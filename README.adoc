@@ -1,0 +1,35 @@
+= Automatics - Valheim Mod
+:uri-configuration-manager: https://github.com/BepInEx/BepInEx.ConfigurationManager
+:uri-license: link:LICENSE
+:image-uri-config_menu: https://app.box.com/shared/static/vfzsn69i950l48er2u69tssod6xxsh8u.jpg
+
+Automatics is a mod that automates the tedious tasks of life in Valheim. Most of its features exist in existing mods, but it has been re-designed to make it easier for me to use.
+
+== Features
+=== Automatic door
+Automatically opens and closes the door near the player. The interval and distance to detect the player can be changed from the configuration.
+
+=== Automatic map pinning
+Automatic pinning animals, monsters, floras, veins, dungeons, etc. that exist around the player to the map. The pinning allows for each object and the detection range of the object can be changed from the config.
+
+=== Automatic processing
+Refueling pieces that need fuel. Deliver materials to pieces that process materials, and store items produced by pieces. These tasks can be automated via containers around the piece.
+
+== Configurations
+I recommend using link:{uri-configuration-manager}[Configuration Manager]. I don't have the energy to explain each configuration item, so I'll upload a screenshot of the GUI. There are also tooltips to supplement the options, so please refer to those as well.
+
+image:{image-uri-config_menu}[link={image-uri-config_menu},title="Configuration Menu"]
+
+== Languages
+|===
+|Language |Translators       |Status
+|English  |Translation Tools |100%
+|Japanese |EideeHi           |100%
+|===
+
+== Credits
+* Dependencies:
+** {uri-configuration-manager}[Configuration Manager]
+
+== License
+Automatics is developed and released under the MIT license. For the full text of the license, please see the {uri-license}[LICENSE] file.

@@ -1,0 +1,97 @@
+﻿@config_checkbox_label_true,有効
+@config_checkbox_label_false,無効
+@config_flags_all_label,すべて選択
+
+@config_logging_category,[ #1 ログ出力 ]
+@config_logging_enabled_name,ログ出力
+@config_logging_enabled_description,ログの出力を有効化します。ここで設定した値に関係なく、Automaticsの初期化作業のログは常に出力されます。
+@config_allowed_log_level_name,出力を許可するレベル
+@config_allowed_log_level_description,ログの出力を許可するレベルを指定します。
+
+@config_automatic_door_category,[ #2 自動ドア ]
+@config_automatic_door_enabled_name,自動ドア
+@config_automatic_door_enabled_description,ドアを自動で開閉する機能を有効にします。
+@config_update_interval_name,更新間隔
+@config_update_interval_description,ドアの状態を更新する間隔を指定します。（単位: 秒）
+@config_player_search_radius_name,プレイヤーの探索範囲
+@config_player_search_radius_description,ドアを原点とした、指定された半径の内側にプレイヤーが存在する場合、ドアが開きます。（単位: メートル）
+
+@config_automatic_map_pinning_category,[ #3 マップの自動ピン留め ]
+@config_automatic_map_pinning_enabled_name,マップの自動ピン留め
+@config_automatic_map_pinning_enabled_description,マップに自動でピン留めする機能を有効にします。
+@config_dynamic_object_search_range_name,動的なオブジェクトの探索範囲
+@config_dynamic_object_search_range_description,動的なオブジェクトとは、動物やモンスターなどの位置が変化するオブジェクトのことです。0に設定すると動的なオブジェクトのピン留めを無効化します。
+@config_static_object_search_range_name,静的なオブジェクトの探索範囲
+@config_static_object_search_range_description,静的なオブジェクトとは、植物や鉱脈などの位置が変化しないオブジェクトのことです。0に設定すると静的なオブジェクトのピン留めを無効化します。
+@config_location_search_range_name,ロケーションの探索範囲
+@config_location_search_range_description,ロケーションとは、ダンジョンやフューリングの集落などの特定の場所のことです。0に設定するとロケーションのピン留めを無効化します。
+@config_allow_pinning_animal_name,ピン留めを許可する動物
+@config_allow_pinning_animal_description,自動ピン留めの対象となる動物を指定します。
+@config_allow_pinning_monster_name,ピン留めを許可するモンスター
+@config_allow_pinning_monster_description,自動ピン留めの対象となるモンスターを指定します。
+@config_allow_pinning_flora_name,ピン留めを許可する植物
+@config_allow_pinning_flora_description,自動ピン留めの対象となる植物を指定します。
+@config_allow_pinning_vein_name,ピン留めを許可する鉱脈
+@config_allow_pinning_vein_description,自動ピン留めの対象となる鉱脈を指定します。
+@config_allow_pinning_spawner_name,ピン留めを許可するスポナー
+@config_allow_pinning_spawner_description,自動ピン留めの対象となるスポナーを指定します。
+@config_allow_pinning_other_name,ピン留めを許可するその他のオブジェクト
+@config_allow_pinning_other_description,自動ピン留めの対象となるその他のオブジェクトを指定します。
+@config_allow_pinning_dungeon_name,ピン留めを許可するダンジョン
+@config_allow_pinning_dungeon_description,自動ピン留めの対象となるダンジョンを指定します。
+@config_allow_pinning_spot_name,ピン留めを許可するスポット
+@config_allow_pinning_spot_description,自動ピン留めの対象となるスポットを指定します。
+@config_ignore_tamed_animals_name,懐いた動物をピン留めしない
+@config_ignore_tamed_animals_description,懐いた動物を自動ピン留めの対象から除外します。
+@config_static_object_search_interval_name,静的なオブジェクトの探索間隔
+@config_static_object_search_interval_description,静的なオブジェクトの探索を行う間隔を指定します。0に設定すると定期的な静的なオブジェクトの探索が無効になります。
+@config_flora_pins_merge_range_name,植物のピンをまとめる距離
+@config_flora_pins_merge_range_description,植物のピン留めを行う際に、指定した範囲内に存在する同じ植物を再帰的に探索して一つのピンにまとめます。
+@config_in_ground_veins_need_wishbone_name,叉骨装備時のみ地中の鉱脈をピン留めする
+@config_in_ground_veins_need_wishbone_description,地中に存在する鉱脈をピン留めするのに叉骨を装備する必要があるか否かを指定します。
+
+@config_automatic_processing_category,[ #4 自動作業 ]
+@config_automatic_processing_enabled_name,自動作業
+@config_automatic_processing_enabled_description,料理や精錬、燃料の補充などの作業を自動で行う機能を有効にします。
+@config_allow_automatic_processing_name,$1に許可する作業
+@config_allow_automatic_processing_description,$1に許可する自動作業を指定します。
+@config_container_search_range_name,$1のコンテナ探索範囲
+@config_container_search_range_description,$1がコンテナの探索を行う最大距離を指定します。
+
+@config_automatic_processing_type_craft,作成
+@config_automatic_processing_type_refuel,燃料補給
+@config_automatic_processing_type_store,収納
+
+@character_level_symbol,★
+@pin_cluster_format,$1 x$2
+
+@animal_bird,鳥
+@animal_seagal,カモメ
+@animal_crow,カラス
+@animal_fish,魚
+
+@piece_wild_beehive,蜂の巣
+
+@spot_infested_tree,汚泥にまみれた木
+@spot_fire_hole,炎の間欠泉
+@spot_drake_nest,ドレイクの巣
+@spot_goblin_camp,フューリングの集落
+@spot_tar_pit,タールの池
+
+@command_syntax_error,構文が間違っています:
+@command_argument_error,引数が不正です:
+@command_h_option,[フィルター]
+@command_h_description,利用可能なコマンドの一覧を表示します。
+@command_give_option,アイテム [数] [品質]
+@command_give_description,プレイヤーのインベントリにアイテムを追加します。
+@command_printobject_option,オブジェクトの種類 探索範囲 [フィルター]
+@command_printobject_description,範囲内に存在するオブジェクトの情報を出力します。
+@command_print_result,$1 件の情報を出力しました。
+@command_print_result_empty,条件にあう情報は見つかりませんでした。
+
+// ここから勝手に翻訳した単語
+enemy_greydwarfspawner,灰色ドワーフの巣
+enemy_skeletonspawner,邪悪な骨の山
+enemy_draugrspawner,死体の山
+enemy_abomination,アボミネーション
+piece_jackoturnip,カブのランタン

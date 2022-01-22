@@ -1,0 +1,90 @@
+﻿@config_checkbox_label_true,Enabled
+@config_checkbox_label_false,Disabled
+@config_flags_all_label,All
+
+@config_logging_category,[ #1 Logging ]
+@config_logging_enabled_name,Logging
+@config_logging_enabled_description,Enable logging. Regardless of the value set here, the log of Automatics initialization process will always be output.
+@config_allowed_log_level_name,Allowed Log Level
+@config_allowed_log_level_description,Specifies the level at which logging is allowed.
+
+@config_automatic_door_category,[ #2 Automatic Door ]
+@config_automatic_door_enabled_name,Automatic Door
+@config_automatic_door_enabled_description,Enable the function to open and close the door automatically.
+@config_update_interval_name,Update Interval
+@config_update_interval_description,Specify the interval at which the door status is updated. (Unit: second)
+@config_player_search_radius_name,Player Search Radius
+@config_player_search_radius_description,The door will open if the player is inside the specified radius, with the door as the origin. (Unit: meter)
+
+@config_automatic_map_pinning_category,[ #3 Automatic Map Pinning ]
+@config_automatic_map_pinning_enabled_name,Automatic Map Pinning
+@config_automatic_map_pinning_enabled_description,Enables automatic pinning to the map.
+@config_dynamic_object_search_range_name,Dynamic Object Search Range
+@config_dynamic_object_search_range_description,"Dynamic Object" are objects that change position, such as animals, monsters, etc. Set to 0 to disable pinning of dynamic objects.
+@config_static_object_search_range_name,Static Object Search Range
+@config_static_object_search_range_description,"Static Object" are objects that do not change their position, such as plants, veins, etc. Setting this to 0 disables pinning of static objects.
+@config_location_search_range_name,Location Search Range
+@config_location_search_range_description,"Location" is a specific place, such as dungeon, fuling village, etc. Setting this to 0 disables location pinning.
+@config_allow_pinning_animal_name,Allow Pinning Animal
+@config_allow_pinning_animal_description,Specify the animals to be automatic pinning.
+@config_allow_pinning_monster_name,Allow Pinning Monster
+@config_allow_pinning_monster_description,Specify the monsters to be automatic pinning.
+@config_allow_pinning_flora_name,Allow Pinning Flora
+@config_allow_pinning_flora_description,Specify the flora to be automatic pinning.
+@config_allow_pinning_vein_name,Allow Pinning Vein
+@config_allow_pinning_vein_description,Specify the veins to be automatic pinning.
+@config_allow_pinning_spawner_name,Allow Pinning Spawner
+@config_allow_pinning_spawner_description,Specify the spawners to be automatic pinning.
+@config_allow_pinning_other_name,Allow Pinning Other Object
+@config_allow_pinning_other_description,Specify the other objects to be automatic pinning.
+@config_allow_pinning_dungeon_name,Allow Pinning Dungeon
+@config_allow_pinning_dungeon_description,Specify the dungeons to be automatic pinning.
+@config_allow_pinning_spot_name,Allow Pinning Spot
+@config_allow_pinning_spot_description,Specify the spots to be automatic pinning.
+@config_ignore_tamed_animals_name,Not Pinning Tamed Animals
+@config_ignore_tamed_animals_description,Exclude tamed animals from automatic pinning.
+@config_static_object_search_interval_name,Static Object Search Interval
+@config_static_object_search_interval_description,Specify the interval at which static object search. Setting to 0 disables periodic static object search.
+@config_flora_pins_merge_range_name,Flora Pins Merge Range
+@config_flora_pins_merge_range_description,When pinning flora, it recursively searches for the same flora that exist within a specified range and merge them into a single pin.
+@config_in_ground_veins_need_wishbone_name,In Ground Veins Need Wishbone
+@config_in_ground_veins_need_wishbone_description,Specify whether need to equip a Wishbone to pinning a vein that in ground.
+
+@config_automatic_processing_category,[ #4 Automatic Processing ]
+@config_automatic_processing_enabled_name,Automatic Processing
+@config_automatic_processing_enabled_description,Enable automatic functions for tasks such as cooking, refining, and refilling fuel.
+@config_allow_automatic_processing_name,$1 Allow Processing
+@config_allow_automatic_processing_description,Specify the automatic processing to be allowed for $1
+@config_container_search_range_name,$1 Container Search Range
+@config_container_search_range_description,Specify the maximum distance which $1 will search for containers
+
+@config_automatic_processing_type_craft,Craft
+@config_automatic_processing_type_refuel,Refuel
+@config_automatic_processing_type_store,Store
+
+@character_level_symbol,★
+@pin_cluster_format,$1 x$2
+
+@animal_bird,Bird
+@animal_seagal,Gull
+@animal_crow,Crow
+@animal_fish,Fish
+
+@piece_wild_beehive,Beehive
+
+@spot_infested_tree,Infested Tree
+@spot_fire_hole,Fire geyser
+@spot_drake_nest,Drake nest
+@spot_goblin_camp,Fuling village
+@spot_tar_pit,Tar pit
+
+@command_syntax_error,Syntax error:
+@command_argument_error,Illegal argument:
+@command_h_option,[filter]
+@command_h_description,Displays a list of available commands.
+@command_give_option,item [amount] [quality]
+@command_give_description,Adds an item to the player's inventory.
+@command_printobject_option,object_type range [filter]
+@command_printobject_description,Outputs information the objects that exist in the range.
+@command_print_result,$1 information was output.
+@command_print_result_empty,No information matching criteria was found.
