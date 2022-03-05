@@ -19,7 +19,8 @@ namespace Automatics.AutomaticMapPinning
         private static HashSet<DynamicPin> AllDynamicPin { get; }
         private static Minimap Map => Minimap.instance;
 
-        private static float _lastStaticObjectSearch;
+        private static float _lastStaticPinning;
+        private static bool _isStaticPinningBusy;
 
         static AutomaticMapPinning()
         {
@@ -133,10 +134,16 @@ namespace Automatics.AutomaticMapPinning
 
         private static void StaticPinning(Player player)
         {
-            if (Time.time - _lastStaticObjectSearch < Config.StaticObjectSearchInterval) return;
+            if (Time.time - _lastStaticPinning < Config.StaticObjectSearchInterval) return;
+
+            if (_isStaticPinningBusy) return;
+            _isStaticPinningBusy = true;
+
             StaticObjectPinning(player);
             LocationPinning(player);
-            _lastStaticObjectSearch = Time.time;
+
+            _lastStaticPinning = Time.time;
+            _isStaticPinningBusy = false;
         }
 
         private static void StaticObjectPinning(Player player)
@@ -303,10 +310,10 @@ namespace Automatics.AutomaticMapPinning
                 AddPin(teleport.transform.position, L10N.Translate(teleport.m_enterText), true);
             }
 
-            foreach (var instance in from x in ZoneSystem.instance.m_locationInstances
-                     where !HavePinInRange(x.Value.m_position, 1f) &&
-                           Vector3.Distance(origin, x.Value.m_position) <= Config.LocationSearchRange
-                     select x.Value)
+            foreach (var instance in from x in ZoneSystem.instance.m_locationInstances.Values
+                     where Vector3.Distance(origin, x.m_position) <= Config.LocationSearchRange &&
+                           !HavePinInRange(x.m_position, 1f)
+                     select x)
             {
                 if (!Spot.GetFlag(instance.m_location.m_prefabName, out var flag)) continue;
                 if (!Config.IsAllowPinning(flag) || !Spot.GetName(flag, out var name)) continue;
