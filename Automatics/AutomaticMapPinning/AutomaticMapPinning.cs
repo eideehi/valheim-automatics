@@ -245,11 +245,15 @@ namespace Automatics.AutomaticMapPinning
             var position = @object.transform.position;
             if (HavePinInRange(position, 1f)) return true;
 
-            var height = ZoneSystem.instance.GetGroundHeight(position);
-            if (position.y < height && Config.InGroundVeinsNeedWishbone)
+            if (Config.InGroundVeinsNeedWishbone)
             {
-                var items = Player.m_localPlayer.GetInventory().GetEquipedtems();
-                if (items.Select(x => x.m_shared.m_name).All(x => x != "$item_wishbone")) return true;
+                var collider = @object.GetComponentInChildren<Collider>();
+                var objectMaxY = collider ? collider.bounds.max.y : position.y;
+                if (objectMaxY < ZoneSystem.instance.GetGroundHeight(position))
+                {
+                    var items = Player.m_localPlayer.GetInventory().GetEquipedtems();
+                    if (items.Select(x => x.m_shared.m_name).All(x => x != "$item_wishbone")) return true;
+                }
             }
 
             AddPin(position, L10N.Translate(name), true);
