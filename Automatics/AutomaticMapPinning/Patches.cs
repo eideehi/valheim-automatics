@@ -8,7 +8,7 @@ namespace Automatics.AutomaticMapPinning
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "Update")]
         private static void MinimapUpdatePostfix()
         {
-            if (!AutomaticMapPinning.IsEnabled()) return;
+            if (!AutomaticMapPinning.IsActive()) return;
 
             AutomaticMapPinning.OnUpdate();
         }
@@ -16,7 +16,7 @@ namespace Automatics.AutomaticMapPinning
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "RemovePin", typeof(Minimap.PinData))]
         private static void MinimapRemovePinPostfix(Minimap.PinData pin)
         {
-            if (!AutomaticMapPinning.IsEnabled()) return;
+            if (!AutomaticMapPinning.IsActive()) return;
 
             AutomaticMapPinning.OnRemovePin(pin);
         }
@@ -24,7 +24,7 @@ namespace Automatics.AutomaticMapPinning
         [HarmonyPostfix, HarmonyPatch(typeof(Pickable), "SetPicked")]
         private static void PickableSetPickedPostfix(Pickable __instance, bool picked)
         {
-            if (!AutomaticMapPinning.IsEnabled()) return;
+            if (!AutomaticMapPinning.IsActive()) return;
 
             if (picked && (__instance.m_respawnTimeMinutes <= 0 || !__instance.m_hideWhenPicked))
             {

@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using HarmonyLib;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
@@ -32,9 +31,9 @@ namespace Automatics.AutomaticMapPinning
             AllDynamicPin = new HashSet<DynamicPin>();
         }
 
-        public static bool IsEnabled()
+        public static bool IsActive()
         {
-            return Config.AutomaticMapPinningEnabled && Player.m_localPlayer;
+            return Config.AutomaticMapPinningEnabled && !Game.IsPaused() && Player.m_localPlayer;
         }
 
         public static void RemoveStaticPin(Vector3 pos)
