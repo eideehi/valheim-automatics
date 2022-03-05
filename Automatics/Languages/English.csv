@@ -11,10 +11,14 @@
 @config_automatic_door_category,[ #2 Automatic Door ]
 @config_automatic_door_enabled_name,Automatic Door
 @config_automatic_door_enabled_description,Enable the function to open and close the door automatically.
-@config_update_interval_name,Update Interval
-@config_update_interval_description,Specify the interval at which the door status is updated. (Unit: second)
-@config_player_search_radius_name,Player Search Radius
-@config_player_search_radius_description,The door will open if the player is inside the specified radius, with the door as the origin. (Unit: meter)
+@config_interval_to_open_name,Interval To Open
+@config_interval_to_open_description,the interval at which to call the process to determine whether to open the door. (Unit: second)
+@config_interval_to_close_name,Interval To Close
+@config_interval_to_close_description,the interval at which to call the process to determine whether to close the door. (Unit: second)
+@config_player_search_radius_to_open_name,Player Search Radius To Open
+@config_player_search_radius_to_open_description,The door automatically open when the player is inside the specified radius, with the door as the origin. (Unit: meter)
+@config_player_search_radius_to_open_name,Player Search Radius To Close
+@config_player_search_radius_to_open_description,The door automatically close when the player is inside the specified radius, with the door as the origin. (Unit: meter)
 
 @config_automatic_map_pinning_category,[ #3 Automatic Map Pinning ]
 @config_automatic_map_pinning_enabled_name,Automatic Map Pinning

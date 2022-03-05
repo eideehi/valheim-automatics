@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using HarmonyLib;
 using UnityEngine;
 
 namespace Automatics.AutomaticDoor
@@ -17,12 +16,17 @@ namespace Automatics.AutomaticDoor
         private Door _door;
         private ZNetView _zNetView;
 
-        public static void ChangeInterval(float interval)
+        private bool IsDoorOpen => _zNetView && _zNetView.GetZDO().GetInt("state") != 0;
+
+        private bool CanDoorInteract => _door &&
+                                        PrivateArea.CheckAccess(_door.transform.position) &&
+                                        Reflection.InvokeMethod<bool>(_door, "CanInteract");
+
+        public static void ChangeInterval(bool isChangedOpenInterval)
         {
             AutomaticDoors.ForEach(x =>
             {
-                x.CancelInvoke(nameof(UpdateDoor));
-                x.InvokeRepeating(nameof(UpdateDoor), Random.Range(1f, 2f), interval);
+                x.CancelInvoke(isChangedOpenInterval ? nameof(OpenDoor) : nameof(CloseDoor));
             });
         }
 
@@ -33,12 +37,12 @@ namespace Automatics.AutomaticDoor
             _door = GetComponent<Door>();
             _zNetView = GetComponent<ZNetView>();
 
-            InvokeRepeating(nameof(UpdateDoor), Random.Range(1f, 2f), Config.UpdateInterval);
+            InvokeRepeating(nameof(UpdateDoor), Random.Range(1f, 2f), 0.1f);
         }
 
         private void OnDestroy()
         {
-            CancelInvoke(nameof(UpdateDoor));
+            CancelInvoke();
 
             _door = null;
             _zNetView = null;
@@ -48,20 +52,61 @@ namespace Automatics.AutomaticDoor
 
         private void UpdateDoor()
         {
-            if (!Config.AutomaticDoorEnabled) return;
-            if (!Reflection.InvokeMethod<bool>(_door, "CanInteract")) return;
-            if (!PrivateArea.CheckAccess(_door.transform.position)) return;
+            const string openDoor = nameof(OpenDoor);
+            const string closeDoor = nameof(CloseDoor);
 
-            var player = Player.GetClosestPlayer(_door.transform.position, Config.PlayerSearchRadius);
-            var isClosed = _zNetView.GetZDO().GetInt("state") == 0;
-            if (player && isClosed)
+            if (!Config.AutomaticDoorEnabled || !CanDoorInteract)
             {
-                _door.Interact(player, false, false);
+                CancelInvoke(openDoor);
+                CancelInvoke(closeDoor);
+                return;
             }
-            else if (!player && !isClosed)
+
+            var player = Player.GetClosestPlayer(_door.transform.position, Config.PlayerSearchRadiusToOpen);
+            if (IsDoorOpen)
             {
-                _zNetView.InvokeRPC("UseDoor", false);
+                var isInvoking = IsInvoking(closeDoor);
+                if (!player && !isInvoking)
+                {
+                    Invoke(closeDoor, Config.IntervalToClose - 0.1f);
+                }
+                else if (player && isInvoking)
+                {
+                    CancelInvoke(closeDoor);
+                }
             }
+            else
+            {
+                var isInvoking = IsInvoking(openDoor);
+                if (player && !isInvoking)
+                {
+                    Invoke(openDoor, Config.IntervalToOpen - 0.1f);
+                }
+                else if (!player && isInvoking)
+                {
+                    CancelInvoke(openDoor);
+                }
+            }
+        }
+
+        private void CloseDoor()
+        {
+            if (!Config.AutomaticDoorEnabled) return;
+            if (!IsDoorOpen || !CanDoorInteract) return;
+            if (Player.IsPlayerInRange(_door.transform.position, Config.PlayerSearchRadiusToClose)) return;
+
+            _zNetView.InvokeRPC("UseDoor", false);
+        }
+
+        private void OpenDoor()
+        {
+            if (!Config.AutomaticDoorEnabled) return;
+            if (IsDoorOpen || !CanDoorInteract) return;
+
+            var player = Player.GetClosestPlayer(_door.transform.position, Config.PlayerSearchRadiusToOpen);
+            if (!player) return;
+
+            _door.Interact(player, false, false);
         }
     }
 }

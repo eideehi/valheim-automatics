@@ -11,10 +11,14 @@
 @config_automatic_door_category,[ #2 自動ドア ]
 @config_automatic_door_enabled_name,自動ドア
 @config_automatic_door_enabled_description,ドアを自動で開閉する機能を有効にします。
-@config_update_interval_name,更新間隔
-@config_update_interval_description,ドアの状態を更新する間隔を指定します。（単位: 秒）
-@config_player_search_radius_name,プレイヤーの探索範囲
-@config_player_search_radius_description,ドアを原点とした、指定された半径の内側にプレイヤーが存在する場合、ドアが開きます。（単位: メートル）
+@config_interval_to_open_name,ドアを開けようとする間隔
+@config_interval_to_open_description,ドアを開けるかどうか判断する処理を呼び出す間隔を指定します。（単位: 秒）
+@config_interval_to_close_name,ドアを閉じようとする間隔
+@config_interval_to_close_description,ドアを閉じるかどうか判断する処理を呼び出す間隔を指定します。（単位: 秒）
+@config_player_search_radius_to_open_name,ドアを開けるためのプレイヤー探索範囲
+@config_player_search_radius_to_open_description,ドアを原点とした、指定された半径の内側にプレイヤーが存在する場合、ドアが自動で開きます。（単位: メートル）
+@config_player_search_radius_to_close_name,ドアを閉じるためのプレイヤー探索範囲
+@config_player_search_radius_to_close_description,ドアを原点とした、指定された半径の内側にプレイヤーが存在する場合、ドアが自動で閉じます。（単位: メートル）
 
 @config_automatic_map_pinning_category,[ #3 マップの自動ピン留め ]
 @config_automatic_map_pinning_enabled_name,マップの自動ピン留め
