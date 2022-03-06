@@ -22,10 +22,12 @@ namespace Automatics.Debug
         private static KeyboardShortcut _removeDrops =
             new KeyboardShortcut(KeyCode.L, KeyCode.LeftShift, KeyCode.LeftAlt);
 
+        private static KeyboardShortcut _debug =
+            new KeyboardShortcut(KeyCode.P, KeyCode.LeftShift, KeyCode.LeftAlt);
+
         [HarmonyPostfix, HarmonyPatch(typeof(Player), "Awake")]
         private static void PlayerAwakePostfix(Player __instance)
         {
-            Console.instance.TryRunCommand("devcommands");
             __instance.SetGodMode(true);
             __instance.SetGhostMode(true);
         }
@@ -57,6 +59,11 @@ namespace Automatics.Debug
             {
                 Console.instance.TryRunCommand("removedrops");
             }
+
+            if (_debug.IsDown())
+            {
+                // Add the process want to run during development
+            }
         }
 
         [HarmonyPrefix, HarmonyPatch(typeof(Player), "UseStamina")]
@@ -73,8 +80,13 @@ namespace Automatics.Debug
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Terminal), "Awake")]
-        private static void TerminalAwakePostfix(Terminal __instance)
+        private static void TerminalAwakePostfix(Terminal __instance, bool ___m_cheat)
         {
+            if (!___m_cheat)
+            {
+                Reflection.SetField(__instance, "m_cheat", true);
+            }
+
             Command.RegisterCommands();
         }
     }

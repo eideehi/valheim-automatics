@@ -31,7 +31,13 @@ namespace Automatics
         public static TType GetStaticField<TClass, TType>(string fieldName) =>
             Traverse.Create<TClass>().Field<TType>(fieldName).Value;
 
+        public static TType SetStaticField<TClass, TType>(string fieldName, TType value) =>
+            Traverse.Create<TClass>().Field<TType>(fieldName).Value = value;
+
         public static T GetField<T>(object instance, string fieldName) =>
             Traverse.Create(instance).Field<T>(fieldName).Value;
+
+        public static void SetField<T>(object instance, string fieldName, T value) =>
+            Traverse.Create(instance).Field<T>(fieldName).Value = value;
     }
 }
