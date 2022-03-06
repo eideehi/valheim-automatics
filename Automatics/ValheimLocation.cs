@@ -77,6 +77,8 @@ namespace Automatics
                     { "GoblinCamp2", Flag.GoblinCamp },
                     { Name.TarPit, Flag.TarPit },
                     { "TarPit1", Flag.TarPit },
+                    { "TarPit2", Flag.TarPit },
+                    { "TarPit3", Flag.TarPit },
                 };
 
                 FlagByName = new Dictionary<Flag, string>
