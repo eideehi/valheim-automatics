@@ -1,6 +1,7 @@
 ﻿using static Automatics.ValheimCharacter;
 using static Automatics.ValheimLocation;
 using static Automatics.ValheimObject;
+using System;
 using BepInEx.Configuration;
 
 namespace Automatics.AutomaticMapPinning
@@ -62,6 +63,24 @@ namespace Automatics.AutomaticMapPinning
             _staticObjectSearchInterval = Configuration.Bind(Section, "static_object_search_interval", 0.25f, (0f, 8f));
             _floraPinMergeRange = Configuration.Bind(Section, "flora_pins_merge_range", 8, (0, 16));
             _inGroundVeinsNeedWishbone = Configuration.Bind(Section, "in_ground_veins_need_wishbone", true);
+
+            _allowPinningAnimal.SettingChanged += OnDynamicObjectSettingChanged;
+            _allowPinningMonster.SettingChanged += OnDynamicObjectSettingChanged;
+
+            _allowPinningFlora.SettingChanged += OnStaticObjectSettingChanged;
+            _allowPinningVein.SettingChanged += OnStaticObjectSettingChanged;
+            _allowPinningSpawner.SettingChanged += OnStaticObjectSettingChanged;
+            _allowPinningOther.SettingChanged += OnStaticObjectSettingChanged;
+        }
+
+        private static void OnDynamicObjectSettingChanged(object sender, EventArgs e)
+        {
+            DynamicMapPinning.ClearObjectCache();
+        }
+
+        private static void OnStaticObjectSettingChanged(object sender, EventArgs e)
+        {
+            StaticMapPinning.ClearObjectCache();
         }
     }
 }

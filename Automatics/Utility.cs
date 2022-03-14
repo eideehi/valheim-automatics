@@ -9,11 +9,13 @@ namespace Automatics
     {
         private static readonly char[] PrefabNameSeparator;
         private static readonly ConditionalWeakTable<MonoBehaviour, ZDO> ZdoCache;
+        private static readonly ConditionalWeakTable<MonoBehaviour, string> NameCache;
 
         static Utility()
         {
             PrefabNameSeparator = " (".ToCharArray();
             ZdoCache = new ConditionalWeakTable<MonoBehaviour, ZDO>();
+            NameCache = new ConditionalWeakTable<MonoBehaviour, string>();
         }
 
         public static string GetPrefabName(GameObject @object)
@@ -27,22 +29,37 @@ namespace Automatics
         {
             if (!@object) return "";
 
+            if (NameCache.TryGetValue(@object, out var name)) return name;
+
             switch (@object)
             {
                 case HoverText text:
-                    return text.m_text;
+                {
+                    name = text.m_text;
+                    break;
+                }
                 case Hoverable hoverable:
-                    return hoverable.GetHoverName();
+                {
+                    name = hoverable.GetHoverName();
+                    break;
+                }
                 default:
                 {
                     var hoverable = @object.GetComponent<Hoverable>();
                     if (hoverable != null)
-                        return hoverable is HoverText text ? text.m_text : hoverable.GetHoverName();
+                    {
+                        name = hoverable is HoverText text ? text.m_text : hoverable.GetHoverName();
+                        break;
+                    }
 
                     var zNetView = @object.GetComponent<ZNetView>();
-                    return zNetView ? zNetView.GetPrefabName() : GetPrefabName(@object.gameObject);
+                    name = zNetView ? zNetView.GetPrefabName() : GetPrefabName(@object.gameObject);
+                    break;
                 }
             }
+
+            NameCache.Add(@object, name);
+            return name;
         }
 
         public static bool GetZdoid(MonoBehaviour @object, out ZDOID id)
