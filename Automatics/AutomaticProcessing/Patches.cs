@@ -1,7 +1,9 @@
-﻿using HarmonyLib;
+﻿using System.Diagnostics.CodeAnalysis;
+using HarmonyLib;
 
 namespace Automatics.AutomaticProcessing
 {
+    [SuppressMessage( "ReSharper", "InconsistentNaming" )]
     [HarmonyPatch]
     internal static class Patches
     {

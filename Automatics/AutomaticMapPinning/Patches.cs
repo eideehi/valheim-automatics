@@ -6,6 +6,7 @@ using HarmonyLib;
 
 namespace Automatics.AutomaticMapPinning
 {
+    [SuppressMessage( "ReSharper", "InconsistentNaming" )]
     [HarmonyPatch]
     internal static class Patches
     {
