@@ -17,8 +17,8 @@
 @config_interval_to_close_description,the interval at which to call the process to determine whether to close the door. (Unit: second)
 @config_player_search_radius_to_open_name,Player Search Radius To Open
 @config_player_search_radius_to_open_description,The door automatically open when the player is inside the specified radius, with the door as the origin. (Unit: meter)
-@config_player_search_radius_to_open_name,Player Search Radius To Close
-@config_player_search_radius_to_open_description,The door automatically close when the player is inside the specified radius, with the door as the origin. (Unit: meter)
+@config_player_search_radius_to_close_name,Player Search Radius To Close
+@config_player_search_radius_to_close_description,The door automatically close when the player is inside the specified radius, with the door as the origin. (Unit: meter)
 
 @config_automatic_map_pinning_category,[ #3 Automatic Map Pinning ]
 @config_automatic_map_pinning_enabled_name,Automatic Map Pinning
