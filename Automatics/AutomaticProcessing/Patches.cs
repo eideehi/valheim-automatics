@@ -7,13 +7,6 @@ namespace Automatics.AutomaticProcessing
     [HarmonyPatch]
     internal static class Patches
     {
-        [HarmonyPostfix, HarmonyPatch(typeof(Container), "Awake")]
-        private static void ContainerAwakePostfix(Container __instance, ZNetView ___m_nview)
-        {
-            if (___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<ContainerCache>();
-        }
-
         [HarmonyPrefix, HarmonyPatch(typeof(Beehive), "IncreseLevel")]
         private static bool BeehiveIncreseLevelPrefix(Beehive __instance, ZNetView ___m_nview, int i)
         {

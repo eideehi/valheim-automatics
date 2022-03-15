@@ -4,6 +4,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using UnityEngine;
 
 namespace Automatics
 {
@@ -32,5 +33,21 @@ namespace Automatics
 
             Harmony.CreateAndPatchAll(assembly, ModId);
         }
+    }
+
+    [HarmonyPatch]
+    internal static partial class Patches
+    {
+        [HarmonyPostfix, HarmonyPatch(typeof(Container), "Awake")]
+        private static void ContainerAwakePostfix(Container __instance, ZNetView ___m_nview)
+        {
+            if (___m_nview.GetZDO() != null)
+                __instance.gameObject.AddComponent<ContainerCache>();
+        }
+    }
+
+    [DisallowMultipleComponent]
+    public sealed class ContainerCache : InstanceCache<Container>
+    {
     }
 }
