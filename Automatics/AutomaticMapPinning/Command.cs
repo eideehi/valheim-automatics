@@ -7,23 +7,19 @@ namespace Automatics.AutomaticMapPinning
 {
     internal static class Command
     {
-        private static readonly Lazy<int> ObjectMask;
-        private static readonly Dictionary<string, Func<Collider, MonoBehaviour>> AllTypeConvertor;
+        private static readonly Dictionary<string, Func<Collider, MonoBehaviour>> TypeConvertors;
 
         static Command()
         {
-            ObjectMask = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid", "Default_small", "piece",
-                "piece_nonsolid", "character", "hitbox", "vehicle", "item"));
-
-            AllTypeConvertor = new Dictionary<string, Func<Collider, MonoBehaviour>>
+            TypeConvertors = new Dictionary<string, Func<Collider, MonoBehaviour>>
             {
-                { "Character", x => x.GetComponent<Character>() },
-                { "Bird", x => x.GetComponent<RandomFlyingBird>() },
-                { "Fish", x => x.GetComponent<Fish>() },
-                { "Pickable", x => x.GetComponent<Pickable>() },
-                { "Destructible", x => x.GetComponent<IDestructible>() as MonoBehaviour },
-                { "Interactable", x => x.GetComponent<Interactable>() as MonoBehaviour },
-                { "Hoverable", x => x.GetComponent<Hoverable>() as MonoBehaviour },
+                { "Character", x => x.GetComponentInParent<Character>() },
+                { "Bird", x => x.GetComponentInParent<RandomFlyingBird>() },
+                { "Fish", x => x.GetComponentInParent<Fish>() },
+                { "Pickable", x => x.GetComponentInParent<Pickable>() },
+                { "Destructible", x => x.GetComponentInParent<IDestructible>() as MonoBehaviour },
+                { "Interactable", x => x.GetComponentInParent<Interactable>() as MonoBehaviour },
+                { "Hoverable", x => x.GetComponentInParent<Hoverable>() as MonoBehaviour },
             };
         }
 
@@ -38,7 +34,7 @@ namespace Automatics.AutomaticMapPinning
             var type = args[1];
             var filter = args.Length >= 4 ? args[3] : "";
 
-            if (!AllTypeConvertor.TryGetValue(type, out var convertor))
+            if (!TypeConvertors.TryGetValue(type, out var convertor))
             {
                 args.Context.AddString(ConsoleCommand.ArgumentError(type));
                 return;
@@ -49,7 +45,7 @@ namespace Automatics.AutomaticMapPinning
             var strings = new HashSet<string>();
             var pos = Player.m_localPlayer.transform.position;
             foreach (var @object in
-                     from x in Utility.GetObjectsInSphere(pos, range, convertor, range * 16, ObjectMask.Value)
+                     from x in Utility.GetObjectsInSphere(pos, range, convertor, range * 16)
                      orderby x.Item2
                      select x.Item1)
             {
@@ -99,7 +95,7 @@ namespace Automatics.AutomaticMapPinning
 
         public static void Register()
         {
-            ConsoleCommand.Register("printobject", PrintObject, optionsFetcher: () => AllTypeConvertor.Keys.ToList(), isCheat: true);
+            ConsoleCommand.Register("printobject", PrintObject, optionsFetcher: () => TypeConvertors.Keys.ToList(), isCheat: true);
         }
     }
 }

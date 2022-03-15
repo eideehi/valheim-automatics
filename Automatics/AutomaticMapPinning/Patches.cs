@@ -62,5 +62,15 @@ namespace Automatics.AutomaticMapPinning
             if (flora != null)
                 StaticMapPinning.RemovePin(flora.Cluster.Center);
         }
+
+        [HarmonyPostfix, HarmonyPatch(typeof(TeleportWorld), "Awake")]
+        private static void TeleportWorldAwakePostfix(TeleportWorld __instance, ZNetView ___m_nview)
+        {
+            if (___m_nview.GetZDO() == null) return;
+
+            var portal = __instance.GetComponent<WearNTear>();
+            if (portal != null)
+                portal.m_onDestroyed += () => { StaticMapPinning.RemovePin(__instance.transform.position); };
+        }
     }
 }

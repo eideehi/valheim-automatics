@@ -67,6 +67,7 @@
 @config_automatic_processing_type_store,Store
 
 @character_level_symbol,★
+@portal_tag_empty,Empty tag
 @pin_cluster_format,$1 x$2
 
 @animal_bird,Bird

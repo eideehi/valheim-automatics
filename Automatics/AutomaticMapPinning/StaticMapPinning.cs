@@ -24,7 +24,8 @@ namespace Automatics.AutomaticMapPinning
         {
             ColliderBuffer = new Collider[1024];
             LazyObjectMask = new Lazy<int>(() =>
-                LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "item"));
+                LayerMask.GetMask("Default", "static_solid", "Default_small", "character_trigger", "piece_nonsolid",
+                    "item"));
             LazyDungeonMask = new Lazy<int>(() => LayerMask.GetMask("character_trigger"));
             _objectCache = new ConditionalWeakTable<Collider, MonoBehaviour>();
         }
@@ -150,11 +151,44 @@ namespace Automatics.AutomaticMapPinning
             if (!Other.GetFlag(name, out var flag)) return false;
             if (!Config.IsAllowPinning(flag) || !Other.GetName(flag, out name)) return true;
 
-            var position = @object.transform.position;
-            if (Map.HavePinInRange(position, 1f)) return true;
+            switch (flag)
+            {
+                case Other.Flag.Portal:
+                {
+                    PortalPinning(@object);
+                    break;
+                }
+                default:
+                {
+                    var position = @object.transform.position;
+                    if (Map.HavePinInRange(position, 1f)) return true;
 
-            Map.AddPin(position, L10N.Localize(name), true);
+                    Map.AddPin(position, L10N.Localize(name), true);
+                    break;
+                }
+            }
+
             return true;
+        }
+
+        private static void PortalPinning(MonoBehaviour @object)
+        {
+            var tag = "";
+
+            var portal = @object.GetComponent<TeleportWorld>();
+            if (portal)
+                tag = portal.GetText();
+
+            var name = string.IsNullOrEmpty(tag) ? L10N.Translate("@portal_tag_empty") : tag;
+            var position = @object.transform.position;
+
+            if (!Map.FindPinInRange(position, 1f, out var data) || data.m_name != name)
+            {
+                if (data == null)
+                    Map.AddPin(position, Minimap.PinType.Icon4, name, true);
+                else
+                    data.m_name = name;
+            }
         }
 
         private static void LocationPinning(Vector3 origin)

@@ -67,6 +67,7 @@
 @config_automatic_processing_type_store,収納
 
 @character_level_symbol,★
+@portal_tag_empty,空のタグ
 @pin_cluster_format,$1 x$2
 
 @animal_bird,鳥

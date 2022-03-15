@@ -259,6 +259,8 @@ namespace Automatics
                     { Name.Runestone, Flag.Runestone },
                     { Name.WildBeehive, Flag.WildBeehive },
                     { "Beehive", Flag.WildBeehive },
+                    { Name.Portal, Flag.Portal },
+                    { "Teleport", Flag.Portal },
                 };
 
                 FlagByName = new Dictionary<Flag, string>
@@ -266,6 +268,7 @@ namespace Automatics
                     { Flag.Vegvisir, Name.Vegvisir },
                     { Flag.Runestone, Name.Runestone },
                     { Flag.WildBeehive, Name.WildBeehive },
+                    { Flag.Portal, Name.Portal },
                 };
             }
 
@@ -278,6 +281,7 @@ namespace Automatics
                 public const string Vegvisir = "$piece_vegvisir";
                 public const string Runestone = "$piece_lorestone";
                 public const string WildBeehive = "@piece_wild_beehive";
+                public const string Portal = "$piece_portal";
             }
 
             [Flags]
@@ -293,6 +297,9 @@ namespace Automatics
 
                 [LocalizedDescription(Name.WildBeehive)]
                 WildBeehive = 1L << 2,
+
+                [LocalizedDescription(Name.Portal)]
+                Portal = 1L << 3,
 
                 [LocalizedDescription("@config_flags_all_label")]
                 All = -1L,
