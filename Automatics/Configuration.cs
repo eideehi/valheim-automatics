@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using BepInEx.Configuration;
 using UnityEngine;
@@ -10,11 +12,41 @@ namespace Automatics
 {
     internal static class Configuration
     {
+        private static readonly ConditionalWeakTable<ConfigEntryBase, string> InputTextCache;
+
         private const int DefaultOrder = 1024;
 
         public static int Order { get; set; } = DefaultOrder;
 
         public static void ResetOrder() => Order = DefaultOrder;
+
+        static Configuration()
+        {
+            InputTextCache = new ConditionalWeakTable<ConfigEntryBase, string>();
+
+            TomlTypeConverter.AddConverter(typeof(StringList), new BepInEx.Configuration.TypeConverter
+            {
+                ConvertToObject = (str, type) =>
+                {
+                    var list = new StringList();
+                    if (string.IsNullOrEmpty(str)) return list;
+
+                    foreach (var x in from x in str.Split(',') select x.Trim())
+                        list.Add(x);
+
+                    return list;
+                },
+                ConvertToString = (obj, type) =>
+                {
+                    var list = (StringList)obj;
+                    return string.Join(", ", list.Select(x =>
+                    {
+                        var str = x.Replace("\"", "\"\"");
+                        return str.Contains(",") ? $"\"{str}\"" : str;
+                    }));
+                },
+            });
+        }
 
         public static ConfigEntry<T> Bind<T>(string section, string key, T defaultValue,
             AcceptableValueBase acceptableValue = null, Action<ConfigurationManagerAttributes> initializer = null)
@@ -62,6 +94,7 @@ namespace Automatics
         private static Action<ConfigEntryBase> GetCustomDrawer(Type type)
         {
             if (type == typeof(bool)) return BoolCustomDrawer;
+            if (type == typeof(StringList)) return StringListCustomDrawer;
             if (type.IsEnum && type.GetCustomAttributes(typeof(FlagsAttribute), false).Any()) return FlagsCustomDrawer;
             return null;
         }
@@ -73,6 +106,70 @@ namespace Automatics
             var result = GUILayout.Toggle(@bool, text, GUILayout.ExpandWidth(true));
             if (result != @bool)
                 entry.BoxedValue = result;
+        }
+
+        private static void StringListCustomDrawer(ConfigEntryBase entry)
+        {
+            var guiWidth = Mathf.Min(Screen.width, 650);
+            var maxWidth = guiWidth - Mathf.RoundToInt(guiWidth / 2.5f) - 115;
+            var addButtonText = L10N.Translate("@config_button_text_add");
+            var removeButtonText = L10N.Translate("@config_button_text_remove");
+
+            var list = new StringList((StringList)entry.BoxedValue);
+
+            GUILayout.BeginVertical(GUILayout.MaxWidth(maxWidth));
+
+            GUILayout.BeginHorizontal();
+
+            if (!InputTextCache.TryGetValue(entry, out var inputText))
+                inputText = "";
+
+            var resultText = GUILayout.TextField(inputText, GUILayout.ExpandWidth(true));
+            if (resultText != inputText)
+            {
+                InputTextCache.Remove(entry);
+                InputTextCache.Add(entry, resultText);
+            }
+
+            var add = GUILayout.Button(addButtonText, GUILayout.ExpandWidth(false));
+            if (add && !string.IsNullOrEmpty(resultText))
+            {
+                if (list.Add(resultText))
+                    entry.BoxedValue = list;
+
+                InputTextCache.Remove(entry);
+                InputTextCache.Add(entry, "");
+            }
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            var lineWidth = 0.0;
+            foreach (var value in list.ToList())
+            {
+                var elementWidth = Mathf.FloorToInt(GUI.skin.label.CalcSize(new GUIContent(value)).x) +
+                                   Mathf.FloorToInt(GUI.skin.button.CalcSize(new GUIContent(removeButtonText)).x);
+
+                lineWidth += elementWidth;
+                if (lineWidth > maxWidth)
+                {
+                    GUILayout.EndHorizontal();
+                    lineWidth = elementWidth;
+                    GUILayout.BeginHorizontal();
+                }
+
+                GUILayout.Label(value, GUILayout.ExpandWidth(false));
+                if (GUILayout.Button(removeButtonText, GUILayout.ExpandWidth(false)))
+                {
+                    if (list.Remove(value))
+                        entry.BoxedValue = list;
+                }
+            }
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.EndVertical();
+            GUILayout.FlexibleSpace();
         }
 
         private static void FlagsCustomDrawer(ConfigEntryBase entry)
@@ -127,6 +224,41 @@ namespace Automatics
             var attribute = member?.GetCustomAttributes(typeof(DescriptionAttribute), false)
                 .OfType<DescriptionAttribute>().FirstOrDefault();
             return attribute?.Description ?? @object.ToString();
+        }
+
+        public class StringList : IEnumerable<string>
+        {
+            private readonly HashSet<string> _values;
+
+            public StringList()
+            {
+                _values = new HashSet<string>();
+            }
+
+            public StringList(IEnumerable<string> collection)
+            {
+                _values = new HashSet<string>(collection);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                return _values.GetEnumerator();
+            }
+
+            internal bool Add(string value)
+            {
+                return _values.Add(value);
+            }
+
+            internal bool Remove(string value)
+            {
+                return _values.Remove(value);
+            }
         }
 
         public class AcceptableValueEnum<T> : AcceptableValueBase where T : Enum

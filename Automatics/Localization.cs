@@ -31,6 +31,19 @@ namespace Automatics
             }
         }
 
+        public static string TranslateInternalNameOnly(string internalName)
+        {
+            switch (internalName[0])
+            {
+                case '$':
+                    return InvokeTranslate(internalName.Substring(1));
+                case '@':
+                    return InvokeTranslate($"net_eidee_{internalName.Substring(1)}");
+                default:
+                    return internalName;
+            }
+        }
+
         public static string Localize(string text)
         {
             var sb = new StringBuilder();
@@ -53,12 +66,7 @@ namespace Automatics
             return InvokeInsertWords(Localize(text), Array.ConvertAll(words, x =>
             {
                 if (!(x is string s)) return x.ToString();
-                switch (s[0])
-                {
-                    case '$': return InvokeTranslate(s.Substring(1));
-                    case '@': return InvokeTranslate($"net_eidee_{s.Substring(1)}");
-                    default: return s;
-                }
+                return TranslateInternalNameOnly(s);
             }));
         }
 

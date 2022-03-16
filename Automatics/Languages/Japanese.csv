@@ -1,6 +1,8 @@
 ﻿@config_checkbox_label_true,有効
 @config_checkbox_label_false,無効
 @config_flags_all_label,すべて選択
+@config_button_text_add,+
+@config_button_text_remove,x
 
 @config_logging_category,[ #1 ログ出力 ]
 @config_logging_enabled_name,ログ出力
@@ -45,6 +47,16 @@
 @config_allow_pinning_dungeon_description,自動ピン留めの対象となるダンジョンを指定します。
 @config_allow_pinning_spot_name,ピン留めを許可するスポット
 @config_allow_pinning_spot_description,自動ピン留めの対象となるスポットを指定します。
+@config_allow_pinning_animal_custom_name,ピン留めを許可する動物（自由指定）
+@config_allow_pinning_animal_custom_description,対象となる動物の表示名（猪 など）や内部名（$enemy_boar など）を指定します。
+@config_allow_pinning_monster_custom_name,ピン留めを許可するモンスター（自由指定）
+@config_allow_pinning_monster_custom_description,対象となるモンスターの表示名（グレイリング など）や内部名（$enemy_greyling など）を指定します。
+@config_allow_pinning_flora_custom_name,ピン留めを許可する植物（自由指定）
+@config_allow_pinning_flora_custom_description,対象となる植物の表示名（タンポポ など）や内部名（$item_dandelion など）を指定します。
+@config_allow_pinning_vein_custom_name,ピン留めを許可する鉱脈（自由指定）
+@config_allow_pinning_vein_custom_description,対象となる鉱脈の表示名（銅鉱脈 など）や内部名（$item_dandelion など）を指定します。
+@config_allow_pinning_spawner_custom_name,ピン留めを許可するスポナー（自由指定）
+@config_allow_pinning_spawner_custom_description,対象となるスポナーの表示名（灰色ドワーフの巣 など）や内部名（$enemy_greydwarfspawner など）を指定します。
 @config_ignore_tamed_animals_name,懐いた動物をピン留めしない
 @config_ignore_tamed_animals_description,懐いた動物を自動ピン留めの対象から除外します。
 @config_static_object_search_interval_name,静的なオブジェクトの探索間隔

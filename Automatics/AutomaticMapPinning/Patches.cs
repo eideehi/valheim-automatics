@@ -26,13 +26,6 @@ namespace Automatics.AutomaticMapPinning
             DynamicMapPinning.RemovePin(pin);
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Pickable), "Awake")]
-        private static void PickableAwakePostfix(Pickable __instance, ZNetView ___m_nview)
-        {
-            if (___m_nview.GetZDO() != null && AutomaticMapPinning.IsFlora(__instance))
-                __instance.gameObject.AddComponent<FloraObject>();
-        }
-
         [HarmonyTranspiler, HarmonyPatch(typeof(Pickable), "SetPicked")]
         private static IEnumerable<CodeInstruction> PickableSetPickedTranspiler(
             IEnumerable<CodeInstruction> instructions)

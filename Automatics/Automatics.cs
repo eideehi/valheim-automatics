@@ -31,6 +31,8 @@ namespace Automatics
             LanguageLoader.LoadFromCsv(Path.Combine(ModLocation, "Languages"));
             InitializeConfigurations();
 
+            AutomaticMapPinning.AutomaticMapPinning.Initialize();
+
             Harmony.CreateAndPatchAll(assembly, ModId);
         }
     }
@@ -44,10 +46,22 @@ namespace Automatics
             if (___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<ContainerCache>();
         }
+
+        [HarmonyPostfix, HarmonyPatch(typeof(Pickable), "Awake")]
+        private static void PickableAwakePostfix(Pickable __instance, ZNetView ___m_nview)
+        {
+            if (___m_nview.GetZDO() != null)
+                __instance.gameObject.AddComponent<PickableCache>();
+        }
     }
 
     [DisallowMultipleComponent]
     public sealed class ContainerCache : InstanceCache<Container>
+    {
+    }
+
+    [DisallowMultipleComponent]
+    public sealed class PickableCache : InstanceCache<Pickable>
     {
     }
 }

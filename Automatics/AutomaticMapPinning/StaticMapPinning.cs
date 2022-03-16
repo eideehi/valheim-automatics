@@ -30,6 +30,12 @@ namespace Automatics.AutomaticMapPinning
             _objectCache = new ConditionalWeakTable<Collider, MonoBehaviour>();
         }
 
+        public static bool IsFlora(Pickable pickable)
+        {
+            var name = Utility.GetName(pickable);
+            return Flora.GetFlag(name, out _) || Config.IsCustomFlora(name);
+        }
+
         public static void ClearObjectCache()
         {
             _objectCache = new ConditionalWeakTable<Collider, MonoBehaviour>();
@@ -79,8 +85,14 @@ namespace Automatics.AutomaticMapPinning
         private static bool FloraPinning(MonoBehaviour @object, string name, ref HashSet<ZDOID> knownId)
         {
             if (!(@object is Pickable pickable)) return false;
-            if (!Flora.GetFlag(name, out var flag)) return false;
-            if (!Config.IsAllowPinning(flag)) return true;
+            if (Flora.GetFlag(name, out var flag))
+            {
+                if (!Config.IsAllowPinning(flag)) return true;
+            }
+            else if (!Config.IsCustomFlora(name))
+            {
+                return false;
+            }
 
             var flora = FloraObject.Find(x => x.transform.position == pickable.transform.position);
             if (!flora.IsValid()) return true;
@@ -112,8 +124,14 @@ namespace Automatics.AutomaticMapPinning
         private static bool VeinPinning(MonoBehaviour @object, string name, ref HashSet<ZDOID> knownId)
         {
             if (!(@object is IDestructible)) return false;
-            if (!Vein.GetFlag(name, out var flag)) return false;
-            if (!Config.IsAllowPinning(flag)) return true;
+            if (Vein.GetFlag(name, out var flag))
+            {
+                if (!Config.IsAllowPinning(flag)) return true;
+            }
+            else if (!Config.IsCustomVein(name))
+            {
+                return false;
+            }
 
             var position = @object.transform.position;
             if (Map.HavePinInRange(position, 1f)) return true;
@@ -136,8 +154,14 @@ namespace Automatics.AutomaticMapPinning
         private static bool SpawnerPinning(MonoBehaviour @object, string name, ref HashSet<ZDOID> knownId)
         {
             if (!@object.GetComponent<SpawnArea>()) return false;
-            if (!Spawner.GetFlag(name, out var flag)) return false;
-            if (!Config.IsAllowPinning(flag)) return true;
+            if (Spawner.GetFlag(name, out var flag))
+            {
+                if (!Config.IsAllowPinning(flag)) return true;
+            }
+            else if (!Config.IsCustomSpawner(name))
+            {
+                return false;
+            }
 
             var position = @object.transform.position;
             if (Map.HavePinInRange(position, 1f)) return true;

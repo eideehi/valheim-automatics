@@ -1,18 +1,21 @@
-﻿using static Automatics.ValheimObject;
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
 {
     internal static class AutomaticMapPinning
     {
+        public static void Initialize()
+        {
+            PickableCache.AddAwakeListener(pickable =>
+            {
+                if (StaticMapPinning.IsFlora(pickable))
+                    pickable.gameObject.AddComponent<FloraObject>();
+            });
+        }
+
         public static bool IsActive()
         {
             return Config.AutomaticMapPinningEnabled && !Game.IsPaused() && Player.m_localPlayer;
-        }
-
-        public static bool IsFlora(Pickable pickable)
-        {
-            return Flora.GetFlag(Utility.GetName(pickable), out _);
         }
 
         public static void OnUpdate()

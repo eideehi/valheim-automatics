@@ -1,6 +1,8 @@
 ﻿@config_checkbox_label_true,Enabled
 @config_checkbox_label_false,Disabled
 @config_flags_all_label,All
+@config_button_text_add,+
+@config_button_text_remove,x
 
 @config_logging_category,[ #1 Logging ]
 @config_logging_enabled_name,Logging
@@ -45,6 +47,16 @@
 @config_allow_pinning_dungeon_description,Specify the dungeons to be automatic pinning.
 @config_allow_pinning_spot_name,Allow Pinning Spot
 @config_allow_pinning_spot_description,Specify the spots to be automatic pinning.
+@config_allow_pinning_animal_custom_name,Allow Pinning Animal (Custom)
+@config_allow_pinning_animal_custom_description,Specify the display name (e.g. Boar) or internal name (e.g. $enemy_boar) of the target animals.
+@config_allow_pinning_monster_custom_name,Allow Pinning Monster (Custom)
+@config_allow_pinning_monster_custom_description,Specify the display name (e.g. Greyling) or internal name (e.g. $enemy_greyling) of the target monsters.
+@config_allow_pinning_flora_custom_name,Allow Pinning Flora (Custom)
+@config_allow_pinning_flora_custom_description,Specify the display name (e.g. Dandelion) or internal name (e.g. $item_dandelion) of the target flora.
+@config_allow_pinning_vein_custom_name,Allow Pinning Vein (Custom)
+@config_allow_pinning_vein_custom_description,Specify the display name (e.g. Copper deposit) or internal name (e.g. $piece_deposit_copper) of the target veins.
+@config_allow_pinning_spawner_custom_name,Allow Pinning Spawner (Custom)
+@config_allow_pinning_spawner_custom_description,Specify the display name (e.g. Greydwarf nest) or internal name (e.g. $enemy_greydwarfspawner) of the target spawners.
 @config_ignore_tamed_animals_name,Not Pinning Tamed Animals
 @config_ignore_tamed_animals_description,Exclude tamed animals from automatic pinning.
 @config_static_object_search_interval_name,Static Object Search Interval

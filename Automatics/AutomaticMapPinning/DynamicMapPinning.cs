@@ -51,8 +51,10 @@ namespace Automatics.AutomaticMapPinning
                      orderby x.Item2
                      select x.Item1)
             {
-                if (Utility.GetZdoid(@object, out var id) && knownId.Add(id))
-                    AddOrUpdatePin(id, @object.transform.position, GetObjectName(@object), delta);
+                if (!Utility.GetZdoid(@object, out var id) || !knownId.Add(id)) continue;
+                if (@object is Character animal && animal.IsTamed() && Config.IgnoreTamedAnimals) continue;
+
+                AddOrUpdatePin(id, @object.transform.position, GetObjectName(@object), delta);
             }
 
             (from x in DynamicPins where !knownId.Contains(x.Id) select x.Data).ToList().ForEach(Map.RemovePin);
@@ -118,25 +120,20 @@ namespace Automatics.AutomaticMapPinning
 
         private static MonoBehaviour ConvertObject(Collider collider)
         {
-            if (!collider.attachedRigidbody) return null;
-
-            switch (collider.attachedRigidbody.GetComponent<MonoBehaviour>())
+            switch (collider.GetComponentInParent<MonoBehaviour>())
             {
-                case Humanoid player when player.IsPlayer():
+                case Humanoid humanoid when humanoid.IsPlayer():
                     return null;
-                case Character animal when animal.GetComponent<Tameable>() || animal.GetComponent<AnimalAI>():
+                case Character animal when IsAnimal(animal):
                 {
-                    if (animal.IsTamed() && Config.IgnoreTamedAnimals) return null;
-                    if (Animal.GetFlag(animal.m_name, out var flag) && !Config.IsAllowPinning(flag))
-                        return null;
-                    return animal;
+                    if (Animal.GetFlag(animal.m_name, out var flag) && Config.IsAllowPinning(flag)) return animal;
+                    return Config.IsCustomAnimal(animal.m_name) ? animal : null;
                 }
-                case Character monster when monster.GetComponent<MonsterAI>():
+                case Character monster when IsMonster(monster):
                 {
                     if (monster.GetFaction() == Character.Faction.Boss) return null;
-                    if (Monster.GetFlag(monster.m_name, out var flag) && !Config.IsAllowPinning(flag))
-                        return null;
-                    return monster;
+                    if (Monster.GetFlag(monster.m_name, out var flag) && Config.IsAllowPinning(flag)) return monster;
+                    return Config.IsCustomMonster(monster.m_name) ? monster : null;
                 }
                 case Fish fish:
                     return Config.IsAllowPinning(Animal.Flag.Fish) ? fish : null;
@@ -145,6 +142,18 @@ namespace Automatics.AutomaticMapPinning
                 default:
                     return null;
             }
+        }
+
+        private static bool IsAnimal(Character character)
+        {
+            if (character.GetComponent<Tameable>() || character.GetComponent<AnimalAI>()) return true;
+            return Config.IsCustomAnimal(character.m_name);
+        }
+
+        private static bool IsMonster(Character character)
+        {
+            if (character.GetComponent<MonsterAI>()) return true;
+            return Config.IsCustomMonster(character.m_name);
         }
 
         private class DynamicMapPin
