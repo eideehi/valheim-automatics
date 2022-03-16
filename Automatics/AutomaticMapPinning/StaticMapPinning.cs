@@ -41,13 +41,6 @@ namespace Automatics.AutomaticMapPinning
             _objectCache = new ConditionalWeakTable<Collider, MonoBehaviour>();
         }
 
-        public static void RemovePin(Vector3 pos)
-        {
-            var pin = Map.Pins.FirstOrDefault(x => x.m_save && x.m_pos == pos);
-            if (pin != null)
-                Map.RemovePin(pin);
-        }
-
         public static void Run(Vector3 origin)
         {
             if (Time.time - _lastRunningTime < Config.StaticObjectSearchInterval) return;
@@ -102,7 +95,7 @@ namespace Automatics.AutomaticMapPinning
 
             if (cluster.IsDirty)
             {
-                RemovePin(cluster.Center);
+                Map.RemovePin(cluster.Center);
                 cluster.Update();
             }
 

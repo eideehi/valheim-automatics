@@ -54,7 +54,7 @@ namespace Automatics.AutomaticMapPinning
 
             var flora = instance.GetComponent<FloraObject>();
             if (flora != null)
-                StaticMapPinning.RemovePin(flora.Cluster.Center);
+                Map.RemovePin(flora.Cluster.Center);
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(TeleportWorld), "Awake")]
@@ -64,7 +64,7 @@ namespace Automatics.AutomaticMapPinning
 
             var portal = __instance.GetComponent<WearNTear>();
             if (portal != null)
-                portal.m_onDestroyed += () => { StaticMapPinning.RemovePin(__instance.transform.position); };
+                portal.m_onDestroyed += () => { Map.RemovePin(__instance.transform.position); };
         }
     }
 }
