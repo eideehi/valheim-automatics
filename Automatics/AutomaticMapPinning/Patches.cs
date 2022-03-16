@@ -66,5 +66,12 @@ namespace Automatics.AutomaticMapPinning
             if (portal != null)
                 portal.m_onDestroyed += () => { Map.RemovePin(__instance.transform.position); };
         }
+
+        [HarmonyPostfix, HarmonyPatch(typeof(Ship), "Awake")]
+        private static void ShipAwakePostfix(Ship __instance, ZNetView ___m_nview)
+        {
+            if (___m_nview.GetZDO() != null)
+                __instance.gameObject.AddComponent<ShipCache>();
+        }
     }
 }

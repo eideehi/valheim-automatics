@@ -45,6 +45,12 @@ namespace Automatics.AutomaticMapPinning
                 return;
             }
 
+            CharacterPinning(origin, delta);
+            ShipPinning(origin, delta);
+        }
+
+        private static void CharacterPinning(Vector3 origin, float delta)
+        {
             var knownId = new HashSet<ZDOID>();
             foreach (var @object in
                      from x in GetNearbyObjects(origin)
@@ -58,6 +64,33 @@ namespace Automatics.AutomaticMapPinning
             }
 
             (from x in DynamicPins where !knownId.Contains(x.Id) select x.Data).ToList().ForEach(Map.RemovePin);
+        }
+
+        private static void ShipPinning(Vector3 origin, float delta)
+        {
+            foreach (var ship in ShipCache.GetAllInstance())
+            {
+                var pos = ship.transform.position;
+                if (Utils.DistanceXZ(origin, pos) > Config.DynamicObjectSearchRange) continue;
+
+                if (Map.FindPinInRange(pos, 4f, out var data))
+                {
+                    if (data.m_pos != pos)
+                        data.m_pos = Vector3.MoveTowards(data.m_pos, pos, 200f * delta);
+                }
+                else
+                {
+                    var name = "";
+                    var shipPiece = ship.GetComponent<Piece>();
+                    if (shipPiece != null)
+                        name = shipPiece.m_name;
+
+                    if (string.IsNullOrEmpty(name))
+                        name = Utility.GetName(ship);
+
+                    Map.AddPin(pos, L10N.TranslateInternalNameOnly(name), true);
+                }
+            }
         }
 
         private static string GetObjectName(MonoBehaviour @object)

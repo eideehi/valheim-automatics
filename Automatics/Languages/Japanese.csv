@@ -47,6 +47,8 @@
 @config_allow_pinning_dungeon_description,自動ピン留めの対象となるダンジョンを指定します。
 @config_allow_pinning_spot_name,ピン留めを許可するスポット
 @config_allow_pinning_spot_description,自動ピン留めの対象となるスポットを指定します。
+@config_allow_pinning_ship_name,船の自動ピン留めを許可する
+@config_allow_pinning_ship_description,船の自動ピン留めを有効化します。
 @config_allow_pinning_animal_custom_name,ピン留めを許可する動物（自由指定）
 @config_allow_pinning_animal_custom_description,対象となる動物の表示名（猪 など）や内部名（$enemy_boar など）を指定します。
 @config_allow_pinning_monster_custom_name,ピン留めを許可するモンスター（自由指定）

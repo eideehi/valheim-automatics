@@ -11,6 +11,18 @@ namespace Automatics.AutomaticMapPinning
                 if (StaticMapPinning.IsFlora(pickable))
                     pickable.gameObject.AddComponent<FloraObject>();
             });
+
+            ShipCache.AddAwakeListener(ship =>
+            {
+                var shipObj = ship.GetComponent<WearNTear>();
+                if (shipObj == null) return;
+
+                shipObj.m_onDestroyed += () =>
+                {
+                    if (Map.FindPinInRange(ship.transform.position, 4f, out var data))
+                        Map.RemovePin(data);
+                };
+            });
         }
 
         public static bool IsActive()
@@ -28,5 +40,10 @@ namespace Automatics.AutomaticMapPinning
             DynamicMapPinning.Run(origin, Time.deltaTime);
             StaticMapPinning.Run(origin);
         }
+    }
+
+    [DisallowMultipleComponent]
+    public sealed class ShipCache : InstanceCache<Ship>
+    {
     }
 }

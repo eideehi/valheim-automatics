@@ -24,6 +24,7 @@ namespace Automatics.AutomaticMapPinning
         private static ConfigEntry<Other.Flag> _allowPinningOther;
         private static ConfigEntry<Dungeon.Flag> _allowPinningDungeon;
         private static ConfigEntry<Spot.Flag> _allowPinningSpot;
+        private static ConfigEntry<bool> _allowPinningShip;
         private static ConfigEntry<StringList> _allowPinningAnimalCustom;
         private static ConfigEntry<StringList> _allowPinningMonsterCustom;
         private static ConfigEntry<StringList> _allowPinningFloraCustom;
@@ -46,6 +47,7 @@ namespace Automatics.AutomaticMapPinning
         public static bool IsAllowPinning(Other.Flag flag) => (_allowPinningOther.Value & flag) != 0;
         public static bool IsAllowPinning(Dungeon.Flag flag) => (_allowPinningDungeon.Value & flag) != 0;
         public static bool IsAllowPinning(Spot.Flag flag) => (_allowPinningSpot.Value & flag) != 0;
+        public static bool IsAllowPinningShip => _allowPinningShip.Value;
 
         public static bool IsCustomAnimal(string name)
         {
@@ -109,9 +111,10 @@ namespace Automatics.AutomaticMapPinning
             _allowPinningFlora = Configuration.Bind(Section, "allow_pinning_flora", Flora.Flag.All ^ (Flora.Flag.Dandelion | Flora.Flag.Carrot | Flora.Flag.Turnip | Flora.Flag.Onion));
             _allowPinningVein = Configuration.Bind(Section, "allow_pinning_vein", Vein.Flag.All ^ Vein.Flag.Obsidian);
             _allowPinningSpawner = Configuration.Bind(Section, "allow_pinning_spawner", Spawner.Flag.None);
-            _allowPinningOther = Configuration.Bind(Section, "allow_pinning_other", Other.Flag.WildBeehive);
+            _allowPinningOther = Configuration.Bind(Section, "allow_pinning_other", Other.Flag.WildBeehive | Other.Flag.Portal);
             _allowPinningDungeon = Configuration.Bind(Section, "allow_pinning_dungeon", Dungeon.Flag.All);
             _allowPinningSpot = Configuration.Bind(Section, "allow_pinning_spot", Spot.Flag.All);
+            _allowPinningShip = Configuration.Bind(Section, "allow_pinning_ship", true);
             _allowPinningAnimalCustom = Configuration.Bind(Section, "allow_pinning_animal_custom", new StringList());
             _allowPinningMonsterCustom = Configuration.Bind(Section, "allow_pinning_monster_custom", new StringList());
             _allowPinningFloraCustom = Configuration.Bind(Section, "allow_pinning_flora_custom", new StringList());
