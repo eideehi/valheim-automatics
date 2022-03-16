@@ -2,7 +2,7 @@
 @config_checkbox_label_false,Disabled
 @config_flags_all_label,All
 @config_button_text_add,+
-@config_button_text_remove,x
+@config_button_text_remove,×
 
 @config_logging_category,[ #1 Logging ]
 @config_logging_enabled_name,Logging
