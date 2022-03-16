@@ -157,23 +157,31 @@ namespace Automatics.AutomaticMapPinning
             {
                 case Humanoid humanoid when humanoid.IsPlayer():
                     return null;
+
+                case RandomFlyingBird bird:
+                    return Config.IsAllowPinning(Animal.Flag.Bird) ? bird : null;
+
                 case Character animal when IsAnimal(animal):
                 {
                     if (Animal.GetFlag(animal.m_name, out var flag) && Config.IsAllowPinning(flag)) return animal;
                     return Config.IsCustomAnimal(animal.m_name) ? animal : null;
                 }
+
                 case Character monster when IsMonster(monster):
                 {
                     if (monster.GetFaction() == Character.Faction.Boss) return null;
                     if (Monster.GetFlag(monster.m_name, out var flag) && Config.IsAllowPinning(flag)) return monster;
                     return Config.IsCustomMonster(monster.m_name) ? monster : null;
                 }
-                case Fish fish:
-                    return Config.IsAllowPinning(Animal.Flag.Fish) ? fish : null;
-                case RandomFlyingBird bird:
-                    return Config.IsAllowPinning(Animal.Flag.Bird) ? bird : null;
+
                 default:
+                {
+                    var fish = collider.GetComponentInParent<Fish>();
+                    if (fish != null)
+                        return Config.IsAllowPinning(Animal.Flag.Fish) ? fish : null;
+
                     return null;
+                }
             }
         }
 
