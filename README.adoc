@@ -1,7 +1,12 @@
 = Automatics - Valheim Mod
 :uri-configuration-manager: https://github.com/BepInEx/BepInEx.ConfigurationManager
 :uri-license: link:LICENSE
+:uri-custom_map_icons_example: link:/package/extra/custom-icon-example/Automatics/Textures
+:uri-custom_map_icons_zip: https://app.box.com/shared/static/n8l56o2l5or24bx1061jjly4jnm21gm3.zip
+:thumbnail-uri-config_menu: https://app.box.com/shared/static/3v57rjpauzzyv0xeugohnw8bn2ye3q2h.png
 :image-uri-config_menu: https://app.box.com/shared/static/vfzsn69i950l48er2u69tssod6xxsh8u.jpg
+:thumbnail-uri-custom_map_icon: https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png
+:image-uri-custom_map_icon: https://app.box.com/shared/static/yhdd2v0mrwzgh54tbkc7twjen17q22gn.jpg
 
 Automatics is a mod that automates the tedious tasks of life in Valheim. Most of its features exist in existing mods, but it has been re-designed to make it easier for me to use.
 
@@ -12,13 +17,49 @@ Automatically opens and closes the door near the player. The interval and distan
 === Automatic map pinning
 Automatic pinning animals, monsters, floras, veins, dungeons, etc. that exist around the player to the map. The pinning allows for each object and the detection range of the object can be changed from the config.
 
+****
+[discrete]
+==== Custom map icons
+Using png files and csv, you can customize icons for pins added by Automatic map pinning.
+
+image:{thumbnail-uri-custom_map_icon}[link={image-uri-custom_map_icon},title="Custom Map Icons (Click to view full size)"]
+
+- ** Files to be prepared **
+  * CustomMapIcon.csv: Describe information such as which icons to customize and which images to use. Detailed specifications are described below.
+  * ICON_NAME.png: Image files required for each icon. A png file with transparency information is preferred.
+
+Place the prepared files in the following configuration.
+
+- ** /Valheim/BepInEx/plugins/Automatics/Textures **
+  * CustomMapIcon.csv
+  * ICON_1_NAME.png
+  * ICON_2_NAME.png
+
+[discrete]
+===== Format of CustomMapIcon.csv
+Four columns are defined in this csv: TARGET, FILE, WIDTH, and HEIGHT. The first line is considered a header and is skipped, so information should be written in the second and subsequent lines.
+
+- TARGET: Specify the name of the object for which the custom icon is to be used. Display name (e.g. Boar) and internal name (e.g. $enemy_boar) are available.
+- FILE: Specify the name of the image file to be used for the icon. It is best to keep the image size between 16x16 and 32x32, as too large an icon will be obtrusive.
+- WIDTH: Specify the width of the icon.
+- HEIGHT: Specify the height of the icon.
+
+[discrete]
+===== Example files
+I don't feel I have explained it very well, so I have prepared a sample file. Please click {uri-custom_map_icons_example}[here] to check the structure of the file that actually works. You can also download the {uri-custom_map_icons_zip}[zip file] and check the operation on your PC.
+
+- {uri-custom_map_icons_example}[Example files (Github)]
+- {uri-custom_map_icons_zip}[Example files (Zip)]
+
+****
+
 === Automatic processing
 Refueling pieces that need fuel. Deliver materials to pieces that process materials, and store items produced by pieces. These tasks can be automated via containers around the piece.
 
 == Configurations
 I recommend using link:{uri-configuration-manager}[Configuration Manager]. I don't have the energy to explain each configuration item, so I'll upload a screenshot of the GUI. There are also tooltips to supplement the options, so please refer to those as well.
 
-image:{image-uri-config_menu}[link={image-uri-config_menu},title="Configuration Menu"]
+image:{thumbnail-uri-config_menu}[link={image-uri-config_menu},title="Configuration Menu (Click to view full size)"]
 
 == Languages
 |===

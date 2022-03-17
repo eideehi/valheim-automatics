@@ -1,0 +1,4 @@
+target,file,width,height
+$enemy_boar,boar.png,32,32
+$item_raspberries,raspberries.png,32,32
+Mushroom,mushroom.png,32,32
