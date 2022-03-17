@@ -60,7 +60,7 @@ namespace Automatics.AutomaticMapPinning
                 if (!Utility.GetZdoid(@object, out var id) || !knownId.Add(id)) continue;
                 if (@object is Character animal && animal.IsTamed() && Config.IgnoreTamedAnimals) continue;
 
-                AddOrUpdatePin(id, @object.transform.position, GetObjectName(@object), delta);
+                AddOrUpdatePin(id, @object, delta);
             }
 
             (from x in DynamicPins where !knownId.Contains(x.Id) select x.Data).ToList().ForEach(Map.RemovePin);
@@ -88,48 +88,56 @@ namespace Automatics.AutomaticMapPinning
                     if (string.IsNullOrEmpty(name))
                         name = Utility.GetName(ship);
 
-                    Map.AddPin(pos, L10N.TranslateInternalNameOnly(name), true);
+                    Map.AddPin(pos, name, L10N.TranslateInternalNameOnly(name), true);
                 }
             }
         }
 
-        private static string GetObjectName(MonoBehaviour @object)
+        private static (string, string) GetObjectNames(MonoBehaviour @object)
         {
             switch (@object)
             {
                 case Character character:
                 {
                     var level = character.GetLevel();
-                    if (level <= 1) return character.GetHoverName();
+                    if (level <= 1) return (character.m_name, character.GetHoverName());
 
                     var levelSymbol = L10N.Translate("@character_level_symbol");
                     var sb = new StringBuilder(character.GetHoverName()).Append(" ");
                     for (var i = 1; i < level; i++) sb.Append(levelSymbol);
 
-                    return sb.ToString();
+                    return (character.m_name, sb.ToString());
                 }
+
                 case RandomFlyingBird bird:
                 {
                     var name = Utility.GetPrefabName(bird.gameObject);
-                    return L10N.Translate($"@animal_{name.ToLower()}");
+                    return (name, L10N.Translate($"@animal_{name.ToLower()}"));
                 }
+
                 default:
-                    return L10N.Localize(Utility.GetName(@object));
+                {
+                    var name = Utility.GetName(@object);
+                    return (name, L10N.Localize(name));
+                }
             }
         }
 
-        private static void AddOrUpdatePin(ZDOID id, Vector3 pos, string name, float delta)
+        private static void AddOrUpdatePin(ZDOID id, MonoBehaviour @object, float delta)
         {
+            var pos = @object.transform.position;
+            var (iconName, pinName) = GetObjectNames(@object);
+
             var pin = DynamicPins.FirstOrDefault(x => x.Id == id);
             if (pin == null)
             {
-                DynamicPins.Add(new DynamicMapPin(id, Map.AddPin(pos, name, false)));
+                DynamicPins.Add(new DynamicMapPin(id, Map.AddPin(pos, iconName, pinName, false)));
             }
             else
             {
                 var data = pin.Data;
 
-                data.m_name = name;
+                data.m_name = pinName;
 
                 if (data.m_pos != pos)
                     data.m_pos = Vector3.MoveTowards(data.m_pos, pos, 200f * delta);

@@ -107,9 +107,9 @@ namespace Automatics.AutomaticMapPinning
 
             var size = cluster.Size;
             if (size == 1)
-                Map.AddPin(pos, L10N.Translate(name), true);
+                Map.AddPin(pos, name, L10N.Translate(name), true);
             else if (size > 1)
-                Map.AddPin(pos, L10N.Localize("@pin_cluster_format", name, size), true);
+                Map.AddPin(pos, name, L10N.Localize("@pin_cluster_format", name, size), true);
 
             return true;
         }
@@ -140,7 +140,7 @@ namespace Automatics.AutomaticMapPinning
                 }
             }
 
-            Map.AddPin(position, L10N.Translate(name), true);
+            Map.AddPin(position, name, L10N.Translate(name), true);
             return true;
         }
 
@@ -159,7 +159,7 @@ namespace Automatics.AutomaticMapPinning
             var position = @object.transform.position;
             if (Map.HavePinInRange(position, 1f)) return true;
 
-            Map.AddPin(position, L10N.Translate(name), true);
+            Map.AddPin(position, name, L10N.Translate(name), true);
             return true;
         }
 
@@ -180,7 +180,7 @@ namespace Automatics.AutomaticMapPinning
                     var position = @object.transform.position;
                     if (Map.HavePinInRange(position, 1f)) return true;
 
-                    Map.AddPin(position, L10N.Localize(name), true);
+                    Map.AddPin(position, name, L10N.Localize(name), true);
                     break;
                 }
             }
@@ -221,7 +221,7 @@ namespace Automatics.AutomaticMapPinning
                 if (!Dungeon.GetFlag(teleport.m_enterText, out var flag)) continue;
                 if (!Config.IsAllowPinning(flag)) continue;
 
-                Map.AddPin(teleport.transform.position, L10N.Translate(teleport.m_enterText), true);
+                Map.AddPin(teleport.transform.position, teleport.m_enterText, L10N.Translate(teleport.m_enterText), true);
             }
 
             foreach (var instance in from x in ZoneSystem.instance.m_locationInstances.Values
@@ -232,7 +232,7 @@ namespace Automatics.AutomaticMapPinning
                 if (!Spot.GetFlag(instance.m_location.m_prefabName, out var flag)) continue;
                 if (!Config.IsAllowPinning(flag) || !Spot.GetName(flag, out var name)) continue;
 
-                Map.AddPin(instance.m_position, L10N.Translate(name), true);
+                Map.AddPin(instance.m_position, name, L10N.Translate(name), true);
             }
         }
 

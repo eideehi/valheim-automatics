@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 
@@ -72,6 +73,12 @@ namespace Automatics.AutomaticMapPinning
         {
             if (___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<ShipCache>();
+        }
+
+        [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "Start")]
+        private static void MinimapStartPostfix(Minimap __instance)
+        {
+            Map.Initialize();
         }
     }
 }
