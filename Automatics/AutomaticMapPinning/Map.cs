@@ -46,7 +46,7 @@ namespace Automatics.AutomaticMapPinning
 
         public static void RemovePin(Vector3 pos, bool save = true)
         {
-            var pin = Pins.FirstOrDefault(x => save ? x.m_save : !x.m_save && x.m_pos == pos);
+            var pin = Pins.FirstOrDefault(x => (save ? x.m_save : !x.m_save) && x.m_pos == pos);
             if (pin != null)
                 RemovePin(pin);
         }
