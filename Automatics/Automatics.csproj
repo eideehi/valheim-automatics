@@ -244,15 +244,18 @@
     </Target>
     <Target Condition="Exists('$(SEVENZIP_PATH)') And '$(Configuration)|$(Platform)' == 'Release|AnyCPU'" Name="ArchiveBinaries" AfterTargets="PostBuildEvent">
         <PropertyGroup>
-            <SevenZipTmpDir>$(ProjectDir)$(BaseOutputPath)$(TargetName)\</SevenZipTmpDir>
+            <ArchiveTmpDir>$(ProjectDir)$(BaseOutputPath)tmp\</ArchiveTmpDir>
         </PropertyGroup>
         <ItemGroup>
-            <Binaries Include="$(TargetDir)**\*.*" Exclude="$(TargetDir)**\*.pdb;$(TargetDir)*.7z" />
+            <Binaries Include="$(TargetDir)**\*.*" Exclude="$(TargetDir)**\*.pdb;$(TargetDir)*.7z;$(TargetDir)*.zip" />
+            <ThunderstoreFiles Include="$(SolutionDir)\package\thunderstore\**\*.*" />
         </ItemGroup>
-        <Move SourceFiles="@(Binaries)" DestinationFiles="@(Binaries->'$(SevenZipTmpDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+        <Move SourceFiles="@(Binaries)" DestinationFiles="@(Binaries->'$(ArchiveTmpDir)$(TargetName)\%(RecursiveDir)%(Filename)%(Extension)')" />
         <RemoveDir Directories="$(TargetDir)" />
         <MakeDir Directories="TargetDir" />
-        <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).7z&quot; &quot;$(SevenZipTmpDir)&quot; -xr!.*/" />
-        <RemoveDir Directories="$(SevenZipTmpDir)" />
+        <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).7z&quot; &quot;$(ArchiveTmpDir)/*&quot; -xr!.*/" />
+        <Copy SourceFiles="@(ThunderstoreFiles)" DestinationFiles="@(ThunderstoreFiles->'$(ArchiveTmpDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+        <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).zip&quot; &quot;$(ArchiveTmpDir)/*&quot; -xr!.*/" />
+        <RemoveDir Directories="$(ArchiveTmpDir)" />
     </Target>
 </Project>
