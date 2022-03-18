@@ -68,6 +68,8 @@ namespace Automatics.AutomaticMapPinning
 
         private static void ShipPinning(Vector3 origin, float delta)
         {
+            if (!Config.IsAllowPinningShip) return;
+
             foreach (var ship in ShipCache.GetAllInstance())
             {
                 var pos = ship.transform.position;
