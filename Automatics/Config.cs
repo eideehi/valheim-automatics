@@ -1,9 +1,10 @@
-﻿using BepInEx.Configuration;
+﻿using Automatics.ModUtils;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 
 namespace Automatics
 {
-    public partial class Automatics
+    internal static class Config
     {
         private const int NexusID = 1700;
 
@@ -13,10 +14,8 @@ namespace Automatics
         internal static bool LoggingEnabled => _loggingEnabled.Value;
         internal static bool AllowedLogLevel(LogLevel level) => (_allowedLogLevel.Value & level) != 0;
 
-        private static void InitializeConfigurations()
+        public static void Initialize()
         {
-            ModLogger.LogInfo("Start configurations initialization");
-
             Configuration.ResetOrder();
             Configuration.Bind("hidden", "NexusID", NexusID, initializer: x =>
             {
@@ -27,10 +26,6 @@ namespace Automatics
             Configuration.ResetOrder();
             _loggingEnabled = Configuration.Bind("logging", "logging_enabled", false);
             _allowedLogLevel = Configuration.Bind("logging", "allowed_log_level", LogLevel.All ^ (LogLevel.Debug | LogLevel.Info));
-
-            AutomaticDoor.Config.Initialize();
-            AutomaticMapPinning.Config.Initialize();
-            AutomaticProcessing.Config.Initialize();
         }
     }
 }

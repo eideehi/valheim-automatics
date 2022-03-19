@@ -1,10 +1,11 @@
-﻿using static Automatics.ValheimCharacter;
-using static Automatics.ValheimLocation;
-using static Automatics.ValheimObject;
+﻿using static Automatics.ModUtils.ValheimCharacter;
+using static Automatics.ModUtils.ValheimLocation;
+using static Automatics.ModUtils.ValheimObject;
 using System;
 using System.Linq;
+using Automatics.ModUtils;
 using BepInEx.Configuration;
-using StringList = Automatics.Configuration.StringList;
+using StringList = Automatics.ModUtils.Configuration.StringList;
 
 namespace Automatics.AutomaticMapPinning
 {

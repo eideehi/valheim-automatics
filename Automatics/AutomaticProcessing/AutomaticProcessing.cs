@@ -1,9 +1,9 @@
-﻿using static Automatics.Configuration;
+﻿using static Automatics.ModUtils.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Automatics.ModUtils;
 using UnityEngine;
-using Type = Automatics.AutomaticProcessing.AutomaticProcessingType;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -348,7 +348,7 @@ namespace Automatics.AutomaticProcessing
         }
     }
 
-    internal static class AutomaticProcessingTarget
+    internal static class Target
     {
         //public const string ArtisanTable = "$piece_artisanstation";
         public const string Beehive = "$piece_beehive";
@@ -378,7 +378,7 @@ namespace Automatics.AutomaticProcessing
 
         public static readonly IList<string> All;
 
-        static AutomaticProcessingTarget()
+        static Target()
         {
             All = Array.AsReadOnly(new[]
             {
@@ -412,7 +412,7 @@ namespace Automatics.AutomaticProcessing
     }
 
     [Flags]
-    internal enum AutomaticProcessingType : long
+    internal enum Type : long
     {
         None = 0,
 

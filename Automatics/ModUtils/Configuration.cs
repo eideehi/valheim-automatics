@@ -8,7 +8,7 @@ using System.Text;
 using BepInEx.Configuration;
 using UnityEngine;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
     internal static class Configuration
     {

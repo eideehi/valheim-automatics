@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
-    public static class Utility
+    public static class Obj
     {
         private static readonly char[] PrefabNameSeparator;
         private static readonly ConditionalWeakTable<MonoBehaviour, ZDO> ZdoCache;
         private static readonly ConditionalWeakTable<MonoBehaviour, string> NameCache;
 
-        static Utility()
+        static Obj()
         {
             PrefabNameSeparator = " (".ToCharArray();
             ZdoCache = new ConditionalWeakTable<MonoBehaviour, ZDO>();
@@ -75,7 +75,7 @@ namespace Automatics
             return id != ZDOID.None;
         }
 
-        public static List<(T, float)> GetObjectsInSphere<T>(Vector3 origin, float radius, Func<Collider, T> convertor,
+        public static List<(T, float)> GetInSphere<T>(Vector3 origin, float radius, Func<Collider, T> convertor,
             Collider[] buffer, int layerMask = -1)
         {
             var size = Physics.OverlapSphereNonAlloc(origin, radius, buffer, layerMask);
@@ -93,10 +93,10 @@ namespace Automatics
             return result;
         }
 
-        public static List<(T, float)> GetObjectsInSphere<T>(Vector3 origin, float radius, Func<Collider, T> convertor,
+        public static List<(T, float)> GetInSphere<T>(Vector3 origin, float radius, Func<Collider, T> convertor,
             int bufferSize = 128, int layerMask = -1)
         {
-            return GetObjectsInSphere(origin, radius, convertor, new Collider[bufferSize], layerMask);
+            return GetInSphere(origin, radius, convertor, new Collider[bufferSize], layerMask);
         }
     }
 }

@@ -1,6 +1,6 @@
 ﻿using HarmonyLib;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
     public static class Reflection
     {

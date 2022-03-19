@@ -1,6 +1,4 @@
-﻿using HarmonyLib;
-
-namespace Automatics
+﻿namespace Automatics.ModUtils
 {
     public static class ConsoleCommand
     {
@@ -23,17 +21,6 @@ namespace Automatics
         public static string ArgumentError(string arg)
         {
             return L10N.Localize($"@command_argument_error {arg}");
-        }
-    }
-
-    [HarmonyPatch]
-    internal static partial class Patches
-    {
-        [HarmonyPostfix, HarmonyPatch(typeof(Terminal), "Awake")]
-        private static void TerminalAwakePostfix(Terminal __instance)
-        {
-            Automatics.ModLogger.LogInfo("Start registering console commands");
-            AutomaticMapPinning.Command.Register();
         }
     }
 }

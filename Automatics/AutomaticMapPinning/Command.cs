@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
@@ -45,7 +46,7 @@ namespace Automatics.AutomaticMapPinning
             var strings = new HashSet<string>();
             var pos = Player.m_localPlayer.transform.position;
             foreach (var @object in
-                     from x in Utility.GetObjectsInSphere(pos, range, convertor, range * 16)
+                     from x in Obj.GetInSphere(pos, range, convertor, range * 16)
                      orderby x.Item2
                      select x.Item1)
             {
@@ -55,14 +56,14 @@ namespace Automatics.AutomaticMapPinning
                         break;
                     case RandomFlyingBird bird:
                     {
-                        var prefabName = Utility.GetPrefabName(bird.gameObject).ToLower();
+                        var prefabName = Obj.GetPrefabName(bird.gameObject).ToLower();
                         var name = $"@animal_{prefabName}";
                         strings.Add($"{L10N.Translate(name)}: [type: {@object.GetType()}, raw_name: {name}, layer: {Layer(@object)}]");
                         break;
                     }
                     default:
                     {
-                        var name = Utility.GetName(@object);
+                        var name = Obj.GetName(@object);
                         strings.Add($"{L10N.Localize(name)}: [type: {@object.GetType()}, raw_name: {name}, layer: {Layer(@object)}]");
                         break;
                     }

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
     public class InstanceCache<T> : MonoBehaviour where T : MonoBehaviour
     {

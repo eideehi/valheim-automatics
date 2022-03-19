@@ -1,11 +1,15 @@
-﻿using UnityEngine;
+﻿using Automatics.ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
 {
-    internal static class AutomaticMapPinning
+    internal static class Core
     {
         public static void Initialize()
         {
+            Config.Initialize();
+            Automatics.OnInitTerminal += Command.Register;
+
             PickableCache.AddAwakeListener(pickable =>
             {
                 if (StaticMapPinning.IsFlora(pickable))

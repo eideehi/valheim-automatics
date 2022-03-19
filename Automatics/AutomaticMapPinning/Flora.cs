@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
@@ -55,12 +56,12 @@ namespace Automatics.AutomaticMapPinning
         private void ClusterConstruction()
         {
             var origin = _pickable.transform.position;
-            var objectName = Utility.GetName(_pickable);
+            var objectName = Obj.GetName(_pickable);
 
             foreach (var flora in
                      from x in FloraObjects
                      where Vector3.Distance(x.transform.position, origin) <= Config.FloraPinMergeRange &&
-                           Utility.GetName(x._pickable) == objectName
+                           Obj.GetName(x._pickable) == objectName
                      select x)
             {
                 if (Cluster == flora.Cluster) continue;

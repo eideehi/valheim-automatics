@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
     public static class Csv
     {

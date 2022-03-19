@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
     public static class Image
     {

@@ -14,15 +14,15 @@ namespace Automatics.AutomaticMapPinning
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "Update")]
         private static void MinimapUpdatePostfix()
         {
-            if (!AutomaticMapPinning.IsActive()) return;
+            if (!Core.IsActive()) return;
 
-            AutomaticMapPinning.OnUpdate();
+            Core.OnUpdate();
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "RemovePin", typeof(Minimap.PinData))]
         private static void MinimapRemovePinPostfix(Minimap.PinData pin)
         {
-            if (!AutomaticMapPinning.IsActive()) return;
+            if (!Core.IsActive()) return;
 
             DynamicMapPinning.RemovePin(pin);
         }
@@ -51,7 +51,7 @@ namespace Automatics.AutomaticMapPinning
         [SuppressMessage("ReSharper", "UnusedMember.Local")]
         private static void PickablePreDestroyHook(Pickable instance)
         {
-            if (!AutomaticMapPinning.IsActive()) return;
+            if (!Core.IsActive()) return;
 
             var flora = instance.GetComponent<FloraObject>();
             if (flora != null)

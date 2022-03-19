@@ -1,13 +1,13 @@
 ﻿using System;
 using BepInEx.Logging;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
     internal static class Log
     {
         private static bool CanLogging(LogLevel level)
         {
-            return Automatics.LoggingEnabled && Automatics.AllowedLogLevel(level);
+            return Config.LoggingEnabled && Config.AllowedLogLevel(level);
         }
 
         public static void Fatal(Func<string> message)

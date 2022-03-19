@@ -3,7 +3,7 @@ using HarmonyLib;
 
 namespace Automatics.AutomaticDoor
 {
-    [SuppressMessage( "ReSharper", "InconsistentNaming" )]
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
     [HarmonyPatch]
     internal static class Patches
     {

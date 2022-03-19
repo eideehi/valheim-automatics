@@ -1,9 +1,12 @@
-﻿using BepInEx.Configuration;
+﻿using System.Diagnostics.CodeAnalysis;
+using Automatics.ModUtils;
+using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
 namespace Automatics.Debug
 {
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
     [HarmonyPatch]
     internal static class Patches
     {
@@ -30,6 +33,8 @@ namespace Automatics.Debug
         {
             __instance.SetGodMode(true);
             __instance.SetGhostMode(true);
+            if (!__instance.NoCostCheat())
+                __instance.ToggleNoPlacementCost();
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Player), "Update")]
@@ -72,13 +77,6 @@ namespace Automatics.Debug
             return !__instance.InGodMode();
         }
 
-        [HarmonyPrefix, HarmonyPatch(typeof(Player), "ConsumeResources")]
-        private static bool PlayerConsumeResourcesPrefix(Player __instance, Piece.Requirement[] requirements,
-            int qualityLevel)
-        {
-            return !__instance.InGodMode();
-        }
-
         [HarmonyPostfix, HarmonyPatch(typeof(Terminal), "Awake")]
         private static void TerminalAwakePostfix(Terminal __instance, bool ___m_cheat)
         {
@@ -86,6 +84,12 @@ namespace Automatics.Debug
             {
                 Reflection.SetField(__instance, "m_cheat", true);
             }
+        }
+
+        [HarmonyPostfix, HarmonyPatch(typeof(Terminal), "InitTerminal")]
+        private static void TerminalAwakePostfix(bool ___m_terminalInitialized)
+        {
+            if (!___m_terminalInitialized) return;
 
             Command.RegisterCommands();
         }

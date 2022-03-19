@@ -1,9 +1,10 @@
-﻿using static Automatics.ValheimObject;
-using static Automatics.ValheimLocation;
+﻿using static Automatics.ModUtils.ValheimObject;
+using static Automatics.ModUtils.ValheimLocation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
@@ -32,7 +33,7 @@ namespace Automatics.AutomaticMapPinning
 
         public static bool IsFlora(Pickable pickable)
         {
-            var name = Utility.GetName(pickable);
+            var name = Obj.GetName(pickable);
             return Flora.GetFlag(name, out _) || Config.IsCustomFlora(name);
         }
 
@@ -65,9 +66,9 @@ namespace Automatics.AutomaticMapPinning
                      orderby x.Item2
                      select x.Item1)
             {
-                if (Utility.GetZdoid(@object, out var id) && !knownId.Add(id)) continue;
+                if (Obj.GetZdoid(@object, out var id) && !knownId.Add(id)) continue;
 
-                var name = Utility.GetName(@object);
+                var name = Obj.GetName(@object);
                 if (FloraPinning(@object, name, ref knownId)) continue;
                 if (VeinPinning(@object, name, ref knownId)) continue;
                 if (SpawnerPinning(@object, name, ref knownId)) continue;
@@ -213,7 +214,7 @@ namespace Automatics.AutomaticMapPinning
             if (Config.LocationSearchRange <= 0) return;
 
             foreach (var teleport in
-                     from x in Utility.GetObjectsInSphere(origin, Config.LocationSearchRange,
+                     from x in Obj.GetInSphere(origin, Config.LocationSearchRange,
                          x => x.GetComponent<Teleport>(), ColliderBuffer, LazyDungeonMask.Value)
                      where !Map.HavePinInRange(x.Item1.transform.position, 1f)
                      select x.Item1)
@@ -238,7 +239,7 @@ namespace Automatics.AutomaticMapPinning
 
         private static IEnumerable<(MonoBehaviour, float)> GetNearbyObjects(Vector3 pos)
         {
-            return Utility.GetObjectsInSphere(pos, Config.StaticObjectSearchRange, GetObject, ColliderBuffer,
+            return Obj.GetInSphere(pos, Config.StaticObjectSearchRange, GetObject, ColliderBuffer,
                 ObjectMask);
         }
 
@@ -259,7 +260,7 @@ namespace Automatics.AutomaticMapPinning
                 collider.GetComponentInParent<Interactable>() as MonoBehaviour ??
                 collider.GetComponentInParent<Hoverable>() as MonoBehaviour;
 
-            var name = Utility.GetName(@object);
+            var name = Obj.GetName(@object);
             if (string.IsNullOrEmpty(name)) return null;
 
             if (Flora.GetFlag(name, out var flag1)) return Config.IsAllowPinning(flag1) ? @object : null;

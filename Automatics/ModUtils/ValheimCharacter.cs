@@ -1,8 +1,8 @@
-﻿using static Automatics.Configuration;
+﻿using static Automatics.ModUtils.Configuration;
 using System;
 using System.Collections.Generic;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
     public static class ValheimCharacter
     {

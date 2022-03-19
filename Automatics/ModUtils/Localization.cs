@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Automatics
+namespace Automatics.ModUtils
 {
-    public static class L10N
+    internal static class L10N
     {
         private static readonly Regex WordPattern;
 
@@ -25,7 +25,7 @@ namespace Automatics
                 case '$':
                     return InvokeTranslate(word.Substring(1));
                 case '@':
-                    return InvokeTranslate($"net_eidee_{word.Substring(1)}");
+                    return InvokeTranslate($"automatics_{word.Substring(1)}");
                 default:
                     return InvokeTranslate(word);
             }
@@ -38,7 +38,7 @@ namespace Automatics
                 case '$':
                     return InvokeTranslate(internalName.Substring(1));
                 case '@':
-                    return InvokeTranslate($"net_eidee_{internalName.Substring(1)}");
+                    return InvokeTranslate($"automatics_{internalName.Substring(1)}");
                 default:
                     return internalName;
             }
@@ -51,7 +51,7 @@ namespace Automatics
             foreach (Match match in WordPattern.Matches(text))
             {
                 var groups = match.Groups;
-                var word = groups[1].Value == "@" ? $"net_eidee_{groups[2].Value}" : groups[2].Value;
+                var word = groups[1].Value == "@" ? $"automatics_{groups[2].Value}" : groups[2].Value;
 
                 sb.Append(text.Substring(offset, groups[0].Index - offset));
                 sb.Append(InvokeTranslate(word));
@@ -77,7 +77,7 @@ namespace Automatics
             Reflection.InvokeMethod<string>(ValheimL10N, "InsertWords", text, words);
     }
 
-    public static class LanguageLoader
+    internal static class LanguageLoader
     {
         private static readonly char[] CsvSeparator;
 
@@ -131,7 +131,7 @@ namespace Automatics
 
             var key = strings[0];
             var value = strings[1];
-            return (key.StartsWith("@") ? $"net_eidee_{key.Substring(1)}" : key, value.Replace(@"\n", "\n"));
+            return (key.StartsWith("@") ? $"automatics_{key.Substring(1)}" : key, value.Replace(@"\n", "\n"));
         }
     }
 }

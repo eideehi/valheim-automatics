@@ -1,9 +1,8 @@
 ﻿using System.Collections.Generic;
+using Automatics.ModUtils;
 using BepInEx.Configuration;
-using Target = Automatics.AutomaticProcessing.AutomaticProcessingTarget;
-using Type = Automatics.AutomaticProcessing.AutomaticProcessingType;
 using AcceptableType =
-    Automatics.Configuration.AcceptableValueEnum<Automatics.AutomaticProcessing.AutomaticProcessingType>;
+    Automatics.ModUtils.Configuration.AcceptableValueEnum<Automatics.AutomaticProcessing.Type>;
 
 namespace Automatics.AutomaticProcessing
 {

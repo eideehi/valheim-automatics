@@ -1,9 +1,10 @@
-﻿using static Automatics.ValheimCharacter;
+﻿using static Automatics.ModUtils.ValheimCharacter;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
@@ -57,7 +58,7 @@ namespace Automatics.AutomaticMapPinning
                      orderby x.Item2
                      select x.Item1)
             {
-                if (!Utility.GetZdoid(@object, out var id) || !knownId.Add(id)) continue;
+                if (!Obj.GetZdoid(@object, out var id) || !knownId.Add(id)) continue;
                 if (@object is Character animal && animal.IsTamed() && Config.IgnoreTamedAnimals) continue;
 
                 AddOrUpdatePin(id, @object, delta);
@@ -88,7 +89,7 @@ namespace Automatics.AutomaticMapPinning
                         name = shipPiece.m_name;
 
                     if (string.IsNullOrEmpty(name))
-                        name = Utility.GetName(ship);
+                        name = Obj.GetName(ship);
 
                     Map.AddPin(pos, name, L10N.TranslateInternalNameOnly(name), true);
                 }
@@ -113,13 +114,13 @@ namespace Automatics.AutomaticMapPinning
 
                 case RandomFlyingBird bird:
                 {
-                    var name = Utility.GetPrefabName(bird.gameObject);
+                    var name = Obj.GetPrefabName(bird.gameObject);
                     return (name, L10N.Translate($"@animal_{name.ToLower()}"));
                 }
 
                 default:
                 {
-                    var name = Utility.GetName(@object);
+                    var name = Obj.GetName(@object);
                     return (name, L10N.Localize(name));
                 }
             }
@@ -148,7 +149,7 @@ namespace Automatics.AutomaticMapPinning
 
         private static IEnumerable<(MonoBehaviour, float)> GetNearbyObjects(Vector3 pos)
         {
-            return Utility.GetObjectsInSphere(pos, Config.DynamicObjectSearchRange, GetObject, ColliderBuffer,
+            return Obj.GetInSphere(pos, Config.DynamicObjectSearchRange, GetObject, ColliderBuffer,
                 ObjectMask);
         }
 

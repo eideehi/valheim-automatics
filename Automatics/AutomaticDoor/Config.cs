@@ -1,4 +1,5 @@
-﻿using BepInEx.Configuration;
+﻿using Automatics.ModUtils;
+using BepInEx.Configuration;
 
 namespace Automatics.AutomaticDoor
 {
