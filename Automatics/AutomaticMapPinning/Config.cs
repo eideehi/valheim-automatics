@@ -109,10 +109,10 @@ namespace Automatics.AutomaticMapPinning
             _locationSearchRange = Configuration.Bind(Section, "location_search_range", 96, (0, 256));
             _allowPinningAnimal = Configuration.Bind(Section, "allow_pinning_animal", Animal.Flag.All);
             _allowPinningMonster = Configuration.Bind(Section, "allow_pinning_monster", Monster.Flag.All);
-            _allowPinningFlora = Configuration.Bind(Section, "allow_pinning_flora", Flora.Flag.All ^ (Flora.Flag.Dandelion | Flora.Flag.Carrot | Flora.Flag.Turnip | Flora.Flag.Onion));
+            _allowPinningFlora = Configuration.Bind(Section, "allow_pinning_flora", Flora.Flag.Raspberries | Flora.Flag.Mushroom | Flora.Flag.Blueberries | Flora.Flag.CarrotSeeds | Flora.Flag.Thistle | Flora.Flag.TurnipSeeds | Flora.Flag.Cloudberries);
             _allowPinningVein = Configuration.Bind(Section, "allow_pinning_vein", Vein.Flag.All ^ Vein.Flag.Obsidian);
             _allowPinningSpawner = Configuration.Bind(Section, "allow_pinning_spawner", Spawner.Flag.None);
-            _allowPinningOther = Configuration.Bind(Section, "allow_pinning_other", Other.Flag.WildBeehive | Other.Flag.Portal);
+            _allowPinningOther = Configuration.Bind(Section, "allow_pinning_other", Other.Flag.WildBeehive);
             _allowPinningDungeon = Configuration.Bind(Section, "allow_pinning_dungeon", Dungeon.Flag.All);
             _allowPinningSpot = Configuration.Bind(Section, "allow_pinning_spot", Spot.Flag.All);
             _allowPinningShip = Configuration.Bind(Section, "allow_pinning_ship", true);
