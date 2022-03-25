@@ -12,12 +12,19 @@ namespace Automatics.AutomaticDoor
         private static ConfigEntry<float> _intervalToClose;
         private static ConfigEntry<float> _playerSearchRadiusToOpen;
         private static ConfigEntry<float> _playerSearchRadiusToClose;
+        private static ConfigEntry<KeyboardShortcut> _toggleAutomaticDoorEnabledKey;
 
         public static bool AutomaticDoorEnabled => _automaticDoorEnabled.Value;
         public static float IntervalToOpen => _intervalToOpen.Value;
         public static float IntervalToClose => _intervalToClose.Value;
         public static float PlayerSearchRadiusToOpen => _playerSearchRadiusToOpen.Value;
         public static float PlayerSearchRadiusToClose => _playerSearchRadiusToClose.Value;
+        public static KeyboardShortcut ToggleAutomaticDoorEnabledKey => _toggleAutomaticDoorEnabledKey.Value;
+
+        public static void SetAutomaticDoorEnabled(bool enabled)
+        {
+            _automaticDoorEnabled.BoxedValue = enabled;
+        }
 
         public static void Initialize()
         {
@@ -27,6 +34,7 @@ namespace Automatics.AutomaticDoor
             _intervalToClose = Configuration.Bind(Section, "interval_to_close", 0.1f, (0.1f, 8f));
             _playerSearchRadiusToOpen = Configuration.Bind(Section, "player_search_radius_to_open", 2.5f, (1f, 8f));
             _playerSearchRadiusToClose = Configuration.Bind(Section, "player_search_radius_to_close", 2.5f, (1f, 8f));
+            _toggleAutomaticDoorEnabledKey = Configuration.Bind(Section, "toggle_automatic_door_enabled_key", new KeyboardShortcut());
 
             _intervalToOpen.SettingChanged += (sender, args) => { AutomaticDoor.ChangeInterval(true); };
             _intervalToClose.SettingChanged += (sender, args) => { AutomaticDoor.ChangeInterval(false); };

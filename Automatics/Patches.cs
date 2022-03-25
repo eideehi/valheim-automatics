@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using Automatics.ModUtils;
 using HarmonyLib;
 
 namespace Automatics
@@ -7,6 +8,15 @@ namespace Automatics
     [HarmonyPatch]
     internal static class Patches
     {
+        [HarmonyPostfix, HarmonyPatch(typeof(Player), "Update")]
+        private static void PlayerUpdatePostfix(Player __instance, ZNetView ___m_nview)
+        {
+            if (!___m_nview.IsValid() || !___m_nview.IsOwner()) return;
+            if (!Reflection.InvokeMethod<bool>(__instance, "TakeInput")) return;
+
+            Automatics.OnPlayerUpdate?.Invoke();
+        }
+
         [HarmonyPostfix, HarmonyPatch(typeof(Container), "Awake")]
         private static void ContainerAwakePostfix(Container __instance, ZNetView ___m_nview)
         {

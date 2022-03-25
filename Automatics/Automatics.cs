@@ -19,6 +19,7 @@ namespace Automatics
         internal static ManualLogSource ModLogger { get; private set; }
         internal static ConfigFile ModConfig { get; private set; }
         internal static Action OnInitTerminal { get; set; }
+        internal static Action OnPlayerUpdate { get; set; }
 
         private void Awake()
         {
