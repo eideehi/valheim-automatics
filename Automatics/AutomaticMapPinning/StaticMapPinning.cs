@@ -42,10 +42,18 @@ namespace Automatics.AutomaticMapPinning
             _objectCache = new ConditionalWeakTable<Collider, MonoBehaviour>();
         }
 
-        public static void Run(Vector3 origin)
+        public static void Run(Vector3 origin, bool takeInput)
         {
             if (!Config.AutomaticMapPinningEnabled) return;
-            if (Time.time - _lastRunningTime < Config.StaticObjectSearchInterval) return;
+
+            if (Config.StaticObjectSearchKey.MainKey != KeyCode.None)
+            {
+                if (!takeInput || !Config.StaticObjectSearchKey.IsDown()) return;
+            }
+            else
+            {
+                if (Time.time - _lastRunningTime < Config.StaticObjectSearchInterval) return;
+            }
 
             if (_busy) return;
             _busy = true;

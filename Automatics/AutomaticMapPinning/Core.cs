@@ -34,17 +34,16 @@ namespace Automatics.AutomaticMapPinning
             return Config.AutomaticMapPinningEnabled && !Game.IsPaused() && Player.m_localPlayer;
         }
 
-        public static void OnUpdate()
+        public static void OnUpdate(Player player, float delta, bool takeInput)
         {
-            if (Game.IsPaused() || !Player.m_localPlayer) return;
+            if (Game.IsPaused()) return;
 
-            var origin = Player.m_localPlayer.transform.position;
-
+            var origin = player.transform.position;
             var location = Location.GetLocation(origin);
             if (location && location.m_hasInterior) return;
 
-            DynamicMapPinning.Run(origin, Time.deltaTime);
-            StaticMapPinning.Run(origin);
+            DynamicMapPinning.Run(origin, delta);
+            StaticMapPinning.Run(origin, takeInput);
         }
     }
 

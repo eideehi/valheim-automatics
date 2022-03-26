@@ -69,6 +69,8 @@
 @config_flora_pins_merge_range_description,When pinning flora, it recursively searches for the same flora that exist within a specified range and merge them into a single pin.
 @config_in_ground_veins_need_wishbone_name,In Ground Veins Need Wishbone
 @config_in_ground_veins_need_wishbone_description,Specify whether need to equip a Wishbone to pinning a vein that in ground.
+@config_static_object_search_key_name,Static Object Search
+@config_static_object_search_key_description,Specify shortcut keys for searching static objects. Setting this item disables the static object search at regular intervals, so that it is performed only once each time the shortcut key is pressed.
 
 @config_automatic_processing_category,[ #4 Automatic Processing ]
 @config_automatic_processing_enabled_name,Automatic Processing

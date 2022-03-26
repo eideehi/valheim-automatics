@@ -35,6 +35,7 @@ namespace Automatics.AutomaticMapPinning
         private static ConfigEntry<float> _staticObjectSearchInterval;
         private static ConfigEntry<int> _floraPinMergeRange;
         private static ConfigEntry<bool> _inGroundVeinsNeedWishbone;
+        private static ConfigEntry<KeyboardShortcut> _staticObjectSearchKey;
 
         public static bool AutomaticMapPinningEnabled => _automaticMapPinningEnabled.Value;
         public static int DynamicObjectSearchRange => _dynamicObjectSearchRange.Value;
@@ -99,6 +100,7 @@ namespace Automatics.AutomaticMapPinning
         public static float StaticObjectSearchInterval => _staticObjectSearchInterval.Value;
         public static int FloraPinMergeRange => _floraPinMergeRange.Value;
         public static bool InGroundVeinsNeedWishbone => _inGroundVeinsNeedWishbone.Value;
+        public static KeyboardShortcut StaticObjectSearchKey => _staticObjectSearchKey.Value;
 
         public static void Initialize()
         {
@@ -125,6 +127,7 @@ namespace Automatics.AutomaticMapPinning
             _staticObjectSearchInterval = Configuration.Bind(Section, "static_object_search_interval", 0.25f, (0f, 8f));
             _floraPinMergeRange = Configuration.Bind(Section, "flora_pins_merge_range", 8, (0, 16));
             _inGroundVeinsNeedWishbone = Configuration.Bind(Section, "in_ground_veins_need_wishbone", true);
+            _staticObjectSearchKey = Configuration.Bind(Section, "static_object_search_key", new KeyboardShortcut());
 
             _allowPinningAnimal.SettingChanged += OnDynamicObjectSettingChanged;
             _allowPinningMonster.SettingChanged += OnDynamicObjectSettingChanged;

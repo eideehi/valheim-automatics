@@ -11,10 +11,10 @@ namespace Automatics.AutomaticMapPinning
     [HarmonyPatch]
     internal static class Patches
     {
-        [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "Update")]
-        private static void MinimapUpdatePostfix()
+        [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "UpdateMap")]
+        private static void MinimapUpdateMapPostfix(Player player, float dt, bool takeInput)
         {
-            Core.OnUpdate();
+            Core.OnUpdate(player, dt, takeInput);
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "RemovePin", typeof(Minimap.PinData))]
