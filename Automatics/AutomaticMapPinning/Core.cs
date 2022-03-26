@@ -36,6 +36,8 @@ namespace Automatics.AutomaticMapPinning
 
         public static void OnUpdate()
         {
+            if (Game.IsPaused() || !Player.m_localPlayer) return;
+
             var origin = Player.m_localPlayer.transform.position;
 
             var location = Location.GetLocation(origin);

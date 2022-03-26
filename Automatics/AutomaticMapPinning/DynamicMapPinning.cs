@@ -40,7 +40,7 @@ namespace Automatics.AutomaticMapPinning
 
         public static void Run(Vector3 origin, float delta)
         {
-            if (Config.DynamicObjectSearchRange <= 0)
+            if (!Config.AutomaticMapPinningEnabled || Config.DynamicObjectSearchRange <= 0)
             {
                 (from x in DynamicPins select x.Data).ToList().ForEach(Map.RemovePin);
                 return;

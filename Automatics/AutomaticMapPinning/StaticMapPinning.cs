@@ -44,6 +44,7 @@ namespace Automatics.AutomaticMapPinning
 
         public static void Run(Vector3 origin)
         {
+            if (!Config.AutomaticMapPinningEnabled) return;
             if (Time.time - _lastRunningTime < Config.StaticObjectSearchInterval) return;
 
             if (_busy) return;

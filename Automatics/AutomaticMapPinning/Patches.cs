@@ -14,16 +14,12 @@ namespace Automatics.AutomaticMapPinning
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "Update")]
         private static void MinimapUpdatePostfix()
         {
-            if (!Core.IsActive()) return;
-
             Core.OnUpdate();
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "RemovePin", typeof(Minimap.PinData))]
         private static void MinimapRemovePinPostfix(Minimap.PinData pin)
         {
-            if (!Core.IsActive()) return;
-
             DynamicMapPinning.RemovePin(pin);
         }
 
