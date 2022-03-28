@@ -116,6 +116,9 @@ namespace Automatics.ModUtils
                     { Name.FulingShaman, Flag.FulingShaman },
                     { Name.Growth, Flag.Growth },
                     { Name.Serpent, Flag.Serpent },
+                    { Name.Bat, Flag.Bat },
+                    { Name.FenringCultist, Flag.FenringCultist },
+                    { Name.Ulv, Flag.Ulv },
                 };
 
                 FlagByName = new Dictionary<Flag, string>
@@ -146,6 +149,9 @@ namespace Automatics.ModUtils
                     { Flag.FulingShaman, Name.FulingShaman },
                     { Flag.Growth, Name.Growth },
                     { Flag.Serpent, Name.Serpent },
+                    { Flag.Bat, Name.Bat },
+                    { Flag.FenringCultist, Name.FenringCultist },
+                    { Flag.Ulv, Name.Ulv },
                 };
             }
 
@@ -181,6 +187,9 @@ namespace Automatics.ModUtils
                 public const string FulingShaman = "$enemy_goblinshaman";
                 public const string Growth = "$enemy_blobtar";
                 public const string Serpent = "$enemy_serpent";
+                public const string Bat = "$enemy_bat";
+                public const string FenringCultist = "$enemy_fenringcultist";
+                public const string Ulv = "$enemy_ulv";
             }
 
             [Flags]
@@ -265,6 +274,15 @@ namespace Automatics.ModUtils
 
                 [LocalizedDescription(Name.Serpent)]
                 Serpent = 1L << 25,
+
+                [LocalizedDescription(Name.Bat)]
+                Bat = 1L << 26,
+
+                [LocalizedDescription(Name.FenringCultist)]
+                FenringCultist = 1L << 27,
+
+                [LocalizedDescription(Name.Ulv)]
+                Ulv = 1L << 28,
 
                 [LocalizedDescription("@config_flags_all_label")]
                 All = -1L,
