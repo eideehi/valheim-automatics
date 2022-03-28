@@ -222,28 +222,41 @@ namespace Automatics.AutomaticMapPinning
         {
             if (Config.LocationSearchRange <= 0) return;
 
-            foreach (var teleport in
-                     from x in Obj.GetInSphere(origin, Config.LocationSearchRange,
-                         x => x.GetComponent<Teleport>(), ColliderBuffer, LazyDungeonMask.Value)
-                     where !Map.HavePinInRange(x.Item1.transform.position, 1f)
-                     select x.Item1)
-            {
-                if (!Dungeon.GetFlag(teleport.m_enterText, out var flag)) continue;
-                if (!Config.IsAllowPinning(flag)) continue;
-
-                Map.AddPin(teleport.transform.position, teleport.m_enterText, L10N.Translate(teleport.m_enterText), true);
-            }
-
             foreach (var instance in from x in ZoneSystem.instance.m_locationInstances.Values
                      where Vector3.Distance(origin, x.m_position) <= Config.LocationSearchRange &&
                            !Map.HavePinInRange(x.m_position, 1f)
                      select x)
             {
-                if (!Spot.GetFlag(instance.m_location.m_prefabName, out var flag)) continue;
-                if (!Config.IsAllowPinning(flag) || !Spot.GetName(flag, out var name)) continue;
-
-                Map.AddPin(instance.m_position, name, L10N.Translate(name), true);
+                if (DungeonPinning(instance)) continue;
+                if (SpotPinning(instance)) continue;
             }
+        }
+
+        private static bool DungeonPinning(ZoneSystem.LocationInstance instance)
+        {
+            if (!Dungeon.GetFlag(instance.m_location.m_prefabName, out var flag)) return false;
+            if (!Config.IsAllowPinning(flag) || !Dungeon.GetName(flag, out var name)) return true;
+
+            foreach (var teleport in
+                     from x in Obj.GetInSphere(instance.m_position, 16f,
+                         x => x.GetComponent<Teleport>(), ColliderBuffer, LazyDungeonMask.Value)
+                     where !Map.HavePinInRange(x.Item1.transform.position, 1f)
+                     select x.Item1)
+            {
+                Map.AddPin(teleport.transform.position, name, L10N.Translate(name), true);
+                break;
+            }
+
+            return true;
+        }
+
+        private static bool SpotPinning(ZoneSystem.LocationInstance instance)
+        {
+            if (!Spot.GetFlag(instance.m_location.m_prefabName, out var flag)) return false;
+            if (!Config.IsAllowPinning(flag) || !Spot.GetName(flag, out var name)) return true;
+
+            Map.AddPin(instance.m_position, name, L10N.Translate(name), true);
+            return true;
         }
 
         private static IEnumerable<(MonoBehaviour, float)> GetNearbyObjects(Vector3 pos)

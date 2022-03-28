@@ -16,8 +16,20 @@ namespace Automatics.ModUtils
                 NameByFlag = new Dictionary<string, Flag>
                 {
                     { Name.BurialChambers, Flag.BurialChambers },
+                    { "Crypt2", Flag.BurialChambers },
+                    { "Crypt3", Flag.BurialChambers },
+                    { "Crypt4", Flag.BurialChambers },
                     { Name.TrollCave, Flag.TrollCave },
+                    { "TrollCave", Flag.TrollCave },
+                    { "TrollCave02", Flag.TrollCave },
                     { Name.SunkenCrypts, Flag.SunkenCrypts },
+                    { "SunkenCrypt1", Flag.SunkenCrypts },
+                    { "SunkenCrypt2", Flag.SunkenCrypts },
+                    { "SunkenCrypt3", Flag.SunkenCrypts },
+                    { "SunkenCrypt4", Flag.SunkenCrypts },
+                    { Name.MountainCave, Flag.MountainCave },
+                    { "MountainCave01", Flag.MountainCave },
+                    { "MountainCave02", Flag.MountainCave },
                 };
 
                 FlagByName = new Dictionary<Flag, string>
@@ -25,6 +37,7 @@ namespace Automatics.ModUtils
                     { Flag.BurialChambers, Name.BurialChambers },
                     { Flag.TrollCave, Name.TrollCave },
                     { Flag.SunkenCrypts, Name.SunkenCrypts },
+                    { Flag.MountainCave, Name.MountainCave },
                 };
             }
 
@@ -37,6 +50,7 @@ namespace Automatics.ModUtils
                 public const string BurialChambers = "$location_forestcrypt";
                 public const string TrollCave = "$location_forestcave";
                 public const string SunkenCrypts = "$location_sunkencrypt";
+                public const string MountainCave = "$location_mountaincave";
             }
 
             [Flags]
@@ -52,6 +66,9 @@ namespace Automatics.ModUtils
 
                 [LocalizedDescription(Name.SunkenCrypts)]
                 SunkenCrypts = 1L << 2,
+
+                [LocalizedDescription(Name.MountainCave)]
+                MountainCave = 1L << 3,
 
                 [LocalizedDescription("@config_flags_all_label")]
                 All = -1L,
