@@ -37,11 +37,9 @@ namespace Automatics.AutomaticMapPinning
         public static void OnUpdate(Player player, float delta, bool takeInput)
         {
             if (Game.IsPaused()) return;
+            if (player.InInterior()) return;
 
             var origin = player.transform.position;
-            var location = Location.GetLocation(origin);
-            if (location && location.m_hasInterior) return;
-
             DynamicMapPinning.Run(origin, delta);
             StaticMapPinning.Run(origin, takeInput);
         }
