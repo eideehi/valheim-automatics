@@ -79,7 +79,7 @@ namespace Automatics.AutomaticProcessing
                     });
 
                 key = $"{target.Substring(1)}_container_search_range";
-                var acceptableValue = new AcceptableValueRange<int>(1, 32);
+                var acceptableValue = new AcceptableValueRange<int>(1, 64);
                 _targetByContainerSearchRange[target] =
                     Configuration.Bind(Section, key, 8, acceptableValue, x =>
                     {
