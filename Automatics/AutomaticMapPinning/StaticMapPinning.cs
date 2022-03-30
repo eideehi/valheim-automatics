@@ -23,7 +23,7 @@ namespace Automatics.AutomaticMapPinning
 
         static StaticMapPinning()
         {
-            ColliderBuffer = new Collider[1024];
+            ColliderBuffer = new Collider[4096];
             LazyObjectMask = new Lazy<int>(() =>
                 LayerMask.GetMask("Default", "static_solid", "Default_small", "character_trigger", "piece_nonsolid",
                     "item"));
