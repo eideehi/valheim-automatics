@@ -100,7 +100,7 @@ namespace Automatics.AutomaticMapPinning
             var flora = FloraObject.Find(x => x.transform.position == pickable.transform.position);
             if (!flora.IsValid()) return true;
 
-            var cluster = flora.Cluster;
+            var cluster = flora.Network;
             if (cluster == null) return true;
 
             if (cluster.IsDirty)
@@ -109,13 +109,13 @@ namespace Automatics.AutomaticMapPinning
                 cluster.Update();
             }
 
-            foreach (var member in cluster.Members.Where(x => x.IsValid()))
+            foreach (var member in cluster.GetAllNodes().Where(x => x.IsValid()))
                 knownId.Add(member.ZdoId);
 
             var pos = cluster.Center;
             if (Map.HavePinInRange(pos, 1f)) return true;
 
-            var size = cluster.Size;
+            var size = cluster.NodeCount;
             if (size == 1)
                 Map.AddPin(pos, name, L10N.Translate(name), true);
             else if (size > 1)

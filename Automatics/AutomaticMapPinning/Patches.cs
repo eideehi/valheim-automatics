@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 
@@ -51,7 +50,7 @@ namespace Automatics.AutomaticMapPinning
 
             var flora = instance.GetComponent<FloraObject>();
             if (flora != null)
-                Map.RemovePin(flora.Cluster.Center);
+                Map.RemovePin(flora.Network.Center);
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(TeleportWorld), "Awake")]

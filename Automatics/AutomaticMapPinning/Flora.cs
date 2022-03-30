@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using Automatics.ModUtils;
 using UnityEngine;
@@ -7,159 +6,91 @@ using UnityEngine;
 namespace Automatics.AutomaticMapPinning
 {
     [DisallowMultipleComponent]
-    internal class FloraObject : MonoBehaviour
+    internal class FloraObject : ObjectNode<FloraObject, FloraCluster>
     {
-        private static readonly List<FloraObject> FloraObjects;
-
-        static FloraObject()
+        public static FloraObject Find(Predicate<Pickable> predicate)
         {
-            FloraObjects = new List<FloraObject>();
+            return ObjectNodes.FirstOrDefault(x => predicate(x._pickable));
         }
 
         private Pickable _pickable;
         private ZNetView _zNetView;
 
-        public FloraCluster Cluster { get; private set; }
+        private string Name => Obj.GetName(_pickable);
 
-        public static FloraObject Find(Predicate<Pickable> predicate)
+        public Vector3 Position => _pickable.transform.position;
+        public ZDOID ZdoId => _zNetView.GetZDO().m_uid;
+
+        private void OnDestroyed()
         {
-            return FloraObjects.FirstOrDefault(x => predicate(x._pickable));
+            Network?.RemoveNode(this);
         }
 
-        private void Awake()
+        protected override void Awake()
         {
-            FloraObjects.Add(this);
-
             _pickable = GetComponent<Pickable>();
             _zNetView = GetComponent<ZNetView>();
 
             var destructible = _pickable.GetComponent<Destructible>();
             if (destructible != null)
             {
-                destructible.m_onDestroyed += () => { Cluster?.Leave(this); };
+                destructible.m_onDestroyed += OnDestroyed;
             }
 
-            Invoke(nameof(ClusterConstruction), UnityEngine.Random.Range(1f, 2f));
+            base.Awake();
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
-            FloraObjects.Remove(this);
+            base.OnDestroy();
+
+            var destructible = _pickable.GetComponent<Destructible>();
+            if (destructible != null)
+            {
+                destructible.m_onDestroyed -= OnDestroyed;
+            }
 
             _pickable = null;
             _zNetView = null;
-
-            Cluster?.Leave(this);
-            Cluster = null;
         }
 
-        private void ClusterConstruction()
+        protected override FloraCluster CreateNetwork()
         {
-            var origin = _pickable.transform.position;
-            var objectName = Obj.GetName(_pickable);
+            return new FloraCluster();
+        }
 
-            foreach (var flora in
-                     from x in FloraObjects
-                     where Vector3.Distance(x.transform.position, origin) <= Config.FloraPinMergeRange &&
-                           Obj.GetName(x._pickable) == objectName
-                     select x)
-            {
-                if (Cluster == flora.Cluster) continue;
-
-                if (Cluster == null)
-                {
-                    Cluster = flora.Cluster;
-                    Cluster.Enter(this);
-                }
-                else if (flora.Cluster == null)
-                {
-                    flora.Cluster = Cluster;
-                    flora.Cluster.Enter(flora);
-                }
-                else if (Cluster.Size >= flora.Cluster.Size)
-                {
-                    foreach (var member in flora.Cluster.Members.ToList())
-                    {
-                        member.Cluster.Leave(flora);
-                        member.Cluster = Cluster;
-                        member.Cluster.Enter(flora);
-                    }
-                }
-                else
-                {
-                    foreach (var member in Cluster.Members.ToList())
-                    {
-                        member.Cluster.Leave(this);
-                        member.Cluster = flora.Cluster;
-                        member.Cluster.Enter(this);
-                    }
-                }
-            }
-
-            if (Cluster != null) return;
-
-            Cluster = new FloraCluster();
-            Cluster.Enter(this);
+        protected override bool IsConnectable(FloraObject other)
+        {
+            return Vector3.Distance(Position, other.Position) <= Config.FloraPinMergeRange && Name == other.Name;
         }
 
         public bool IsValid()
         {
             return _pickable != null && _zNetView != null && _zNetView.GetZDO() != null;
         }
-
-        public ZDOID ZdoId => _zNetView.GetZDO().m_uid;
     }
 
-    internal class FloraCluster
+    internal class FloraCluster : ObjectNetwork<FloraObject, FloraCluster>
     {
-        private readonly HashSet<FloraObject> _members;
-
-        public IEnumerable<FloraObject> Members => _members;
-
-        public int Size => _members.Count;
-
         public Vector3 Center { get; private set; }
-
-        public bool IsDirty { get; private set; }
 
         public FloraCluster()
         {
-            _members = new HashSet<FloraObject>();
             Center = Vector3.zero;
-        }
 
-        private void MarkDirty()
-        {
-            IsDirty = true;
-        }
-
-        public void Enter(FloraObject floraObject)
-        {
-            if (_members.Add(floraObject))
-                MarkDirty();
-        }
-
-        public void Leave(FloraObject floraObject)
-        {
-            if (_members.Remove(floraObject))
-                MarkDirty();
-        }
-
-        public void Update()
-        {
-            if (!IsDirty) return;
-
-            var count = 0;
-            var center = Vector3.zero;
-            foreach (var member in _members.Where(member => member.IsValid()))
+            OnNodeChanged += nodes =>
             {
-                center += member.transform.position;
-                count++;
-            }
+                var count = 0;
+                var center = Vector3.zero;
 
-            Center = center / count;
+                foreach (var node in nodes.Where(x => x.IsValid()))
+                {
+                    center += node.Position;
+                    count++;
+                }
 
-            IsDirty = false;
+                Center = center / count;
+            };
         }
     }
 }
