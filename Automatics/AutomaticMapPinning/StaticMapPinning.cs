@@ -37,6 +37,12 @@ namespace Automatics.AutomaticMapPinning
             return Flora.GetFlag(name, out _) || Config.IsCustomFlora(name);
         }
 
+        public static bool IsVein(Destructible destructible)
+        {
+            var name = Obj.GetName(destructible);
+            return Vein.GetFlag(name, out _) || Config.IsCustomFlora(name);
+        }
+
         public static void ClearObjectCache()
         {
             _objectCache = new ConditionalWeakTable<Collider, MonoBehaviour>();

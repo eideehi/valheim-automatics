@@ -6,7 +6,7 @@ using HarmonyLib;
 
 namespace Automatics.AutomaticMapPinning
 {
-    [SuppressMessage( "ReSharper", "InconsistentNaming" )]
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
     [HarmonyPatch]
     internal static class Patches
     {
@@ -61,6 +61,15 @@ namespace Automatics.AutomaticMapPinning
             var portal = __instance.GetComponent<WearNTear>();
             if (portal != null)
                 portal.m_onDestroyed += () => { Map.RemovePin(__instance.transform.position); };
+        }
+
+        [HarmonyPostfix, HarmonyPatch(typeof(Destructible), "Awake")]
+        private static void DestructibleAwakePostfix(Destructible __instance, ZNetView ___m_nview)
+        {
+            if (___m_nview.GetZDO() == null) return;
+
+            if (StaticMapPinning.IsVein(__instance))
+                __instance.m_onDestroyed += () => { Map.RemovePin(__instance.transform.position); };
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Ship), "Awake")]
