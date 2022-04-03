@@ -10,9 +10,10 @@ namespace Automatics.AutomaticDoor
             Automatics.OnPlayerUpdate += OnPlayerUpdate;
         }
 
-        private static void OnPlayerUpdate()
+        private static void OnPlayerUpdate(Player player, bool takeInput)
         {
-            if (Player.m_localPlayer == null) return;
+            if (player == null || Player.m_localPlayer != player) return;
+            if (!takeInput) return;
 
             if (Config.ToggleAutomaticDoorEnabledKey.IsDown())
             {

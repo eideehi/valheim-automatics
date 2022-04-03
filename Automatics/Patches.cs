@@ -12,9 +12,9 @@ namespace Automatics
         private static void PlayerUpdatePostfix(Player __instance, ZNetView ___m_nview)
         {
             if (!___m_nview.IsValid() || !___m_nview.IsOwner()) return;
-            if (!Reflection.InvokeMethod<bool>(__instance, "TakeInput")) return;
 
-            Automatics.OnPlayerUpdate?.Invoke();
+            var takeInput = Reflection.InvokeMethod<bool>(__instance, "TakeInput");
+            Automatics.OnPlayerUpdate?.Invoke(__instance, takeInput);
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Container), "Awake")]
