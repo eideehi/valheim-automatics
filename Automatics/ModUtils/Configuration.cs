@@ -2,9 +2,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -12,13 +12,12 @@ namespace Automatics.ModUtils
 {
     internal static class Configuration
     {
+        private const int DefaultOrder = 4096;
+
         private static readonly ConditionalWeakTable<ConfigEntryBase, string> InputTextCache;
 
-        private const int DefaultOrder = 1024;
-
-        public static int Order { get; set; } = DefaultOrder;
-
-        public static void ResetOrder() => Order = DefaultOrder;
+        private static string Section { get; set; } = "";
+        private static int Order { get; set; } = DefaultOrder;
 
         static Configuration()
         {
@@ -48,21 +47,68 @@ namespace Automatics.ModUtils
             });
         }
 
-        public static ConfigEntry<T> Bind<T>(string section, string key, T defaultValue,
+        [Conditional("DEBUG")]
+        private static void PrintSection()
+        {
+            Automatics.ModLogger.LogDebug($"[CONFIG] ### {GetCategory(Section)} / [{Section}]");
+        }
+
+        [Conditional("DEBUG")]
+        private static void PrintConfig<T>(string key, T defaultValue, ConfigurationManagerAttributes attributes,
+            AcceptableValueBase acceptableValue = null)
+        {
+            var type = typeof(T);
+
+            Automatics.ModLogger.LogDebug(string.IsNullOrEmpty(attributes.DispName)
+                ? $"[CONFIG] #### {GetName(key)} / [{key}]"
+                : $"[CONFIG] #### {attributes.DispName} / [{key}]");
+
+            Automatics.ModLogger.LogDebug(string.IsNullOrEmpty(attributes.Description)
+                ? $"[CONFIG] {GetDescription(key)}"
+                : $"[CONFIG] {attributes.Description}");
+            
+            if (attributes.ObjToStr != null)
+                Automatics.ModLogger.LogDebug($"[CONFIG] * Default value: {attributes.ObjToStr(defaultValue)}");
+            else if (TomlTypeConverter.CanConvert(type))
+                Automatics.ModLogger.LogDebug($"[CONFIG] * Default value: {TomlTypeConverter.ConvertToString(defaultValue, type)}");
+            else
+                Automatics.ModLogger.LogDebug($"[CONFIG] * Default value: {defaultValue}");
+
+            if (acceptableValue != null)
+                Automatics.ModLogger.LogDebug($"[CONFIG] * {acceptableValue.ToDescriptionString()}");
+            else if (type.IsEnum && type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
+                Automatics.ModLogger.LogDebug($"[CONFIG] * Acceptable values: {string.Join(", ", Enum.GetValues(type).OfType<T>().Select(x => Enum.GetName(type, x)))}");
+        }
+
+        public static void ChangeSection(string section, int initialOrder = DefaultOrder)
+        {
+            Section = section;
+            Order = initialOrder;
+            PrintSection();
+        }
+
+        private static ConfigEntry<T> Bind<T>(string section, int order, string key, T defaultValue,
             AcceptableValueBase acceptableValue = null, Action<ConfigurationManagerAttributes> initializer = null)
         {
             var attributes = new ConfigurationManagerAttributes
             {
                 Category = GetCategory(section),
-                Order = --Order,
+                Order = order,
                 DispName = GetName(key),
                 CustomDrawer = GetCustomDrawer(typeof(T))
             };
             initializer?.Invoke(attributes);
 
-            Automatics.ModLogger.LogDebug($"Bind config: [{AttributesToString(attributes)}]");
+            PrintConfig(key, defaultValue, attributes, acceptableValue);
+
             return Automatics.ModConfig.Bind(section, key, defaultValue,
                 new ConfigDescription(GetDescription(key), acceptableValue, attributes));
+        }
+
+        public static ConfigEntry<T> Bind<T>(string section, string key, T defaultValue,
+            AcceptableValueBase acceptableValue = null, Action<ConfigurationManagerAttributes> initializer = null)
+        {
+            return Bind(section, Order--, key, defaultValue, acceptableValue, initializer);
         }
 
         public static ConfigEntry<T> Bind<T>(string section, string key, T defaultValue, (T, T) acceptableValue,
@@ -72,24 +118,23 @@ namespace Automatics.ModUtils
             return Bind(section, key, defaultValue, new AcceptableValueRange<T>(minValue, maxValue), initializer);
         }
 
+        public static ConfigEntry<T> Bind<T>(string key, T defaultValue, AcceptableValueBase acceptableValue = null,
+            Action<ConfigurationManagerAttributes> initializer = null)
+        {
+            return Bind(Section, key, defaultValue, acceptableValue, initializer);
+        }
+
+        public static ConfigEntry<T> Bind<T>(string key, T defaultValue, (T, T) acceptableValue,
+            Action<ConfigurationManagerAttributes> initializer = null) where T : IComparable
+        {
+            return Bind(Section, key, defaultValue, acceptableValue, initializer);
+        }
+
         private static string GetCategory(string category) => L10N.Translate($"@config_{category}_category");
         private static string GetName(string name) => L10N.Translate($"@config_{name}_name");
 
         private static string GetDescription(string description) =>
             L10N.Translate($"@config_{description}_description");
-
-        private static string AttributesToString(ConfigurationManagerAttributes attributes)
-        {
-            var result =
-                new StringBuilder("category: ").Append(attributes.Category)
-                    .Append(", name: ").Append(attributes.DispName)
-                    .Append(", description: ").Append(attributes.Description)
-                    .Append(", order: ").Append(attributes.Order);
-            if (!attributes.Browsable ?? false) result.Append(", hidden");
-            if (attributes.ReadOnly ?? false) result.Append(", readonly");
-            if (attributes.IsAdvanced ?? false) result.Append(", advanced");
-            return result.ToString();
-        }
 
         private static Action<ConfigEntryBase> GetCustomDrawer(Type type)
         {

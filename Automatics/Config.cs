@@ -16,16 +16,16 @@ namespace Automatics
 
         public static void Initialize()
         {
-            Configuration.ResetOrder();
-            Configuration.Bind("hidden", "NexusID", NexusID, initializer: x =>
+            Configuration.ChangeSection("hidden");
+            Configuration.Bind("NexusID", NexusID, initializer: x =>
             {
                 x.Browsable = false;
                 x.ReadOnly = true;
             });
 
-            Configuration.ResetOrder();
-            _loggingEnabled = Configuration.Bind("logging", "logging_enabled", false);
-            _allowedLogLevel = Configuration.Bind("logging", "allowed_log_level", LogLevel.All ^ (LogLevel.Debug | LogLevel.Info));
+            Configuration.ChangeSection("logging");
+            _loggingEnabled = Configuration.Bind("logging_enabled", false);
+            _allowedLogLevel = Configuration.Bind("allowed_log_level", LogLevel.All ^ (LogLevel.Debug | LogLevel.Info));
         }
     }
 }

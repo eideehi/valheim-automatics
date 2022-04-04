@@ -28,13 +28,13 @@ namespace Automatics.AutomaticDoor
 
         public static void Initialize()
         {
-            Configuration.ResetOrder();
-            _automaticDoorEnabled = Configuration.Bind(Section, "automatic_door_enabled", true);
-            _intervalToOpen = Configuration.Bind(Section, "interval_to_open", 0.1f, (0.1f, 8f));
-            _intervalToClose = Configuration.Bind(Section, "interval_to_close", 0.1f, (0.1f, 8f));
-            _playerSearchRadiusToOpen = Configuration.Bind(Section, "player_search_radius_to_open", 2.5f, (1f, 8f));
-            _playerSearchRadiusToClose = Configuration.Bind(Section, "player_search_radius_to_close", 2.5f, (1f, 8f));
-            _toggleAutomaticDoorEnabledKey = Configuration.Bind(Section, "toggle_automatic_door_enabled_key", new KeyboardShortcut());
+            Configuration.ChangeSection(Section);
+            _automaticDoorEnabled = Configuration.Bind("automatic_door_enabled", true);
+            _intervalToOpen = Configuration.Bind("interval_to_open", 0.1f, (0.1f, 8f));
+            _intervalToClose = Configuration.Bind("interval_to_close", 0.1f, (0.1f, 8f));
+            _playerSearchRadiusToOpen = Configuration.Bind("player_search_radius_to_open", 2.5f, (1f, 8f));
+            _playerSearchRadiusToClose = Configuration.Bind("player_search_radius_to_close", 2.5f, (1f, 8f));
+            _toggleAutomaticDoorEnabledKey = Configuration.Bind("toggle_automatic_door_enabled_key", new KeyboardShortcut());
 
             _intervalToOpen.SettingChanged += (sender, args) => { AutomaticDoor.ChangeInterval(true); };
             _intervalToClose.SettingChanged += (sender, args) => { AutomaticDoor.ChangeInterval(false); };

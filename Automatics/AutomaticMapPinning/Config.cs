@@ -104,30 +104,30 @@ namespace Automatics.AutomaticMapPinning
 
         public static void Initialize()
         {
-            Configuration.ResetOrder();
-            _automaticMapPinningEnabled = Configuration.Bind(Section, "automatic_map_pinning_enabled", true);
-            _dynamicObjectSearchRange = Configuration.Bind(Section, "dynamic_object_search_range", 64, (0, 256));
-            _staticObjectSearchRange = Configuration.Bind(Section, "static_object_search_range", 16, (0, 256));
-            _locationSearchRange = Configuration.Bind(Section, "location_search_range", 96, (0, 256));
-            _allowPinningAnimal = Configuration.Bind(Section, "allow_pinning_animal", Animal.Flag.All);
-            _allowPinningMonster = Configuration.Bind(Section, "allow_pinning_monster", Monster.Flag.All);
-            _allowPinningFlora = Configuration.Bind(Section, "allow_pinning_flora", Flora.Flag.Raspberries | Flora.Flag.Mushroom | Flora.Flag.Blueberries | Flora.Flag.CarrotSeeds | Flora.Flag.Thistle | Flora.Flag.TurnipSeeds | Flora.Flag.Cloudberries);
-            _allowPinningVein = Configuration.Bind(Section, "allow_pinning_vein", Vein.Flag.All ^ Vein.Flag.Obsidian);
-            _allowPinningSpawner = Configuration.Bind(Section, "allow_pinning_spawner", Spawner.Flag.None);
-            _allowPinningOther = Configuration.Bind(Section, "allow_pinning_other", Other.Flag.WildBeehive);
-            _allowPinningDungeon = Configuration.Bind(Section, "allow_pinning_dungeon", Dungeon.Flag.All);
-            _allowPinningSpot = Configuration.Bind(Section, "allow_pinning_spot", Spot.Flag.All);
-            _allowPinningShip = Configuration.Bind(Section, "allow_pinning_ship", true);
-            _allowPinningAnimalCustom = Configuration.Bind(Section, "allow_pinning_animal_custom", new StringList());
-            _allowPinningMonsterCustom = Configuration.Bind(Section, "allow_pinning_monster_custom", new StringList());
-            _allowPinningFloraCustom = Configuration.Bind(Section, "allow_pinning_flora_custom", new StringList());
-            _allowPinningVeinCustom = Configuration.Bind(Section, "allow_pinning_vein_custom", new StringList());
-            _allowPinningSpawnerCustom = Configuration.Bind(Section, "allow_pinning_spawner_custom", new StringList());
-            _ignoreTamedAnimals = Configuration.Bind(Section, "ignore_tamed_animals", true);
-            _staticObjectSearchInterval = Configuration.Bind(Section, "static_object_search_interval", 0.25f, (0f, 8f));
-            _floraPinMergeRange = Configuration.Bind(Section, "flora_pins_merge_range", 8, (0, 16));
-            _inGroundVeinsNeedWishbone = Configuration.Bind(Section, "in_ground_veins_need_wishbone", true);
-            _staticObjectSearchKey = Configuration.Bind(Section, "static_object_search_key", new KeyboardShortcut());
+            Configuration.ChangeSection(Section);
+            _automaticMapPinningEnabled = Configuration.Bind("automatic_map_pinning_enabled", true);
+            _dynamicObjectSearchRange = Configuration.Bind("dynamic_object_search_range", 64, (0, 256));
+            _staticObjectSearchRange = Configuration.Bind("static_object_search_range", 16, (0, 256));
+            _locationSearchRange = Configuration.Bind("location_search_range", 96, (0, 256));
+            _allowPinningAnimal = Configuration.Bind("allow_pinning_animal", Animal.Flag.All);
+            _allowPinningMonster = Configuration.Bind("allow_pinning_monster", Monster.Flag.All);
+            _allowPinningFlora = Configuration.Bind("allow_pinning_flora", Flora.Flag.Raspberries | Flora.Flag.Mushroom | Flora.Flag.Blueberries | Flora.Flag.CarrotSeeds | Flora.Flag.Thistle | Flora.Flag.TurnipSeeds | Flora.Flag.Cloudberries);
+            _allowPinningVein = Configuration.Bind("allow_pinning_vein", Vein.Flag.All ^ Vein.Flag.Obsidian);
+            _allowPinningSpawner = Configuration.Bind("allow_pinning_spawner", Spawner.Flag.None);
+            _allowPinningOther = Configuration.Bind("allow_pinning_other", Other.Flag.WildBeehive);
+            _allowPinningDungeon = Configuration.Bind("allow_pinning_dungeon", Dungeon.Flag.All);
+            _allowPinningSpot = Configuration.Bind("allow_pinning_spot", Spot.Flag.All);
+            _allowPinningShip = Configuration.Bind("allow_pinning_ship", true);
+            _allowPinningAnimalCustom = Configuration.Bind("allow_pinning_animal_custom", new StringList());
+            _allowPinningMonsterCustom = Configuration.Bind("allow_pinning_monster_custom", new StringList());
+            _allowPinningFloraCustom = Configuration.Bind("allow_pinning_flora_custom", new StringList());
+            _allowPinningVeinCustom = Configuration.Bind("allow_pinning_vein_custom", new StringList());
+            _allowPinningSpawnerCustom = Configuration.Bind("allow_pinning_spawner_custom", new StringList());
+            _ignoreTamedAnimals = Configuration.Bind("ignore_tamed_animals", true);
+            _staticObjectSearchInterval = Configuration.Bind("static_object_search_interval", 0.25f, (0f, 8f));
+            _floraPinMergeRange = Configuration.Bind("flora_pins_merge_range", 8, (0, 16));
+            _inGroundVeinsNeedWishbone = Configuration.Bind("in_ground_veins_need_wishbone", true);
+            _staticObjectSearchKey = Configuration.Bind("static_object_search_key", new KeyboardShortcut());
 
             _allowPinningAnimal.SettingChanged += OnDynamicObjectSettingChanged;
             _allowPinningMonster.SettingChanged += OnDynamicObjectSettingChanged;

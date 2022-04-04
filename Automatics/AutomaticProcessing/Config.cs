@@ -26,8 +26,8 @@ namespace Automatics.AutomaticProcessing
 
         public static void Initialize()
         {
-            Configuration.ResetOrder();
-            _automaticProcessingEnabled = Configuration.Bind(Section, "automatic_processing_enabled", true);
+            Configuration.ChangeSection(Section);
+            _automaticProcessingEnabled = Configuration.Bind("automatic_processing_enabled", true);
 
             _targetByAllowAutomaticProcessingType = new Dictionary<string, ConfigEntry<Type>>();
             _targetByContainerSearchRange = new Dictionary<string, ConfigEntry<int>>();
@@ -72,7 +72,7 @@ namespace Automatics.AutomaticProcessing
                 var targetName = L10N.Translate(target);
                 var key = $"{target.Substring(1)}_allow_automatic_processing";
                 _targetByAllowAutomaticProcessingType[target] =
-                    Configuration.Bind(Section, key, defaultType, acceptableType, x =>
+                    Configuration.Bind(key, defaultType, acceptableType, x =>
                     {
                         x.DispName = L10N.Localize("@config_allow_automatic_processing_name", targetName);
                         x.Description = L10N.Localize("@config_allow_automatic_processing_description", targetName);
@@ -81,7 +81,7 @@ namespace Automatics.AutomaticProcessing
                 key = $"{target.Substring(1)}_container_search_range";
                 var acceptableValue = new AcceptableValueRange<int>(1, 64);
                 _targetByContainerSearchRange[target] =
-                    Configuration.Bind(Section, key, 8, acceptableValue, x =>
+                    Configuration.Bind(key, 8, acceptableValue, x =>
                     {
                         x.DispName = L10N.Localize("@config_container_search_range_name", targetName);
                         x.Description = L10N.Localize("@config_container_search_range_description", targetName);
