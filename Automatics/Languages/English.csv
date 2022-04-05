@@ -84,9 +84,22 @@
 @config_container_search_range_name,$1 Container Search Range
 @config_container_search_range_description,Specify the maximum distance which $1 will search for containers. (Unit: meter)
 
+@config_automatic_feeding_category,[ #5 Automatic Feeding ]
+@config_automatic_feeding_enabled_name,Automatic Feeding
+@config_automatic_feeding_enabled_description,Enable automatic feeding for animals.
+@config_feed_search_range_name,Feed Search Range
+@config_feed_search_range_description,Specify the maximum distance which animal will search for food. 0 disables the feed box search and -1 uses the default value for each animal. (Unit: meter)
+@config_need_close_to_eat_the_feed_name,Need Close To Eat The Feed
+@config_need_close_to_eat_the_feed_description,Specify whether or not the animal needs to approach the food in order to eat it.
+@config_allow_to_feed_from_container_name,Allow To Feed From Container
+@config_allow_to_feed_from_container_description,Specify the types of animals allowed to feed from the container.
+
 @config_automatic_processing_type_craft,Craft
 @config_automatic_processing_type_refuel,Refuel
 @config_automatic_processing_type_store,Store
+
+@config_automatic_feed_animal_type_wild,Wild
+@config_automatic_feed_animal_type_tamed,Tamed
 
 @character_level_symbol,★
 @portal_tag_empty,Empty tag

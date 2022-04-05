@@ -35,6 +35,7 @@ namespace Automatics
             AutomaticDoor.Core.Initialize();
             AutomaticMapPinning.Core.Initialize();
             AutomaticProcessing.Core.Initialize();
+            AutomaticFeeding.Core.Initialize();
 
             Harmony.CreateAndPatchAll(assembly, ModId);
         }
