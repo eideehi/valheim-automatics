@@ -125,7 +125,7 @@ namespace Automatics.ModUtils
                 [LocalizedDescription(Name.Flex)]
                 Flex = 1L << 14,
 
-                [LocalizedDescription("@config_flags_all_label")]
+                [LocalizedDescription("@select_all")]
                 All = -1L,
             }
         }
@@ -189,7 +189,7 @@ namespace Automatics.ModUtils
                 [LocalizedDescription(Name.Silver)]
                 Silver = 1L << 4,
 
-                [LocalizedDescription("@config_flags_all_label")]
+                [LocalizedDescription("@select_all")]
                 All = -1L,
             }
         }
@@ -241,7 +241,7 @@ namespace Automatics.ModUtils
                 [LocalizedDescription(Name.BodyPile)]
                 BodyPile = 1L << 2,
 
-                [LocalizedDescription("@config_flags_all_label")]
+                [LocalizedDescription("@select_all")]
                 All = -1L,
             }
         }
@@ -301,7 +301,7 @@ namespace Automatics.ModUtils
                 [LocalizedDescription(Name.Portal)]
                 Portal = 1L << 3,
 
-                [LocalizedDescription("@config_flags_all_label")]
+                [LocalizedDescription("@select_all")]
                 All = -1L,
             }
         }

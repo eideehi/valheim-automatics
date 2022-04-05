@@ -125,7 +125,7 @@ namespace Automatics.AutomaticMapPinning
             if (size == 1)
                 Map.AddPin(pos, name, L10N.Translate(name), true);
             else if (size > 1)
-                Map.AddPin(pos, name, L10N.Localize("@pin_cluster_format", name, size), true);
+                Map.AddPin(pos, name, L10N.Localize("@flora_cluster_format", name, size), true);
 
             return true;
         }

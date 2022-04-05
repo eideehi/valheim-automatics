@@ -76,7 +76,7 @@ namespace Automatics.ModUtils
                 [LocalizedDescription(Name.Fish)]
                 Fish = 1L << 5,
 
-                [LocalizedDescription("@config_flags_all_label")]
+                [LocalizedDescription("@select_all")]
                 All = -1L,
             }
         }
@@ -284,7 +284,7 @@ namespace Automatics.ModUtils
                 [LocalizedDescription(Name.Ulv)]
                 Ulv = 1L << 28,
 
-                [LocalizedDescription("@config_flags_all_label")]
+                [LocalizedDescription("@select_all")]
                 All = -1L,
             }
         }

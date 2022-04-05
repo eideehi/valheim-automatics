@@ -1,8 +1,8 @@
-﻿@config_checkbox_label_true,有効
-@config_checkbox_label_false,無効
-@config_flags_all_label,すべて選択
-@config_button_text_add,+
-@config_button_text_remove,×
+﻿@enabled,有効
+@disabled,無効
+@select_all,すべて選択
+@add,+
+@remove,×
 
 @config_logging_category,[ #1 ログ出力 ]
 @config_logging_enabled_name,ログ出力
@@ -32,11 +32,11 @@
 @config_automatic_map_pinning_enabled_name,マップの自動ピン留め
 @config_automatic_map_pinning_enabled_description,マップに自動でピン留めする機能を有効にします。
 @config_dynamic_object_search_range_name,動的なオブジェクトの探索範囲
-@config_dynamic_object_search_range_description,動的なオブジェクトとは、動物やモンスターなどの位置が変化するオブジェクトのことです。0に設定すると動的なオブジェクトのピン留めを無効化します。
+@config_dynamic_object_search_range_description,動的なオブジェクトを探索する範囲を指定します。動的なオブジェクトとは、動物やモンスターなどの位置が変化するオブジェクトのことです。0に設定すると動的なオブジェクトのピン留めを無効化します。（単位: メートル）
 @config_static_object_search_range_name,静的なオブジェクトの探索範囲
-@config_static_object_search_range_description,静的なオブジェクトとは、植物や鉱脈などの位置が変化しないオブジェクトのことです。0に設定すると静的なオブジェクトのピン留めを無効化します。
+@config_static_object_search_range_description,静的なオブジェクトを探索する範囲を指定します。静的なオブジェクトとは、植物や鉱脈などの位置が変化しないオブジェクトのことです。0に設定すると静的なオブジェクトのピン留めを無効化します。（単位: メートル）
 @config_location_search_range_name,ロケーションの探索範囲
-@config_location_search_range_description,ロケーションとは、ダンジョンやフューリングの集落などの特定の場所のことです。0に設定するとロケーションのピン留めを無効化します。
+@config_location_search_range_description,ロケーションを探索する範囲を指定します。ロケーションとは、ダンジョンやフューリングの集落などの特定の場所のことです。0に設定するとロケーションのピン留めを無効化します。（単位: メートル）
 @config_allow_pinning_animal_name,ピン留めを許可する動物
 @config_allow_pinning_animal_description,自動ピン留めの対象となる動物を指定します。
 @config_allow_pinning_monster_name,ピン留めを許可するモンスター
@@ -68,9 +68,9 @@
 @config_ignore_tamed_animals_name,懐いた動物をピン留めしない
 @config_ignore_tamed_animals_description,懐いた動物を自動ピン留めの対象から除外します。
 @config_static_object_search_interval_name,静的なオブジェクトの探索間隔
-@config_static_object_search_interval_description,静的なオブジェクトの探索を行う間隔を指定します。0に設定すると定期的な静的なオブジェクトの探索が無効になります。
+@config_static_object_search_interval_description,静的なオブジェクトの探索を行う間隔を指定します。0に設定すると定期的な静的なオブジェクトの探索が無効になります。（単位: 秒）
 @config_flora_pins_merge_range_name,植物のピンをまとめる距離
-@config_flora_pins_merge_range_description,植物のピン留めを行う際に、指定した範囲内に存在する同じ植物を再帰的に探索して一つのピンにまとめます。
+@config_flora_pins_merge_range_description,植物のピン留めを行う際に、指定した範囲内に存在する同じ植物を再帰的に探索して一つのピンにまとめます。（単位: メートル）
 @config_in_ground_veins_need_wishbone_name,叉骨装備時のみ地中の鉱脈をピン留めする
 @config_in_ground_veins_need_wishbone_description,地中に存在する鉱脈をピン留めするのに叉骨を装備する必要があるか否かを指定します。
 @config_static_object_search_key_name,静的オブジェクトの検索
@@ -82,7 +82,7 @@
 @config_allow_automatic_processing_name,$1に許可する作業
 @config_allow_automatic_processing_description,$1に許可する自動作業を指定します。
 @config_container_search_range_name,$1のコンテナ探索範囲
-@config_container_search_range_description,$1がコンテナの探索を行う最大距離を指定します。
+@config_container_search_range_description,$1がコンテナの探索を行う最大距離を指定します。（単位: メートル）
 
 @config_automatic_processing_type_craft,作成
 @config_automatic_processing_type_refuel,燃料補給
@@ -90,7 +90,7 @@
 
 @character_level_symbol,★
 @portal_tag_empty,空のタグ
-@pin_cluster_format,$1 x$2
+@flora_cluster_format,$1 x$2
 
 @animal_bird,鳥
 @animal_seagal,カモメ

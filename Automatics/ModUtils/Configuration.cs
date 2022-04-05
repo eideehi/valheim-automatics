@@ -147,7 +147,7 @@ namespace Automatics.ModUtils
         private static void BoolCustomDrawer(ConfigEntryBase entry)
         {
             var @bool = (bool)entry.BoxedValue;
-            var text = L10N.Translate($"@config_checkbox_label_{(@bool ? "true" : "false")}");
+            var text = L10N.Translate($"@{(@bool ? "enabled" : "disabled")}");
             var result = GUILayout.Toggle(@bool, text, GUILayout.ExpandWidth(true));
             if (result != @bool)
                 entry.BoxedValue = result;
@@ -157,8 +157,8 @@ namespace Automatics.ModUtils
         {
             var guiWidth = Mathf.Min(Screen.width, 650);
             var maxWidth = guiWidth - Mathf.RoundToInt(guiWidth / 2.5f) - 115;
-            var addButtonText = L10N.Translate("@config_button_text_add");
-            var removeButtonText = L10N.Translate("@config_button_text_remove");
+            var addButtonText = L10N.Translate("@add");
+            var removeButtonText = L10N.Translate("@remove");
 
             var list = new StringList((StringList)entry.BoxedValue);
 

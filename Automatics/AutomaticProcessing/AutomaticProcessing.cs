@@ -425,7 +425,7 @@ namespace Automatics.AutomaticProcessing
         [LocalizedDescription("@config_automatic_processing_type_store")]
         Store = 1L << 2,
 
-        [LocalizedDescription("@config_flags_all_label")]
+        [LocalizedDescription("@select_all")]
         All = -1L,
     }
 }

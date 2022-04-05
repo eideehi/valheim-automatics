@@ -63,7 +63,7 @@ namespace Automatics.AutomaticDoor
             [LocalizedDescription(Name.WoodShutter)]
             WoodShutter = 1L << 4,
 
-            [LocalizedDescription("@config_flags_all_label")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
     }

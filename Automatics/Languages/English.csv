@@ -1,8 +1,8 @@
-﻿@config_checkbox_label_true,Enabled
-@config_checkbox_label_false,Disabled
-@config_flags_all_label,All
-@config_button_text_add,+
-@config_button_text_remove,×
+﻿@enabled,Enabled
+@disabled,Disabled
+@select_all,All
+@add,+
+@remove,×
 
 @config_logging_category,[ #1 Logging ]
 @config_logging_enabled_name,Logging
@@ -32,11 +32,11 @@
 @config_automatic_map_pinning_enabled_name,Automatic Map Pinning
 @config_automatic_map_pinning_enabled_description,Enables automatic pinning to the map.
 @config_dynamic_object_search_range_name,Dynamic Object Search Range
-@config_dynamic_object_search_range_description,"Dynamic Object" are objects that change position, such as animals, monsters, etc. Set to 0 to disable pinning of dynamic objects.
+@config_dynamic_object_search_range_description,Specify the range of dynamic objects to be explored. "Dynamic Object" are objects that change position, such as animals, monsters, etc. Set to 0 to disable pinning of dynamic objects. (Unit: meter)
 @config_static_object_search_range_name,Static Object Search Range
-@config_static_object_search_range_description,"Static Object" are objects that do not change their position, such as plants, veins, etc. Setting this to 0 disables pinning of static objects.
+@config_static_object_search_range_description,Specify the range of static objects to be explored. "Static Object" are objects that do not change their position, such as plants, veins, etc. Setting this to 0 disables pinning of static objects. (Unit: meter)
 @config_location_search_range_name,Location Search Range
-@config_location_search_range_description,"Location" is a specific place, such as dungeon, fuling village, etc. Setting this to 0 disables location pinning.
+@config_location_search_range_description,Specify the range of location to be explored. "Location" is a specific place, such as dungeon, fuling village, etc. Setting this to 0 disables location pinning. (Unit: meter)
 @config_allow_pinning_animal_name,Allow Pinning Animal
 @config_allow_pinning_animal_description,Specify the animals to be automatic pinning.
 @config_allow_pinning_monster_name,Allow Pinning Monster
@@ -68,9 +68,9 @@
 @config_ignore_tamed_animals_name,Not Pinning Tamed Animals
 @config_ignore_tamed_animals_description,Exclude tamed animals from automatic pinning.
 @config_static_object_search_interval_name,Static Object Search Interval
-@config_static_object_search_interval_description,Specify the interval at which static object search. Setting to 0 disables periodic static object search.
+@config_static_object_search_interval_description,Specify the interval at which static object search. Setting to 0 disables periodic static object search. (Unit: second)
 @config_flora_pins_merge_range_name,Flora Pins Merge Range
-@config_flora_pins_merge_range_description,When pinning flora, it recursively searches for the same flora that exist within a specified range and merge them into a single pin.
+@config_flora_pins_merge_range_description,When pinning flora, it recursively searches for the same flora that exist within a specified range and merge them into a single pin. (Unit: meter)
 @config_in_ground_veins_need_wishbone_name,In Ground Veins Need Wishbone
 @config_in_ground_veins_need_wishbone_description,Specify whether need to equip a Wishbone to pinning a vein that in ground.
 @config_static_object_search_key_name,Static Object Search
@@ -82,7 +82,7 @@
 @config_allow_automatic_processing_name,$1 Allow Processing
 @config_allow_automatic_processing_description,Specify the automatic processing to be allowed for $1
 @config_container_search_range_name,$1 Container Search Range
-@config_container_search_range_description,Specify the maximum distance which $1 will search for containers
+@config_container_search_range_description,Specify the maximum distance which $1 will search for containers. (Unit: meter)
 
 @config_automatic_processing_type_craft,Craft
 @config_automatic_processing_type_refuel,Refuel
@@ -90,7 +90,7 @@
 
 @character_level_symbol,★
 @portal_tag_empty,Empty tag
-@pin_cluster_format,$1 x$2
+@flora_cluster_format,$1 x$2
 
 @animal_bird,Bird
 @animal_seagal,Gull

@@ -19,8 +19,7 @@ namespace Automatics.AutomaticDoor
             if (Config.ToggleAutomaticDoorEnabledKey.IsDown())
             {
                 var enabled = Config.AutomaticDoorEnabled = !Config.AutomaticDoorEnabled;
-                var message = L10N.Localize("@message_toggle_automatic_door",
-                    $"@config_checkbox_label_{(enabled ? "true" : "false")}");
+                var message = L10N.Localize("@message_toggle_automatic_door", $"@{(enabled ? "enabled" : "disabled")}");
                 Player.m_localPlayer.Message(MessageHud.MessageType.Center, message);
             }
         }

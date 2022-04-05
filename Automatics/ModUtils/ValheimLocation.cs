@@ -70,7 +70,7 @@ namespace Automatics.ModUtils
                 [LocalizedDescription(Name.MountainCave)]
                 MountainCave = 1L << 3,
 
-                [LocalizedDescription("@config_flags_all_label")]
+                [LocalizedDescription("@select_all")]
                 All = -1L,
             }
         }
@@ -141,7 +141,7 @@ namespace Automatics.ModUtils
                 [LocalizedDescription(Name.TarPit)]
                 TarPit = 1L << 4,
 
-                [LocalizedDescription("@config_flags_all_label")]
+                [LocalizedDescription("@select_all")]
                 All = -1L,
             }
         }
