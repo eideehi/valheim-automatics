@@ -3,11 +3,16 @@ using BepInEx.Configuration;
 
 namespace Automatics.AutomaticDoor
 {
+    using Door = ValheimDoor.Flag;
+    using StringList = Configuration.StringList;
+
     internal static class Config
     {
         private const string Section = "automatic_door";
 
         private static ConfigEntry<bool> _automaticDoorEnabled;
+        private static ConfigEntry<Door> _allowAutomaticDoor;
+        private static ConfigEntry<StringList> _allowAutomaticDoorCustom;
         private static ConfigEntry<float> _intervalToOpen;
         private static ConfigEntry<float> _intervalToClose;
         private static ConfigEntry<float> _playerSearchRadiusToOpen;
@@ -20,6 +25,8 @@ namespace Automatics.AutomaticDoor
             set => _automaticDoorEnabled.Value = value;
         }
 
+        public static Door AllowAutomaticDoor => _allowAutomaticDoor.Value;
+        public static StringList AllowAutomaticDoorCustom => _allowAutomaticDoorCustom.Value;
         public static float IntervalToOpen => _intervalToOpen.Value;
         public static float IntervalToClose => _intervalToClose.Value;
         public static float PlayerSearchRadiusToOpen => _playerSearchRadiusToOpen.Value;
@@ -30,6 +37,8 @@ namespace Automatics.AutomaticDoor
         {
             Configuration.ChangeSection(Section);
             _automaticDoorEnabled = Configuration.Bind("automatic_door_enabled", true);
+            _allowAutomaticDoor = Configuration.Bind("allow_automatic_door", Door.All);
+            _allowAutomaticDoorCustom = Configuration.Bind("allow_automatic_door_custom", new StringList());
             _intervalToOpen = Configuration.Bind("interval_to_open", 0.1f, (0.1f, 8f));
             _intervalToClose = Configuration.Bind("interval_to_close", 0.1f, (0.1f, 8f));
             _playerSearchRadiusToOpen = Configuration.Bind("player_search_radius_to_open", 2.5f, (1f, 8f));

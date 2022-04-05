@@ -96,7 +96,7 @@ namespace Automatics.AutomaticDoor
 
         private bool IsValid()
         {
-            return _door != null && _zNetView != null && _zNetView.IsValid();
+            return _door != null && _zNetView != null && _zNetView.IsValid() && Core.IsAllowAutomaticDoor(_door);
         }
 
         private bool CheckAccess()

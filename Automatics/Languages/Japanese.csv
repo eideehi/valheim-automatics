@@ -13,6 +13,10 @@
 @config_automatic_door_category,[ #2 自動ドア ]
 @config_automatic_door_enabled_name,自動ドア
 @config_automatic_door_enabled_description,ドアを自動で開閉する機能を有効にします。
+@config_allow_automatic_door_name,自動開閉を許可するドア
+@config_allow_automatic_door_description,自動開閉を許可するドアを指定します。
+@config_allow_automatic_door_custom_name,自動開閉を許可するドア（自由指定）
+@config_allow_automatic_door_custom_description,自動開閉を許可する任意のドアを指定します。表示名（木のドア など）、または内部名（$piece_wooddoor など）が指定可能です。
 @config_interval_to_open_name,ドアを開けようとする間隔
 @config_interval_to_open_description,ドアを開けるかどうか判断する処理を呼び出す間隔を指定します。（単位: 秒）
 @config_interval_to_close_name,ドアを閉じようとする間隔

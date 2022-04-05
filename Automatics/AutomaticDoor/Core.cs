@@ -1,4 +1,5 @@
-﻿using Automatics.ModUtils;
+﻿using System.Linq;
+using Automatics.ModUtils;
 
 namespace Automatics.AutomaticDoor
 {
@@ -22,6 +23,18 @@ namespace Automatics.AutomaticDoor
                     $"@config_checkbox_label_{(enabled ? "true" : "false")}");
                 Player.m_localPlayer.Message(MessageHud.MessageType.Center, message);
             }
+        }
+
+        public static bool IsAllowAutomaticDoor(Door door)
+        {
+            var name = Obj.GetName(door);
+            if (ValheimDoor.GetFlag(name, out var flag) && (Config.AllowAutomaticDoor & flag) != 0) return true;
+
+            var list = Config.AllowAutomaticDoorCustom;
+            if (!list.Any()) return false;
+
+            var localizedName = L10N.TranslateInternalNameOnly(name);
+            return list.Any(x => L10N.TranslateInternalNameOnly(x) == localizedName);
         }
     }
 }
