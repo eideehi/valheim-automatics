@@ -14,17 +14,17 @@ namespace Automatics.AutomaticDoor
         private static ConfigEntry<float> _playerSearchRadiusToClose;
         private static ConfigEntry<KeyboardShortcut> _toggleAutomaticDoorEnabledKey;
 
-        public static bool AutomaticDoorEnabled => _automaticDoorEnabled.Value;
+        public static bool AutomaticDoorEnabled
+        {
+            get => _automaticDoorEnabled.Value;
+            set => _automaticDoorEnabled.Value = value;
+        }
+
         public static float IntervalToOpen => _intervalToOpen.Value;
         public static float IntervalToClose => _intervalToClose.Value;
         public static float PlayerSearchRadiusToOpen => _playerSearchRadiusToOpen.Value;
         public static float PlayerSearchRadiusToClose => _playerSearchRadiusToClose.Value;
         public static KeyboardShortcut ToggleAutomaticDoorEnabledKey => _toggleAutomaticDoorEnabledKey.Value;
-
-        public static void SetAutomaticDoorEnabled(bool enabled)
-        {
-            _automaticDoorEnabled.BoxedValue = enabled;
-        }
 
         public static void Initialize()
         {

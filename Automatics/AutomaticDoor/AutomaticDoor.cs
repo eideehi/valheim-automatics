@@ -17,21 +17,18 @@ namespace Automatics.AutomaticDoor
         private Door _door;
         private ZNetView _zNetView;
         private bool _active;
-        private DoorStatus _status;
+        private Status _status;
         private Player _closestPlayer;
 
         public static void ChangeInterval(bool isChangedOpenInterval)
         {
-            AutomaticDoors.ForEach(x =>
-            {
-                x.CancelInvoke(isChangedOpenInterval ? nameof(OpenDoor) : nameof(CloseDoor));
-            });
+            AutomaticDoors.ForEach(x => { x.CancelInvoke(isChangedOpenInterval ? nameof(Open) : nameof(Close)); });
         }
 
         private void Awake()
         {
             AutomaticDoors.Add(this);
-            InvokeRepeating(nameof(UpdateDoor), Random.Range(1f, 2f), 0.1f);
+            InvokeRepeating(nameof(Run), Random.Range(1f, 2f), 0.1f);
 
             _door = GetComponent<Door>();
             _zNetView = GetComponent<ZNetView>();
@@ -47,69 +44,72 @@ namespace Automatics.AutomaticDoor
             _closestPlayer = null;
         }
 
-        private void UpdateDoor()
+        private void Run()
         {
-            _active = false;
-            _status = DoorStatus.Null;
+            const string open = nameof(Open);
+            const string close = nameof(Close);
+
+            _active = Config.AutomaticDoorEnabled && IsValid() && CheckAccess() && CanInteract();
+            _status = Status.Null;
             _closestPlayer = null;
 
-            if (!Config.AutomaticDoorEnabled || _door == null || _zNetView == null || !_zNetView.IsValid() ||
-                !PrivateArea.CheckAccess(_door.transform.position) ||
-                !Reflection.InvokeMethod<bool>(_door, "CanInteract"))
+            if (!_active)
             {
-                CancelInvoke(nameof(OpenDoor));
-                CancelInvoke(nameof(CloseDoor));
+                CancelInvoke(open);
+                CancelInvoke(close);
                 return;
             }
 
-            _active = true;
-            _status = _zNetView.GetZDO().GetInt("state") == 0 ? DoorStatus.Close : DoorStatus.Open;
+            _status = _zNetView.GetZDO().GetInt("state") == 0 ? Status.Close : Status.Open;
 
-            if (_status == DoorStatus.Open)
+            var isOpen = _status == Status.Open;
+            var radius = isOpen ? Config.PlayerSearchRadiusToClose : Config.PlayerSearchRadiusToOpen;
+
+            _closestPlayer = Player.GetClosestPlayer(_door.transform.position, radius);
+
+            var foundClosestPlayer = _closestPlayer != null;
+            var invoke = isOpen ? close : open;
+            var isInvoking = IsInvoking(invoke);
+
+            if (!isInvoking && ((isOpen && !foundClosestPlayer) || (!isOpen && foundClosestPlayer)))
             {
-                _closestPlayer = Player.GetClosestPlayer(_door.transform.position, Config.PlayerSearchRadiusToClose);
-                var isInvoking = IsInvoking(nameof(CloseDoor));
-                if (!_closestPlayer && !isInvoking)
-                {
-                    Invoke(nameof(CloseDoor), Config.IntervalToClose - 0.1f);
-                }
-                else if (_closestPlayer && isInvoking)
-                {
-                    CancelInvoke(nameof(CloseDoor));
-                }
+                var interval = isOpen ? Config.IntervalToClose : Config.IntervalToOpen;
+                Invoke(invoke, interval - 0.1f);
             }
-            else
+            else if (isInvoking && ((isOpen && foundClosestPlayer) || (!isOpen && !foundClosestPlayer)))
             {
-                _closestPlayer = Player.GetClosestPlayer(_door.transform.position, Config.PlayerSearchRadiusToOpen);
-                var isInvoking = IsInvoking(nameof(OpenDoor));
-                if (_closestPlayer && !isInvoking)
-                {
-                    Invoke(nameof(OpenDoor), Config.IntervalToOpen - 0.1f);
-                }
-                else if (!_closestPlayer && isInvoking)
-                {
-                    CancelInvoke(nameof(OpenDoor));
-                }
+                CancelInvoke(invoke);
             }
         }
 
-        private void CloseDoor()
+        private void Close()
         {
-            if (!_active) return;
-            if (_status != DoorStatus.Open || _closestPlayer) return;
-
-            _zNetView.InvokeRPC("UseDoor", false);
+            if (IsValid() && _active && _status == Status.Open && _closestPlayer == null)
+                _zNetView.InvokeRPC("UseDoor", false);
         }
 
-        private void OpenDoor()
+        private void Open()
         {
-            if (!_active) return;
-            if (_status != DoorStatus.Close || !_closestPlayer) return;
-
-            _door.Interact(_closestPlayer, false, false);
+            if (IsValid() && _active && _status == Status.Close && _closestPlayer != null)
+                _door.Interact(_closestPlayer, false, false);
         }
 
-        private enum DoorStatus
+        private bool IsValid()
+        {
+            return _door != null && _zNetView != null && _zNetView.IsValid();
+        }
+
+        private bool CheckAccess()
+        {
+            return PrivateArea.CheckAccess(_door.transform.position);
+        }
+
+        private bool CanInteract()
+        {
+            return Reflection.InvokeMethod<bool>(_door, "CanInteract");
+        }
+
+        private enum Status
         {
             Open,
             Close,
