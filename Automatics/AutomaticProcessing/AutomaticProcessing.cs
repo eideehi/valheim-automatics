@@ -39,7 +39,7 @@ namespace Automatics.AutomaticProcessing
                 totalStoredCount += storedHoneyCount;
             }
 
-            zNetView.GetZDO().Set("level", honeyCount - totalStoredCount);
+            zNetView.GetZDO().Set("level", Mathf.Clamp(honeyCount - totalStoredCount, 0, piece.m_maxHoney));
             return false;
         }
 
