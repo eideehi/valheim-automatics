@@ -332,6 +332,8 @@ namespace Automatics.AutomaticProcessing
                 storedCount += storedItemCount;
             }
 
+            if (storedCount == 0) return true;
+
             piece.m_produceEffects.Create(transform.position, transform.rotation);
             return false;
         }
