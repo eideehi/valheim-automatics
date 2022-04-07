@@ -1,7 +1,7 @@
 {
   "name": "Automatics",
   "description": "Automatics is a mod that automates the tedious tasks of life in Valheim. Most of its features exist in existing mods, but it has been re-designed to make it easier for me to use.",
-  "version_number": "1.0.6",
+  "version_number": "1.1.0",
   "website_url": "https://github.com/eideehi/valheim-automatics",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.1900"

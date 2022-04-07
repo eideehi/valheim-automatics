@@ -1,7 +1,13 @@
+#### v1.1.0 [2022-04-07]
+- Add the feature of 'Automatic Feeding'
+- Add the feature of 'Automatic Repair'
+- Add option to allow automatic opening/closing for any door
+- Fix a bug where the generated items would be lost if Smelter could not find the container when 'Automatic Store' was enabled
+- Fix a bug where the honey to be set over the maximum if Beehive could not find the container when 'Automatic Store' was enabled
 #### v1.0.6 [2022-04-04]
 - Fix a bug that prevented automatic pinning of player existing in the open air under certain conditions, judging that they exist in the dungeon
 - Add elements added in patch 0.207.20 to be the target for automatic pinning
-- Change the maximum value of the container search range in "Automatic Processing" to 64
+- Change the maximum value of the container search range in 'Automatic Processing' to 64
 - Change to remove pins added by automatic pinning when some veins are destroyed
 #### v1.0.5 [2022-03-28]
 - Add shortcut key to perform searches for static objects
@@ -25,7 +31,7 @@
   * In particular, FPS is greatly improved in areas with a lot of flora, such as farms
 - Reduce the processing load on Automatic Door
 - Add Portal to the Automatic Map Pinning target
-  * Portal is added to "Allow Pinning Other Objects"
+  * Portal is added to 'Allow Pinning Other Objects'
 #### v1.0.1 [2022-03-06]
 - Fix a bug that prevented some Tar Pits from being pinning
 - Fix a bug in which automatic map pinning of static objects causes a significant drop in FPS
