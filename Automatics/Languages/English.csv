@@ -94,12 +94,30 @@
 @config_allow_to_feed_from_container_name,Allow To Feed From Container
 @config_allow_to_feed_from_container_description,Specify the types of animals allowed to feed from the container.
 
+@config_automatic_repair_category,[ #6 Automatic Repair ]
+@config_automatic_repair_enabled_name,Automatic Repair
+@config_automatic_repair_enabled_description,Enable automatic repair of items and pieces.
+@config_crafting_station_search_range_name,Crafting Station Search Range
+@config_crafting_station_search_range_description,Specify the range to search for a crafting station to be used to repair items. Setting to 0 disables periodic item repair. (Unit: meters)
+@config_repair_items_when_accessing_the_crafting_station_name,Repair Items When Accessing The Crafting Station
+@config_repair_items_when_accessing_the_crafting_station_description,Specify whether or not to repair all items that can be repaired when the workbench GUI is opened.
+@config_item_repair_message_name,Item Repair Message
+@config_item_repair_message_description,Specify where the message is displayed when an item is repaired.
+@config_piece_search_range_name,Piece Search Range
+@config_piece_search_range_description,Specify the range to search for a pieces to repair. Setting to 0 disables periodic pieces repairs. (Unit: meters)
+@config_piece_repair_message_name,Piece Repair Message
+@config_piece_repair_message_description,Specify where the message is displayed when a piece is repaired.
+
 @config_automatic_processing_type_craft,Craft
 @config_automatic_processing_type_refuel,Refuel
 @config_automatic_processing_type_store,Store
 
 @config_automatic_feed_animal_type_wild,Wild
 @config_automatic_feed_animal_type_tamed,Tamed
+
+@config_automatic_repair_repair_message_none,Do Not Display
+@config_automatic_repair_repair_message_center,Display In The Center
+@config_automatic_repair_repair_message_top_left,Display In Top Left
 
 @character_level_symbol,★
 @portal_tag_empty,Empty tag
@@ -119,6 +137,8 @@
 @spot_tar_pit,Tar pit
 
 @message_toggle_automatic_door,Automatic Door: $1
+@message_repair_items,Repaired $1 Item(s)
+@message_repair_pieces,Repaired $1 Piece(s)
 
 @command_syntax_error,Syntax error:
 @command_argument_error,Illegal argument:

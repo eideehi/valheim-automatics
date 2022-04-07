@@ -36,6 +36,7 @@ namespace Automatics
             AutomaticMapPinning.Core.Initialize();
             AutomaticProcessing.Core.Initialize();
             AutomaticFeeding.Core.Initialize();
+            AutomaticRepair.Core.Initialize();
 
             Harmony.CreateAndPatchAll(assembly, ModId);
         }
