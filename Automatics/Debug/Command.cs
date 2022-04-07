@@ -1,13 +1,53 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Automatics.ModUtils;
-using HarmonyLib;
 using UnityEngine;
 
 namespace Automatics.Debug
 {
     internal static class Command
     {
+        private static readonly Lazy<IEnumerable<Piece>> LazyAllPieces;
+
+        static Command()
+        {
+            LazyAllPieces = new Lazy<IEnumerable<Piece>>(() =>
+            {
+                var pieces = new HashSet<Piece>();
+
+                var knownTables = new HashSet<PieceTable>();
+                var knownPieces = new HashSet<string>();
+                foreach (var item in GetAllItems())
+                {
+                    var table = item.m_itemData.m_shared.m_buildPieces;
+                    if (table == null || !knownTables.Add(table)) continue;
+
+                    foreach (var piece in table.m_pieces)
+                    {
+                        var component = piece.GetComponent<Piece>();
+                        if (!component.m_enabled) continue;
+
+                        switch (component.m_category)
+                        {
+                            case Piece.PieceCategory.Building:
+                            case Piece.PieceCategory.Crafting:
+                            case Piece.PieceCategory.Furniture:
+                                break;
+
+                            default:
+                                continue;
+                        }
+
+                        if (knownPieces.Add(component.m_name))
+                            pieces.Add(component);
+                    }
+                }
+
+                return pieces.AsEnumerable();
+            });
+        }
+
         public static void RegisterCommands()
         {
             ConsoleCommand.Register("h", Help);
@@ -29,11 +69,6 @@ namespace Automatics.Debug
             }
         }
 
-        private static Dictionary<string, Terminal.ConsoleCommand> GetCommands()
-        {
-            return Traverse.Create<Terminal>().Field<Dictionary<string, Terminal.ConsoleCommand>>("commands").Value;
-        }
-
         private static void Give(Terminal.ConsoleEventArgs args)
         {
             var name = args.Length >= 2 ? args[1] : "";
@@ -43,11 +78,11 @@ namespace Automatics.Debug
                 return;
             }
 
-            var count = args.Length >= 3 && int.TryParse(args[2], out var @int) ? @int : 1;
-            var quality = args.Length >= 4 && int.TryParse(args[3], out @int) ? @int : 1;
+            var count = args.TryParameterInt(2);
+            var quality = args.TryParameterInt(3);
 
             var items = new List<ItemDrop>();
-            foreach (var item in Resources.FindObjectsOfTypeAll<ItemDrop>())
+            foreach (var item in GetAllItems())
             {
                 var itemName = L10N.Translate(item.m_itemData.m_shared.m_name).Replace(" ", "_");
                 if (itemName == name)
@@ -64,6 +99,74 @@ namespace Automatics.Debug
             {
                 GiveItem(items[0], count, quality);
             }
+        }
+
+        private static List<string> GiveOptions() =>
+            (from x in GetAllItems()
+                let name = x.m_itemData.m_shared.m_name.Trim()
+                where name.StartsWith("$")
+                select L10N.Translate(name).Replace(" ", "_"))
+            .Distinct()
+            .ToList();
+
+        private static void GiveMaterials(Terminal.ConsoleEventArgs args)
+        {
+            var name = args.Length >= 2 ? args[1] : "";
+            var count = args.TryParameterInt(2);
+
+            Log.Debug(() => $"Run givematerials {name} {count}");
+
+            var exit = false;
+            foreach (var piece in GetAllPieces())
+            {
+                var pieceName = L10N.Translate(piece.m_name.Trim()).Replace(" ", "_");
+                if (pieceName != name) continue;
+                exit = true;
+                foreach (var resource in piece.m_resources)
+                {
+                    GiveItem(resource.m_resItem, resource.m_amount * count, 1);
+                }
+            }
+
+            if (exit) return;
+
+            foreach (var recipe in GetAllRecipes())
+            {
+                var itemName = L10N.Translate(recipe.m_item.m_itemData.m_shared.m_name.Trim()).Replace(" ", "_");
+                if (itemName != name) continue;
+
+                foreach (var resource in recipe.m_resources)
+                {
+                    GiveItem(resource.m_resItem, resource.m_amount * count, 1);
+                }
+            }
+        }
+
+        private static List<string> GiveMaterialsOptions()
+        {
+            var list = (from x in GetAllPieces() select x.m_name).ToList();
+            list.AddRange(from x in GetAllRecipes() select x.m_item.m_itemData.m_shared.m_name);
+            return (from x in list select L10N.Translate(x.Trim()).Replace(" ", "_")).Distinct().ToList();
+        }
+
+        private static Dictionary<string, Terminal.ConsoleCommand> GetCommands()
+        {
+            return Reflection.GetStaticField<Terminal, Dictionary<string, Terminal.ConsoleCommand>>("commands");
+        }
+
+        private static IEnumerable<ItemDrop> GetAllItems()
+        {
+            return ObjectDB.instance.m_items.Select(x => x.GetComponent<ItemDrop>());
+        }
+
+        private static IEnumerable<Piece> GetAllPieces()
+        {
+            return LazyAllPieces.Value;
+        }
+
+        private static IEnumerable<Recipe> GetAllRecipes()
+        {
+            return ObjectDB.instance.m_recipes.Where(x => x.m_item != null);
         }
 
         private static void GiveItem(ItemDrop item, int count, int quality)
@@ -88,58 +191,6 @@ namespace Automatics.Debug
                 player.ShowPickupMessage(data, amount);
                 count -= amount;
             }
-        }
-
-        private static List<string> GiveOptions() =>
-            (from x in Resources.FindObjectsOfTypeAll<ItemDrop>()
-                let name = x.m_itemData.m_shared.m_name.Trim()
-                where name.StartsWith("$")
-                select L10N.Translate(name).Replace(" ", "_"))
-            .Distinct()
-            .ToList();
-
-        private static void GiveMaterials(Terminal.ConsoleEventArgs args)
-        {
-            var name = args.Length >= 2 ? args[1] : "";
-            var count = args.Length >= 3 && int.TryParse(args[2], out var @int) ? @int : 1;
-
-            Log.Debug(() => $"Run givematerials {name} {count}");
-
-            var exit = false;
-            foreach (var piece in Resources.FindObjectsOfTypeAll<Piece>())
-            {
-                var pieceName = L10N.Translate(piece.m_name.Trim()).Replace(" ", "_");
-                if (pieceName != name) continue;
-                exit = true;
-                foreach (var resource in piece.m_resources)
-                {
-                    GiveItem(resource.m_resItem, resource.m_amount * count, 1);
-                }
-            }
-
-            if (exit) return;
-
-            foreach (var recipe in from x in Resources.FindObjectsOfTypeAll<Recipe>() where x && x.m_item select x)
-            {
-                var itemName = L10N.Translate(recipe.m_item.m_itemData.m_shared.m_name.Trim()).Replace(" ", "_");
-                if (itemName != name) continue;
-
-                foreach (var resource in recipe.m_resources)
-                {
-                    GiveItem(resource.m_resItem, resource.m_amount * count, 1);
-                }
-            }
-        }
-
-        private static List<string> GiveMaterialsOptions()
-        {
-            var result = (from piece in Resources.FindObjectsOfTypeAll<Piece>()
-                    where piece && !piece.m_targetNonPlayerBuilt
-                    select piece.m_name)
-                .ToList();
-            result.AddRange(Resources.FindObjectsOfTypeAll<Recipe>().Where(x => x && x.m_item)
-                .Select(recipe => recipe.m_item.m_itemData.m_shared.m_name));
-            return (from x in result select L10N.Translate(x.Trim())).Distinct().ToList();
         }
     }
 }
