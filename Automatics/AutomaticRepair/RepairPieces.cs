@@ -40,6 +40,8 @@ namespace Automatics.AutomaticRepair
         public static void Run(Player player, bool takeInput)
         {
             if (!player.InPlaceMode()) return;
+            if (!Config.AutomaticRepairEnabled) return;
+            if (Config.PieceSearchRange <= 0) return;
             if (!Runnable()) return;
 
             var tool = player.GetRightItem();
