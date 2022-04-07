@@ -70,6 +70,7 @@ It can automatically repair items when the player is near a crafting station or 
 ## Configurations
 
 I recommend using [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
+
 [![Configuration Menu](https://app.box.com/shared/static/3v57rjpauzzyv0xeugohnw8bn2ye3q2h.png)](https://app.box.com/shared/static/vfzsn69i950l48er2u69tssod6xxsh8u.jpg "Configuration Menu (Click to view full size)")
 
 ### [ #1 Logging ] / [logging]

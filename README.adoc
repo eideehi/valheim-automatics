@@ -64,6 +64,7 @@ It can automatically repair items when the player is near a crafting station or 
 
 == Configurations
 I recommend using link:{uri-configuration-manager}[Configuration Manager].
+
 image:{thumbnail-uri-config_menu}[link={image-uri-config_menu},title="Configuration Menu (Click to view full size)"]
 
 === [ #1 Logging ] / [logging]
