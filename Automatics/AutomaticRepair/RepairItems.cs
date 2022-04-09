@@ -20,7 +20,7 @@ namespace Automatics.AutomaticRepair
 
         private static bool Runnable()
         {
-            return Time.time - _lastRunningTime >= 1f;
+            return !Game.IsPaused() && Time.time - _lastRunningTime >= 1f;
         }
 
         private static void ShowRepairMessage(Player player, int repairCount)
