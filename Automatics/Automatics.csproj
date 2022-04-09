@@ -242,20 +242,27 @@
         </ItemGroup>
         <Copy SourceFiles="@(Binaries)" DestinationFiles="@(Binaries->'$(BepInExDirectory)\plugins\$(ProjectName)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     </Target>
-    <Target Condition="Exists('$(SEVENZIP_PATH)') And '$(Configuration)|$(Platform)' == 'Release|AnyCPU'" Name="ArchiveBinaries" AfterTargets="PostBuildEvent">
+    <Target Condition="Exists('$(SEVENZIP_PATH)') And '$(Configuration)|$(Platform)' == 'Release|AnyCPU'" Name="PackageModFiles" AfterTargets="PostBuildEvent">
         <PropertyGroup>
-            <ArchiveTmpDir>$(ProjectDir)$(BaseOutputPath)tmp\</ArchiveTmpDir>
+            <PackageTempDir>$(ProjectDir)$(BaseOutputPath)tmp\</PackageTempDir>
+            <NexusPackageDir>$(PackageTempDir)$(TargetName)\</NexusPackageDir>
+            <ThunderstorePackageDir>$(PackageTempDir)plugins\</ThunderstorePackageDir>
         </PropertyGroup>
         <ItemGroup>
-            <Binaries Include="$(TargetDir)**\*.*" Exclude="$(TargetDir)**\*.pdb;$(TargetDir)*.7z;$(TargetDir)*.zip" />
+            <ModFiles Include="$(TargetPath)" />
+            <ModFiles Include="$(TargetDir)**\*.csv" />
             <ThunderstoreFiles Include="$(SolutionDir)\package\thunderstore\**\*.*" />
         </ItemGroup>
-        <Move SourceFiles="@(Binaries)" DestinationFiles="@(Binaries->'$(ArchiveTmpDir)$(TargetName)\%(RecursiveDir)%(Filename)%(Extension)')" />
+        <Move SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(NexusPackageDir)\%(RecursiveDir)%(Filename)%(Extension)')" />
         <RemoveDir Directories="$(TargetDir)" />
         <MakeDir Directories="$(TargetDir)" />
-        <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).7z&quot; &quot;$(ArchiveTmpDir)/*&quot; -xr!.*/" />
-        <Copy SourceFiles="@(ThunderstoreFiles)" DestinationFiles="@(ThunderstoreFiles->'$(ArchiveTmpDir)%(RecursiveDir)%(Filename)%(Extension)')" />
-        <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).zip&quot; &quot;$(ArchiveTmpDir)/*&quot; -xr!.*/" />
-        <RemoveDir Directories="$(ArchiveTmpDir)" />
+        <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).7z&quot; &quot;$(PackageTempDir)/*&quot;" />
+        <ItemGroup>
+            <NexusPackageFiles Include="$(NexusPackageDir)**\*" />
+        </ItemGroup>
+        <Move SourceFiles="@(NexusPackageFiles)" DestinationFiles="@(NexusPackageFiles->'$(ThunderstorePackageDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+        <Copy SourceFiles="@(ThunderstoreFiles)" DestinationFiles="@(ThunderstoreFiles->'$(PackageTempDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+        <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).zip&quot; &quot;$(PackageTempDir)/*&quot; -xr!$(TargetName)/" />
+        <RemoveDir Directories="$(PackageTempDir)" />
     </Target>
 </Project>
