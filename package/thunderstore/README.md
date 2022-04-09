@@ -429,6 +429,9 @@ Specify where the message is displayed when a piece is repaired.
 Automatics is developed and released under the MIT license. For the full text of the license, please see the [LICENSE](https://github.com/eideehi/valheim-automatics/blob/main/LICENSE) file.
 
 ## Changelog
+#### v1.1.1 [2022-04-10]
+- Fix package task of mod files for Thunderstore
+- Fix a bug in which the 'Repair Pieces' function continued to work even though the 'Automatic Repair' feature was disabled in the configuration
 #### v1.1.0 [2022-04-07]
 - Add the feature of 'Automatic Feeding'
 - Add the feature of 'Automatic Repair'
