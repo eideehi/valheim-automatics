@@ -9,6 +9,7 @@ namespace Automatics.Debug
     internal static class Command
     {
         private static readonly Lazy<IEnumerable<Piece>> LazyAllPieces;
+        private static readonly Dictionary<string, Func<Collider, MonoBehaviour>> ObjectColliderConvertors;
 
         static Command()
         {
@@ -46,27 +47,24 @@ namespace Automatics.Debug
 
                 return pieces.AsEnumerable();
             });
+
+            ObjectColliderConvertors = new Dictionary<string, Func<Collider, MonoBehaviour>>
+            {
+                { "Character", x => x.GetComponentInParent<Character>() },
+                { "Bird", x => x.GetComponentInParent<RandomFlyingBird>() },
+                { "Fish", x => x.GetComponentInParent<Fish>() },
+                { "Pickable", x => x.GetComponentInParent<Pickable>() },
+                { "Destructible", x => x.GetComponentInParent<IDestructible>() as MonoBehaviour },
+                { "Interactable", x => x.GetComponentInParent<Interactable>() as MonoBehaviour },
+                { "Hoverable", x => x.GetComponentInParent<Hoverable>() as MonoBehaviour },
+            };
         }
 
         public static void RegisterCommands()
         {
-            ConsoleCommand.Register("h", Help);
-            ConsoleCommand.Register("give", Give, optionsFetcher: GiveOptions, isCheat: true);
-            ConsoleCommand.Register("givematerials", GiveMaterials, optionsFetcher: GiveMaterialsOptions,
-                isCheat: true);
-        }
-
-        private static void Help(Terminal.ConsoleEventArgs args)
-        {
-            var filter = args.Length >= 2 ? args[1] : "";
-            foreach (var command in from x in GetCommands().Values
-                     where !x.IsSecret && x.IsValid(args.Context) &&
-                           (x.Command.Contains(filter) || x.Description.Contains(filter))
-                     orderby x.Command
-                     select x.Command + " - " + x.Description)
-            {
-                args.Context.AddString(command);
-            }
+            ConsoleCommand.Register("give", Give, GiveOptions, isCheat: true);
+            ConsoleCommand.Register("givematerials", GiveMaterials, GiveMaterialsOptions, isCheat: true);
+            ConsoleCommand.Register("printobject", PrintObject, PrintObjectOptions, isCheat: true);
         }
 
         private static void Give(Terminal.ConsoleEventArgs args)
@@ -149,9 +147,81 @@ namespace Automatics.Debug
             return (from x in list select L10N.Translate(x.Trim()).Replace(" ", "_")).Distinct().ToList();
         }
 
-        private static Dictionary<string, Terminal.ConsoleCommand> GetCommands()
+        private static void PrintObject(Terminal.ConsoleEventArgs args)
         {
-            return Reflection.GetStaticField<Terminal, Dictionary<string, Terminal.ConsoleCommand>>("commands");
+            if (!(args.Length >= 3 && int.TryParse(args[2], out var range)))
+            {
+                args.Context.AddString(ConsoleCommand.SyntaxError("printobject"));
+                return;
+            }
+
+            var type = args[1];
+            var filter = args.Length >= 4 ? args[3] : "";
+
+            if (!ObjectColliderConvertors.TryGetValue(type, out var convertor))
+            {
+                args.Context.AddString(ConsoleCommand.ArgumentError("printobject", type));
+                return;
+            }
+
+            Log.Debug(() => $"Run command: printobject {type} {range} {filter}");
+
+            var strings = new HashSet<string>();
+            var pos = Player.m_localPlayer.transform.position;
+            foreach (var @object in
+                     from x in Obj.GetInSphere(pos, range, convertor, range * 16)
+                     orderby x.Item2
+                     select x.Item1)
+            {
+                switch (@object)
+                {
+                    case Humanoid humanoid when humanoid.IsPlayer():
+                        break;
+                    case RandomFlyingBird bird:
+                    {
+                        var prefabName = Obj.GetPrefabName(bird.gameObject).ToLower();
+                        var name = $"@animal_{prefabName}";
+                        strings.Add(
+                            $"{L10N.Translate(name)}: [type: {@object.GetType()}, raw_name: {name}, layer: {Layer(@object)}]");
+                        break;
+                    }
+                    default:
+                    {
+                        var name = Obj.GetName(@object);
+                        strings.Add(
+                            $"{L10N.Localize(name)}: [type: {@object.GetType()}, raw_name: {name}, layer: {Layer(@object)}]");
+                        break;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(filter))
+                strings.RemoveWhere(x => !x.Contains(filter));
+
+            if (strings.Count > 0)
+            {
+                foreach (var x in strings)
+                {
+                    args.Context.AddString(x);
+                    Log.Debug(() => x);
+                }
+
+                args.Context.AddString(L10N.Localize("@command_print_result", strings.Count));
+            }
+            else
+            {
+                args.Context.AddString(L10N.Translate("@command_print_result_empty"));
+            }
+
+            string Layer(Component @object)
+            {
+                return LayerMask.LayerToName(@object.gameObject.layer);
+            }
+        }
+
+        private static List<string> PrintObjectOptions()
+        {
+            return ObjectColliderConvertors.Keys.ToList();
         }
 
         private static IEnumerable<ItemDrop> GetAllItems()

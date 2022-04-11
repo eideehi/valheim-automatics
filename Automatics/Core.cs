@@ -10,6 +10,7 @@ namespace Automatics
         {
             LanguageLoader.LoadFromCsv(Path.Combine(Automatics.ModLocation, "Languages"));
             Config.Initialize();
+            Automatics.OnInitTerminal += Command.Register;
         }
     }
 

@@ -140,13 +140,20 @@
 @message_repair_items,Repaired $1 Item(s)
 @message_repair_pieces,Repaired $1 Piece(s)
 
-@command_syntax_error,Syntax error:
-@command_argument_error,Illegal argument:
-@command_h_option,[filter]
-@command_h_description,Displays a list of available commands.
-@command_give_option,item [amount] [quality]
+@command_description_format,$1 The command "automatics $2" can be used to confirm usage.
+@command_syntax_error_format,Syntax error: $1\n$2
+@command_argument_error_format,Illegal argument: $1\n$2
+
+@command_automatics_description,Displays the usage of commands added by Automatics.
+@command_automatics_usage,Usage: automatics [COMMAND]\nDisplays the usage of commands added by Automatics.\n\nCOMMAND: Command name to display usage. If there is an exact match, it will be displayed. Otherwise, it will display the first partially matched command found. If omitted, the usage of the automatics command itself is displayed.
+@command_automatics_command_not_found,Command not found: $1
+
+// Commands for debugging
 @command_give_description,Adds an item to the player's inventory.
-@command_printobject_option,object_type range [filter]
+@command_give_usage,Usage: give ITEM [AMOUNT] [QUALITY]
+@command_givematerials_description,Add items to the player's inventory that will materials for creating items and buildings.
+@command_givematerials_usage,Usage: givematerials TARGET [AMOUNT]
 @command_printobject_description,Outputs information the objects that exist in the range.
+@command_printobject_usage,Usage: printobject TYPE RANGE [FILTER]
 @command_print_result,$1 information was output.
 @command_print_result_empty,No information matching criteria was found.

@@ -1,4 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection.Emit;
 using Automatics.ModUtils;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -86,12 +88,21 @@ namespace Automatics.Debug
             }
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Terminal), "InitTerminal")]
-        private static void TerminalAwakePostfix(bool ___m_terminalInitialized)
+        [HarmonyTranspiler, HarmonyPatch(typeof(Terminal), "InitTerminal")]
+        private static IEnumerable<CodeInstruction> TerminalInitTerminalTranspiler(
+            IEnumerable<CodeInstruction> instructions)
         {
-            if (!___m_terminalInitialized) return;
+            var Hook = AccessTools.Method(typeof(Patches), nameof(CallInitTerminalHook));
 
-            Command.RegisterCommands();
+            var codes = new List<CodeInstruction>(instructions);
+
+            var index = codes.FindLastIndex(x => x.opcode == OpCodes.Ret);
+            if (index != -1)
+                codes.Insert(index - 1, new CodeInstruction(OpCodes.Call, Hook));
+
+            return codes;
         }
+
+        private static void CallInitTerminalHook() => Command.RegisterCommands();
     }
 }

@@ -1,4 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection.Emit;
 using Automatics.ModUtils;
 using HarmonyLib;
 
@@ -17,6 +19,20 @@ namespace Automatics
             Automatics.OnPlayerUpdate?.Invoke(__instance, takeInput);
         }
 
+        [HarmonyTranspiler, HarmonyPatch(typeof(Terminal), "InitTerminal")]
+        private static IEnumerable<CodeInstruction> TerminalInitTerminalTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            var Hook = AccessTools.Method(typeof(Patches), nameof(TerminalInitTerminalHook));
+
+            var codes = new List<CodeInstruction>(instructions);
+
+            var index = codes.FindLastIndex(x => x.opcode == OpCodes.Ret);
+            if (index != -1)
+                codes.Insert(index - 1, new CodeInstruction(OpCodes.Call, Hook));
+
+            return codes;
+        }
+
         [HarmonyPostfix, HarmonyPatch(typeof(Container), "Awake")]
         private static void ContainerAwakePostfix(Container __instance, ZNetView ___m_nview)
         {
@@ -31,12 +47,6 @@ namespace Automatics
                 __instance.gameObject.AddComponent<PickableCache>();
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Terminal), "InitTerminal")]
-        private static void TerminalAwakePostfix(bool ___m_terminalInitialized)
-        {
-            if (!___m_terminalInitialized) return;
-
-            Automatics.OnInitTerminal?.Invoke();
-        }
+        private static void TerminalInitTerminalHook() => Automatics.OnInitTerminal?.Invoke();
     }
 }

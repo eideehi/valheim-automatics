@@ -140,14 +140,21 @@
 @message_repair_items,$1個のアイテムを修理した
 @message_repair_pieces,$1点の建築物を修繕した
 
-@command_syntax_error,構文が間違っています:
-@command_argument_error,引数が不正です:
-@command_h_option,[フィルター]
-@command_h_description,利用可能なコマンドの一覧を表示します。
-@command_give_option,アイテム [数] [品質]
-@command_give_description,プレイヤーのインベントリにアイテムを追加します。
-@command_printobject_option,オブジェクトの種類 探索範囲 [フィルター]
+@command_description_format,$1 "automatics $2" のコマンドを実行することで使用方法を確認することが出来ます。
+@command_syntax_error_format,構文が間違っています: $1\n$2
+@command_argument_error_format,引数が不正です: $1\n$2
+
+@command_automatics_description,Automaticsにより追加されたコマンドの使用方法を確認することが出来ます。
+@command_automatics_usage,使用方法: automatics [COMMAND]\nAutomatics により追加されたコマンドの使用方法を表示します。\n\nCOMMAND: 使用方法を表示するコマンド名。\n完全に一致するコマンドがある場合はそれを表示し、ない場合は最初に見つかった部分的に一致するコマンドを表示します。\n省略した場合は、automaticsコマンド自体の使用方法を表示します。
+@command_automatics_command_not_found,コマンドが見つかりませんでした: $1
+
+// デバッグ用コマンド
+@command_give_description,アイテムをプレイヤーのインベントリに追加します。
+@command_give_usage,使用方法: give アイテム名 [数量] [品質]
+@command_givematerials_description,アイテムや建築物の素材となるアイテムをプレイヤーのインベントリに追加します。
+@command_givematerials_usage,使用方法: givematerials ターゲット [数量]
 @command_printobject_description,範囲内に存在するオブジェクトの情報を出力します。
+@command_printobject_usage,使用方法: printobject オブジェクトの種類 探索範囲 [フィルター]
 @command_print_result,$1 件の情報を出力しました。
 @command_print_result_empty,条件にあう情報は見つかりませんでした。
 

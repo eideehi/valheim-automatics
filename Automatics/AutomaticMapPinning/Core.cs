@@ -8,7 +8,6 @@ namespace Automatics.AutomaticMapPinning
         public static void Initialize()
         {
             Config.Initialize();
-            Automatics.OnInitTerminal += Command.Register;
 
             PickableCache.AddAwakeListener(pickable =>
             {
