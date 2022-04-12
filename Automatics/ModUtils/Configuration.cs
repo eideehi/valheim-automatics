@@ -101,8 +101,11 @@ namespace Automatics.ModUtils
 
             PrintConfig(key, defaultValue, attributes, acceptableValue);
 
+            var description = string.IsNullOrEmpty(attributes.Description)
+                ? GetDescription(key)
+                : attributes.Description;
             return Automatics.ModConfig.Bind(section, key, defaultValue,
-                new ConfigDescription(GetDescription(key), acceptableValue, attributes));
+                new ConfigDescription(description, acceptableValue, attributes));
         }
 
         public static ConfigEntry<T> Bind<T>(string section, string key, T defaultValue,
