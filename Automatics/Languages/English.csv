@@ -16,7 +16,7 @@
 @config_allow_automatic_door_name,Allow Automatic Door
 @config_allow_automatic_door_description,Specify which doors are allowed to open and close automatically.
 @config_allow_automatic_door_custom_name,Allow Automatic Door (Custom)
-@config_allow_automatic_door_custom_description,Specify any door to be allowed to open and close automatically. A display name (e.g. wooden door) or an internal name (e.g. $piece_wooddoor) can be specified.
+@config_allow_automatic_door_custom_description,Specify any door to be allowed to open and close automatically. A display name (e.g. Wood door) or an internal name (e.g. $piece_wooddoor) can be specified.
 @config_interval_to_open_name,Interval To Open
 @config_interval_to_open_description,the interval at which to call the process to determine whether to open the door. (Unit: second)
 @config_interval_to_close_name,Interval To Close
