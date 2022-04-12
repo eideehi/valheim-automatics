@@ -9,8 +9,7 @@ namespace Automatics.AutomaticMapPinning
 {
     internal static class Map
     {
-        private static Dictionary<string, Sprite> _customIcons;
-        private static Dictionary<string, Minimap.PinType> _nameByPinTypeMap;
+        private static List<IconInfo> _customIcons;
 
         private static Minimap VMap => Minimap.instance;
 
@@ -18,7 +17,7 @@ namespace Automatics.AutomaticMapPinning
 
         private static void LoadCustomIcons()
         {
-            _customIcons = new Dictionary<string, Sprite>();
+            _customIcons = new List<IconInfo>();
 
             var texturesDir = Path.Combine(Automatics.ModLocation, "Textures");
             var customIconsCsv = Path.Combine(texturesDir, "CustomMapIcon.csv");
@@ -53,15 +52,18 @@ namespace Automatics.AutomaticMapPinning
                 var sprite = Image.CreateSprite(texturesDir, element.Value);
                 if (sprite == null) continue;
 
-                _customIcons[L10N.TranslateInternalNameOnly(element.Key)] = sprite;
+                _customIcons.Add(new IconInfo
+                {
+                    Name = element.Key,
+                    IsInternalName = L10N.IsInternalName(element.Key),
+                    Sprite = sprite,
+                });
                 Automatics.ModLogger.LogInfo($"* Loaded custom icon for {element.Key}");
             }
         }
 
         private static void RegisterCustomIcons()
         {
-            _nameByPinTypeMap = new Dictionary<string, Minimap.PinType>();
-
             if (!_customIcons.Any()) return;
 
             var iconTypes = Reflection.GetField<bool[]>(VMap, "m_visibleIconTypes");
@@ -78,14 +80,14 @@ namespace Automatics.AutomaticMapPinning
             {
                 var pinType = (Minimap.PinType)(iconTypeCount + j);
 
-                _nameByPinTypeMap[customIcon.Key] = pinType;
+                customIcon.PinType = pinType;
                 VMap.m_icons.Add(new Minimap.SpriteData
                 {
                     m_name = pinType,
-                    m_icon = customIcon.Value
+                    m_icon = customIcon.Sprite
                 });
 
-                Automatics.ModLogger.LogInfo($"Register new sprite data: ({pinType}, {customIcon.Key})");
+                Automatics.ModLogger.LogInfo($"Register new sprite data: ({pinType}, {customIcon.Name})");
 
                 j++;
             }
@@ -97,10 +99,18 @@ namespace Automatics.AutomaticMapPinning
             RegisterCustomIcons();
         }
 
-        public static Minimap.PinType GetCustomIcon(string name)
+        public static Minimap.PinType GetCustomIcon(string iName)
         {
-            var localizedName = L10N.TranslateInternalNameOnly(name);
-            return _nameByPinTypeMap.TryGetValue(localizedName, out var icon) ? icon : Minimap.PinType.Icon3;
+            if (!_customIcons.Any()) return Minimap.PinType.Icon3;
+
+            var dName = L10N.TranslateInternalNameOnly(iName);
+            return (from x in _customIcons
+                    where x.IsInternalName
+                        ? iName.Equals(x.Name, StringComparison.Ordinal)
+                        : dName.IndexOf(x.Name, StringComparison.OrdinalIgnoreCase) >= 0
+                    select x.PinType)
+                .DefaultIfEmpty(Minimap.PinType.Icon3)
+                .FirstOrDefault();
         }
 
         public static bool HavePinInRange(Vector3 pos, float radius)
@@ -142,6 +152,14 @@ namespace Automatics.AutomaticMapPinning
             var pin = Pins.FirstOrDefault(x => (save ? x.m_save : !x.m_save) && x.m_pos == pos);
             if (pin != null)
                 RemovePin(pin);
+        }
+
+        private class IconInfo
+        {
+            public string Name;
+            public bool IsInternalName;
+            public Minimap.PinType PinType;
+            public Sprite Sprite;
         }
     }
 }

@@ -16,7 +16,7 @@
 @config_allow_automatic_door_name,Allow Automatic Door
 @config_allow_automatic_door_description,Specify which doors are allowed to open and close automatically.
 @config_allow_automatic_door_custom_name,Allow Automatic Door (Custom)
-@config_allow_automatic_door_custom_description,Specify any door to be allowed to open and close automatically. A display name (e.g. Wood door) or an internal name (e.g. $piece_wooddoor) can be specified.
+@config_allow_automatic_door_custom_description,Specify the display or internal name of any door that is allowed to open and close automatically. A display name is a name displayed in the game, such as "Wood door", and the specified value will enable the automatic door if it partially matches the target display name. The internal name is the name used on the program side, such as "$piece_wooddoor", and the specified value must exactly match the target's internal name for the automatic door to be enabled.
 @config_interval_to_open_name,Interval To Open
 @config_interval_to_open_description,the interval at which to call the process to determine whether to open the door. (Unit: second)
 @config_interval_to_close_name,Interval To Close
@@ -56,15 +56,15 @@
 @config_allow_pinning_ship_name,Allow Pinning Ship
 @config_allow_pinning_ship_description,Enable automatic pinning for the ship.
 @config_allow_pinning_animal_custom_name,Allow Pinning Animal (Custom)
-@config_allow_pinning_animal_custom_description,Specify the display name (e.g. Boar) or internal name (e.g. $enemy_boar) of the target animals.
+@config_allow_pinning_animal_custom_description,Specify the display or internal name of any animals that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Boar", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$enemy_boar", and the specified value must exactly match the target's internal name for the pinning to be enabled.
 @config_allow_pinning_monster_custom_name,Allow Pinning Monster (Custom)
-@config_allow_pinning_monster_custom_description,Specify the display name (e.g. Greyling) or internal name (e.g. $enemy_greyling) of the target monsters.
+@config_allow_pinning_monster_custom_description,Specify the display or internal name of any monster that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Greyling", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$enemy_greyling", and the specified value must exactly match the target's internal name for the pinning to be enabled.
 @config_allow_pinning_flora_custom_name,Allow Pinning Flora (Custom)
-@config_allow_pinning_flora_custom_description,Specify the display name (e.g. Dandelion) or internal name (e.g. $item_dandelion) of the target flora.
+@config_allow_pinning_flora_custom_description,Specify the display or internal name of any flora that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Dandelion", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$item_dandelion", and the specified value must exactly match the target's internal name for the pinning to be enabled.
 @config_allow_pinning_vein_custom_name,Allow Pinning Vein (Custom)
-@config_allow_pinning_vein_custom_description,Specify the display name (e.g. Copper deposit) or internal name (e.g. $piece_deposit_copper) of the target veins.
+@config_allow_pinning_vein_custom_description,Specify the display or internal name of any veins that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Copper deposit", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$piece_deposit_copper", and the specified value must exactly match the target's internal name for the pinning to be enabled.
 @config_allow_pinning_spawner_custom_name,Allow Pinning Spawner (Custom)
-@config_allow_pinning_spawner_custom_description,Specify the display name (e.g. Greydwarf nest) or internal name (e.g. $enemy_greydwarfspawner) of the target spawners.
+@config_allow_pinning_spawner_custom_description,Specify the display or internal name of any spawners that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Greydwarf nest", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$enemy_greydwarfspawner", and the specified value must exactly match the target's internal name for the pinning to be enabled.
 @config_ignore_tamed_animals_name,Not Pinning Tamed Animals
 @config_ignore_tamed_animals_description,Exclude tamed animals from automatic pinning.
 @config_static_object_search_interval_name,Static Object Search Interval

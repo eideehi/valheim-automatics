@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using Automatics.ModUtils;
 
 namespace Automatics.AutomaticDoor
@@ -26,14 +27,17 @@ namespace Automatics.AutomaticDoor
 
         public static bool IsAllowAutomaticDoor(Door door)
         {
-            var name = Obj.GetName(door);
-            if (ValheimDoor.GetFlag(name, out var flag) && (Config.AllowAutomaticDoor & flag) != 0) return true;
+            var iName = Obj.GetName(door);
+            if (ValheimDoor.GetFlag(iName, out var flag) && (Config.AllowAutomaticDoor & flag) != 0) return true;
 
             var list = Config.AllowAutomaticDoorCustom;
             if (!list.Any()) return false;
 
-            var localizedName = L10N.TranslateInternalNameOnly(name);
-            return list.Any(x => L10N.TranslateInternalNameOnly(x) == localizedName);
+            var dName = L10N.TranslateInternalNameOnly(iName);
+            return list.Any(x =>
+                L10N.IsInternalName(x)
+                    ? iName.Equals(x, StringComparison.Ordinal)
+                    : dName.IndexOf(x, StringComparison.OrdinalIgnoreCase) >= 0);
         }
     }
 }

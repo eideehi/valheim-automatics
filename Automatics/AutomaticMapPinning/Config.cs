@@ -51,50 +51,26 @@ namespace Automatics.AutomaticMapPinning
         public static bool IsAllowPinning(Spot.Flag flag) => (_allowPinningSpot.Value & flag) != 0;
         public static bool IsAllowPinningShip => _allowPinningShip.Value;
 
-        public static bool IsCustomAnimal(string name)
+        private static bool CheckCustom(string iName, StringList list)
         {
-            var list = _allowPinningAnimalCustom.Value;
             if (!list.Any()) return false;
 
-            var floraName = L10N.TranslateInternalNameOnly(name);
-            return list.Any(x => L10N.TranslateInternalNameOnly(x) == floraName);
+            var dName = L10N.TranslateInternalNameOnly(iName);
+            return list.Any(x =>
+                L10N.IsInternalName(x)
+                    ? iName.Equals(x, StringComparison.Ordinal)
+                    : dName.IndexOf(x, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
-        public static bool IsCustomMonster(string name)
-        {
-            var list = _allowPinningMonsterCustom.Value;
-            if (!list.Any()) return false;
+        public static bool IsCustomAnimal(string iName) => CheckCustom(iName, _allowPinningAnimalCustom.Value);
 
-            var floraName = L10N.TranslateInternalNameOnly(name);
-            return list.Any(x => L10N.TranslateInternalNameOnly(x) == floraName);
-        }
+        public static bool IsCustomMonster(string iName) => CheckCustom(iName, _allowPinningMonsterCustom.Value);
 
-        public static bool IsCustomFlora(string name)
-        {
-            var list = _allowPinningFloraCustom.Value;
-            if (!list.Any()) return false;
+        public static bool IsCustomFlora(string iName) => CheckCustom(iName, _allowPinningFloraCustom.Value);
 
-            var floraName = L10N.TranslateInternalNameOnly(name);
-            return list.Any(x => L10N.TranslateInternalNameOnly(x) == floraName);
-        }
+        public static bool IsCustomVein(string iName) => CheckCustom(iName, _allowPinningVeinCustom.Value);
 
-        public static bool IsCustomVein(string name)
-        {
-            var list = _allowPinningVeinCustom.Value;
-            if (!list.Any()) return false;
-
-            var veinName = L10N.TranslateInternalNameOnly(name);
-            return list.Any(x => L10N.TranslateInternalNameOnly(x) == veinName);
-        }
-
-        public static bool IsCustomSpawner(string name)
-        {
-            var list = _allowPinningSpawnerCustom.Value;
-            if (!list.Any()) return false;
-
-            var spawnerName = L10N.TranslateInternalNameOnly(name);
-            return list.Any(x => L10N.TranslateInternalNameOnly(x) == spawnerName);
-        }
+        public static bool IsCustomSpawner(string iName) => CheckCustom(iName, _allowPinningSpawnerCustom.Value);
 
         public static bool IgnoreTamedAnimals => _ignoreTamedAnimals.Value;
         public static float StaticObjectSearchInterval => _staticObjectSearchInterval.Value;

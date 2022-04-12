@@ -17,6 +17,19 @@ namespace Automatics.ModUtils
 
         internal static Localization ValheimL10N => Localization.instance;
 
+        public static bool IsInternalName(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            switch (text[0])
+            {
+                case '$':
+                case '@':
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         public static string Translate(string word)
         {
             if (string.IsNullOrEmpty(word)) return "";
