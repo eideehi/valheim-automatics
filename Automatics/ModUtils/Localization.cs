@@ -70,6 +70,11 @@ namespace Automatics.ModUtils
             }));
         }
 
+        public static string LocalizeWithoutTranslateWords(string text, params object[] words)
+        {
+            return InvokeInsertWords(Localize(text), Array.ConvertAll(words, x => x as string ?? x.ToString()));
+        }
+
         private static string InvokeTranslate(string word) =>
             Reflection.InvokeMethod<string>(ValheimL10N, "Translate", word);
 

@@ -147,6 +147,9 @@
 @command_automatics_description,Displays the usage of commands added by Automatics.
 @command_automatics_usage,Usage: automatics [COMMAND]\nDisplays the usage of commands added by Automatics.\n\nCOMMAND: Command name to display usage. If there is an exact match, it will be displayed. Otherwise, it will display the first partially matched command found. If omitted, the usage of the automatics command itself is displayed.
 @command_automatics_command_not_found,Command not found: $1
+@command_printnames_description,Output internal and display names.
+@command_printnames_usage,Usage: printnames (WORD|REGEXP)\nOutputs internal or display names that contain the specified string or match the specified regular expression.\n\nWORD: A text contained in the internal or display name. (e.g. $enemy_, $item_, $piece_, Boar, Mushroom, Wood door); All partially matching internal and display names are output.\nREGEXP: A regular expression of the internal or display name to be output. Must be prefixed with "r/". (e.g. r/^[$]item_, r/^boar$)\n\nExamples:\nprintnames greydwarf\nprintnames r/deposit_[ct].+$
+@command_printnames_result_format,Internal name: [$1], Display name: [$2]
 
 // Commands for debugging
 @command_give_description,Adds an item to the player's inventory.
