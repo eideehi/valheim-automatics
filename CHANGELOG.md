@@ -1,3 +1,12 @@
+#### v1.1.2 [2022-04-14]
+- Add command to output internal and display names
+  * See ["Console commands"](https://github.com/eideehi/valheim-automatics#console-commands) in the README for details.
+- Add options to suppress automatic processing based on item count
+- Add option to automatic refuel only when materials supplied
+- Change 'Automatic Repair' not to work during game pauses
+- Change 'Allow...(Custom)' options to evaluate for exact match if an internal name is specified, or partial match if a display name is specified
+  * The "$enemy_boar" matches only "Boar", but "Greydwarf" matches "Greydwarf brute" and "Greydwarf shaman" in addition to "Greydwarf"
+  * The same goes for TARGET for [Custom Map Icon](https://github.com/eideehi/valheim-automatics#custom-map-icons)
 #### v1.1.1 [2022-04-10]
 - Fix package task of mod files for Thunderstore
 - Fix a bug in which the 'Repair Pieces' function continued to work even though the 'Automatic Repair' feature was disabled in the configuration

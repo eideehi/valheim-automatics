@@ -13,7 +13,7 @@ namespace Automatics
     {
         private const string ModId = "net.eidee.valheim.automatics";
         private const string ModName = "Automatics";
-        private const string ModVersion = "1.1.1";
+        private const string ModVersion = "1.1.2";
 
         internal static string ModLocation { get; private set; }
         internal static ManualLogSource ModLogger { get; private set; }
