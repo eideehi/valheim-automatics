@@ -23,6 +23,8 @@ namespace Automatics.AutomaticProcessing
             if (!Config.IsAllowAutomaticProcessing(stationName, Type.Refuel)) return;
 
             if (zNetView.GetZDO().GetFloat("fuel") > piece.m_maxFuel - 1f) return;
+            if (Config.IsRefuelOnlyWhenMaterialsSupplied(stationName) &&
+                Reflection.InvokeMethod<int>(piece, "GetFreeSlot") < 0) return;
 
             var minFuelCount = Config.GetItemCountThatSuppressAutomaticRefuel(stationName);
             var origin = piece.transform.position;
@@ -77,6 +79,8 @@ namespace Automatics.AutomaticProcessing
             if (!Config.IsAllowAutomaticProcessing(smelterName, Type.Refuel)) return;
 
             if (zNetView.GetZDO().GetFloat("fuel") >= piece.m_maxFuel - 1) return;
+            if (Config.IsRefuelOnlyWhenMaterialsSupplied(smelterName) &&
+                zNetView.GetZDO().GetInt("queued") == 0) return;
 
             var minFuelCount = Config.GetItemCountThatSuppressAutomaticRefuel(smelterName);
             var origin = piece.transform.position;

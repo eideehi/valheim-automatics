@@ -89,6 +89,8 @@
 @config_fuel_count_that_suppress_automatic_process_description,Suppresses automatic processing of $1 to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 @config_product_count_that_suppress_automatic_store_name,Count Of Products To Suppress Automatic Processing For $1
 @config_product_count_that_suppress_automatic_store_description,Suppresses automatic processing of $1 to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+@config_refuel_only_when_materials_supplied_name,Refuel $1 Only When Materials Supplied
+@config_refuel_only_when_materials_supplied_description,Performs automatic refuel only when materials are supplied to $1.
 
 @config_automatic_feeding_category,[ #5 Automatic Feeding ]
 @config_automatic_feeding_enabled_name,Automatic Feeding

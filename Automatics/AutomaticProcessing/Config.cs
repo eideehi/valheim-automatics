@@ -16,6 +16,7 @@ namespace Automatics.AutomaticProcessing
         private static Dictionary<string, ConfigEntry<int>> _targetByItemCountThatSuppressAutomaticCraft;
         private static Dictionary<string, ConfigEntry<int>> _targetByItemCountThatSuppressAutomaticRefuel;
         private static Dictionary<string, ConfigEntry<int>> _targetByItemCountThatSuppressAutomaticStore;
+        private static Dictionary<string, ConfigEntry<bool>> _targetByRefuelOnlyWhenMaterialsSupplied;
 
         public static bool AutomaticProcessingEnabled => _automaticProcessingEnabled.Value;
 
@@ -42,6 +43,11 @@ namespace Automatics.AutomaticProcessing
                 ? entry.Value
                 : @default;
 
+        public static bool IsRefuelOnlyWhenMaterialsSupplied(string target, bool @default = false) =>
+            _targetByRefuelOnlyWhenMaterialsSupplied.TryGetValue(target, out var entry)
+                ? entry.Value
+                : @default;
+
         public static void Initialize()
         {
             Configuration.ChangeSection(Section);
@@ -52,6 +58,7 @@ namespace Automatics.AutomaticProcessing
             _targetByItemCountThatSuppressAutomaticCraft = new Dictionary<string, ConfigEntry<int>>();
             _targetByItemCountThatSuppressAutomaticRefuel = new Dictionary<string, ConfigEntry<int>>();
             _targetByItemCountThatSuppressAutomaticStore = new Dictionary<string, ConfigEntry<int>>();
+            _targetByRefuelOnlyWhenMaterialsSupplied = new Dictionary<string, ConfigEntry<bool>>();
 
             var acceptStore = new AcceptableType(Type.None, Type.Store);
             var acceptRefuel = new AcceptableType(Type.None, Type.Refuel);
@@ -142,6 +149,17 @@ namespace Automatics.AutomaticProcessing
                         {
                             x.DispName = L10N.Localize("@config_product_count_that_suppress_automatic_store_name", displayName);
                             x.Description = L10N.Localize("@config_product_count_that_suppress_automatic_store_description", displayName);
+                        });
+                }
+
+                if (acceptableType.IsValid(Type.Refuel) && acceptableType.IsValid(Type.Craft))
+                {
+                    key = $"{rawName}_refuel_only_when_materials_supplied";
+                    _targetByRefuelOnlyWhenMaterialsSupplied[target] =
+                        Configuration.Bind(key, false, initializer: x =>
+                        {
+                            x.DispName = L10N.Localize("@config_refuel_only_when_materials_supplied_name", displayName);
+                            x.Description = L10N.Localize("@config_refuel_only_when_materials_supplied_description", displayName);
                         });
                 }
             }
