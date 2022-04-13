@@ -13,15 +13,16 @@ namespace Automatics.AutomaticProcessing
             Config.Initialize();
         }
 
-        public static IEnumerable<(Container, float)> GetNearbyContainers(string target, Vector3 origin)
+        public static IEnumerable<Container> GetNearbyContainers(string target, Vector3 origin)
         {
             var range = Config.GetContainerSearchRange(target);
             return range <= 0
-                ? Enumerable.Empty<(Container, float)>()
+                ? Enumerable.Empty<Container>()
                 : from x in ContainerCache.GetAllInstance()
                 let distance = Vector3.Distance(origin, x.transform.position)
                 where distance <= range
-                select (x, distance);
+                orderby distance descending
+                select x;
         }
     }
 

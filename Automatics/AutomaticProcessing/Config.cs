@@ -1,11 +1,11 @@
 ﻿using System.Collections.Generic;
 using Automatics.ModUtils;
 using BepInEx.Configuration;
-using AcceptableType =
-    Automatics.ModUtils.Configuration.AcceptableValueEnum<Automatics.AutomaticProcessing.Type>;
 
 namespace Automatics.AutomaticProcessing
 {
+    using AcceptableType = Configuration.AcceptableValueEnum<Type>;
+
     internal static class Config
     {
         private const string Section = "automatic_processing";
@@ -13,6 +13,9 @@ namespace Automatics.AutomaticProcessing
         private static ConfigEntry<bool> _automaticProcessingEnabled;
         private static Dictionary<string, ConfigEntry<Type>> _targetByAllowAutomaticProcessingType;
         private static Dictionary<string, ConfigEntry<int>> _targetByContainerSearchRange;
+        private static Dictionary<string, ConfigEntry<int>> _targetByItemCountThatSuppressAutomaticCraft;
+        private static Dictionary<string, ConfigEntry<int>> _targetByItemCountThatSuppressAutomaticRefuel;
+        private static Dictionary<string, ConfigEntry<int>> _targetByItemCountThatSuppressAutomaticStore;
 
         public static bool AutomaticProcessingEnabled => _automaticProcessingEnabled.Value;
 
@@ -24,6 +27,21 @@ namespace Automatics.AutomaticProcessing
                 ? entry.Value
                 : @default;
 
+        public static int GetItemCountThatSuppressAutomaticCraft(string target, int @default = 0) =>
+            _targetByItemCountThatSuppressAutomaticCraft.TryGetValue(target, out var entry)
+                ? entry.Value
+                : @default;
+
+        public static int GetItemCountThatSuppressAutomaticRefuel(string target, int @default = 0) =>
+            _targetByItemCountThatSuppressAutomaticRefuel.TryGetValue(target, out var entry)
+                ? entry.Value
+                : @default;
+
+        public static int GetItemCountThatSuppressAutomaticStore(string target, int @default = 0) =>
+            _targetByItemCountThatSuppressAutomaticStore.TryGetValue(target, out var entry)
+                ? entry.Value
+                : @default;
+
         public static void Initialize()
         {
             Configuration.ChangeSection(Section);
@@ -31,6 +49,9 @@ namespace Automatics.AutomaticProcessing
 
             _targetByAllowAutomaticProcessingType = new Dictionary<string, ConfigEntry<Type>>();
             _targetByContainerSearchRange = new Dictionary<string, ConfigEntry<int>>();
+            _targetByItemCountThatSuppressAutomaticCraft = new Dictionary<string, ConfigEntry<int>>();
+            _targetByItemCountThatSuppressAutomaticRefuel = new Dictionary<string, ConfigEntry<int>>();
+            _targetByItemCountThatSuppressAutomaticStore = new Dictionary<string, ConfigEntry<int>>();
 
             var acceptStore = new AcceptableType(Type.None, Type.Store);
             var acceptRefuel = new AcceptableType(Type.None, Type.Refuel);
@@ -69,23 +90,60 @@ namespace Automatics.AutomaticProcessing
             {
                 var (defaultType, acceptableType) = targetByConfigData[target];
 
-                var targetName = L10N.Translate(target);
-                var key = $"{target.Substring(1)}_allow_automatic_processing";
+                var displayName = L10N.Translate(target);
+                var rawName = target.Substring(1);
+                var key = $"{rawName}_allow_automatic_processing";
                 _targetByAllowAutomaticProcessingType[target] =
                     Configuration.Bind(key, defaultType, acceptableType, x =>
                     {
-                        x.DispName = L10N.Localize("@config_allow_automatic_processing_name", targetName);
-                        x.Description = L10N.Localize("@config_allow_automatic_processing_description", targetName);
+                        x.DispName = L10N.Localize("@config_allow_automatic_processing_name", displayName);
+                        x.Description = L10N.Localize("@config_allow_automatic_processing_description", displayName);
                     });
 
-                key = $"{target.Substring(1)}_container_search_range";
+                key = $"{rawName}_container_search_range";
                 var acceptableValue = new AcceptableValueRange<int>(1, 64);
                 _targetByContainerSearchRange[target] =
                     Configuration.Bind(key, 8, acceptableValue, x =>
                     {
-                        x.DispName = L10N.Localize("@config_container_search_range_name", targetName);
-                        x.Description = L10N.Localize("@config_container_search_range_description", targetName);
+                        x.DispName = L10N.Localize("@config_container_search_range_name", displayName);
+                        x.Description = L10N.Localize("@config_container_search_range_description", displayName);
                     });
+
+                if (acceptableType.IsValid(Type.Craft))
+                {
+                    key = $"{rawName}_material_count_that_suppress_automatic_process";
+                    acceptableValue = new AcceptableValueRange<int>(0, 9999);
+                    _targetByItemCountThatSuppressAutomaticCraft[target] =
+                        Configuration.Bind(key, 1, acceptableValue, x =>
+                        {
+                            x.DispName = L10N.Localize("@config_material_count_that_suppress_automatic_process_name", displayName);
+                            x.Description = L10N.Localize("@config_material_count_that_suppress_automatic_process_description", displayName);
+                        });
+                }
+
+                if (acceptableType.IsValid(Type.Refuel))
+                {
+                    key = $"{rawName}_fuel_count_that_suppress_automatic_process";
+                    acceptableValue = new AcceptableValueRange<int>(0, 9999);
+                    _targetByItemCountThatSuppressAutomaticRefuel[target] =
+                        Configuration.Bind(key, 1, acceptableValue, x =>
+                        {
+                            x.DispName = L10N.Localize("@config_fuel_count_that_suppress_automatic_process_name", displayName);
+                            x.Description = L10N.Localize("@config_fuel_count_that_suppress_automatic_process_description", displayName);
+                        });
+                }
+
+                if (acceptableType.IsValid(Type.Store))
+                {
+                    key = $"{rawName}_product_count_that_suppress_automatic_store";
+                    acceptableValue = new AcceptableValueRange<int>(0, 9999);
+                    _targetByItemCountThatSuppressAutomaticStore[target] =
+                        Configuration.Bind(key, 0, acceptableValue, x =>
+                        {
+                            x.DispName = L10N.Localize("@config_product_count_that_suppress_automatic_store_name", displayName);
+                            x.Description = L10N.Localize("@config_product_count_that_suppress_automatic_store_description", displayName);
+                        });
+                }
             }
         }
     }

@@ -25,27 +25,32 @@ namespace Automatics.AutomaticProcessing
             if (honeyCount <= 0) return true;
 
             var honeyItem = piece.m_honeyItem;
-            var honeyName = honeyItem.m_itemData.m_shared.m_name;
+            var honeyData = honeyItem.m_itemData.m_shared;
+            var honeyName = honeyData.m_name;
 
+            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(beehiveName);
             var origin = piece.transform.position;
-            var totalStoredCount = 0;
+            var honeyRemaining = honeyCount;
             foreach (var (container, honeyCountBefore) in
                      from x in Core.GetNearbyContainers(beehiveName, origin)
-                     let count = x.Item1.GetInventory().CountItems(honeyName)
-                     orderby count descending, x.Item2
-                     select (x.Item1, count))
+                     let count = x.GetInventory().CountItems(honeyName)
+                     let distance = Vector3.Distance(origin, x.transform.position)
+                     orderby count descending, distance
+                     select (x, count))
             {
-                if (totalStoredCount >= honeyCount) break;
+                if (honeyRemaining <= 0) break;
 
                 var inventory = container.GetInventory();
-                if (!inventory.AddItem(honeyItem.gameObject, honeyCount)) continue;
+
+                if (maxProductCount > 0 && inventory.CountItems(honeyName) > maxProductCount - honeyRemaining) continue;
+                if (!inventory.AddItem(honeyItem.gameObject, honeyRemaining)) continue;
 
                 var storedHoneyCount = inventory.CountItems(honeyName) - honeyCountBefore;
                 Log.Debug(() => LogMessage(honeyName, storedHoneyCount, beehiveName, origin, container));
-                totalStoredCount += storedHoneyCount;
+                honeyRemaining -= storedHoneyCount;
             }
 
-            zNetView.GetZDO().Set("level", Mathf.Clamp(honeyCount - totalStoredCount, 0, piece.m_maxHoney));
+            zNetView.GetZDO().Set("level", Mathf.Clamp(honeyRemaining, 0, piece.m_maxHoney));
             return false;
         }
 
@@ -69,17 +74,24 @@ namespace Automatics.AutomaticProcessing
 
             if (doneItems.Count == 0) return;
 
+            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(stationName);
             var origin = piece.transform.position;
-            var containersWithDistance = Core.GetNearbyContainers(stationName, origin).ToList();
+            var containerWithDistanceList = Core.GetNearbyContainers(stationName, origin)
+                .Select(x => (x, Vector3.Distance(origin, x.transform.position))).ToList();
+
             foreach (var (slot, itemId) in doneItems)
             {
                 var conversion = piece.m_conversion.FirstOrDefault(x => x.m_to.gameObject.name == itemId);
                 if (conversion == null) continue;
 
                 var item = conversion.m_to;
-                var itemName = item.m_itemData.m_shared.m_name;
-                var container = (from x in containersWithDistance
-                        orderby x.Item1.GetInventory().CountItems(itemName) descending, x.Item2
+                var itemData = item.m_itemData.m_shared;
+                var itemName = itemData.m_name;
+
+                var container = (from x in containerWithDistanceList
+                        let count = x.Item1.GetInventory().CountItems(itemName)
+                        where maxProductCount == 0 || count < maxProductCount
+                        orderby count descending, x.Item2
                         select x.Item1)
                     .FirstOrDefault(x => x.GetInventory().AddItem(item.gameObject, 1));
                 if (container == null) continue;
@@ -87,6 +99,7 @@ namespace Automatics.AutomaticProcessing
                 zNetView.GetZDO().Set("slot" + slot, "");
                 zNetView.GetZDO().Set("slot" + slot, 0f);
                 zNetView.GetZDO().Set("slotstatus" + slot, 0);
+                zNetView.InvokeRPC(ZNetView.Everybody, "SetSlotVisual", slot, "");
                 Log.Debug(() => LogMessage(itemName, 1, stationName, origin, container));
             }
         }
@@ -102,33 +115,40 @@ namespace Automatics.AutomaticProcessing
             if (Reflection.InvokeMethod<int>(piece, "GetStatus") != 3) return;
 
             var itemId = zNetView.GetZDO().GetString("Content");
+            var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == itemId);
+            if (conversion == null) return;
+
+            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(fermenterName);
+            var origin = piece.transform.position;
+            var item = conversion.m_to;
+            var itemData = item.m_itemData.m_shared;
+            var itemName = itemData.m_name;
+
+            var productRemaining = conversion.m_producedItems;
+            foreach (var (container, itemCountBefore) in
+                     from x in Core.GetNearbyContainers(fermenterName, origin)
+                     let distance = Vector3.Distance(origin, x.transform.position)
+                     let count = x.GetInventory().CountItems(itemName)
+                     orderby count descending, distance
+                     select (x, count))
+            {
+                if (productRemaining <= 0) break;
+
+                var inventory = container.GetInventory();
+
+                if (maxProductCount > 0 && itemCountBefore > maxProductCount - productRemaining) continue;
+                if (!inventory.AddItem(item.gameObject, productRemaining)) continue;
+
+                var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;
+                Log.Debug(() => LogMessage(itemName, storedItemCount, fermenterName, origin, container));
+                productRemaining -= storedItemCount;
+            }
+
+            if (productRemaining == conversion.m_producedItems) return;
 
             zNetView.GetZDO().Set("Content", "");
             zNetView.GetZDO().Set("StartTime", 0);
             piece.m_spawnEffects.Create(piece.m_outputPoint.transform.position, Quaternion.identity);
-
-            var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == itemId);
-            if (conversion == null) return;
-
-            var origin = piece.transform.position;
-            var item = conversion.m_to;
-            var itemName = item.m_itemData.m_shared.m_name;
-            var totalStoredCount = 0;
-            foreach (var (container, itemCountBefore) in
-                     from x in Core.GetNearbyContainers(fermenterName, origin)
-                     let count = x.Item1.GetInventory().CountItems(itemName)
-                     orderby count descending, x.Item2
-                     select (x.Item1, count))
-            {
-                if (totalStoredCount >= conversion.m_producedItems) break;
-
-                var inventory = container.GetInventory();
-                if (!inventory.AddItem(item.gameObject, conversion.m_producedItems)) continue;
-
-                var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;
-                Log.Debug(() => LogMessage(itemName, storedItemCount, fermenterName, origin, container));
-                totalStoredCount += storedItemCount;
-            }
         }
 
         public static bool Run(Smelter piece, string ore, int stack)
@@ -141,29 +161,41 @@ namespace Automatics.AutomaticProcessing
             var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == ore);
             if (conversion == null) return true;
 
+            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(smelterName);
             var origin = piece.transform.position;
             var item = conversion.m_to;
-            var itemName = item.m_itemData.m_shared.m_name;
+            var itemData = item.m_itemData.m_shared;
+            var itemName = itemData.m_name;
             var containers =
                 from x in Core.GetNearbyContainers(smelterName, origin)
-                let count = x.Item1.GetInventory().CountItems(itemName)
-                orderby count descending, x.Item2
-                select (x.Item1, count);
+                let distance = Vector3.Distance(origin, x.transform.position)
+                let count = x.GetInventory().CountItems(itemName)
+                orderby count descending, distance
+                select (x, count);
 
-            var storedCount = 0;
+            var productRemaining = stack;
             foreach (var (container, itemCountBefore) in containers)
             {
-                if (storedCount >= stack) break;
+                if (productRemaining <= 0) break;
 
                 var inventory = container.GetInventory();
+
+                if (maxProductCount > 0 && itemCountBefore > maxProductCount - productRemaining) continue;
                 if (!inventory.AddItem(item.gameObject, stack)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;
                 Log.Debug(() => LogMessage(itemName, storedItemCount, smelterName, origin, container));
-                storedCount += storedItemCount;
+                productRemaining -= storedItemCount;
             }
 
-            if (storedCount == 0) return true;
+            if (productRemaining == stack) return true;
+
+            while (productRemaining > 0)
+            {
+                Object.Instantiate(conversion.m_to.gameObject, piece.m_outputPoint.position,
+                    piece.m_outputPoint.rotation).GetComponent<ItemDrop>().m_itemData.m_stack = stack;
+                productRemaining--;
+            }
 
             piece.m_produceEffects.Create(origin, piece.transform.rotation);
             return false;

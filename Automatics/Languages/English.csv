@@ -83,6 +83,12 @@
 @config_allow_automatic_processing_description,Specify the automatic processing to be allowed for $1
 @config_container_search_range_name,$1 Container Search Range
 @config_container_search_range_description,Specify the maximum distance which $1 will search for containers. (Unit: meter)
+@config_material_count_that_suppress_automatic_process_name,Count Of Materials To Suppress Automatic Processing For $1
+@config_material_count_that_suppress_automatic_process_description,Suppresses automatic processing of $1 to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+@config_fuel_count_that_suppress_automatic_process_name,Count Of Fuels To Suppress Automatic Processing For $1
+@config_fuel_count_that_suppress_automatic_process_description,Suppresses automatic processing of $1 to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+@config_product_count_that_suppress_automatic_store_name,Count Of Products To Suppress Automatic Processing For $1
+@config_product_count_that_suppress_automatic_store_description,Suppresses automatic processing of $1 to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
 
 @config_automatic_feeding_category,[ #5 Automatic Feeding ]
 @config_automatic_feeding_enabled_name,Automatic Feeding

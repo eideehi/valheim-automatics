@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using Automatics.ModUtils;
 using UnityEngine;
 
@@ -23,41 +24,75 @@ namespace Automatics.AutomaticProcessing
             if (!Config.IsAllowAutomaticProcessing(stationName, Type.Craft)) return;
 
             if (piece.m_requireFire && !Reflection.InvokeMethod<bool>(piece, "IsFireLit")) return;
+            if (piece.m_useFuel && zNetView.GetZDO().GetFloat("fuel") <= 0f) return;
 
+            var cookingProductCounts = new Dictionary<string, int>();
             var freeSlot = -1;
             for (var slot = 0; slot < piece.m_slots.Length; slot++)
             {
-                if (zNetView.GetZDO().GetString("slot" + slot) != "") continue;
-                freeSlot = slot;
-                break;
-            }
+                var item = zNetView.GetZDO().GetString("slot" + slot);
+                if (string.IsNullOrEmpty(item))
+                {
+                    freeSlot = slot;
+                    continue;
+                }
 
-            if (freeSlot < 0) return;
+                var conversion = Reflection.InvokeMethod<CookingStation.ItemConversion>(piece, "GetItemConversion", item);
+                if (conversion == null) continue;
+
+                var productName = conversion.m_to.m_itemData.m_shared.m_name;
+                cookingProductCounts[productName] = cookingProductCounts.TryGetValue(productName, out var count) ? count + 1 : 1;
+            }
+            if (freeSlot == -1) return;
+
+            var minMaterialCount = Config.GetItemCountThatSuppressAutomaticCraft(stationName);
+            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(stationName);
 
             var origin = piece.transform.position;
-            var containersWithInventory =
-                (from x in Core.GetNearbyContainers(stationName, origin)
-                    orderby x.Item2
-                    select (x.Item1, x.Item1.GetInventory()))
-                .ToList();
-            if (containersWithInventory.Count == 0) return;
+            var containerWithInventoryList = Core.GetNearbyContainers(stationName, origin)
+                .Select(x => (x, x.GetInventory())).ToList();
 
             foreach (var conversion in piece.m_conversion)
             {
-                foreach (var (container, inventory) in containersWithInventory)
-                {
-                    var fromItem = inventory.GetItem(conversion.m_from.m_itemData.m_shared.m_name);
-                    if (fromItem == null) continue;
+                Container materialContainer = null;
+                var hasProductContainer = false;
 
-                    inventory.RemoveOneItem(fromItem);
-                    zNetView.InvokeRPC("AddItem", fromItem.m_dropPrefab.name);
-                    Log.Debug(() => LogMessage(fromItem.m_shared.m_name, 1, conversion.m_to.m_itemData.m_shared.m_name,
-                        container, stationName, origin));
-                    goto CRAFT_DONE;
+                var materialItem = conversion.m_from.m_itemData;
+                var materialData = materialItem.m_shared;
+                var productItem = conversion.m_to.m_itemData;
+                var productData = productItem.m_shared;
+                foreach (var (container, inventory) in containerWithInventoryList)
+                {
+                    if (materialContainer != null && hasProductContainer) break;
+
+                    if (materialContainer == null)
+                    {
+                        var material = inventory.GetItem(materialData.m_name);
+                        if (material != null)
+                        {
+                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) > minMaterialCount)
+                                materialContainer = container;
+                        }
+                    }
+
+                    if (!hasProductContainer)
+                    {
+                        var cookingCount = cookingProductCounts.TryGetValue(productData.m_name, out var count) ? count : 0;
+                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) < maxProductCount - cookingCount)
+                            hasProductContainer = inventory.CanAddItem(productItem, 1);
+                    }
+                }
+
+                if (materialContainer != null && hasProductContainer)
+                {
+                    var item = materialContainer.GetInventory().GetItem(materialData.m_name);
+                    materialContainer.GetInventory().RemoveOneItem(item);
+                    zNetView.InvokeRPC("AddItem", item.m_dropPrefab.name);
+                    Log.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                        stationName, origin));
+                    break;
                 }
             }
-
-            CRAFT_DONE: ;
         }
 
         public static void Run(CraftingStation piece, ZNetView zNetView)
@@ -80,24 +115,53 @@ namespace Automatics.AutomaticProcessing
 
             if (Reflection.InvokeMethod<int>(piece, "GetStatus") != 0) return;
 
+            var minMaterialCount = Config.GetItemCountThatSuppressAutomaticCraft(fermenterName);
+            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(fermenterName);
+
             var origin = piece.transform.position;
-            foreach (var container in from x in Core.GetNearbyContainers(fermenterName, origin)
-                     orderby x.Item2
-                     select x.Item1)
+            var containerWithInventoryList = Core.GetNearbyContainers(fermenterName, origin)
+                .Select(x => (x, x.GetInventory())).ToList();
+
+            foreach (var conversion in piece.m_conversion)
             {
-                var inventory = container.GetInventory();
+                Container materialContainer = null;
+                var hasProductContainer = false;
 
-                var (fromItem, toItem) = (from x in piece.m_conversion
-                    let item = inventory.GetItem(x.m_from.m_itemData.m_shared.m_name)
-                    where item != null
-                    select (item, x.m_to)).FirstOrDefault();
-                if (fromItem == null) continue;
+                var materialItem = conversion.m_from.m_itemData;
+                var materialData = materialItem.m_shared;
+                var productItem = conversion.m_to.m_itemData;
+                var productData = productItem.m_shared;
+                foreach (var (container, inventory) in containerWithInventoryList)
+                {
+                    if (materialContainer != null && hasProductContainer) break;
 
-                inventory.RemoveOneItem(fromItem);
-                zNetView.InvokeRPC("AddItem", fromItem.m_dropPrefab.name);
-                Log.Debug(() => LogMessage(fromItem.m_shared.m_name, 1, toItem.m_itemData.m_shared.m_name, container,
-                    fermenterName, origin));
-                break;
+                    if (materialContainer == null)
+                    {
+                        var material = inventory.GetItem(materialData.m_name);
+                        if (material != null)
+                        {
+                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) > minMaterialCount)
+                                materialContainer = container;
+                        }
+                    }
+
+                    if (!hasProductContainer)
+                    {
+                        var count = conversion.m_producedItems;
+                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) < maxProductCount - count)
+                            hasProductContainer = inventory.CanAddItem(productItem, count);
+                    }
+                }
+
+                if (materialContainer != null && hasProductContainer)
+                {
+                    var item = materialContainer.GetInventory().GetItem(materialData.m_name);
+                    materialContainer.GetInventory().RemoveOneItem(item);
+                    zNetView.InvokeRPC("AddItem", item.m_dropPrefab.name);
+                    Log.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                        fermenterName, origin));
+                    break;
+                }
             }
         }
 
@@ -109,33 +173,75 @@ namespace Automatics.AutomaticProcessing
             var smelterName = piece.m_name;
             if (!Config.IsAllowAutomaticProcessing(smelterName, Type.Craft)) return;
 
-            var materialCount = zNetView.GetZDO().GetInt("queued");
-            if (materialCount >= piece.m_maxOre) return;
+            var oreCount = zNetView.GetZDO().GetInt("queued");
+            if (oreCount >= piece.m_maxOre) return;
+
+            var minMaterialCount = Config.GetItemCountThatSuppressAutomaticCraft(smelterName);
+            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(smelterName);
+
+            var smeltingProductCounts = new Dictionary<string, int>();
+            var conversions = new List<Smelter.ItemConversion>();
+            for (var i = 0; i < oreCount; i++)
+            {
+                var queuedOre = zNetView.GetZDO().GetString("item" + i);
+                if (string.IsNullOrEmpty(queuedOre)) continue;
+
+                var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == queuedOre);
+                if (conversion == null) continue;
+
+                conversions.Add(conversion);
+                var productName = conversion.m_to.m_itemData.m_shared.m_name;
+                smeltingProductCounts[productName] = smeltingProductCounts.TryGetValue(productName, out var count) ? count + 1 : 1;
+            }
+
+            conversions.Reverse();
+            foreach (var conversion in piece.m_conversion.Where(x => !conversions.Contains(x)))
+                conversions.Add(conversion);
 
             var origin = piece.transform.position;
-            var tailMaterial = materialCount <= 0 ? "" : zNetView.GetZDO().GetString("item" + (materialCount - 1));
-            var material = !string.IsNullOrEmpty(tailMaterial)
-                ? piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == tailMaterial)
-                : null;
-            foreach (var container in from x in Core.GetNearbyContainers(smelterName, origin)
-                     orderby x.Item2
-                     select x.Item1)
+            var containerWithInventoryList = Core.GetNearbyContainers(smelterName, origin)
+                .Select(x => (x, x.GetInventory())).ToList();
+
+            foreach (var conversion in conversions)
             {
-                var inventory = container.GetInventory();
+                Container materialContainer = null;
+                var hasProductContainer = false;
 
-                var (fromItem, toItem) = material != null
-                    ? (inventory.GetItem(material.m_from.m_itemData.m_shared.m_name), material.m_to)
-                    : (from x in piece.m_conversion
-                        let item = inventory.GetItem(x.m_from.m_itemData.m_shared.m_name)
-                        where item != null
-                        select (item, x.m_to)).FirstOrDefault();
-                if (fromItem == null) continue;
+                var materialItem = conversion.m_from.m_itemData;
+                var materialData = materialItem.m_shared;
+                var productItem = conversion.m_to.m_itemData;
+                var productData = productItem.m_shared;
+                foreach (var (container, inventory) in containerWithInventoryList)
+                {
+                    if (materialContainer != null && hasProductContainer) break;
 
-                inventory.RemoveOneItem(fromItem);
-                zNetView.InvokeRPC("AddOre", fromItem.m_dropPrefab.name);
-                Log.Debug(() => LogMessage(fromItem.m_shared.m_name, 1, toItem.m_itemData.m_shared.m_name, container,
-                    smelterName, origin));
-                break;
+                    if (materialContainer == null)
+                    {
+                        var material = inventory.GetItem(materialData.m_name);
+                        if (material != null)
+                        {
+                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) > minMaterialCount)
+                                materialContainer = container;
+                        }
+                    }
+
+                    if (!hasProductContainer)
+                    {
+                        var smeltingCount = smeltingProductCounts.TryGetValue(productData.m_name, out var count) ? count : 0;
+                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) < maxProductCount - smeltingCount)
+                            hasProductContainer = inventory.CanAddItem(productItem, 1);
+                    }
+                }
+
+                if (materialContainer != null && hasProductContainer)
+                {
+                    var item = materialContainer.GetInventory().GetItem(materialData.m_name);
+                    materialContainer.GetInventory().RemoveOneItem(item);
+                    zNetView.InvokeRPC("AddOre", item.m_dropPrefab.name);
+                    Log.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                        smelterName, origin));
+                    break;
+                }
             }
         }
     }
