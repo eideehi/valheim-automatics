@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace Automatics.ModUtils
@@ -21,8 +22,9 @@ namespace Automatics.ModUtils
 
         public static Sprite CreateSprite(string texturesDir, SpriteInfo info)
         {
-            var path = Path.Combine(texturesDir, info.file);
+            if (!IsValidSpriteInfo(info)) return null;
 
+            var path = Path.Combine(texturesDir, info.file);
             if (_textureCache.TryGetValue(path, out var tex)) return tex != null ? CreateSprite(tex, info) : null;
 
             try
@@ -41,6 +43,18 @@ namespace Automatics.ModUtils
                 _textureCache.Add(path, null);
                 return null;
             }
+        }
+
+        private static bool IsValidSpriteInfo(SpriteInfo info)
+        {
+            return !string.IsNullOrEmpty(info.file) && info.width > 0 && info.height > 0;
+        }
+
+        public static string GetTextureFileName(Sprite sprite)
+        {
+            foreach (var pair in _textureCache.Where(pair => pair.Value == sprite.texture))
+                return Path.GetFileName(pair.Key);
+            return "";
         }
     }
 

@@ -123,9 +123,9 @@ namespace Automatics.AutomaticMapPinning
 
             var size = cluster.NodeCount;
             if (size == 1)
-                Map.AddPin(pos, name, L10N.Translate(name), true);
+                Map.AddPin(pos, L10N.Translate(name), true, new Target { name = name });
             else if (size > 1)
-                Map.AddPin(pos, name, L10N.Localize("@flora_cluster_format", name, size), true);
+                Map.AddPin(pos, L10N.Localize("@flora_cluster_format", name, size), true, new Target { name = name });
 
             return true;
         }
@@ -156,7 +156,7 @@ namespace Automatics.AutomaticMapPinning
                 }
             }
 
-            Map.AddPin(position, name, L10N.Translate(name), true);
+            Map.AddPin(position, L10N.Translate(name), true, new Target { name = name });
             return true;
         }
 
@@ -175,7 +175,7 @@ namespace Automatics.AutomaticMapPinning
             var position = @object.transform.position;
             if (Map.HavePinInRange(position, 1f)) return true;
 
-            Map.AddPin(position, name, L10N.Translate(name), true);
+            Map.AddPin(position, L10N.Translate(name), true, new Target { name = name });
             return true;
         }
 
@@ -196,7 +196,7 @@ namespace Automatics.AutomaticMapPinning
                     var position = @object.transform.position;
                     if (Map.HavePinInRange(position, 1f)) return true;
 
-                    Map.AddPin(position, name, L10N.Localize(name), true);
+                    Map.AddPin(position, L10N.Localize(name), true, new Target { name = name });
                     break;
                 }
             }
@@ -249,7 +249,7 @@ namespace Automatics.AutomaticMapPinning
                      where !Map.HavePinInRange(x.Item1.transform.position, 1f)
                      select x.Item1)
             {
-                Map.AddPin(teleport.transform.position, name, L10N.Translate(name), true);
+                Map.AddPin(teleport.transform.position, L10N.Translate(name), true, new Target { name = name });
                 break;
             }
 
@@ -261,7 +261,7 @@ namespace Automatics.AutomaticMapPinning
             if (!Spot.GetFlag(instance.m_location.m_prefabName, out var flag)) return false;
             if (!Config.IsAllowPinning(flag) || !Spot.GetName(flag, out var name)) return true;
 
-            Map.AddPin(instance.m_position, name, L10N.Translate(name), true);
+            Map.AddPin(instance.m_position, L10N.Translate(name), true, new Target { name = name });
             return true;
         }
 

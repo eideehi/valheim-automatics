@@ -91,7 +91,7 @@ namespace Automatics.AutomaticMapPinning
                     if (string.IsNullOrEmpty(name))
                         name = Obj.GetName(ship);
 
-                    Map.AddPin(pos, name, L10N.TranslateInternalNameOnly(name), true);
+                    Map.AddPin(pos, L10N.TranslateInternalNameOnly(name), true, new Target{ name = name });
                 }
             }
         }
@@ -134,7 +134,8 @@ namespace Automatics.AutomaticMapPinning
             var pin = DynamicPins.FirstOrDefault(x => x.Id == id);
             if (pin == null)
             {
-                DynamicPins.Add(new DynamicMapPin(id, Map.AddPin(pos, iconName, pinName, false)));
+                var target = new Target{ name = iconName, metadata = new MetaData{ level = @object is Character x ? x.GetLevel() : 0 }};
+                DynamicPins.Add(new DynamicMapPin(id, Map.AddPin(pos, pinName, false, target)));
             }
             else
             {

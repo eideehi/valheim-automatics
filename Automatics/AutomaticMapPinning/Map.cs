@@ -3,163 +3,207 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Automatics.ModUtils;
+using LitJson;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
 {
+    using PinData = Minimap.PinData;
+    using PinType = Minimap.PinType;
+
     internal static class Map
     {
-        private static List<IconInfo> _customIcons;
+        private static readonly List<CustomIcon> CustomIcons;
 
-        private static Minimap VMap => Minimap.instance;
+        static Map()
+        {
+            CustomIcons = new List<CustomIcon>();
+        }
 
-        public static IEnumerable<Minimap.PinData> Pins => Reflection.GetField<List<Minimap.PinData>>(VMap, "m_pins");
+        private static Minimap ValheimMap => Minimap.instance;
+
+        private static IEnumerable<PinData> GetAllPins() => Reflection.GetField<List<PinData>>(ValheimMap, "m_pins");
+
+        public static void Initialize()
+        {
+            Deprecated.Map.Initialize();
+            LoadCustomIcons();
+            RegisterCustomIcons();
+        }
 
         private static void LoadCustomIcons()
         {
-            _customIcons = new List<IconInfo>();
+            CustomIcons.Clear();
 
             var texturesDir = Path.Combine(Automatics.ModLocation, "Textures");
-            var customIconsCsv = Path.Combine(texturesDir, "CustomMapIcon.csv");
-            if (!File.Exists(customIconsCsv)) return;
+            var customIconsJson = Path.Combine(texturesDir, "custom-map-icon.json");
+            if (!File.Exists(customIconsJson)) return;
 
-            var spriteData = new Dictionary<string, SpriteInfo>();
             try
             {
-                Automatics.ModLogger.LogInfo($"Load custom icon data from {customIconsCsv}");
-                foreach (var line in File.ReadLines(customIconsCsv).Skip(1))
-                {
-                    var values = Csv.ParseLine(line);
-                    if (values.Count < 4) continue;
+                Automatics.ModLogger.LogInfo($"Load custom icon data from {customIconsJson}");
 
-                    spriteData[values[0]] = new SpriteInfo
+                var reader = new JsonReader(File.ReadAllText(customIconsJson))
+                {
+                    AllowComments = true,
+                };
+
+                foreach (var data in JsonMapper.ToObject<List<CustomIconData>>(reader))
+                {
+                    var sprite = Image.CreateSprite(texturesDir, data.sprite);
+                    if (sprite == null) continue;
+
+                    CustomIcons.Add(new CustomIcon
                     {
-                        file = values[1],
-                        width = int.TryParse(values[2], out var value) ? value : 0,
-                        height = int.TryParse(values[3], out value) ? value : 0
-                    };
+                        Target = data.target,
+                        Sprite = sprite,
+                    });
+
+                    Automatics.ModLogger.LogInfo($"* Loaded custom icon data for {data.target.name}");
                 }
             }
             catch (Exception e)
             {
-                Automatics.ModLogger.LogError($"Failed to load custom icon data: {customIconsCsv}\n{e}");
-                return;
-            }
-
-            Automatics.ModLogger.LogInfo($"Load custom icons from {texturesDir}");
-            foreach (var element in spriteData)
-            {
-                var sprite = Image.CreateSprite(texturesDir, element.Value);
-                if (sprite == null) continue;
-
-                _customIcons.Add(new IconInfo
-                {
-                    Name = element.Key,
-                    IsInternalName = L10N.IsInternalName(element.Key),
-                    Sprite = sprite,
-                });
-                Automatics.ModLogger.LogInfo($"* Loaded custom icon for {element.Key}");
+                Automatics.ModLogger.LogError($"Failed to load custom icon data: {customIconsJson}\n{e}");
             }
         }
 
         private static void RegisterCustomIcons()
         {
-            if (!_customIcons.Any()) return;
+            if (!CustomIcons.Any()) return;
 
-            var iconTypes = Reflection.GetField<bool[]>(VMap, "m_visibleIconTypes");
-            var iconTypeCount = iconTypes.Length;
-            var newIconTypes = new bool[iconTypeCount + _customIcons.Count];
-            for (var i = 0; i < newIconTypes.Length; i++)
-                newIconTypes[i] = i < iconTypeCount && iconTypes[i];
-            Reflection.SetField(VMap, "m_visibleIconTypes", newIconTypes);
+            var visibleIconTypes = Reflection.GetField<bool[]>(ValheimMap, "m_visibleIconTypes");
+            var originalArraySize = visibleIconTypes.Length;
+            var newVisibleIconTypes = new bool[originalArraySize + CustomIcons.Count];
+            for (var i = 0; i < newVisibleIconTypes.Length; i++)
+                newVisibleIconTypes[i] = i < originalArraySize && visibleIconTypes[i];
+            Reflection.SetField(ValheimMap, "m_visibleIconTypes", newVisibleIconTypes);
+
             Automatics.ModLogger.LogInfo(
-                $"Minimap.m_visibleIconTypes Expanded: {iconTypeCount} -> {newIconTypes.Length}");
+                $"Minimap.m_visibleIconTypes Expanded: {originalArraySize} -> {newVisibleIconTypes.Length}");
 
-            var j = 0;
-            foreach (var customIcon in _customIcons)
+            for (var j = 0; j < CustomIcons.Count; j++)
             {
-                var pinType = (Minimap.PinType)(iconTypeCount + j);
+                var icon = CustomIcons[j];
+                var pinType = (PinType)(originalArraySize + j);
 
-                customIcon.PinType = pinType;
-                VMap.m_icons.Add(new Minimap.SpriteData
+                icon.PinType = pinType;
+                ValheimMap.m_icons.Add(new Minimap.SpriteData
                 {
                     m_name = pinType,
-                    m_icon = customIcon.Sprite
+                    m_icon = icon.Sprite
                 });
 
-                Automatics.ModLogger.LogInfo($"Register new sprite data: ({pinType}, {customIcon.Name})");
-
-                j++;
+                Automatics.ModLogger.LogInfo(
+                    $"Register new sprite data: ({pinType}, {Image.GetTextureFileName(icon.Sprite)})");
             }
         }
 
-        public static void Initialize()
+        private static PinType GetCustomIcon(Target target)
         {
-            LoadCustomIcons();
-            RegisterCustomIcons();
+            var type = GetCustomIconInternal(target);
+            return type != PinType.Icon3 ? type : Deprecated.Map.GetCustomIcon(target.name);
         }
 
-        public static Minimap.PinType GetCustomIcon(string iName)
+        private static PinType GetCustomIconInternal(Target target)
         {
-            if (!_customIcons.Any()) return Minimap.PinType.Icon3;
+            if (!CustomIcons.Any()) return PinType.Icon3;
 
+            var iName = target.name;
             var dName = L10N.TranslateInternalNameOnly(iName);
-            return (from x in _customIcons
-                    where x.IsInternalName
-                        ? iName.Equals(x.Name, StringComparison.Ordinal)
-                        : dName.IndexOf(x.Name, StringComparison.OrdinalIgnoreCase) >= 0
+            var meta = target.metadata;
+            return (from x in CustomIcons
+                    where (L10N.IsInternalName(x.Target.name)
+                              ? iName.Equals(x.Target.name, StringComparison.Ordinal)
+                              : dName.IndexOf(x.Target.name, StringComparison.OrdinalIgnoreCase) >= 0) &&
+                          (x.Target.metadata == null || IsMetaDataEquals(x.Target.metadata, meta))
+                    orderby x.Target.metadata != null descending,
+                        x.Target.metadata
                     select x.PinType)
-                .DefaultIfEmpty(Minimap.PinType.Icon3)
+                .DefaultIfEmpty(PinType.Icon3)
                 .FirstOrDefault();
+        }
+
+        private static bool IsMetaDataEquals(MetaData a, MetaData b)
+        {
+            if (a == null || b == null) return false;
+            return a.level == b.level;
         }
 
         public static bool HavePinInRange(Vector3 pos, float radius)
         {
-            return Pins.Any(data => Utils.DistanceXZ(data.m_pos, pos) <= radius);
+            return GetAllPins().Any(data => Utils.DistanceXZ(data.m_pos, pos) <= radius);
         }
 
-        public static bool FindPin(Func<Minimap.PinData, bool> predicate, out Minimap.PinData data)
+        public static bool FindPin(Func<PinData, bool> predicate, out PinData data)
         {
-            data = Pins.FirstOrDefault(predicate);
+            data = GetAllPins().FirstOrDefault(predicate);
             return data != null;
         }
 
-        public static bool FindPinInRange(Vector3 pos, float radius, out Minimap.PinData data)
+        public static bool FindPinInRange(Vector3 pos, float radius, out PinData data)
         {
             return FindPin(x => Utils.DistanceXZ(x.m_pos, pos) <= radius, out data);
         }
 
-        public static Minimap.PinData AddPin(Vector3 pos, Minimap.PinType type, string name, bool save)
+        public static PinData AddPin(Vector3 pos, PinType type, string name, bool save)
         {
-            var data = VMap.AddPin(pos, type, name, save, false);
+            var data = ValheimMap.AddPin(pos, type, name, save, false);
             Log.Debug(() => $"Add pin: [name: {data.m_name}, pos: {data.m_pos}]");
             return data;
         }
 
-        public static Minimap.PinData AddPin(Vector3 pos, string iconName, string pinName, bool save)
+        public static PinData AddPin(Vector3 pos, string pinName, bool save, Target target)
         {
-            return AddPin(pos, GetCustomIcon(iconName), pinName, save);
+            return AddPin(pos, GetCustomIcon(target), pinName, save);
         }
 
-        public static void RemovePin(Minimap.PinData data)
+        public static void RemovePin(PinData data)
         {
-            VMap.RemovePin(data);
+            ValheimMap.RemovePin(data);
             Log.Debug(() => $"Remove pin: [name: {data.m_name}, pos: {data.m_pos}]");
         }
 
         public static void RemovePin(Vector3 pos, bool save = true)
         {
-            var pin = Pins.FirstOrDefault(x => (save ? x.m_save : !x.m_save) && x.m_pos == pos);
+            var pin = GetAllPins().FirstOrDefault(x => (save ? x.m_save : !x.m_save) && x.m_pos == pos);
             if (pin != null)
                 RemovePin(pin);
         }
 
-        private class IconInfo
+        private class CustomIcon
         {
-            public string Name;
-            public bool IsInternalName;
-            public Minimap.PinType PinType;
+            public Target Target;
+            public PinType PinType;
             public Sprite Sprite;
+        }
+    }
+
+    [Serializable]
+    public struct CustomIconData
+    {
+        public Target target;
+        public SpriteInfo sprite;
+    }
+
+    [Serializable]
+    public struct Target
+    {
+        public string name;
+        public MetaData metadata;
+    }
+
+    [Serializable]
+    public class MetaData : IComparer<MetaData>
+    {
+        public int level;
+
+        public int Compare(MetaData x, MetaData y)
+        {
+            if (x == null && y == null) return 0;
+            if (x == null) return -1;
+            if (y == null) return 1;
+            return x.level.CompareTo(y.level);
         }
     }
 }
