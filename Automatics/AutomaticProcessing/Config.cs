@@ -84,6 +84,7 @@ namespace Automatics.AutomaticProcessing
                 { Target.Smelter, (Type.Craft | Type.Refuel | Type.Store, acceptAll) },
                 { Target.SpinningWheel, (Type.Store, acceptCraftStore) },
                 { Target.StandingBlueBurningIronTorch, (Type.Refuel, acceptRefuel) },
+                { Target.StandingBrazier, (Type.Refuel, acceptRefuel) },
                 { Target.StandingGreenBurningIronTorch, (Type.Refuel, acceptRefuel) },
                 { Target.StandingIronTorch, (Type.Refuel, acceptRefuel) },
                 { Target.StandingWoodTorch, (Type.Refuel, acceptRefuel) },

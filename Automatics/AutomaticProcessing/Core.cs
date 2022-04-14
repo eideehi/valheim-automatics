@@ -46,6 +46,7 @@ namespace Automatics.AutomaticProcessing
         public const string Smelter = "$piece_smelter";
         public const string SpinningWheel = "$piece_spinningwheel";
         public const string StandingBlueBurningIronTorch = "$piece_groundtorchblue";
+        public const string StandingBrazier = "$piece_brazierfloor01";
         public const string StandingGreenBurningIronTorch = "$piece_groundtorchgreen";
         public const string StandingIronTorch = "$piece_groundtorch";
         public const string StandingWoodTorch = "$piece_groundtorchwood";
@@ -78,6 +79,7 @@ namespace Automatics.AutomaticProcessing
                 Smelter,
                 SpinningWheel,
                 StandingBlueBurningIronTorch,
+                StandingBrazier,
                 StandingGreenBurningIronTorch,
                 StandingIronTorch,
                 StandingWoodTorch,
