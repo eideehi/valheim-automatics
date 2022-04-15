@@ -137,11 +137,11 @@
 
 @piece_wild_beehive,蜂の巣
 
-@spot_infested_tree,汚泥にまみれた木
-@spot_fire_hole,炎の間欠泉
-@spot_drake_nest,ドレイクの巣
-@spot_goblin_camp,フューリングの集落
-@spot_tar_pit,タールの池
+@location_infested_tree,汚泥にまみれた木
+@location_fire_hole,炎の間欠泉
+@location_drake_nest,ドレイクの巣
+@location_goblin_camp,フューリングの集落
+@location_tar_pit,タールの池
 
 @message_toggle_automatic_door,自動ドア: $1
 @message_repair_items,$1個のアイテムを修理した

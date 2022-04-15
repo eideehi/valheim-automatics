@@ -114,11 +114,11 @@ namespace Automatics.ModUtils
 
             public static class Name
             {
-                public const string InfestedTree = "@spot_infested_tree";
-                public const string FireHole = "@spot_fire_hole";
-                public const string DrakeNest = "@spot_drake_nest";
-                public const string GoblinCamp = "@spot_goblin_camp";
-                public const string TarPit = "@spot_tar_pit";
+                public const string InfestedTree = "@location_infested_tree";
+                public const string FireHole = "@location_fire_hole";
+                public const string DrakeNest = "@location_drake_nest";
+                public const string GoblinCamp = "@location_goblin_camp";
+                public const string TarPit = "@location_tar_pit";
             }
 
             [Flags]

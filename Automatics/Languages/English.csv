@@ -137,11 +137,11 @@
 
 @piece_wild_beehive,Beehive
 
-@spot_infested_tree,Infested Tree
-@spot_fire_hole,Fire geyser
-@spot_drake_nest,Drake nest
-@spot_goblin_camp,Fuling village
-@spot_tar_pit,Tar pit
+@location_infested_tree,Infested tree
+@location_fire_hole,Fire geyser
+@location_drake_nest,Drake nest
+@location_goblin_camp,Fuling village
+@location_tar_pit,Tar pit
 
 @message_toggle_automatic_door,Automatic Door: $1
 @message_repair_items,Repaired $1 Item(s)
