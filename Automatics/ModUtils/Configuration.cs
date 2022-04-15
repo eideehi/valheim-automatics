@@ -25,24 +25,13 @@ namespace Automatics.ModUtils
 
             TomlTypeConverter.AddConverter(typeof(StringList), new BepInEx.Configuration.TypeConverter
             {
-                ConvertToObject = (str, type) =>
-                {
-                    var list = new StringList();
-                    if (string.IsNullOrEmpty(str)) return list;
-
-                    foreach (var x in from x in str.Split(',') select x.Trim())
-                        list.Add(x);
-
-                    return list;
-                },
+                ConvertToObject = (str, type) => string.IsNullOrEmpty(str)
+                    ? new StringList()
+                    : new StringList(Csv.ParseLine(str)),
                 ConvertToString = (obj, type) =>
                 {
                     var list = (StringList)obj;
-                    return string.Join(", ", list.Select(x =>
-                    {
-                        var str = x.Replace("\"", "\"\"");
-                        return str.Contains(",") ? $"\"{str}\"" : str;
-                    }));
+                    return string.Join(", ", list.Select(Csv.Escape));
                 },
             });
         }
