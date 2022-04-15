@@ -73,7 +73,7 @@ namespace Automatics
                          ? $"@{translation.Key.Substring(11)}"
                          : $"${translation.Key}"
                      let value = translation.Value
-                     where Regex.IsMatch(key, @"^[$@](enemy|item|piece)_") &&
+                     where Regex.IsMatch(key, @"^[$@](animal|enemy|item|location|piece)_") &&
                            (regex
                                ? Regex.IsMatch(key, arg) || Regex.IsMatch(value, arg)
                                : key.IndexOf(arg, StringComparison.OrdinalIgnoreCase) >= 0 ||
