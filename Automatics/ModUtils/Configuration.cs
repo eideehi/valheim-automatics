@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -37,43 +38,54 @@ namespace Automatics.ModUtils
         }
 
         [Conditional("DEBUG")]
-        private static void PrintSection()
+        private static void LogSection(string section)
         {
-            Automatics.ModLogger.LogDebug($"[CONFIG] ### {GetCategory(Section)} / [{Section}]");
+            Automatics.ModLogger.LogDebug($"[CONFIG] === {GetCategory(section)} / [{section}]");
         }
 
         [Conditional("DEBUG")]
-        private static void PrintConfig<T>(string key, T defaultValue, ConfigurationManagerAttributes attributes,
-            AcceptableValueBase acceptableValue = null)
+        private static void LogConfigEntry<T>(ConfigEntry<T> entry, ConfigurationManagerAttributes attributes)
         {
+            Automatics.ModLogger.LogDebug($"[CONFIG] ==== {attributes.DispName} / [{entry.Definition.Key}]");
+            Automatics.ModLogger.LogDebug($"[CONFIG] {entry.Description.Description}");
+            Automatics.ModLogger.LogDebug("[CONFIG]");
+
             var type = typeof(T);
+            var defaultValue = entry.DefaultValue;
 
-            Automatics.ModLogger.LogDebug(string.IsNullOrEmpty(attributes.DispName)
-                ? $"[CONFIG] #### {GetName(key)} / [{key}]"
-                : $"[CONFIG] #### {attributes.DispName} / [{key}]");
-
-            Automatics.ModLogger.LogDebug(string.IsNullOrEmpty(attributes.Description)
-                ? $"[CONFIG] {GetDescription(key)}"
-                : $"[CONFIG] {attributes.Description}");
-            
             if (attributes.ObjToStr != null)
-                Automatics.ModLogger.LogDebug($"[CONFIG] * Default value: {attributes.ObjToStr(defaultValue)}");
+                Automatics.ModLogger.LogDebug($"[CONFIG] - Default value: {attributes.ObjToStr(defaultValue)}");
             else if (TomlTypeConverter.CanConvert(type))
-                Automatics.ModLogger.LogDebug($"[CONFIG] * Default value: {TomlTypeConverter.ConvertToString(defaultValue, type)}");
+                Automatics.ModLogger.LogDebug($"[CONFIG] - Default value: {TomlTypeConverter.ConvertToString(defaultValue, type)}");
             else
-                Automatics.ModLogger.LogDebug($"[CONFIG] * Default value: {defaultValue}");
+                Automatics.ModLogger.LogDebug($"[CONFIG] - Default value: {defaultValue}");
 
-            if (acceptableValue != null)
-                Automatics.ModLogger.LogDebug($"[CONFIG] * {acceptableValue.ToDescriptionString()}");
-            else if (type.IsEnum && type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
-                Automatics.ModLogger.LogDebug($"[CONFIG] * Acceptable values: {string.Join(", ", Enum.GetValues(type).OfType<T>().Select(x => Enum.GetName(type, x)))}");
+            var acceptableValues = entry.Description.AcceptableValues;
+            if (acceptableValues != null)
+            {
+                Automatics.ModLogger.LogDebug($"[CONFIG] - {acceptableValues.ToDescriptionString()}");
+            }
+            else if (type.IsEnum)
+            {
+                var values = Enum.GetValues(type).OfType<T>().Select(x => Enum.GetName(type, x)).ToList();
+                Automatics.ModLogger.LogDebug($"[CONFIG] - Acceptable values: {string.Join(", ", values)}");
+                if (type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
+                {
+                    var filtered = values.Where(x =>
+                        !string.Equals(x, "none", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(x, "all", StringComparison.OrdinalIgnoreCase)).Take(2);
+                    Automatics.ModLogger.LogDebug($"[CONFIG] - Multiple values can be set at the same time by separating them with , (e.g. {string.Join(", ", filtered)})");
+                }
+            }
+
+            Automatics.ModLogger.LogDebug("[CONFIG]");
         }
 
         public static void ChangeSection(string section, int initialOrder = DefaultOrder)
         {
             Section = section;
             Order = initialOrder;
-            PrintSection();
+            LogSection(Section);
         }
 
         private static ConfigEntry<T> Bind<T>(string section, int order, string key, T defaultValue,
@@ -88,13 +100,14 @@ namespace Automatics.ModUtils
             };
             initializer?.Invoke(attributes);
 
-            PrintConfig(key, defaultValue, attributes, acceptableValue);
-
             var description = string.IsNullOrEmpty(attributes.Description)
                 ? GetDescription(key)
                 : attributes.Description;
-            return Automatics.ModConfig.Bind(section, key, defaultValue,
+
+            var configEntry = Automatics.ModConfig.Bind(section, key, defaultValue,
                 new ConfigDescription(description, acceptableValue, attributes));
+            LogConfigEntry(configEntry, attributes);
+            return configEntry;
         }
 
         public static ConfigEntry<T> Bind<T>(string section, string key, T defaultValue,
@@ -334,9 +347,25 @@ namespace Automatics.ModUtils
                 return _values.Any(x => Convert.ToInt64(x) == @long);
             }
 
-            public override string ToDescriptionString() =>
-                "# Acceptable values: " + string.Join(", ",
-                    (from x in _values where Enum.IsDefined(typeof(T), x) select Enum.GetName(typeof(T), x)).ToArray());
+            public override string ToDescriptionString()
+            {
+                var buffer = new StringBuilder();
+
+                var type = typeof(T);
+                var values = (from x in _values where Enum.IsDefined(type, x) select Enum.GetName(type, x)).ToList();
+                buffer.Append("# Acceptable values: ").Append(string.Join(", ", values));
+
+                if (type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
+                {
+                    var list = values.Where(x =>
+                        !string.Equals(x, "none", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(x, "all", StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+                    if (list.Count == 2)
+                        buffer.Append('\n').Append("# Multiple values can be set at the same time by separating them with , (e.g. ").Append(string.Join(", ", list)).Append(")");
+                }
+
+                return buffer.ToString();
+            }
         }
 
         public class LocalizedDescriptionAttribute : DescriptionAttribute
