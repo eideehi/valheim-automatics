@@ -50,7 +50,7 @@ namespace Automatics.ModUtils
                 public const string Wolf = "$enemy_wolf";
                 public const string Lox = "$enemy_lox";
                 public const string Bird = "@animal_bird";
-                public const string Fish = "@animal_fish";
+                public const string Fish = "$animal_fish";
             }
 
             [Flags]
