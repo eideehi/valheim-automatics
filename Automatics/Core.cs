@@ -8,9 +8,16 @@ namespace Automatics
     {
         public static void Initialize()
         {
-            LanguageLoader.LoadFromCsv(Path.Combine(Automatics.ModLocation, "Languages"));
+            LoadTranslations();
             Config.Initialize();
             Automatics.OnInitTerminal += Command.Register;
+        }
+
+        private static void LoadTranslations()
+        {
+            var languagesDir = Path.Combine(Automatics.ModLocation, "Languages");
+            Deprecated.LanguageLoader.LoadFromCsv(languagesDir);
+            TranslationsLoader.LoadFromJson(languagesDir);
         }
     }
 

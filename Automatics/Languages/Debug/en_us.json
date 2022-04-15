@@ -1,0 +1,13 @@
+﻿{
+  "language": "english",
+  "translations": {
+    "@command_give_description": "Adds an item to the player's inventory.",
+    "@command_give_usage": "Usage: give ITEM [AMOUNT] [QUALITY]",
+    "@command_givematerials_description": "Add items to the player's inventory that will materials for creating items and buildings.",
+    "@command_givematerials_usage": "Usage: givematerials TARGET [AMOUNT]",
+    "@command_printobject_description": "Outputs information the objects that exist in the range.",
+    "@command_printobject_usage": "Usage: printobject TYPE RANGE [FILTER]",
+    "@command_print_result": "$1 information was output.",
+    "@command_print_result_empty": "No information matching criteria was found."
+  }
+}

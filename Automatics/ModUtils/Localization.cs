@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using LitJson;
 
 namespace Automatics.ModUtils
 {
@@ -88,6 +90,9 @@ namespace Automatics.ModUtils
             return InvokeInsertWords(Localize(text), Array.ConvertAll(words, x => x as string ?? x.ToString()));
         }
 
+        public static void AddWord(string key, string word) =>
+            Reflection.InvokeMethod(L10N.ValheimL10N, "AddWord", key, word);
+
         private static string InvokeTranslate(string word) =>
             Reflection.InvokeMethod<string>(ValheimL10N, "Translate", word);
 
@@ -95,61 +100,87 @@ namespace Automatics.ModUtils
             Reflection.InvokeMethod<string>(ValheimL10N, "InsertWords", text, words);
     }
 
-    internal static class LanguageLoader
+    internal static class TranslationsLoader
     {
-        private static readonly char[] CsvSeparator;
+        private static readonly Dictionary<string, TranslationFile> Cache;
 
-        static LanguageLoader()
+        static TranslationsLoader()
         {
-            CsvSeparator = new[] { ',' };
+            Cache = new Dictionary<string, TranslationFile>();
         }
 
-        public static void LoadFromCsv(string languagesDir, string language = "", string defaultLanguage = "English")
+        public static void LoadFromJson(string languagesDir)
         {
-            language = string.IsNullOrEmpty(language) ? L10N.ValheimL10N.GetSelectedLanguage() : language;
+            const string defaultLanguage = "English";
+            var language = L10N.ValheimL10N.GetSelectedLanguage();
 
-            var languageFile = Path.Combine(languagesDir, $"{defaultLanguage}.csv");
             if (language != defaultLanguage)
             {
-                if (!ReadCsvFile(languageFile))
-                    Automatics.ModLogger.LogError($"Failed to load default language file: {languageFile}");
+                if (!ReadAllJson(languagesDir, defaultLanguage))
+                    Automatics.ModLogger.LogError(
+                        $"Failed to load {defaultLanguage} language file from {languagesDir}");
             }
 
-            languageFile = Path.Combine(languagesDir, $"{language}.csv");
-            if (!ReadCsvFile(languageFile))
-                Automatics.ModLogger.LogWarning($"Failed to load language file: {languageFile}");
+            if (!ReadAllJson(languagesDir, language))
+                Automatics.ModLogger.LogWarning($"Failed to load {language} language file from {languagesDir}");
+
+            Cache.Clear();
         }
 
-        private static bool ReadCsvFile(string filePath)
+        private static bool ReadAllJson(string directory, string language)
         {
-            if (!File.Exists(filePath)) return false;
+            Automatics.ModLogger.LogDebug($"Try to load {language} translations from {directory}");
+            if (!Directory.Exists(directory)) return false;
+            return Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories)
+                .Count(x => ReadJsonFile(x, language)) > 0;
+        }
 
-            Automatics.ModLogger.LogDebug($"Try to load language file: {filePath}");
+        private static bool ReadJsonFile(string path, string language)
+        {
+            if (Cache.TryGetValue(path, out var x)) return Load(x, language, path);
+            if (!File.Exists(path)) return false;
+
             try
             {
-                foreach (var (key, value) in from x in File.ReadLines(filePath)
-                         let line = x.Trim()
-                         where !line.StartsWith("//")
-                         select ReadCsvLine(x))
-                    Reflection.InvokeMethod(L10N.ValheimL10N, "AddWord", key, value);
+                var translationFile = JsonMapper.ToObject<TranslationFile>(new JsonReader(File.ReadAllText(path))
+                {
+                    AllowComments = true,
+                });
+                Cache[path] = translationFile;
+                return Load(translationFile, language, path);
             }
             catch (Exception e)
             {
-                Automatics.ModLogger.LogError($"File read error: {e.Message}");
+                Automatics.ModLogger.LogError($"File read error: {e}");
                 return false;
+            }
+        }
+
+        private static bool Load(TranslationFile translationFile, string language, string path)
+        {
+            if (!string.Equals(translationFile.language, language, StringComparison.OrdinalIgnoreCase)) return false;
+            if (translationFile.translations == null) return false;
+
+            Automatics.ModLogger.LogDebug($"Load translations from {path}");
+            foreach (var translation in translationFile.translations)
+            {
+                var key = translation.Key.StartsWith("@")
+                    ? $"automatics_{translation.Key.Substring(1)}"
+                    : translation.Key;
+                var value = translation.Value;
+                L10N.AddWord(key, value);
             }
 
             return true;
         }
+    }
 
-        private static (string, string) ReadCsvLine(string line)
-        {
-            var strings = line.Split(CsvSeparator, 2);
-            if (strings.Length != 2) return ("", "");
+    [Serializable]
+    public struct TranslationFile
+    {
+        public string language;
 
-            var key = strings[0];
-            var value = strings[1];
-            return (key.StartsWith("@") ? $"automatics_{key.Substring(1)}" : key, value.Replace(@"\n", "\n"));
-        }
+        // ReSharper disable once UnassignedField.Global, InconsistentNaming
+        public Dictionary<string, string> translations;
     }
 }

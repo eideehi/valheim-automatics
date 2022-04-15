@@ -1,0 +1,13 @@
+﻿{
+  "language": "japanese",
+  "translations": {
+    "@command_give_description": "アイテムをプレイヤーのインベントリに追加します。",
+    "@command_give_usage": "使用方法: give アイテム名 [数量] [品質]",
+    "@command_givematerials_description": "アイテムや建築物の素材となるアイテムをプレイヤーのインベントリに追加します。",
+    "@command_givematerials_usage": "使用方法: givematerials ターゲット [数量]",
+    "@command_printobject_description": "範囲内に存在するオブジェクトの情報を出力します。",
+    "@command_printobject_usage": "使用方法: printobject オブジェクトの種類 探索範囲 [フィルター]",
+    "@command_print_result": "$1 件の情報を出力しました。",
+    "@command_print_result_empty": "条件にあう情報は見つかりませんでした。"
+  }
+}

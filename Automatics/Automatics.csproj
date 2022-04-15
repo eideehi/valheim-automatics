@@ -200,10 +200,14 @@
         <Compile Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Include="Debug\**\*.cs" />
     </ItemGroup>
     <ItemGroup>
-        <None Include="Languages\**\*">
+        <Content Include="Languages\**\*" Exclude="Languages\Debug\**\*">
             <Link>Languages\%(RecursiveDir)%(FileName)%(Extension)</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
+        </Content>
+        <Content Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Include="Languages\Debug\**\*">
+            <Link>Languages\Debug\%(RecursiveDir)%(FileName)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
         <None Include="packages.config" />
         <None Include="ILRepack.targets" />
     </ItemGroup>
@@ -218,7 +222,7 @@
     <Target Condition="Exists('$(BepInExDirectory)') And '$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Name="DeployModFiles" AfterTargets="ILRepacker">
         <ItemGroup>
             <ModFiles Include="$(TargetPath)" />
-            <ModFiles Include="$(TargetDir)**\*.csv" />
+            <ModFiles Include="$(TargetDir)**\*.json" />
         </ItemGroup>
         <Copy SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(BepInExDirectory)\plugins\$(ProjectName)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     </Target>
@@ -230,7 +234,7 @@
         </PropertyGroup>
         <ItemGroup>
             <ModFiles Include="$(TargetPath)" />
-            <ModFiles Include="$(TargetDir)**\*.csv" />
+            <ModFiles Include="$(TargetDir)**\*.json" />
             <ThunderstoreFiles Include="$(SolutionDir)\package\thunderstore\**\*.*" />
         </ItemGroup>
         <Move SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(NexusPackageDir)\%(RecursiveDir)%(Filename)%(Extension)')" />
