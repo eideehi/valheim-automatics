@@ -8,6 +8,16 @@ License:
   CC BY 4.0
 
 
+[ deer.png ]
+* deer.png was created by processing the "Emojione 2.x" icon.
+
+Website:
+  https://github.com/EmojiTwo/emojitwo
+
+License:
+  CC BY 4.0
+
+
 [ raspberries.png ]
 * raspberries.png was created by modifying the "SVG Logos" icon created by "Gil Barbara".
 
