@@ -72,19 +72,25 @@ namespace Automatics.AutomaticDoor
             _status = _zNetView.GetZDO().GetInt("state") == 0 ? Status.Close : Status.Open;
 
             var isOpen = _status == Status.Open;
-            var radius = isOpen ? Config.PlayerSearchRadiusToClose : Config.PlayerSearchRadiusToOpen;
+            var invoke = isOpen ? close : open;
+            var interval = isOpen ? Config.IntervalToClose : Config.IntervalToOpen;
 
-            _closestPlayer = Player.GetClosestPlayer(_door.transform.position, radius);
+            if (interval < 0.1f)
+            {
+                CancelInvoke(invoke);
+                return;
+            }
+
+            _closestPlayer = Player.GetClosestPlayer(_door.transform.position,
+                isOpen ? Config.PlayerSearchRadiusToClose : Config.PlayerSearchRadiusToOpen);
             _noObstaclesBetweenPlayer = _closestPlayer != null && !FindObstaclesBetween(_closestPlayer);
 
             var foundClosestPlayer = _closestPlayer != null;
-            var invoke = isOpen ? close : open;
             var isInvoking = IsInvoking(invoke);
 
             if (!isInvoking && ((isOpen && (!foundClosestPlayer || !_noObstaclesBetweenPlayer)) ||
                                 (!isOpen && foundClosestPlayer && _noObstaclesBetweenPlayer)))
             {
-                var interval = isOpen ? Config.IntervalToClose : Config.IntervalToOpen;
                 Invoke(invoke, interval - 0.1f);
             }
             else if (isInvoking && ((isOpen && foundClosestPlayer && _noObstaclesBetweenPlayer) ||
