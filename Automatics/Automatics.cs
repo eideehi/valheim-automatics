@@ -23,9 +23,7 @@ namespace Automatics
 
         private void Awake()
         {
-            var assembly = Assembly.GetExecutingAssembly();
-
-            ModLocation = Path.GetDirectoryName(assembly.Location) ?? "";
+            ModLocation = Path.GetDirectoryName(Info.Location) ?? "";
             ModLogger = Logger;
             ModConfig = Config;
 
@@ -38,7 +36,7 @@ namespace Automatics
             AutomaticFeeding.Core.Initialize();
             AutomaticRepair.Core.Initialize();
 
-            Harmony.CreateAndPatchAll(assembly, ModId);
+            Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly(), ModId);
         }
     }
 }
