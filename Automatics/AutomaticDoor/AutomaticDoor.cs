@@ -1,24 +1,33 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticDoor
 {
+    using Random = UnityEngine.Random;
+
     [DisallowMultipleComponent]
     internal class AutomaticDoor : MonoBehaviour
     {
+        private static readonly Lazy<int> LazyPieceMask;
         private static readonly List<AutomaticDoor> AutomaticDoors;
 
         static AutomaticDoor()
         {
+            LazyPieceMask = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid", "Default_small", "piece",
+                "piece_nonsolid", "terrain", "vehicle"));
             AutomaticDoors = new List<AutomaticDoor>();
         }
+
+        private static int PieceMask => LazyPieceMask.Value;
 
         private Door _door;
         private ZNetView _zNetView;
         private bool _active;
         private Status _status;
         private Player _closestPlayer;
+        private bool _noObstaclesBetweenPlayer;
 
         public static void ChangeInterval(bool isChangedOpenInterval)
         {
@@ -66,17 +75,20 @@ namespace Automatics.AutomaticDoor
             var radius = isOpen ? Config.PlayerSearchRadiusToClose : Config.PlayerSearchRadiusToOpen;
 
             _closestPlayer = Player.GetClosestPlayer(_door.transform.position, radius);
+            _noObstaclesBetweenPlayer = _closestPlayer != null && !FindObstaclesBetween(_closestPlayer);
 
             var foundClosestPlayer = _closestPlayer != null;
             var invoke = isOpen ? close : open;
             var isInvoking = IsInvoking(invoke);
 
-            if (!isInvoking && ((isOpen && !foundClosestPlayer) || (!isOpen && foundClosestPlayer)))
+            if (!isInvoking && ((isOpen && (!foundClosestPlayer || !_noObstaclesBetweenPlayer)) ||
+                                (!isOpen && foundClosestPlayer && _noObstaclesBetweenPlayer)))
             {
                 var interval = isOpen ? Config.IntervalToClose : Config.IntervalToOpen;
                 Invoke(invoke, interval - 0.1f);
             }
-            else if (isInvoking && ((isOpen && foundClosestPlayer) || (!isOpen && !foundClosestPlayer)))
+            else if (isInvoking && ((isOpen && foundClosestPlayer && _noObstaclesBetweenPlayer) ||
+                                    (!isOpen && (!foundClosestPlayer || !_noObstaclesBetweenPlayer))))
             {
                 CancelInvoke(invoke);
             }
@@ -84,19 +96,32 @@ namespace Automatics.AutomaticDoor
 
         private void Close()
         {
-            if (IsValid() && _active && _status == Status.Open && _closestPlayer == null)
+            if (IsValid() && _active && _status == Status.Open && (_closestPlayer == null || !_noObstaclesBetweenPlayer))
                 _zNetView.InvokeRPC("UseDoor", false);
         }
 
         private void Open()
         {
-            if (IsValid() && _active && _status == Status.Close && _closestPlayer != null)
+            if (IsValid() && _active && _status == Status.Close && _closestPlayer != null && _noObstaclesBetweenPlayer)
                 _door.Interact(_closestPlayer, false, false);
         }
 
         private bool IsValid()
         {
             return _door != null && _zNetView != null && _zNetView.IsValid() && Core.IsAllowAutomaticDoor(_door);
+        }
+
+        private bool FindObstaclesBetween(Player player)
+        {
+            var from = Reflection.GetField<Collider>(player, "m_collider")?.bounds.center ?? player.m_eye.position;
+            var to = _door.transform.position;
+
+            if (!Physics.Linecast(from, to, out var hitInfo, PieceMask)) return false;
+
+            var door = hitInfo.collider.GetComponentInParent<Door>();
+            if (door != null) return door != _door;
+
+            return hitInfo.collider.GetComponentInParent<Piece>() != null;
         }
 
         private bool CheckAccess()
