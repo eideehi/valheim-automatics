@@ -48,7 +48,7 @@ namespace Automatics.ModUtils
         {
             Automatics.ModLogger.LogDebug($"[CONFIG] ==== {attributes.DispName} / [{entry.Definition.Key}]");
             Automatics.ModLogger.LogDebug($"[CONFIG] {entry.Description.Description}");
-            Automatics.ModLogger.LogDebug("[CONFIG]");
+            Automatics.ModLogger.LogDebug("[CONFIG] ");
 
             var type = typeof(T);
             var defaultValue = entry.DefaultValue;
@@ -63,7 +63,8 @@ namespace Automatics.ModUtils
             var acceptableValues = entry.Description.AcceptableValues;
             if (acceptableValues != null)
             {
-                Automatics.ModLogger.LogDebug($"[CONFIG] - {acceptableValues.ToDescriptionString()}");
+                foreach (var line in acceptableValues.ToDescriptionString().Split('\n'))
+                    Automatics.ModLogger.LogDebug($"[CONFIG] - {line}");
             }
             else if (type.IsEnum)
             {
@@ -78,7 +79,7 @@ namespace Automatics.ModUtils
                 }
             }
 
-            Automatics.ModLogger.LogDebug("[CONFIG]");
+            Automatics.ModLogger.LogDebug("[CONFIG] ");
         }
 
         public static void ChangeSection(string section, int initialOrder = DefaultOrder)
