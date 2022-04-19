@@ -129,10 +129,9 @@ Displays the usage of commands added by Automatics.
     matched command found. If omitted, the usage of the automatics
     command itself is displayed.
 
-### printnames (WORD|REGEXP)
+### printnames (WORD|REGEXP)...
 
-Outputs internal or display names that contain the specified string or
-match the specified regular expression.
+Outputs internal or display names that contain the specified string or match the specified regular expression. If multiple arguments are specified, only those matching all of them will be output.
 
 -   WORD: A text contained in the internal or display name. (e.g.
     $enemy\_, $item\_, $piece\_, Boar, Mushroom, Wood door); All
@@ -143,9 +142,9 @@ match the specified regular expression.
 
 Examples:
 
--   printnames greydwarf
-
--   printnames r/deposit\_\[ct\].+$
+- `printnames ling r/^[$]enemy_`
+- `printnames r/^[$@]location_.+(?<!_(enter|exit))$`
+- `printnames mushroom r/^[$]item_.+(?<!_description)$`
 
 ## Configurations
 
@@ -178,7 +177,7 @@ Internal names are the names used inside the game program, such as
 $enemy\_boar, $enemy\_deer, $item\_dandelion, etc. The matching rule for
 "Internal name" is an exact match, meaning that if the target internal
 name is identical to the specified string, it matches. It is
-case-insensitive.
+case-insensitive. Note that internal names for translations added by Automatics are prefixed with @, not $, as in `@internal_name`
 
 #### Matching Samples
 

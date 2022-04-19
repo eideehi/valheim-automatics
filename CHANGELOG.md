@@ -1,3 +1,11 @@
+#### v1.2.1 [2022-04-19]
+- Change the automatic door to not work if there is an obstacle between the player and the door
+- Change the minimum automatic door process interval to 0
+  * Setting the value below 0.1 disables automatic opening or closing. The substantive minimum interval remains unchanged from 0.1
+- Change so that the printnames command searches all translations
+  * With this change, the printnames command can now take multiple arguments, allowing for more powerful filtering
+  * See [printnames usage](https://github.com/eideehi/valheim-automatics/blob/1.2.1/README.adoc#printnames-wordregexp) for command details
+
 #### v1.2.0 [2022-04-16]
 - Change the format of the Cutom Map Icon settings file from csv to json
   * See ["Format of custom-map-icon.json"](https://github.com/eideehi/valheim-automatics/tree/1.2.0/README.adoc#format-of-custom-map-iconjson) for more information on json files

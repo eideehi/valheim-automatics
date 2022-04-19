@@ -84,16 +84,17 @@ Displays the usage of commands added by Automatics.
 
 - COMMAND: Command name to display usage. If there is an exact match, it will be displayed. Otherwise, it will display the first partially matched command found. If omitted, the usage of the automatics command itself is displayed.
 
-=== printnames (WORD|REGEXP)
-Outputs internal or display names that contain the specified string or match the specified regular expression.
+=== printnames (WORD|REGEXP)...
+Outputs internal or display names that contain the specified string or match the specified regular expression. If multiple arguments are specified, only those matching all of them will be output.
 
 - WORD: A text contained in the internal or display name. (e.g. $enemy_, $item_, $piece_, Boar, Mushroom, Wood door); All partially matching internal and display names are output.
 - REGEXP: A regular expression of the internal or display name to be output. Must be prefixed with "r/". (e.g. r/^[$]item_, r/^boar$)
 
 Examples:
 
-- printnames greydwarf
-- printnames r/deposit_[ct].+$
+- `printnames ling r/^[$]enemy_`
+- `printnames r/^[$@]location_.+(?<!_(enter|exit))$`
+- `printnames mushroom r/^[$]item_.+(?<!_description)$`
 
 == Configurations
 I recommend using {uri-configuration-manager}[Configuration Manager].
@@ -112,7 +113,7 @@ In some features of Automatics, there is an option that allows the user to add t
 Display names are the names that appear in the game, such as Boar, Deer, Dandelion, etc. The matching rule for "Display name" is a partial match, meaning that if the target display name contains the specified string, it matches. It is case-insensitive.
 
 ==== Internal name
-Internal names are the names used inside the game program, such as $enemy_boar, $enemy_deer, $item_dandelion, etc. The matching rule for "Internal name" is an exact match, meaning that if the target internal name is identical to the specified string, it matches. It is case-insensitive.
+Internal names are the names used inside the game program, such as $enemy_boar, $enemy_deer, $item_dandelion, etc. The matching rule for "Internal name" is an exact match, meaning that if the target internal name is identical to the specified string, it matches. It is case-insensitive. Note that internal names for translations added by Automatics are prefixed with @, not $, as in `@internal_name`
 
 ==== Matching Samples
 .Target data

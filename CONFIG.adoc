@@ -30,16 +30,16 @@ Specify the display or internal name of any door that is allowed to open and clo
 - Default value:
 
 ==== Interval To Open / [interval_to_open]
-the interval at which to call the process to determine whether to open the door. (Unit: second)
+Interval at which to call the process of automatically opening the door. Setting this to less than 0.1 disables the process call. (Unit: second)
 
 - Default value: 0.1
-- Acceptable value range: From 0.1 to 8
+- Acceptable value range: From 0 to 8
 
 ==== Interval To Close / [interval_to_close]
-the interval at which to call the process to determine whether to close the door. (Unit: second)
+Interval at which to call the process of automatically closing the door. Setting this to less than 0.1 disables the process call. (Unit: second)
 
 - Default value: 0.1
-- Acceptable value range: From 0.1 to 8
+- Acceptable value range: From 0 to 8
 
 ==== Player Search Radius To Open / [player_search_radius_to_open]
 The door automatically open when the player is inside the specified radius, with the door as the origin. (Unit: meter)
@@ -241,7 +241,8 @@ Suppresses automatic processing of Bonfire to prevent the count of fuels stored 
 Specify the automatic processing to be allowed for Blast furnace
 
 - Default value: Craft, Refuel, Store
-- Acceptable values: None, Craft, Refuel, StoreMultiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
+- Acceptable values: None, Craft, Refuel, Store
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
 ==== Blast furnace Container Search Range / [piece_blastfurnace_container_search_range]
 Specify the maximum distance which Blast furnace will search for containers. (Unit: meter)
@@ -294,7 +295,8 @@ Suppresses automatic processing of Campfire to prevent the count of fuels stored
 Specify the automatic processing to be allowed for Charcoal kiln
 
 - Default value: Craft, Store
-- Acceptable values: None, Craft, StoreMultiple values can be set at the same time by separating them with , (e.g. Craft, Store)
+- Acceptable values: None, Craft, Store
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ==== Charcoal kiln Container Search Range / [piece_charcoalkiln_container_search_range]
 Specify the maximum distance which Charcoal kiln will search for containers. (Unit: meter)
@@ -318,7 +320,8 @@ Suppresses automatic processing of Charcoal kiln to prevent the count of product
 Specify the automatic processing to be allowed for Cooking station
 
 - Default value: Store
-- Acceptable values: None, Craft, StoreMultiple values can be set at the same time by separating them with , (e.g. Craft, Store)
+- Acceptable values: None, Craft, Store
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ==== Cooking station Container Search Range / [piece_cookingstation_container_search_range]
 Specify the maximum distance which Cooking station will search for containers. (Unit: meter)
@@ -342,7 +345,8 @@ Suppresses automatic processing of Cooking station to prevent the count of produ
 Specify the automatic processing to be allowed for Fermenter
 
 - Default value: Craft, Store
-- Acceptable values: None, Craft, StoreMultiple values can be set at the same time by separating them with , (e.g. Craft, Store)
+- Acceptable values: None, Craft, Store
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ==== Fermenter Container Search Range / [piece_fermenter_container_search_range]
 Specify the maximum distance which Fermenter will search for containers. (Unit: meter)
@@ -402,7 +406,8 @@ Suppresses automatic processing of Hearth to prevent the count of fuels stored i
 Specify the automatic processing to be allowed for Iron cooking station
 
 - Default value: Store
-- Acceptable values: None, Craft, StoreMultiple values can be set at the same time by separating them with , (e.g. Craft, Store)
+- Acceptable values: None, Craft, Store
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ==== Iron cooking station Container Search Range / [piece_cookingstation_iron_container_search_range]
 Specify the maximum distance which Iron cooking station will search for containers. (Unit: meter)
@@ -462,7 +467,8 @@ Suppresses automatic processing of Sconce to prevent the count of fuels stored i
 Specify the automatic processing to be allowed for Smelter
 
 - Default value: Craft, Refuel, Store
-- Acceptable values: None, Craft, Refuel, StoreMultiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
+- Acceptable values: None, Craft, Refuel, Store
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
 ==== Smelter Container Search Range / [piece_smelter_container_search_range]
 Specify the maximum distance which Smelter will search for containers. (Unit: meter)
@@ -497,7 +503,8 @@ Performs automatic refuel only when materials are supplied to Smelter.
 Specify the automatic processing to be allowed for Spinning wheel
 
 - Default value: Store
-- Acceptable values: None, Craft, StoreMultiple values can be set at the same time by separating them with , (e.g. Craft, Store)
+- Acceptable values: None, Craft, Store
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ==== Spinning wheel Container Search Range / [piece_spinningwheel_container_search_range]
 Specify the maximum distance which Spinning wheel will search for containers. (Unit: meter)
@@ -647,7 +654,8 @@ Performs automatic refuel only when materials are supplied to Stone oven.
 Specify the automatic processing to be allowed for Windmill
 
 - Default value: Store
-- Acceptable values: None, Craft, StoreMultiple values can be set at the same time by separating them with , (e.g. Craft, Store)
+- Acceptable values: None, Craft, Store
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ==== Windmill Container Search Range / [piece_windmill_container_search_range]
 Specify the maximum distance which Windmill will search for containers. (Unit: meter)
