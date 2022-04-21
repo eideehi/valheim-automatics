@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Emit;
-using Automatics.ModUtils;
 using HarmonyLib;
 
 namespace Automatics
@@ -10,17 +9,31 @@ namespace Automatics
     [HarmonyPatch]
     internal static class Patches
     {
-        [HarmonyPostfix, HarmonyPatch(typeof(Player), "Update")]
-        private static void PlayerUpdatePostfix(Player __instance, ZNetView ___m_nview)
+        [HarmonyTranspiler, HarmonyPatch(typeof(Player), "Update")]
+        private static IEnumerable<CodeInstruction> PlayerUpdateTranspiler(IEnumerable<CodeInstruction> instructions)
         {
-            if (!___m_nview.IsValid() || !___m_nview.IsOwner()) return;
+            var UpdatePlacement = AccessTools.Method(typeof(Player), "UpdatePlacement");
+            var Hook = AccessTools.Method(typeof(Patches), nameof(PlayerUpdateHook));
 
-            var takeInput = Reflection.InvokeMethod<bool>(__instance, "TakeInput");
-            Automatics.OnPlayerUpdate?.Invoke(__instance, takeInput);
+            var codes = new List<CodeInstruction>(instructions);
+
+            var index = codes.FindIndex(x => x.Calls(UpdatePlacement));
+            if (index != -1)
+            {
+                codes.InsertRange(index, new[]
+                {
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldloc_0),
+                    new CodeInstruction(OpCodes.Call, Hook),
+                });
+            }
+
+            return codes;
         }
 
         [HarmonyTranspiler, HarmonyPatch(typeof(Terminal), "InitTerminal")]
-        private static IEnumerable<CodeInstruction> TerminalInitTerminalTranspiler(IEnumerable<CodeInstruction> instructions)
+        private static IEnumerable<CodeInstruction> TerminalInitTerminalTranspiler(
+            IEnumerable<CodeInstruction> instructions)
         {
             var Hook = AccessTools.Method(typeof(Patches), nameof(TerminalInitTerminalHook));
 
@@ -46,6 +59,9 @@ namespace Automatics
             if (___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<PickableCache>();
         }
+
+        private static void PlayerUpdateHook(Player player, bool takeInput) =>
+            Automatics.OnPlayerUpdate?.Invoke(player, takeInput);
 
         private static void TerminalInitTerminalHook() => Automatics.OnInitTerminal?.Invoke();
     }
