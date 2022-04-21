@@ -2,7 +2,8 @@
 {
     internal static class Core
     {
-        public static void Initialize()
+        [AutomaticsInitializer(4)]
+        private static void Initialize()
         {
             Config.Initialize();
         }

@@ -4,7 +4,8 @@ namespace Automatics.AutomaticRepair
 {
     internal static class Core
     {
-        public static void Initialize()
+        [AutomaticsInitializer(5)]
+        private static void Initialize()
         {
             Config.Initialize();
             Automatics.OnPlayerUpdate += RepairItems.Run;

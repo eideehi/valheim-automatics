@@ -5,7 +5,8 @@ namespace Automatics.AutomaticMapPinning
 {
     internal static class Core
     {
-        public static void Initialize()
+        [AutomaticsInitializer(2)]
+        private static void Initialize()
         {
             Config.Initialize();
 

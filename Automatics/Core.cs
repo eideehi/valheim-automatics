@@ -6,7 +6,8 @@ namespace Automatics
 {
     internal static class Core
     {
-        public static void Initialize()
+        [AutomaticsInitializer]
+        private static void Initialize()
         {
             LoadTranslations();
             Config.Initialize();

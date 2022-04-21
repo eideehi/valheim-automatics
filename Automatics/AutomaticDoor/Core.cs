@@ -6,7 +6,8 @@ namespace Automatics.AutomaticDoor
 {
     internal static class Core
     {
-        public static void Initialize()
+        [AutomaticsInitializer(1)]
+        private static void Initialize()
         {
             Config.Initialize();
             Automatics.OnPlayerUpdate += OnPlayerUpdate;

@@ -8,7 +8,8 @@ namespace Automatics.AutomaticProcessing
 {
     internal static class Core
     {
-        public static void Initialize()
+        [AutomaticsInitializer(3)]
+        private static void Initialize()
         {
             Config.Initialize();
         }

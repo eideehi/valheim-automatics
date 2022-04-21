@@ -1,10 +1,12 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using JetBrains.Annotations;
 
 namespace Automatics
 {
@@ -27,16 +29,39 @@ namespace Automatics
             ModLogger = Logger;
             ModConfig = Config;
 
-            ModLogger.LogInfo($"{ModName} {ModVersion} - Running");
+            var assembly = Assembly.GetExecutingAssembly();
 
-            Core.Initialize();
-            AutomaticDoor.Core.Initialize();
-            AutomaticMapPinning.Core.Initialize();
-            AutomaticProcessing.Core.Initialize();
-            AutomaticFeeding.Core.Initialize();
-            AutomaticRepair.Core.Initialize();
+            foreach (var (initializer, _) in AccessTools.GetTypesFromAssembly(assembly)
+                         .SelectMany(AccessTools.GetDeclaredMethods)
+                         .Select(x => (x,
+                             x.GetCustomAttributes(typeof(AutomaticsInitializerAttribute), false)
+                                 .OfType<AutomaticsInitializerAttribute>().FirstOrDefault()))
+                         .Where(x => x.Item2 != null)
+                         .OrderBy(x => x.Item2.Order))
+            {
+                try
+                {
+                    initializer.Invoke(null, new object[] { });
+                }
+                catch (Exception e)
+                {
+                    ModLogger.LogError($"Error while initializing {initializer.Name}\n{e}");
+                }
+            }
 
-            Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly(), ModId);
+            Harmony.CreateAndPatchAll(assembly, ModId);
+        }
+    }
+
+    [AttributeUsage(AttributeTargets.Method)]
+    [MeansImplicitUse]
+    public class AutomaticsInitializerAttribute : Attribute
+    {
+        public int Order { get; }
+
+        public AutomaticsInitializerAttribute(int order = 0)
+        {
+            Order = order;
         }
     }
 }
