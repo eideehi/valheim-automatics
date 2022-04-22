@@ -245,7 +245,7 @@
         <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).7z&quot; &quot;$(PackageTempDir)/*&quot;" />
         <ItemGroup>
             <NexusPackageFiles Include="$(NexusPackageDir)**\*" />
-            <ReadmeText Include="$([System.IO.File]::ReadAllText(%(ThunderstoreReadmeText.Identity)))"/>
+            <ReadmeText Include="$([System.IO.File]::ReadAllText(%(ThunderstoreReadmeText.Identity)))" />
         </ItemGroup>
         <Move SourceFiles="@(NexusPackageFiles)" DestinationFiles="@(NexusPackageFiles->'$(ThunderstorePackageDir)%(RecursiveDir)%(Filename)%(Extension)')" />
         <Copy SourceFiles="@(ThunderstoreFiles)" DestinationFiles="@(ThunderstoreFiles->'$(PackageTempDir)%(RecursiveDir)%(Filename)%(Extension)')" />
