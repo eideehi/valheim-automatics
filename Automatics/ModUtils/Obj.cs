@@ -1,76 +1,71 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using HarmonyLib;
 using UnityEngine;
 
 namespace Automatics.ModUtils
 {
     public static class Obj
     {
-        private static readonly char[] PrefabNameSeparator;
-        private static readonly ConditionalWeakTable<MonoBehaviour, ZDO> ZdoCache;
-        private static readonly ConditionalWeakTable<MonoBehaviour, string> NameCache;
+        private static readonly ConditionalWeakTable<Component, ZNetView> ZNetViewCache;
+        private static readonly ConditionalWeakTable<Component, string> NameCache;
 
         static Obj()
         {
-            PrefabNameSeparator = " (".ToCharArray();
-            ZdoCache = new ConditionalWeakTable<MonoBehaviour, ZDO>();
-            NameCache = new ConditionalWeakTable<MonoBehaviour, string>();
+            ZNetViewCache = new ConditionalWeakTable<Component, ZNetView>();
+            NameCache = new ConditionalWeakTable<Component, string>();
         }
 
-        public static string GetPrefabName(GameObject @object)
+        public static string GetPrefabName(GameObject gameObject) => Utils.GetPrefabName(gameObject);
+
+        public static string GetName(Component component)
         {
-            var name = @object.name;
-            var index = name.IndexOfAny(PrefabNameSeparator);
-            return index == -1 ? name : name.Remove(index);
-        }
+            if (component == null) return "";
 
-        public static string GetName(MonoBehaviour @object)
-        {
-            if (!@object) return "";
+            if (NameCache.TryGetValue(component, out var name)) return name;
 
-            if (NameCache.TryGetValue(@object, out var name)) return name;
+            name = AccessTools.GetDeclaredFields(component.GetType())
+                .Where(x => x.Name == "m_name" && x.FieldType == typeof(string))
+                .Select(x => x.GetValue(component) as string)
+                .FirstOrDefault();
 
-            switch (@object)
+            if (string.IsNullOrEmpty(name))
             {
-                case HoverText text:
-                {
-                    name = text.m_text;
-                    break;
-                }
-                case Hoverable hoverable:
-                {
-                    name = hoverable.GetHoverName();
-                    break;
-                }
-                default:
-                {
-                    var hoverable = @object.GetComponent<Hoverable>();
-                    if (hoverable != null)
-                    {
-                        name = hoverable is HoverText text ? text.m_text : hoverable.GetHoverName();
-                        break;
-                    }
-
-                    var zNetView = @object.GetComponent<ZNetView>();
-                    name = zNetView ? zNetView.GetPrefabName() : GetPrefabName(@object.gameObject);
-                    break;
-                }
+                var hoverable = component.GetComponent<Hoverable>();
+                if (hoverable != null)
+                    name = hoverable is HoverText text ? text.m_text : hoverable.GetHoverName();
+                else
+                    name = Utils.GetPrefabName(component.gameObject);
             }
 
-            NameCache.Add(@object, name);
+            NameCache.Add(component, name);
             return name;
         }
 
-        public static bool GetZdoid(MonoBehaviour @object, out ZDOID id)
+        public static bool GetZNetView(Component component, out ZNetView zNetView)
         {
-            if (!ZdoCache.TryGetValue(@object, out var zdo))
+            if (component == null)
             {
-                var zNetView = @object.GetComponent<ZNetView>();
-                zdo = zNetView ? zNetView.GetZDO() : null;
-                ZdoCache.Add(@object, zdo);
+                zNetView = null;
+                return false;
             }
 
+            if (ZNetViewCache.TryGetValue(component, out zNetView)) return zNetView != null;
+
+            zNetView = AccessTools.GetDeclaredFields(component.GetType())
+                .Where(x => x.Name == "m_nview" && x.FieldType == typeof(ZNetView))
+                .Select(x => x.GetValue(component) as ZNetView)
+                .FirstOrDefault() ?? component.GetComponent<ZNetView>();
+
+            ZNetViewCache.Add(component, zNetView);
+            return zNetView != null;
+        }
+
+        public static bool GetZdoid(Component component, out ZDOID id)
+        {
+            var zdo = GetZNetView(component, out var zNetView) ? zNetView.GetZDO() : null;
             id = zdo?.m_uid ?? ZDOID.None;
             return id != ZDOID.None;
         }
