@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -97,7 +98,7 @@ namespace Automatics.ModUtils
                 Category = GetCategory(section),
                 Order = order,
                 DispName = GetName(key),
-                CustomDrawer = GetCustomDrawer(typeof(T))
+                CustomDrawer = GetCustomDrawer(typeof(T), acceptableValue)
             };
             initializer?.Invoke(attributes);
 
@@ -142,9 +143,10 @@ namespace Automatics.ModUtils
         private static string GetDescription(string description) =>
             L10N.Translate($"@config_{description}_description");
 
-        private static Action<ConfigEntryBase> GetCustomDrawer(Type type)
+        private static Action<ConfigEntryBase> GetCustomDrawer(Type type, AcceptableValueBase acceptableValue)
         {
             if (type == typeof(bool)) return BoolCustomDrawer;
+            if (type == typeof(float) && acceptableValue is AcceptableValueRange<float>) return FloatRangeCustomDrawer;
             if (type == typeof(StringList)) return StringListCustomDrawer;
             if (type.IsEnum && type.GetCustomAttributes(typeof(FlagsAttribute), false).Any()) return FlagsCustomDrawer;
             return null;
@@ -157,6 +159,34 @@ namespace Automatics.ModUtils
             var result = GUILayout.Toggle(@bool, text, GUILayout.ExpandWidth(true));
             if (result != @bool)
                 entry.BoxedValue = result;
+        }
+
+        private static void FloatRangeCustomDrawer(ConfigEntryBase entry)
+        {
+            var range = (AcceptableValueRange<float>)entry.Description.AcceptableValues;
+            var value = (float)entry.BoxedValue;
+            var min = range.MinValue;
+            var max = range.MaxValue;
+
+            var result = GUILayout.HorizontalSlider(value, min, max, GUILayout.ExpandWidth(true));
+            result = Mathf.Floor(result * 100f) / 100f;
+            if (Math.Abs(result - value) > Mathf.Abs(max - min) / 1000)
+                entry.BoxedValue = result;
+
+            var stringValue = value.ToString("0.00", CultureInfo.InvariantCulture);
+            var stringResult = GUILayout.TextField(stringValue, GUILayout.Width(50));
+            if (stringResult == stringValue) return;
+
+            try
+            {
+                result = (float)Convert.ToDouble(stringResult, CultureInfo.InvariantCulture);
+                var newValue = Convert.ChangeType(range.Clamp(result), entry.SettingType, CultureInfo.InvariantCulture);
+                entry.BoxedValue = newValue;
+            }
+            catch (FormatException)
+            {
+                // Ignore user typing in bad data
+            }
         }
 
         private static void StringListCustomDrawer(ConfigEntryBase entry)
