@@ -1,14 +1,16 @@
-﻿using static Automatics.ModUtils.ValheimCharacter;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Automatics.ModUtils;
+using Automatics.Valheim;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
 {
+    using Animal = Creature.Animal;
+
     internal static class DynamicMapPinning
     {
         private static readonly Collider[] ColliderBuffer;
@@ -171,18 +173,18 @@ namespace Automatics.AutomaticMapPinning
                     return null;
 
                 case RandomFlyingBird bird:
-                    return Config.IsAllowPinning(Animal.Flag.Bird) ? bird : null;
+                    return Config.IsAllowPinning(Animal.Bird) ? bird : null;
 
                 case Character animal when IsAnimal(animal):
                 {
-                    if (Animal.GetFlag(animal.m_name, out var flag) && Config.IsAllowPinning(flag)) return animal;
+                    if (Creature.GetAnimal(animal.m_name, out var flag) && Config.IsAllowPinning(flag)) return animal;
                     return Config.IsCustomAnimal(animal.m_name) ? animal : null;
                 }
 
                 case Character monster when IsMonster(monster):
                 {
                     if (monster.GetFaction() == Character.Faction.Boss) return null;
-                    if (Monster.GetFlag(monster.m_name, out var flag) && Config.IsAllowPinning(flag)) return monster;
+                    if (Creature.GetMonster(monster.m_name, out var flag) && Config.IsAllowPinning(flag)) return monster;
                     return Config.IsCustomMonster(monster.m_name) ? monster : null;
                 }
 
@@ -190,7 +192,7 @@ namespace Automatics.AutomaticMapPinning
                 {
                     var fish = collider.GetComponentInParent<Fish>();
                     if (fish != null)
-                        return Config.IsAllowPinning(Animal.Flag.Fish) ? fish : null;
+                        return Config.IsAllowPinning(Animal.Fish) ? fish : null;
 
                     return null;
                 }

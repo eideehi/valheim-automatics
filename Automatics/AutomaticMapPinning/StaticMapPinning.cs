@@ -1,6 +1,4 @@
-﻿using static Automatics.ModUtils.ValheimObject;
-using static Automatics.ModUtils.ValheimLocation;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -9,6 +7,9 @@ using UnityEngine;
 
 namespace Automatics.AutomaticMapPinning
 {
+    using Object = Valheim.Object;
+    using Location = Valheim.Location;
+
     internal static class StaticMapPinning
     {
         private static readonly Collider[] ColliderBuffer;
@@ -34,13 +35,13 @@ namespace Automatics.AutomaticMapPinning
         public static bool IsFlora(Pickable pickable)
         {
             var name = Obj.GetName(pickable);
-            return Flora.GetFlag(name, out _) || Config.IsCustomFlora(name);
+            return Object.IsFlora(name) || Config.IsCustomFlora(name);
         }
 
         public static bool IsVein(Destructible destructible)
         {
             var name = Obj.GetName(destructible);
-            return Vein.GetFlag(name, out _) || Config.IsCustomFlora(name);
+            return Object.IsMineralDeposit(name) || Config.IsCustomFlora(name);
         }
 
         public static void ClearObjectCache()
@@ -94,7 +95,7 @@ namespace Automatics.AutomaticMapPinning
         private static bool FloraPinning(MonoBehaviour @object, string name, ref HashSet<ZDOID> knownId)
         {
             if (!(@object is Pickable pickable)) return false;
-            if (Flora.GetFlag(name, out var flag))
+            if (Object.GetFlora(name, out var flag))
             {
                 if (!Config.IsAllowPinning(flag)) return true;
             }
@@ -133,7 +134,7 @@ namespace Automatics.AutomaticMapPinning
         private static bool VeinPinning(MonoBehaviour @object, string name, ref HashSet<ZDOID> knownId)
         {
             if (!(@object is IDestructible)) return false;
-            if (Vein.GetFlag(name, out var flag))
+            if (Object.GetMineralDeposit(name, out var flag))
             {
                 if (!Config.IsAllowPinning(flag)) return true;
             }
@@ -163,7 +164,7 @@ namespace Automatics.AutomaticMapPinning
         private static bool SpawnerPinning(MonoBehaviour @object, string name, ref HashSet<ZDOID> knownId)
         {
             if (!@object.GetComponent<SpawnArea>()) return false;
-            if (Spawner.GetFlag(name, out var flag))
+            if (OtherObject.GetSpawner(name, out var flag))
             {
                 if (!Config.IsAllowPinning(flag)) return true;
             }
@@ -181,12 +182,12 @@ namespace Automatics.AutomaticMapPinning
 
         private static bool OtherPinning(MonoBehaviour @object, string name, ref HashSet<ZDOID> knownId)
         {
-            if (!Other.GetFlag(name, out var flag)) return false;
-            if (!Config.IsAllowPinning(flag) || !Other.GetName(flag, out name)) return true;
+            if (!OtherObject.GetEtcetera(name, out var flag)) return false;
+            if (!Config.IsAllowPinning(flag) || !OtherObject.GetEtceteraName(flag, out name)) return true;
 
             switch (flag)
             {
-                case Other.Flag.Portal:
+                case OtherObject.Etcetera.Portal:
                 {
                     PortalPinning(@object);
                     break;
@@ -240,8 +241,8 @@ namespace Automatics.AutomaticMapPinning
 
         private static bool DungeonPinning(ZoneSystem.LocationInstance instance)
         {
-            if (!Dungeon.GetFlag(instance.m_location.m_prefabName, out var flag)) return false;
-            if (!Config.IsAllowPinning(flag) || !Dungeon.GetName(flag, out var name)) return true;
+            if (!Location.GetDungeon(instance.m_location.m_prefabName, out var flag)) return false;
+            if (!Config.IsAllowPinning(flag) || !Location.GetDungeonName(flag, out var name)) return true;
 
             foreach (var teleport in
                      from x in Obj.GetInSphere(instance.m_position, 16f,
@@ -258,8 +259,8 @@ namespace Automatics.AutomaticMapPinning
 
         private static bool SpotPinning(ZoneSystem.LocationInstance instance)
         {
-            if (!Spot.GetFlag(instance.m_location.m_prefabName, out var flag)) return false;
-            if (!Config.IsAllowPinning(flag) || !Spot.GetName(flag, out var name)) return true;
+            if (!Location.GetSpot(instance.m_location.m_prefabName, out var flag)) return false;
+            if (!Config.IsAllowPinning(flag) || !Location.GetSpotName(flag, out var name)) return true;
 
             Map.AddPin(instance.m_position, L10N.Translate(name), true, new Target { name = name });
             return true;
@@ -291,10 +292,10 @@ namespace Automatics.AutomaticMapPinning
             var name = Obj.GetName(@object);
             if (string.IsNullOrEmpty(name)) return null;
 
-            if (Flora.GetFlag(name, out var flag1)) return Config.IsAllowPinning(flag1) ? @object : null;
-            if (Vein.GetFlag(name, out var flag2)) return Config.IsAllowPinning(flag2) ? @object : null;
-            if (Spawner.GetFlag(name, out var flag3)) return Config.IsAllowPinning(flag3) ? @object : null;
-            if (Other.GetFlag(name, out var flag4)) return Config.IsAllowPinning(flag4) ? @object : null;
+            if (Object.GetFlora(name, out var flag1)) return Config.IsAllowPinning(flag1) ? @object : null;
+            if (Object.GetMineralDeposit(name, out var flag2)) return Config.IsAllowPinning(flag2) ? @object : null;
+            if (OtherObject.GetSpawner(name, out var flag3)) return Config.IsAllowPinning(flag3) ? @object : null;
+            if (OtherObject.GetEtcetera(name, out var flag4)) return Config.IsAllowPinning(flag4) ? @object : null;
 
             return null;
         }
