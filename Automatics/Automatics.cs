@@ -20,6 +20,7 @@ namespace Automatics
         internal static string ModLocation { get; private set; }
         internal static ManualLogSource ModLogger { get; private set; }
         internal static ConfigFile ModConfig { get; private set; }
+        internal static Action OnGameAwake { get; set; }
         internal static Action OnInitTerminal { get; set; }
         internal static Action<Player, bool> OnPlayerUpdate { get; set; }
 

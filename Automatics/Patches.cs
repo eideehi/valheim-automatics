@@ -9,6 +9,9 @@ namespace Automatics
     [HarmonyPatch]
     internal static class Patches
     {
+        [HarmonyPostfix, HarmonyPatch(typeof(Game), "Awake")]
+        private static void GameAwakePostfix() => Automatics.OnGameAwake?.Invoke();
+
         [HarmonyTranspiler, HarmonyPatch(typeof(Player), "Update")]
         private static IEnumerable<CodeInstruction> PlayerUpdateTranspiler(IEnumerable<CodeInstruction> instructions)
         {
