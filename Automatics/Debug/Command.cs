@@ -8,12 +8,12 @@ namespace Automatics.Debug
 {
     internal static class Command
     {
-        private static readonly Lazy<IEnumerable<Piece>> LazyAllPieces;
+        private static readonly Lazy<IEnumerable<Piece>> AllPiecesLazy;
         private static readonly Dictionary<string, Func<Collider, MonoBehaviour>> ObjectColliderConvertors;
 
         static Command()
         {
-            LazyAllPieces = new Lazy<IEnumerable<Piece>>(() =>
+            AllPiecesLazy = new Lazy<IEnumerable<Piece>>(() =>
             {
                 var pieces = new HashSet<Piece>();
 
@@ -168,28 +168,25 @@ namespace Automatics.Debug
 
             var strings = new HashSet<string>();
             var pos = Player.m_localPlayer.transform.position;
-            foreach (var @object in
-                     from x in Obj.GetInSphere(pos, range, convertor, range * 16)
-                     orderby x.Item2
-                     select x.Item1)
+            foreach (var (_, obj, _) in Obj.GetInsideSphere(pos, range, convertor, range * 16).OrderBy(x => x.distance))
             {
-                switch (@object)
+                switch (obj)
                 {
                     case Humanoid humanoid when humanoid.IsPlayer():
                         break;
+
                     case RandomFlyingBird bird:
                     {
-                        var prefabName = Obj.GetPrefabName(bird.gameObject).ToLower();
-                        var name = $"@animal_{prefabName}";
-                        strings.Add(
-                            $"{L10N.Translate(name)}: [type: {@object.GetType()}, raw_name: {name}, layer: {Layer(@object)}]");
+                        var prefabName = Obj.GetPrefabName(bird.gameObject);
+                        var name = $"@animal_{prefabName.ToLower()}";
+                        strings.Add($"{L10N.Translate(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
                         break;
                     }
+
                     default:
                     {
-                        var name = Obj.GetName(@object);
-                        strings.Add(
-                            $"{L10N.Localize(name)}: [type: {@object.GetType()}, raw_name: {name}, layer: {Layer(@object)}]");
+                        var name = Obj.GetName(obj);
+                        strings.Add($"{L10N.Localize(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
                         break;
                     }
                 }
@@ -231,7 +228,7 @@ namespace Automatics.Debug
 
         private static IEnumerable<Piece> GetAllPieces()
         {
-            return LazyAllPieces.Value;
+            return AllPiecesLazy.Value;
         }
 
         private static IEnumerable<Recipe> GetAllRecipes()
