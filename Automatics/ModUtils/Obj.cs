@@ -70,28 +70,27 @@ namespace Automatics.ModUtils
             return id != ZDOID.None;
         }
 
-        public static List<(T, float)> GetInSphere<T>(Vector3 origin, float radius, Func<Collider, T> convertor,
-            Collider[] buffer, int layerMask = -1)
+        public static List<(Collider collider, T obj, float distance)> GetInsideSphere<T>(Vector3 origin, float radius,
+            Func<Collider, T> convertor, Collider[] buffer, int layerMask = -1)
         {
-            var size = Physics.OverlapSphereNonAlloc(origin, radius, buffer, layerMask);
-            var result = new List<(T, float)>(size);
+            var result = new List<(Collider collider, T obj, float distance)>();
 
+            var size = Physics.OverlapSphereNonAlloc(origin, radius, buffer, layerMask);
             for (var i = 0; i < size; i++)
             {
                 var collider = buffer[i];
-
-                var @object = convertor.Invoke(collider);
-                if (@object != null)
-                    result.Add((@object, Vector3.Distance(origin, collider.transform.position)));
+                var obj = convertor.Invoke(collider);
+                if (obj != null)
+                    result.Add((collider, obj, Vector3.Distance(origin, collider.transform.position)));
             }
 
             return result;
         }
 
-        public static List<(T, float)> GetInSphere<T>(Vector3 origin, float radius, Func<Collider, T> convertor,
-            int bufferSize = 128, int layerMask = -1)
+        public static List<(Collider collider, T obj, float distance)> GetInsideSphere<T>(Vector3 origin, float radius,
+            Func<Collider, T> convertor, int bufferSize = 128, int layerMask = -1)
         {
-            return GetInSphere(origin, radius, convertor, new Collider[bufferSize], layerMask);
+            return GetInsideSphere(origin, radius, convertor, new Collider[bufferSize], layerMask);
         }
     }
 }
