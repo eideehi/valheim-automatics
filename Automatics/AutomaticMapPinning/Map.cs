@@ -27,15 +27,16 @@ namespace Automatics.AutomaticMapPinning
         public static void Initialize()
         {
             Deprecated.Map.Initialize();
-            LoadCustomIcons();
+            CustomIcons.Clear();
+            LoadCustomIcons(Automatics.GetDefaultResourcePath("Textures"));
+            LoadCustomIcons(Automatics.GetInjectedResourcePath("Textures"));
             RegisterCustomIcons();
         }
 
-        private static void LoadCustomIcons()
+        private static void LoadCustomIcons(string texturesDir)
         {
-            CustomIcons.Clear();
+            if (string.IsNullOrEmpty(texturesDir)) return;
 
-            var texturesDir = Path.Combine(Automatics.ModLocation, "Textures");
             var customIconsJson = Path.Combine(texturesDir, "custom-map-icon.json");
             if (!File.Exists(customIconsJson)) return;
 

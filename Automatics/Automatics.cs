@@ -24,6 +24,19 @@ namespace Automatics
         internal static Action OnInitTerminal { get; set; }
         internal static Action<Player, bool> OnPlayerUpdate { get; set; }
 
+        internal static string GetDefaultResourcePath(string resourceName)
+        {
+            return Path.Combine(ModLocation, resourceName);
+        }
+
+        internal static string GetInjectedResourcePath(string resourceName)
+        {
+            var directory = global::Automatics.Config.ResourcesDirectory;
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+                return Path.Combine(directory, resourceName);
+            return "";
+        }
+
         private void Awake()
         {
             ModLocation = Path.GetDirectoryName(Info.Location) ?? "";

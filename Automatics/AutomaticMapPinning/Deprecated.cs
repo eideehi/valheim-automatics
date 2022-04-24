@@ -15,11 +15,18 @@ namespace Automatics.AutomaticMapPinning
 
             private static Minimap VMap => Minimap.instance;
 
-            private static void LoadCustomIcons()
+            public static void Initialize()
             {
                 _customIcons = new List<IconInfo>();
+                LoadCustomIcons(Automatics.GetDefaultResourcePath("Textures"));
+                LoadCustomIcons(Automatics.GetInjectedResourcePath("Textures"));
+                RegisterCustomIcons();
+            }
 
-                var texturesDir = Path.Combine(Automatics.ModLocation, "Textures");
+            private static void LoadCustomIcons(string texturesDir)
+            {
+                if (string.IsNullOrEmpty(texturesDir)) return;
+
                 var customIconsCsv = Path.Combine(texturesDir, "CustomMapIcon.csv");
                 if (!File.Exists(customIconsCsv)) return;
 
@@ -91,12 +98,6 @@ namespace Automatics.AutomaticMapPinning
 
                     j++;
                 }
-            }
-
-            public static void Initialize()
-            {
-                LoadCustomIcons();
-                RegisterCustomIcons();
             }
 
             public static Minimap.PinType GetCustomIcon(string iName)

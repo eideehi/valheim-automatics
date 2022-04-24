@@ -1,5 +1,4 @@
-﻿using System.IO;
-using Automatics.ModUtils;
+﻿using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics
@@ -9,14 +8,17 @@ namespace Automatics
         [AutomaticsInitializer]
         private static void Initialize()
         {
-            LoadTranslations();
+            LoadTranslations(Automatics.GetDefaultResourcePath("Languages"));
             Config.Initialize();
+            LoadTranslations(Automatics.GetInjectedResourcePath("Languages"));
+
             Automatics.OnInitTerminal += Command.Register;
         }
 
-        private static void LoadTranslations()
+        private static void LoadTranslations(string languagesDir)
         {
-            var languagesDir = Path.Combine(Automatics.ModLocation, "Languages");
+            if (string.IsNullOrEmpty(languagesDir)) return;
+
             Deprecated.LanguageLoader.LoadFromCsv(languagesDir);
             TranslationsLoader.LoadFromJson(languagesDir);
         }

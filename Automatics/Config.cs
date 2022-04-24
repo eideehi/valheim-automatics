@@ -10,9 +10,11 @@ namespace Automatics
 
         private static ConfigEntry<bool> _loggingEnabled;
         private static ConfigEntry<LogLevel> _allowedLogLevel;
+        private static ConfigEntry<string> _resourcesDirectory;
 
         internal static bool LoggingEnabled => _loggingEnabled.Value;
         internal static bool AllowedLogLevel(LogLevel level) => (_allowedLogLevel.Value & level) != 0;
+        internal static string ResourcesDirectory => _resourcesDirectory.Value;
 
         public static void Initialize()
         {
@@ -23,9 +25,10 @@ namespace Automatics
                 x.ReadOnly = true;
             });
 
-            Configuration.ChangeSection("logging");
+            Configuration.ChangeSection("system");
             _loggingEnabled = Configuration.Bind("logging_enabled", false);
             _allowedLogLevel = Configuration.Bind("allowed_log_level", LogLevel.All ^ (LogLevel.Debug | LogLevel.Info));
+            _resourcesDirectory = Configuration.Bind("resources_directory", "");
         }
     }
 }

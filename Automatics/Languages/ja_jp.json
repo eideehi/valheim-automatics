@@ -7,11 +7,13 @@
     "@add": "+",
     "@remove": "×",
 
-    "@config_logging_category": "[ #1 ログ出力 ]",
+    "@config_system_category": "[ #1 システム ]",
     "@config_logging_enabled_name": "ログ出力",
     "@config_logging_enabled_description": "ログの出力を有効化します。ここで設定した値に関係なく、Automaticsの初期化作業のログは常に出力されます。",
     "@config_allowed_log_level_name": "出力を許可するレベル",
     "@config_allowed_log_level_description": "ログの出力を許可するレベルを指定します。",
+    "@config_resources_directory_name": "リソースディレクトリ",
+    "@config_resources_directory_description": "カスタムマップアイコンなどのリソースが格納されるディレクトリの絶対パスを指定します。このオプションに有効な値が指定されている場合、デフォルトのリソースディレクトリからはファイルが読み込まれないことに注意してください。",
 
     "@config_automatic_door_category": "[ #2 自動ドア ]",
     "@config_automatic_door_enabled_name": "自動ドア",

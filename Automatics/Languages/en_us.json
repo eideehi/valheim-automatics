@@ -7,11 +7,13 @@
     "@add": "+",
     "@remove": "×",
 
-    "@config_logging_category": "[ #1 Logging ]",
+    "@config_system_category": "[ #1 System ]",
     "@config_logging_enabled_name": "Logging",
     "@config_logging_enabled_description": "Enable logging. Regardless of the value set here, the log of Automatics initialization process will always be output.",
     "@config_allowed_log_level_name": "Allowed Log Level",
     "@config_allowed_log_level_description": "Specifies the level at which logging is allowed.",
+    "@config_resources_directory_name": "Resources Directory",
+    "@config_resources_directory_description": "Specify the absolute path of the directory where resources such as custom map icon will be stored. Note that if a valid directory is specified for this option, files will not be loaded from the default resource directory.",
 
     "@config_automatic_door_category": "[ #2 Automatic Door ]",
     "@config_automatic_door_enabled_name": "Automatic Door",
