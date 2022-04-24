@@ -100,23 +100,23 @@ namespace Automatics.AutomaticMapPinning
             }
         }
 
-        private static PinType GetCustomIcon(Target target)
+        private static PinType GetCustomIcon(PinningTarget target)
         {
             var type = GetCustomIconInternal(target);
             return type != PinType.Icon3 ? type : Deprecated.Map.GetCustomIcon(target.name);
         }
 
-        private static PinType GetCustomIconInternal(Target target)
+        private static PinType GetCustomIconInternal(PinningTarget target)
         {
             if (!CustomIcons.Any()) return PinType.Icon3;
 
-            var iName = target.name;
-            var dName = L10N.TranslateInternalNameOnly(iName);
+            var internalName = target.name;
+            var displayName = L10N.TranslateInternalNameOnly(internalName);
             var meta = target.metadata;
             return (from x in CustomIcons
                     where (L10N.IsInternalName(x.Target.name)
-                              ? iName.Equals(x.Target.name, StringComparison.Ordinal)
-                              : dName.IndexOf(x.Target.name, StringComparison.OrdinalIgnoreCase) >= 0) &&
+                              ? internalName.Equals(x.Target.name, StringComparison.Ordinal)
+                              : displayName.IndexOf(x.Target.name, StringComparison.OrdinalIgnoreCase) >= 0) &&
                           (x.Target.metadata == null || IsMetaDataEquals(x.Target.metadata, meta))
                     orderby x.Target.metadata != null descending,
                         x.Target.metadata
@@ -150,19 +150,19 @@ namespace Automatics.AutomaticMapPinning
         public static PinData AddPin(Vector3 pos, PinType type, string name, bool save)
         {
             var data = ValheimMap.AddPin(pos, type, name, save, false);
-            Log.Debug(() => $"Add pin: [name: {data.m_name}, pos: {data.m_pos}]");
+            Log.Debug(() => $"Add pin: [name: {name}, pos: {data.m_pos}, icon: {(int)type}]");
             return data;
         }
 
-        public static PinData AddPin(Vector3 pos, string pinName, bool save, Target target)
+        public static PinData AddPin(Vector3 pos, string name, bool save, PinningTarget target)
         {
-            return AddPin(pos, GetCustomIcon(target), pinName, save);
+            return AddPin(pos, GetCustomIcon(target), name, save);
         }
 
         public static void RemovePin(PinData data)
         {
             ValheimMap.RemovePin(data);
-            Log.Debug(() => $"Remove pin: [name: {data.m_name}, pos: {data.m_pos}]");
+            Log.Debug(() => $"Remove pin: [name: {data.m_name}, pos: {data.m_pos}, icon: {(int)data.m_type}]");
         }
 
         public static void RemovePin(Vector3 pos, bool save = true)
@@ -174,7 +174,7 @@ namespace Automatics.AutomaticMapPinning
 
         private class CustomIcon
         {
-            public Target Target;
+            public PinningTarget Target;
             public PinType PinType;
             public Sprite Sprite;
         }
@@ -183,12 +183,12 @@ namespace Automatics.AutomaticMapPinning
     [Serializable]
     public struct CustomIconData
     {
-        public Target target;
+        public PinningTarget target;
         public SpriteInfo sprite;
     }
 
     [Serializable]
-    public struct Target
+    public struct PinningTarget
     {
         public string name;
         public MetaData metadata;
@@ -197,7 +197,7 @@ namespace Automatics.AutomaticMapPinning
     [Serializable]
     public class MetaData : IComparer<MetaData>
     {
-        public int level;
+        public int level = -1;
 
         public int Compare(MetaData x, MetaData y)
         {

@@ -7,14 +7,14 @@ namespace Automatics.AutomaticMapPinning
 {
     using Description = Configuration.LocalizedDescriptionAttribute;
 
-    public static class OtherObject
+    public static class ValheimObject
     {
         private static readonly Dictionary<string, Spawner> Spawners;
         private static readonly Dictionary<Spawner, string> SpawnerNames;
-        private static readonly Dictionary<string, Etcetera> Etceteras;
-        private static readonly Dictionary<Etcetera, string> EtceteraNames;
+        private static readonly Dictionary<string, Other> Others;
+        private static readonly Dictionary<Other, string> OtherNames;
 
-        static OtherObject()
+        static ValheimObject()
         {
             Spawners = new Dictionary<string, Spawner>
             {
@@ -30,22 +30,22 @@ namespace Automatics.AutomaticMapPinning
                 { Spawner.BodyPile, Name.BodyPile },
             };
 
-            Etceteras = new Dictionary<string, Etcetera>
+            Others = new Dictionary<string, Other>
             {
-                { Name.Vegvisir, Etcetera.Vegvisir },
-                { Name.Runestone, Etcetera.Runestone },
-                { Name.WildBeehive, Etcetera.WildBeehive },
-                { "Beehive", Etcetera.WildBeehive },
-                { Name.Portal, Etcetera.Portal },
-                { "Teleport", Etcetera.Portal },
+                { Name.Vegvisir, Other.Vegvisir },
+                { Name.Runestone, Other.Runestone },
+                { Name.WildBeehive, Other.WildBeehive },
+                { "Beehive", Other.WildBeehive },
+                { Name.Portal, Other.Portal },
+                { "Teleport", Other.Portal },
             };
 
-            EtceteraNames = new Dictionary<Etcetera, string>
+            OtherNames = new Dictionary<Other, string>
             {
-                { Etcetera.Vegvisir, Name.Vegvisir },
-                { Etcetera.Runestone, Name.Runestone },
-                { Etcetera.WildBeehive, Name.WildBeehive },
-                { Etcetera.Portal, Name.Portal },
+                { Other.Vegvisir, Name.Vegvisir },
+                { Other.Runestone, Name.Runestone },
+                { Other.WildBeehive, Name.WildBeehive },
+                { Other.Portal, Name.Portal },
             };
         }
 
@@ -56,12 +56,12 @@ namespace Automatics.AutomaticMapPinning
         public static bool GetSpawnerName(Spawner spawner, out string name) =>
             SpawnerNames.TryGetValue(spawner, out name);
 
-        public static bool GetEtcetera(string name, out Etcetera etcetera) => Etceteras.TryGetValue(name, out etcetera);
+        public static bool GetOther(string name, out Other other) => Others.TryGetValue(name, out other);
 
-        public static bool IsEtcetera(string name) => Etceteras.ContainsKey(name);
+        public static bool IsOther(string name) => Others.ContainsKey(name);
 
-        public static bool GetEtceteraName(Etcetera etcetera, out string name) =>
-            EtceteraNames.TryGetValue(etcetera, out name);
+        public static bool GetOtherName(Other other, out string name) =>
+            OtherNames.TryGetValue(other, out name);
 
         public static class Name
         {
@@ -73,7 +73,7 @@ namespace Automatics.AutomaticMapPinning
             /* Others */
             public const string Vegvisir = "$piece_vegvisir";
             public const string Runestone = "$piece_lorestone";
-            public const string WildBeehive = "@piece_wild_beehive";
+            public const string WildBeehive = "@piece_wildbeehive";
             public const string Portal = "$piece_portal";
         }
 
@@ -98,7 +98,7 @@ namespace Automatics.AutomaticMapPinning
         }
 
         [Flags]
-        public enum Etcetera : long
+        public enum Other : long
         {
             [UsedImplicitly]
             None = 0,

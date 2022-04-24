@@ -52,6 +52,7 @@ namespace Automatics.Valheim
                 { Name.DrakeNest, Spot.DrakeNest },
                 { "DrakeNest01", Spot.DrakeNest },
                 { Name.GoblinCamp, Spot.GoblinCamp },
+                { "GoblinCamp1", Spot.GoblinCamp },
                 { "GoblinCamp2", Spot.GoblinCamp },
                 { Name.TarPit, Spot.TarPit },
                 { "TarPit1", Spot.TarPit },
@@ -90,11 +91,11 @@ namespace Automatics.Valheim
             public const string MountainCave = "$location_mountaincave";
 
             /* Spots */
-            public const string InfestedTree = "@location_infested_tree";
-            public const string FireHole = "@location_fire_hole";
-            public const string DrakeNest = "@location_drake_nest";
-            public const string GoblinCamp = "@location_goblin_camp";
-            public const string TarPit = "@location_tar_pit";
+            public const string InfestedTree = "@location_infestedtree";
+            public const string FireHole = "@location_firehole";
+            public const string DrakeNest = "@location_drakenest";
+            public const string GoblinCamp = "@location_goblincamp";
+            public const string TarPit = "@location_tarpit";
         }
 
         [Flags]

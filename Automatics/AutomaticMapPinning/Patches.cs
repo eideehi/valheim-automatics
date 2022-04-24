@@ -2,6 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection.Emit;
+using Automatics.ModUtils;
 using HarmonyLib;
 
 namespace Automatics.AutomaticMapPinning
@@ -13,13 +14,13 @@ namespace Automatics.AutomaticMapPinning
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "UpdateMap")]
         private static void MinimapUpdateMapPostfix(Player player, float dt, bool takeInput)
         {
-            Core.OnUpdate(player, dt, takeInput);
+            Core.OnUpdateMap(player, dt, takeInput);
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "RemovePin", typeof(Minimap.PinData))]
         private static void MinimapRemovePinPostfix(Minimap.PinData pin)
         {
-            DynamicMapPinning.RemovePin(pin);
+            DynamicPinning.RemoveDynamicPin(pin);
         }
 
         [HarmonyTranspiler, HarmonyPatch(typeof(Pickable), "SetPicked")]
@@ -59,17 +60,26 @@ namespace Automatics.AutomaticMapPinning
             if (___m_nview.GetZDO() == null) return;
 
             var portal = __instance.GetComponent<WearNTear>();
-            if (portal != null)
-                portal.m_onDestroyed += () => { Map.RemovePin(__instance.transform.position); };
+            if (portal == null) return;
+
+            portal.m_onDestroyed += () =>
+            {
+                if (Core.IsActive())
+                    Map.RemovePin(__instance.transform.position);
+            };
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Destructible), "Awake")]
         private static void DestructibleAwakePostfix(Destructible __instance, ZNetView ___m_nview)
         {
             if (___m_nview.GetZDO() == null) return;
+            if (Core.IsMineralDeposit(Obj.GetName(__instance), out _)) return;
 
-            if (StaticMapPinning.IsVein(__instance))
-                __instance.m_onDestroyed += () => { Map.RemovePin(__instance.transform.position); };
+            __instance.m_onDestroyed += () =>
+            {
+                if (Core.IsActive())
+                    Map.RemovePin(__instance.transform.position);
+            };
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(Ship), "Awake")]

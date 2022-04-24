@@ -10,7 +10,7 @@ namespace Automatics.AutomaticMapPinning
     {
         public static FloraObject Find(Predicate<Pickable> predicate)
         {
-            return ObjectNodes.FirstOrDefault(x => predicate(x._pickable));
+            return ObjectNodes.Where(x => x.IsValid()).FirstOrDefault(x => predicate(x._pickable));
         }
 
         private Pickable _pickable;
@@ -43,12 +43,6 @@ namespace Automatics.AutomaticMapPinning
         protected override void OnDestroy()
         {
             base.OnDestroy();
-
-            var destructible = _pickable.GetComponent<Destructible>();
-            if (destructible != null)
-            {
-                destructible.m_onDestroyed -= OnDestroyed;
-            }
 
             _pickable = null;
             _zNetView = null;
