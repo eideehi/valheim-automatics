@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -7,6 +8,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using JetBrains.Annotations;
+using UnityEngine;
 
 namespace Automatics
 {
@@ -16,6 +18,13 @@ namespace Automatics
         private const string ModId = "net.eidee.valheim.automatics";
         private const string ModName = "Automatics";
         private const string ModVersion = "1.2.1";
+
+        private static readonly Dictionary<string, (Action action, float timestamp, float delay)> InvokeQueue;
+
+        static Automatics()
+        {
+            InvokeQueue = new Dictionary<string, (Action action, float timestamp, float delay)>();
+        }
 
         internal static string ModLocation { get; private set; }
         internal static ManualLogSource ModLogger { get; private set; }
@@ -35,6 +44,16 @@ namespace Automatics
             if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
                 return Path.Combine(directory, resourceName);
             return "";
+        }
+
+        internal static void AddInvoke(string id, Action action, float delay)
+        {
+            InvokeQueue[id] = (action, Time.time, delay);
+        }
+
+        internal static void RemoveInvoke(string id)
+        {
+            InvokeQueue.Remove(id);
         }
 
         private void Awake()
@@ -64,6 +83,18 @@ namespace Automatics
             }
 
             Harmony.CreateAndPatchAll(assembly, ModId);
+        }
+
+        private void Update()
+        {
+            foreach (var queue in InvokeQueue.ToList())
+            {
+                var (action, timestamp, delay) = queue.Value;
+                if (!(Time.time - timestamp >= delay)) continue;
+
+                action.Invoke();
+                InvokeQueue.Remove(queue.Key);
+            }
         }
     }
 
