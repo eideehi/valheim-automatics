@@ -58,7 +58,7 @@ namespace Automatics.AutomaticDoor
             const string open = nameof(Open);
             const string close = nameof(Close);
 
-            _active = Config.AutomaticDoorEnabled && IsValid() && CheckAccess() && CanInteract();
+            _active = Config.EnableAutomaticDoor && IsValid() && CheckAccess() && CanInteract();
             _status = Status.Null;
             _closestPlayer = null;
 
@@ -82,7 +82,7 @@ namespace Automatics.AutomaticDoor
             }
 
             _closestPlayer = Player.GetClosestPlayer(_door.transform.position,
-                isOpen ? Config.PlayerSearchRadiusToClose : Config.PlayerSearchRadiusToOpen);
+                isOpen ? Config.DistanceForAutomaticClosing : Config.DistanceForAutomaticOpening);
             _noObstaclesBetweenPlayer = _closestPlayer != null && !FindObstaclesBetween(_closestPlayer);
 
             var foundClosestPlayer = _closestPlayer != null;

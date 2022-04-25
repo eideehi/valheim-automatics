@@ -5,8 +5,6 @@ using JetBrains.Annotations;
 
 namespace Automatics.Valheim
 {
-    using Description = Configuration.LocalizedDescriptionAttribute;
-
     public static class Object
     {
         private static readonly Dictionary<string, Flora> Floras;
@@ -120,53 +118,53 @@ namespace Automatics.Valheim
             [UsedImplicitly]
             None = 0,
 
-            [Description(Name.Dandelion)]
+            [LocalizedDescription(Name.Dandelion)]
             Dandelion = 1L << 0,
 
-            [Description(Name.Mushroom)]
+            [LocalizedDescription(Name.Mushroom)]
             Mushroom = 1L << 1,
 
-            [Description(Name.Raspberries)]
+            [LocalizedDescription(Name.Raspberries)]
             Raspberries = 1L << 2,
 
-            [Description(Name.Blueberries)]
+            [LocalizedDescription(Name.Blueberries)]
             Blueberries = 1L << 3,
 
-            [Description(Name.Carrot)]
+            [LocalizedDescription(Name.Carrot)]
             Carrot = 1L << 4,
 
-            [Description(Name.CarrotSeeds)]
+            [LocalizedDescription(Name.CarrotSeeds)]
             CarrotSeeds = 1L << 5,
 
-            [Description(Name.YellowMushroom)]
+            [LocalizedDescription(Name.YellowMushroom)]
             YellowMushroom = 1L << 6,
 
-            [Description(Name.Thistle)]
+            [LocalizedDescription(Name.Thistle)]
             Thistle = 1L << 7,
 
-            [Description(Name.Turnip)]
+            [LocalizedDescription(Name.Turnip)]
             Turnip = 1L << 8,
 
-            [Description(Name.TurnipSeeds)]
+            [LocalizedDescription(Name.TurnipSeeds)]
             TurnipSeeds = 1L << 9,
 
-            [Description(Name.Onion)]
+            [LocalizedDescription(Name.Onion)]
             Onion = 1L << 10,
 
-            [Description(Name.OnionSeeds)]
+            [LocalizedDescription(Name.OnionSeeds)]
             OnionSeeds = 1L << 11,
 
-            [Description(Name.Barley)]
+            [LocalizedDescription(Name.Barley)]
             Barley = 1L << 12,
 
-            [Description(Name.Cloudberries)]
+            [LocalizedDescription(Name.Cloudberries)]
             Cloudberries = 1L << 13,
 
-            [Description(Name.Flex)]
+            [LocalizedDescription(Name.Flex)]
             Flex = 1L << 14,
 
             [UsedImplicitly]
-            [Description("@select_all")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
 
@@ -176,23 +174,23 @@ namespace Automatics.Valheim
             [UsedImplicitly]
             None = 0,
 
-            [Description(Name.CopperDeposit)]
+            [LocalizedDescription(Name.CopperDeposit)]
             CopperDeposit = 1L << 0,
 
-            [Description(Name.TinDeposit)]
+            [LocalizedDescription(Name.TinDeposit)]
             TinDeposit = 1L << 1,
 
-            [Description(Name.MudPile)]
+            [LocalizedDescription(Name.MudPile)]
             MudPile = 1L << 2,
 
-            [Description(Name.ObsidianDeposit)]
+            [LocalizedDescription(Name.ObsidianDeposit)]
             ObsidianDeposit = 1L << 3,
 
-            [Description(Name.SilverVein)]
+            [LocalizedDescription(Name.SilverVein)]
             SilverVein = 1L << 4,
 
             [UsedImplicitly]
-            [Description("@select_all")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
     }

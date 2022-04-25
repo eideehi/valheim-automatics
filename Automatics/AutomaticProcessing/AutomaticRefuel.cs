@@ -15,18 +15,21 @@ namespace Automatics.AutomaticProcessing
 
         public static void Run(CookingStation piece, ZNetView zNetView)
         {
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
             if (!piece.m_useFuel) return;
 
             var stationName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(stationName, Type.Refuel)) return;
+            if (!Core.IsAllowProcessing(stationName, Type.Refuel)) return;
 
             if (zNetView.GetZDO().GetFloat("fuel") > piece.m_maxFuel - 1f) return;
-            if (Config.IsRefuelOnlyWhenMaterialsSupplied(stationName) &&
-                Reflection.InvokeMethod<int>(piece, "GetFreeSlot") < 0) return;
 
-            var minFuelCount = Config.GetItemCountThatSuppressAutomaticRefuel(stationName);
+            if (Config.RefuelOnlyWhenMaterialsSupplied(stationName))
+            {
+                if (Reflection.InvokeMethod<int>(piece, "GetFreeSlot") < 0) return;
+            }
+
+            var minFuelCount = Config.FuelCountOfSuppressProcessing(stationName);
             var origin = piece.transform.position;
             var fuelName = piece.m_fuelItem.m_itemData.m_shared.m_name;
 
@@ -45,15 +48,15 @@ namespace Automatics.AutomaticProcessing
 
         public static void Run(Fireplace fire, Piece piece, ZNetView zNetView)
         {
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
 
             var fireplaceName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(fireplaceName, Type.Refuel)) return;
+            if (!Core.IsAllowProcessing(fireplaceName, Type.Refuel)) return;
 
             if (Mathf.CeilToInt(zNetView.GetZDO().GetFloat("fuel")) >= fire.m_maxFuel) return;
 
-            var minFuelCount = Config.GetItemCountThatSuppressAutomaticRefuel(fireplaceName);
+            var minFuelCount = Config.FuelCountOfSuppressProcessing(fireplaceName);
             var origin = fire.transform.position;
             var fuelName = fire.m_fuelItem.m_itemData.m_shared.m_name;
 
@@ -72,17 +75,20 @@ namespace Automatics.AutomaticProcessing
 
         public static void Run(Smelter piece, ZNetView zNetView)
         {
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
 
             var smelterName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(smelterName, Type.Refuel)) return;
+            if (!Core.IsAllowProcessing(smelterName, Type.Refuel)) return;
 
             if (zNetView.GetZDO().GetFloat("fuel") >= piece.m_maxFuel - 1) return;
-            if (Config.IsRefuelOnlyWhenMaterialsSupplied(smelterName) &&
-                zNetView.GetZDO().GetInt("queued") == 0) return;
 
-            var minFuelCount = Config.GetItemCountThatSuppressAutomaticRefuel(smelterName);
+            if (Config.RefuelOnlyWhenMaterialsSupplied(smelterName))
+            {
+                if (zNetView.GetZDO().GetInt("queued") == 0) return;
+            }
+
+            var minFuelCount = Config.FuelCountOfSuppressProcessing(smelterName);
             var origin = piece.transform.position;
             var fuelName = piece.m_fuelItem.m_itemData.m_shared.m_name;
 

@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using Automatics.ModUtils;
 using UnityEngine;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
     using static Valheim.Location;
     using static ValheimObject;
@@ -83,7 +83,7 @@ namespace Automatics.AutomaticMapPinning
 
         public static void Run(Vector3 origin, bool takeInput)
         {
-            if (!Config.AutomaticMapPinningEnabled) return;
+            if (!Config.EnableAutomaticMapping) return;
 
             if (Config.StaticObjectSearchKey.MainKey != KeyCode.None)
             {
@@ -148,11 +148,11 @@ namespace Automatics.AutomaticMapPinning
             if (Map.HavePinInRange(position, 1f)) return true;
 
             var size = cluster.NodeCount;
-            if (size == 1)
-                Map.AddPin(position, L10N.Translate(name), true, CreateTarget(name));
-            else if (size > 1)
-                Map.AddPin(position, L10N.Localize("@flora_cluster_format", name, size), true, CreateTarget(name));
+            var pinName = size > 1
+                ? L10N.Localize("@text_automatic_mapping_flora_cluster_pin_name", name, size)
+                : L10N.Translate(name);
 
+            Map.AddPin(position, pinName, true, CreateTarget(name));
             return true;
         }
 
@@ -228,7 +228,7 @@ namespace Automatics.AutomaticMapPinning
             if (portal)
                 tag = portal.GetText();
 
-            var name = string.IsNullOrEmpty(tag) ? L10N.Translate("@portal_tag_empty") : tag;
+            var name = string.IsNullOrEmpty(tag) ? L10N.Translate("@text_automatic_mapping_empty_portal_tag") : tag;
             var position = component.transform.position;
             if (Map.FindPinInRange(position, 1f, out var data) && data.m_name == name) return;
 

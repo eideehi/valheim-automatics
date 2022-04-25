@@ -17,11 +17,11 @@ namespace Automatics.AutomaticProcessing
 
         public static void Run(CookingStation piece, ZNetView zNetView)
         {
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
 
             var stationName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(stationName, Type.Craft)) return;
+            if (!Core.IsAllowProcessing(stationName, Type.Craft)) return;
 
             if (piece.m_requireFire && !Reflection.InvokeMethod<bool>(piece, "IsFireLit")) return;
             if (piece.m_useFuel && zNetView.GetZDO().GetFloat("fuel") <= 0f) return;
@@ -45,8 +45,8 @@ namespace Automatics.AutomaticProcessing
             }
             if (freeSlot == -1) return;
 
-            var minMaterialCount = Config.GetItemCountThatSuppressAutomaticCraft(stationName);
-            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(stationName);
+            var minMaterialCount = Config.MaterialCountOfSuppressProcessing(stationName);
+            var maxProductCount = Config.ProductCountOfSuppressProcessing(stationName);
 
             var origin = piece.transform.position;
             var containerWithInventoryList = Core.GetNearbyContainers(stationName, origin)
@@ -99,7 +99,7 @@ namespace Automatics.AutomaticProcessing
         {
             // Not yet implemented.
             /*
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!Config.IsAllowAutomaticProcessing(piece.m_name, Type.Craft)) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
             */
@@ -107,16 +107,16 @@ namespace Automatics.AutomaticProcessing
 
         public static void Run(Fermenter piece, ZNetView zNetView)
         {
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
 
             var fermenterName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(fermenterName, Type.Craft)) return;
+            if (!Core.IsAllowProcessing(fermenterName, Type.Craft)) return;
 
             if (Reflection.InvokeMethod<int>(piece, "GetStatus") != 0) return;
 
-            var minMaterialCount = Config.GetItemCountThatSuppressAutomaticCraft(fermenterName);
-            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(fermenterName);
+            var minMaterialCount = Config.MaterialCountOfSuppressProcessing(fermenterName);
+            var maxProductCount = Config.ProductCountOfSuppressProcessing(fermenterName);
 
             var origin = piece.transform.position;
             var containerWithInventoryList = Core.GetNearbyContainers(fermenterName, origin)
@@ -167,17 +167,17 @@ namespace Automatics.AutomaticProcessing
 
         public static void Run(Smelter piece, ZNetView zNetView)
         {
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
 
             var smelterName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(smelterName, Type.Craft)) return;
+            if (!Core.IsAllowProcessing(smelterName, Type.Craft)) return;
 
             var oreCount = zNetView.GetZDO().GetInt("queued");
             if (oreCount >= piece.m_maxOre) return;
 
-            var minMaterialCount = Config.GetItemCountThatSuppressAutomaticCraft(smelterName);
-            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(smelterName);
+            var minMaterialCount = Config.MaterialCountOfSuppressProcessing(smelterName);
+            var maxProductCount = Config.ProductCountOfSuppressProcessing(smelterName);
 
             var smeltingProductCounts = new Dictionary<string, int>();
             var conversions = new List<Smelter.ItemConversion>();

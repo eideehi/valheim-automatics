@@ -28,10 +28,10 @@ namespace Automatics.AutomaticRepair
             if (repairCount == 0) return;
 
             Log.Debug(() => $"Repaired {repairCount} items");
-            if (Config.ItemRepairMessage == RepairMessage.None) return;
+            if (Config.ItemRepairMessage == Message.None) return;
 
-            var type = Config.ItemRepairMessage == RepairMessage.Center ? MessageType.Center : MessageType.TopLeft;
-            player.Message(type, L10N.Localize("@message_repair_items", repairCount));
+            var type = Config.ItemRepairMessage == Message.Center ? MessageType.Center : MessageType.TopLeft;
+            player.Message(type, L10N.Localize("@message_automatic_repair_repaired_the_items", repairCount));
         }
 
         private static IEnumerable<CraftingStation> GetAllCraftingStations()
@@ -72,7 +72,7 @@ namespace Automatics.AutomaticRepair
 
         public static void CraftingStationInteractHook(Player player, CraftingStation station)
         {
-            if (!Config.AutomaticRepairEnabled) return;
+            if (!Config.EnableAutomaticRepair) return;
             if (!Config.RepairItemsWhenAccessingTheCraftingStation) return;
 
             var count = RepairAll(player, station);
@@ -84,7 +84,7 @@ namespace Automatics.AutomaticRepair
 
         public static void Run(Player player, bool takeInput)
         {
-            if (!Config.AutomaticRepairEnabled) return;
+            if (!Config.EnableAutomaticRepair) return;
             if (Config.CraftingStationSearchRange <= 0) return;
             if (!Runnable()) return;
 

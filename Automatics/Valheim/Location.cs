@@ -5,8 +5,6 @@ using JetBrains.Annotations;
 
 namespace Automatics.Valheim
 {
-    using Description = Configuration.LocalizedDescriptionAttribute;
-
     public static class Location
     {
         private static readonly Dictionary<string, Dungeon> Dungeons;
@@ -104,20 +102,20 @@ namespace Automatics.Valheim
             [UsedImplicitly]
             None = 0,
 
-            [Description(Name.BurialChambers)]
+            [LocalizedDescription(Name.BurialChambers)]
             BurialChambers = 1L << 0,
 
-            [Description(Name.TrollCave)]
+            [LocalizedDescription(Name.TrollCave)]
             TrollCave = 1L << 1,
 
-            [Description(Name.SunkenCrypts)]
+            [LocalizedDescription(Name.SunkenCrypts)]
             SunkenCrypts = 1L << 2,
 
-            [Description(Name.MountainCave)]
+            [LocalizedDescription(Name.MountainCave)]
             MountainCave = 1L << 3,
 
             [UsedImplicitly]
-            [Description("@select_all")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
 
@@ -127,23 +125,23 @@ namespace Automatics.Valheim
             [UsedImplicitly]
             None = 0,
 
-            [Description(Name.InfestedTree)]
+            [LocalizedDescription(Name.InfestedTree)]
             InfestedTree = 1L << 0,
 
-            [Description(Name.FireHole)]
+            [LocalizedDescription(Name.FireHole)]
             FireHole = 1L << 1,
 
-            [Description(Name.DrakeNest)]
+            [LocalizedDescription(Name.DrakeNest)]
             DrakeNest = 1L << 2,
 
-            [Description(Name.GoblinCamp)]
+            [LocalizedDescription(Name.GoblinCamp)]
             GoblinCamp = 1L << 3,
 
-            [Description(Name.TarPit)]
+            [LocalizedDescription(Name.TarPit)]
             TarPit = 1L << 4,
 
             [UsedImplicitly]
-            [Description("@select_all")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
     }

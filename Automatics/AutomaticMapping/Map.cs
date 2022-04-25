@@ -6,7 +6,7 @@ using Automatics.ModUtils;
 using LitJson;
 using UnityEngine;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
     using PinData = Minimap.PinData;
     using PinType = Minimap.PinType;

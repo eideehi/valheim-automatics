@@ -4,13 +4,12 @@ using System.Text.RegularExpressions;
 using Automatics.ModUtils;
 using UnityEngine;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
     using static Valheim.Creature;
     using static Valheim.Object;
     using static Valheim.Location;
     using static ValheimObject;
-    using StringList = Configuration.StringList;
 
     internal static class Core
     {
@@ -50,7 +49,7 @@ namespace Automatics.AutomaticMapPinning
 
         public static bool IsActive()
         {
-            return Config.AutomaticMapPinningEnabled && Player.m_localPlayer != null;
+            return Config.EnableAutomaticMapping && Player.m_localPlayer != null;
         }
 
         public static bool IsAnimal(string name, out (Animal Animal, bool IsCustom, bool IsAllowed) data)

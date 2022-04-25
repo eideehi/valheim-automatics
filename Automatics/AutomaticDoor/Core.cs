@@ -18,11 +18,18 @@ namespace Automatics.AutomaticDoor
             if (player == null || Player.m_localPlayer != player) return;
             if (!takeInput) return;
 
-            if (Config.ToggleAutomaticDoorEnabledKey.IsDown())
+            if (Config.AutomaticDoorEnableDisableToggle.IsDown())
             {
-                var enabled = Config.AutomaticDoorEnabled = !Config.AutomaticDoorEnabled;
-                var message = L10N.Localize("@message_toggle_automatic_door", $"@{(enabled ? "enabled" : "disabled")}");
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center, message);
+                var enabled = Config.EnableAutomaticDoor = !Config.EnableAutomaticDoor;
+                var toggleMessage = Config.AutomaticDoorEnableDisableToggleMessage;
+                if (toggleMessage != Message.None)
+                {
+                    var message = L10N.Localize("@message_automatic_door_enable_disable_toggle", $"@{(enabled ? "enabled" : "disabled")}");
+                    var type = toggleMessage == Message.Center
+                        ? MessageHud.MessageType.Center
+                        : MessageHud.MessageType.TopLeft;
+                    Player.m_localPlayer.Message(type, message);
+                }
             }
         }
 

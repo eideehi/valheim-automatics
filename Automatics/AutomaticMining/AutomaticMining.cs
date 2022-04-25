@@ -26,7 +26,7 @@ namespace Automatics.AutomaticMining
 
         public static void Run(Player player, bool takeInput)
         {
-            if (!Config.AutomaticMiningEnabled) return;
+            if (!Config.EnableAutomaticMining) return;
             if (player == null || Player.m_localPlayer != player) return;
 
             if (Config.MiningKey.MainKey != KeyCode.None)

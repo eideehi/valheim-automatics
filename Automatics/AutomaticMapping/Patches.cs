@@ -5,7 +5,7 @@ using System.Reflection.Emit;
 using Automatics.ModUtils;
 using HarmonyLib;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
     [SuppressMessage("ReSharper", "InconsistentNaming")]
     [HarmonyPatch]

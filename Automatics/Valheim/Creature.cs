@@ -5,8 +5,6 @@ using JetBrains.Annotations;
 
 namespace Automatics.Valheim
 {
-    using Description = Configuration.LocalizedDescriptionAttribute;
-
     public static class Creature
     {
         private static readonly Dictionary<string, Animal> Animals;
@@ -168,26 +166,26 @@ namespace Automatics.Valheim
             [UsedImplicitly]
             None = 0,
 
-            [Description(Name.Boar)]
+            [LocalizedDescription(Name.Boar)]
             Boar = 1L << 0,
 
-            [Description(Name.Deer)]
+            [LocalizedDescription(Name.Deer)]
             Deer = 1L << 1,
 
-            [Description(Name.Wolf)]
+            [LocalizedDescription(Name.Wolf)]
             Wolf = 1L << 2,
 
-            [Description(Name.Lox)]
+            [LocalizedDescription(Name.Lox)]
             Lox = 1L << 3,
 
-            [Description(Name.Bird)]
+            [LocalizedDescription(Name.Bird)]
             Bird = 1L << 4,
 
-            [Description(Name.Fish)]
+            [LocalizedDescription(Name.Fish)]
             Fish = 1L << 5,
 
             [UsedImplicitly]
-            [Description("@select_all")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
 
@@ -197,95 +195,95 @@ namespace Automatics.Valheim
             [UsedImplicitly]
             None = 0,
 
-            [Description(Name.Greyling)]
+            [LocalizedDescription(Name.Greyling)]
             Greyling = 1L << 0,
 
-            [Description(Name.Neck)]
+            [LocalizedDescription(Name.Neck)]
             Neck = 1L << 1,
 
-            [Description(Name.Ghost)]
+            [LocalizedDescription(Name.Ghost)]
             Ghost = 1L << 2,
 
-            [Description(Name.Greydwarf)]
+            [LocalizedDescription(Name.Greydwarf)]
             Greydwarf = 1L << 3,
 
-            [Description(Name.GreydwarfBrute)]
+            [LocalizedDescription(Name.GreydwarfBrute)]
             GreydwarfBrute = 1L << 4,
 
-            [Description(Name.GreydwarfShaman)]
+            [LocalizedDescription(Name.GreydwarfShaman)]
             GreydwarfShaman = 1L << 5,
 
-            [Description(Name.RancidRemains)]
+            [LocalizedDescription(Name.RancidRemains)]
             RancidRemains = 1L << 6,
 
-            [Description(Name.Skeleton)]
+            [LocalizedDescription(Name.Skeleton)]
             Skeleton = 1L << 7,
 
-            [Description(Name.Troll)]
+            [LocalizedDescription(Name.Troll)]
             Troll = 1L << 8,
 
-            [Description(Name.Abomination)]
+            [LocalizedDescription(Name.Abomination)]
             Abomination = 1L << 9,
 
-            [Description(Name.Blob)]
+            [LocalizedDescription(Name.Blob)]
             Blob = 1L << 10,
 
-            [Description(Name.Draugr)]
+            [LocalizedDescription(Name.Draugr)]
             Draugr = 1L << 11,
 
-            [Description(Name.DraugrElite)]
+            [LocalizedDescription(Name.DraugrElite)]
             DraugrElite = 1L << 12,
 
-            [Description(Name.Leech)]
+            [LocalizedDescription(Name.Leech)]
             Leech = 1L << 13,
 
-            [Description(Name.Oozer)]
+            [LocalizedDescription(Name.Oozer)]
             Oozer = 1L << 14,
 
-            [Description(Name.Surtling)]
+            [LocalizedDescription(Name.Surtling)]
             Surtling = 1L << 15,
 
-            [Description(Name.Wraith)]
+            [LocalizedDescription(Name.Wraith)]
             Wraith = 1L << 16,
 
-            [Description(Name.Drake)]
+            [LocalizedDescription(Name.Drake)]
             Drake = 1L << 17,
 
-            [Description(Name.Fenring)]
+            [LocalizedDescription(Name.Fenring)]
             Fenring = 1L << 18,
 
-            [Description(Name.StoneGolem)]
+            [LocalizedDescription(Name.StoneGolem)]
             StoneGolem = 1L << 19,
 
-            [Description(Name.Deathsquito)]
+            [LocalizedDescription(Name.Deathsquito)]
             Deathsquito = 1L << 20,
 
-            [Description(Name.Fuling)]
+            [LocalizedDescription(Name.Fuling)]
             Fuling = 1L << 21,
 
-            [Description(Name.FulingBerserker)]
+            [LocalizedDescription(Name.FulingBerserker)]
             FulingBerserker = 1L << 22,
 
-            [Description(Name.FulingShaman)]
+            [LocalizedDescription(Name.FulingShaman)]
             FulingShaman = 1L << 23,
 
-            [Description(Name.Growth)]
+            [LocalizedDescription(Name.Growth)]
             Growth = 1L << 24,
 
-            [Description(Name.Serpent)]
+            [LocalizedDescription(Name.Serpent)]
             Serpent = 1L << 25,
 
-            [Description(Name.Bat)]
+            [LocalizedDescription(Name.Bat)]
             Bat = 1L << 26,
 
-            [Description(Name.FenringCultist)]
+            [LocalizedDescription(Name.FenringCultist)]
             FenringCultist = 1L << 27,
 
-            [Description(Name.Ulv)]
+            [LocalizedDescription(Name.Ulv)]
             Ulv = 1L << 28,
 
             [UsedImplicitly]
-            [Description("@select_all")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
     }

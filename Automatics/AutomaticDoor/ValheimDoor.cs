@@ -1,6 +1,6 @@
-﻿using static Automatics.ModUtils.Configuration;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using Automatics.ModUtils;
 
 namespace Automatics.AutomaticDoor
 {

@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using Automatics.ModUtils;
 using JetBrains.Annotations;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
-    using Description = Configuration.LocalizedDescriptionAttribute;
-
     public static class ValheimObject
     {
         private static readonly Dictionary<string, Spawner> Spawners;
@@ -83,17 +81,17 @@ namespace Automatics.AutomaticMapPinning
             [UsedImplicitly]
             None = 0,
 
-            [Description(Name.GreydwarfNest)]
+            [LocalizedDescription(Name.GreydwarfNest)]
             GreydwarfNest = 1L << 0,
 
-            [Description(Name.EvilBonePile)]
+            [LocalizedDescription(Name.EvilBonePile)]
             EvilBonePile = 1L << 1,
 
-            [Description(Name.BodyPile)]
+            [LocalizedDescription(Name.BodyPile)]
             BodyPile = 1L << 2,
 
             [UsedImplicitly]
-            [Description("@select_all")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
 
@@ -103,20 +101,20 @@ namespace Automatics.AutomaticMapPinning
             [UsedImplicitly]
             None = 0,
 
-            [Description(Name.Vegvisir)]
+            [LocalizedDescription(Name.Vegvisir)]
             Vegvisir = 1L << 0,
 
-            [Description(Name.Runestone)]
+            [LocalizedDescription(Name.Runestone)]
             Runestone = 1L << 1,
 
-            [Description(Name.WildBeehive)]
+            [LocalizedDescription(Name.WildBeehive)]
             WildBeehive = 1L << 2,
 
-            [Description(Name.Portal)]
+            [LocalizedDescription(Name.Portal)]
             Portal = 1L << 3,
 
             [UsedImplicitly]
-            [Description("@select_all")]
+            [LocalizedDescription("@select_all")]
             All = -1L,
         }
     }

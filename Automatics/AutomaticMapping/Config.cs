@@ -1,19 +1,18 @@
 ﻿using Automatics.ModUtils;
 using BepInEx.Configuration;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
     using static Valheim.Creature;
     using static Valheim.Object;
     using static Valheim.Location;
     using static ValheimObject;
-    using StringList = Configuration.StringList;
 
     internal static class Config
     {
-        private const string Section = "automatic_map_pinning";
+        private const string Section = "automatic_mapping";
 
-        private static ConfigEntry<bool> _automaticMapPinningEnabled;
+        private static ConfigEntry<bool> _enableAutomaticMapping;
         private static ConfigEntry<int> _dynamicObjectSearchRange;
         private static ConfigEntry<int> _staticObjectSearchRange;
         private static ConfigEntry<int> _locationSearchRange;
@@ -34,13 +33,13 @@ namespace Automatics.AutomaticMapPinning
         private static ConfigEntry<Spot> _allowPinningSpot;
         private static ConfigEntry<StringList> _allowPinningSpotCustom;
         private static ConfigEntry<bool> _allowPinningShip;
-        private static ConfigEntry<bool> _ignoreTamedAnimals;
+        private static ConfigEntry<bool> _notPinningTamedAnimals;
         private static ConfigEntry<float> _staticObjectSearchInterval;
         private static ConfigEntry<int> _floraPinMergeRange;
         private static ConfigEntry<bool> _needToEquipWishboneForUndergroundDeposits;
         private static ConfigEntry<KeyboardShortcut> _staticObjectSearchKey;
 
-        public static bool AutomaticMapPinningEnabled => _automaticMapPinningEnabled.Value;
+        public static bool EnableAutomaticMapping => _enableAutomaticMapping.Value;
         public static int DynamicObjectSearchRange => _dynamicObjectSearchRange.Value;
         public static int StaticObjectSearchRange => _staticObjectSearchRange.Value;
         public static int LocationSearchRange => _locationSearchRange.Value;
@@ -60,8 +59,8 @@ namespace Automatics.AutomaticMapPinning
         public static StringList AllowPinningDungeonCustom => _allowPinningDungeonCustom.Value;
         public static Spot AllowPinningSpot => _allowPinningSpot.Value;
         public static StringList AllowPinningSpotCustom => _allowPinningSpotCustom.Value;
-        public static bool IsAllowPinningShip => _allowPinningShip.Value;
-        public static bool IgnoreTamedAnimals => _ignoreTamedAnimals.Value;
+        public static bool AllowPinningShip => _allowPinningShip.Value;
+        public static bool NotPinningTamedAnimals => _notPinningTamedAnimals.Value;
         public static float StaticObjectSearchInterval => _staticObjectSearchInterval.Value;
         public static int FloraPinMergeRange => _floraPinMergeRange.Value;
         public static bool NeedToEquipWishboneForUndergroundDeposits => _needToEquipWishboneForUndergroundDeposits.Value;
@@ -70,7 +69,7 @@ namespace Automatics.AutomaticMapPinning
         public static void Initialize()
         {
             Configuration.ChangeSection(Section);
-            _automaticMapPinningEnabled = Configuration.Bind("automatic_map_pinning_enabled", true);
+            _enableAutomaticMapping = Configuration.Bind("enable_automatic_mapping", true);
             _dynamicObjectSearchRange = Configuration.Bind("dynamic_object_search_range", 64, (0, 256));
             _staticObjectSearchRange = Configuration.Bind("static_object_search_range", 16, (0, 256));
             _locationSearchRange = Configuration.Bind("location_search_range", 96, (0, 256));
@@ -91,7 +90,7 @@ namespace Automatics.AutomaticMapPinning
             _allowPinningSpot = Configuration.Bind("allow_pinning_spot", Spot.All);
             _allowPinningSpotCustom = Configuration.Bind("allow_pinning_spot_custom", new StringList());
             _allowPinningShip = Configuration.Bind("allow_pinning_ship", true);
-            _ignoreTamedAnimals = Configuration.Bind("ignore_tamed_animals", true);
+            _notPinningTamedAnimals = Configuration.Bind("not_pinning_tamed_animals", true);
             _staticObjectSearchInterval = Configuration.Bind("static_object_search_interval", 0.25f, (0f, 8f));
             _floraPinMergeRange = Configuration.Bind("flora_pins_merge_range", 8, (0, 16));
             _needToEquipWishboneForUndergroundDeposits = Configuration.Bind("need_to_equip_wishbone_for_underground_deposits", true);
@@ -101,7 +100,7 @@ namespace Automatics.AutomaticMapPinning
             _allowPinningMonster.SettingChanged += DynamicPinning.OnSettingChanged;
             _allowPinningAnimalCustom.SettingChanged += DynamicPinning.OnSettingChanged;
             _allowPinningMonsterCustom.SettingChanged += DynamicPinning.OnSettingChanged;
-            _ignoreTamedAnimals.SettingChanged += DynamicPinning.OnSettingChanged;
+            _notPinningTamedAnimals.SettingChanged += DynamicPinning.OnSettingChanged;
 
             _allowPinningFlora.SettingChanged += StaticPinning.OnSettingChanged;
             _allowPinningVein.SettingChanged += StaticPinning.OnSettingChanged;

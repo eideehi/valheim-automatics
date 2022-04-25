@@ -7,7 +7,7 @@ namespace Automatics.ModUtils
     {
         private static bool CanLogging(LogLevel level)
         {
-            return Config.LoggingEnabled && Config.AllowedLogLevel(level);
+            return Config.EnableLogging && (Config.LogLevelToAllowLogging & level) != 0;
         }
 
         public static void Fatal(Func<string> message)

@@ -41,7 +41,7 @@ namespace Automatics.ModUtils
         [Conditional("DEBUG")]
         private static void LogSection(string section)
         {
-            Automatics.ModLogger.LogDebug($"[CONFIG] === {GetCategory(section)} / [{section}]");
+            Automatics.ModLogger.LogDebug($"[CONFIG] === {GetSection(section)} / [{section}]");
         }
 
         [Conditional("DEBUG")]
@@ -95,15 +95,15 @@ namespace Automatics.ModUtils
         {
             var attributes = new ConfigurationManagerAttributes
             {
-                Category = GetCategory(section),
+                Category = GetSection(section),
                 Order = order,
-                DispName = GetName(key),
+                DispName = GetName(section, key),
                 CustomDrawer = GetCustomDrawer(typeof(T), acceptableValue)
             };
             initializer?.Invoke(attributes);
 
             var description = string.IsNullOrEmpty(attributes.Description)
-                ? GetDescription(key)
+                ? GetDescription(section, key)
                 : attributes.Description;
 
             var configEntry = Automatics.ModConfig.Bind(section, key, defaultValue,
@@ -137,11 +137,14 @@ namespace Automatics.ModUtils
             return Bind(Section, key, defaultValue, acceptableValue, initializer);
         }
 
-        private static string GetCategory(string category) => L10N.Translate($"@config_{category}_category");
-        private static string GetName(string name) => L10N.Translate($"@config_{name}_name");
+        private static string GetSection(string section) =>
+            L10N.Translate($"@config_{section}_section");
 
-        private static string GetDescription(string description) =>
-            L10N.Translate($"@config_{description}_description");
+        private static string GetName(string section, string key) =>
+            L10N.Translate($"@config_{section}_{key}_name");
+
+        private static string GetDescription(string section, string key) =>
+            L10N.Translate($"@config_{section}_{key}_description");
 
         private static Action<ConfigEntryBase> GetCustomDrawer(Type type, AcceptableValueBase acceptableValue)
         {
@@ -306,109 +309,123 @@ namespace Automatics.ModUtils
                 .OfType<DescriptionAttribute>().FirstOrDefault();
             return attribute?.Description ?? @object.ToString();
         }
+    }
 
-        public class StringList : IEnumerable<string>
+    public class StringList : IEnumerable<string>
+    {
+        private readonly HashSet<string> _values;
+
+        public StringList()
         {
-            private readonly HashSet<string> _values;
-
-            public StringList()
-            {
-                _values = new HashSet<string>();
-            }
-
-            public StringList(IEnumerable<string> collection)
-            {
-                _values = new HashSet<string>(collection);
-            }
-
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return GetEnumerator();
-            }
-
-            public IEnumerator<string> GetEnumerator()
-            {
-                return _values.GetEnumerator();
-            }
-
-            internal bool Add(string value)
-            {
-                return _values.Add(value);
-            }
-
-            internal bool Remove(string value)
-            {
-                return _values.Remove(value);
-            }
+            _values = new HashSet<string>();
         }
 
-        public class AcceptableValueEnum<T> : AcceptableValueBase where T : Enum
+        public StringList(IEnumerable<string> collection)
         {
-            private readonly IList<T> _values;
-
-            public AcceptableValueEnum(params T[] values) : base(typeof(T))
-            {
-                _values = MakeValues(values);
-            }
-
-            private static IList<T> MakeValues(IReadOnlyCollection<T> values)
-            {
-                var enumerable = new List<T>(values.Count == 0 ? Enum.GetValues(typeof(T)).OfType<T>() : values);
-                if (!typeof(T).GetCustomAttributes(typeof(FlagsAttribute), false).Any()) return enumerable;
-
-                var set = new HashSet<long>();
-                foreach (var value in enumerable.Select(@enum => Convert.ToInt64(@enum)))
-                {
-                    foreach (var other in set.ToArray())
-                        set.Add(other | value);
-                    set.Add(value);
-                }
-
-                return set.Select(x => Enum.ToObject(typeof(T), x)).Cast<T>().ToList();
-            }
-
-            public override object Clamp(object value) => IsValid(value) ? value : _values[0];
-
-            public override bool IsValid(object value)
-            {
-                if (value is T @enum) return _values.Contains(@enum);
-                if (!(value is IConvertible)) return false;
-
-                var @long = Convert.ToInt64(value);
-                return _values.Any(x => Convert.ToInt64(x) == @long);
-            }
-
-            public override string ToDescriptionString()
-            {
-                var buffer = new StringBuilder();
-
-                var type = typeof(T);
-                var values = (from x in _values where Enum.IsDefined(type, x) select Enum.GetName(type, x)).ToList();
-                buffer.Append("# Acceptable values: ").Append(string.Join(", ", values));
-
-                if (type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
-                {
-                    var list = values.Where(x =>
-                        !string.Equals(x, "none", StringComparison.OrdinalIgnoreCase) &&
-                        !string.Equals(x, "all", StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
-                    if (list.Count == 2)
-                        buffer.Append('\n').Append("# Multiple values can be set at the same time by separating them with , (e.g. ").Append(string.Join(", ", list)).Append(")");
-                }
-
-                return buffer.ToString();
-            }
+            _values = new HashSet<string>(collection);
         }
 
-        public class LocalizedDescriptionAttribute : DescriptionAttribute
+        IEnumerator IEnumerable.GetEnumerator()
         {
-            private readonly string _key;
+            return GetEnumerator();
+        }
 
-            public LocalizedDescriptionAttribute(string key) : base(key)
+        public IEnumerator<string> GetEnumerator()
+        {
+            return _values.GetEnumerator();
+        }
+
+        internal bool Add(string value)
+        {
+            return _values.Add(value);
+        }
+
+        internal bool Remove(string value)
+        {
+            return _values.Remove(value);
+        }
+    }
+
+    public class AcceptableValueEnum<T> : AcceptableValueBase where T : Enum
+    {
+        private readonly IList<T> _values;
+
+        public AcceptableValueEnum(params T[] values) : base(typeof(T))
+        {
+            _values = MakeValues(values);
+        }
+
+        private static IList<T> MakeValues(IReadOnlyCollection<T> values)
+        {
+            var enumerable = new List<T>(values.Count == 0 ? Enum.GetValues(typeof(T)).OfType<T>() : values);
+            if (!typeof(T).GetCustomAttributes(typeof(FlagsAttribute), false).Any()) return enumerable;
+
+            var set = new HashSet<long>();
+            foreach (var value in enumerable.Select(@enum => Convert.ToInt64(@enum)))
             {
-                _key = key;
+                foreach (var other in set.ToArray())
+                    set.Add(other | value);
+                set.Add(value);
             }
 
-            public override string Description => L10N.Translate(_key);
+            return set.Select(x => Enum.ToObject(typeof(T), x)).Cast<T>().ToList();
         }
+
+        public override object Clamp(object value) => IsValid(value) ? value : _values[0];
+
+        public override bool IsValid(object value)
+        {
+            if (value is T @enum) return _values.Contains(@enum);
+            if (!(value is IConvertible)) return false;
+
+            var @long = Convert.ToInt64(value);
+            return _values.Any(x => Convert.ToInt64(x) == @long);
+        }
+
+        public override string ToDescriptionString()
+        {
+            var buffer = new StringBuilder();
+
+            var type = typeof(T);
+            var values = (from x in _values where Enum.IsDefined(type, x) select Enum.GetName(type, x)).ToList();
+            buffer.Append("# Acceptable values: ").Append(string.Join(", ", values));
+
+            if (type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
+            {
+                var list = values.Where(x =>
+                    !string.Equals(x, "none", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(x, "all", StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+                if (list.Count == 2)
+                    buffer.Append('\n')
+                        .Append("# Multiple values can be set at the same time by separating them with , (e.g. ")
+                        .Append(string.Join(", ", list)).Append(")");
+            }
+
+            return buffer.ToString();
+        }
+    }
+
+    public class LocalizedDescriptionAttribute : DescriptionAttribute
+    {
+        private readonly string _key;
+
+        public LocalizedDescriptionAttribute(string key) : base(key)
+        {
+            _key = key;
+        }
+
+        public override string Description => L10N.Translate(_key);
+    }
+
+    public enum Message
+    {
+        [LocalizedDescription("@message_none")]
+        None,
+
+        [LocalizedDescription("@message_center")]
+        Center,
+
+        [LocalizedDescription("@message_top_left")]
+        TopLeft,
     }
 }

@@ -5,7 +5,7 @@ using System.Linq;
 using Automatics.ModUtils;
 using UnityEngine;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
     internal static class Deprecated
     {

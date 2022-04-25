@@ -8,12 +8,12 @@ namespace Automatics
     {
         private const int NexusID = 1700;
 
-        private static ConfigEntry<bool> _loggingEnabled;
-        private static ConfigEntry<LogLevel> _allowedLogLevel;
+        private static ConfigEntry<bool> _enableLogging;
+        private static ConfigEntry<LogLevel> _logLevelToAllowLogging;
         private static ConfigEntry<string> _resourcesDirectory;
 
-        internal static bool LoggingEnabled => _loggingEnabled.Value;
-        internal static bool AllowedLogLevel(LogLevel level) => (_allowedLogLevel.Value & level) != 0;
+        internal static bool EnableLogging => _enableLogging.Value;
+        internal static LogLevel LogLevelToAllowLogging => _logLevelToAllowLogging.Value;
         internal static string ResourcesDirectory => _resourcesDirectory.Value;
 
         public static void Initialize()
@@ -26,8 +26,8 @@ namespace Automatics
             });
 
             Configuration.ChangeSection("system");
-            _loggingEnabled = Configuration.Bind("logging_enabled", false);
-            _allowedLogLevel = Configuration.Bind("allowed_log_level", LogLevel.All ^ (LogLevel.Debug | LogLevel.Info));
+            _enableLogging = Configuration.Bind("enable_logging", false);
+            _logLevelToAllowLogging = Configuration.Bind("log_level_to_allow_logging", LogLevel.All ^ (LogLevel.Debug | LogLevel.Info));
             _resourcesDirectory = Configuration.Bind("resources_directory", "");
         }
     }

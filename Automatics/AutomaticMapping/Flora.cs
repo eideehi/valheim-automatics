@@ -3,7 +3,7 @@ using System.Linq;
 using Automatics.ModUtils;
 using UnityEngine;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
     [DisallowMultipleComponent]
     internal class FloraObject : ObjectNode<FloraObject, FloraCluster>

@@ -6,7 +6,7 @@ using System.Text;
 using Automatics.ModUtils;
 using UnityEngine;
 
-namespace Automatics.AutomaticMapPinning
+namespace Automatics.AutomaticMapping
 {
     using PinData = Minimap.PinData;
 
@@ -41,7 +41,7 @@ namespace Automatics.AutomaticMapPinning
 
         public static void Run(Vector3 origin, float delta)
         {
-            if (!Config.AutomaticMapPinningEnabled || Config.DynamicObjectSearchRange <= 0)
+            if (!Config.EnableAutomaticMapping || Config.DynamicObjectSearchRange <= 0)
             {
                 DynamicPins.Select(x => x.Data).ToList().ForEach(Map.RemovePin);
                 return;
@@ -74,7 +74,7 @@ namespace Automatics.AutomaticMapPinning
                 if (Core.IsAnimal(name, out var animalData))
                 {
                     if (!animalData.IsAllowed) continue;
-                    if (character.IsTamed() && Config.IgnoreTamedAnimals) continue;
+                    if (character.IsTamed() && Config.NotPinningTamedAnimals) continue;
                 }
                 else if (Core.IsMonster(name, out var monsterData))
                 {
@@ -102,7 +102,7 @@ namespace Automatics.AutomaticMapPinning
 
         private static void ShipPinning(Vector3 origin, float delta)
         {
-            if (!Config.IsAllowPinningShip) return;
+            if (!Config.AllowPinningShip) return;
 
             foreach (var ship in ShipCache.GetAllInstance())
             {
@@ -210,7 +210,7 @@ namespace Automatics.AutomaticMapPinning
             var level = character.GetLevel();
             if (level <= 1) return (CreateTarget(name, level), character.GetHoverName());
 
-            var symbol = L10N.Translate("@character_level_symbol");
+            var symbol = L10N.Translate("@text_automatic_mapping_creature_level_symbol");
             var sb = new StringBuilder(character.GetHoverName()).Append(" ");
             for (var i = 1; i < level; i++) sb.Append(symbol);
 

@@ -16,10 +16,10 @@ namespace Automatics.AutomaticProcessing
 
         public static bool Run(Beehive piece, ZNetView zNetView, int increaseCount)
         {
-            if (!Config.AutomaticProcessingEnabled) return true;
+            if (!Config.EnableAutomaticProcessing) return true;
 
             var beehiveName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(beehiveName, Type.Store)) return true;
+            if (!Core.IsAllowProcessing(beehiveName, Type.Store)) return true;
 
             var honeyCount = zNetView.GetZDO().GetInt("level") + increaseCount;
             if (honeyCount <= 0) return true;
@@ -28,7 +28,7 @@ namespace Automatics.AutomaticProcessing
             var honeyData = honeyItem.m_itemData.m_shared;
             var honeyName = honeyData.m_name;
 
-            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(beehiveName);
+            var maxProductCount = Config.ProductCountOfSuppressProcessing(beehiveName);
             var origin = piece.transform.position;
             var honeyRemaining = honeyCount;
             foreach (var (container, honeyCountBefore) in
@@ -56,11 +56,11 @@ namespace Automatics.AutomaticProcessing
 
         public static void Run(CookingStation piece, ZNetView zNetView)
         {
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
 
             var stationName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(stationName, Type.Store)) return;
+            if (!Core.IsAllowProcessing(stationName, Type.Store)) return;
 
             var doneItems = new List<(int, string)>(piece.m_slots.Length);
             for (var i = 0; i < piece.m_slots.Length; i++)
@@ -74,7 +74,7 @@ namespace Automatics.AutomaticProcessing
 
             if (doneItems.Count == 0) return;
 
-            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(stationName);
+            var maxProductCount = Config.ProductCountOfSuppressProcessing(stationName);
             var origin = piece.transform.position;
             var containerWithDistanceList = Core.GetNearbyContainers(stationName, origin)
                 .Select(x => (x, Vector3.Distance(origin, x.transform.position))).ToList();
@@ -106,11 +106,11 @@ namespace Automatics.AutomaticProcessing
 
         public static void Run(Fermenter piece, ZNetView zNetView)
         {
-            if (!Config.AutomaticProcessingEnabled) return;
+            if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
 
             var fermenterName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(fermenterName, Type.Store)) return;
+            if (!Core.IsAllowProcessing(fermenterName, Type.Store)) return;
 
             if (Reflection.InvokeMethod<int>(piece, "GetStatus") != 3) return;
 
@@ -118,7 +118,7 @@ namespace Automatics.AutomaticProcessing
             var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == itemId);
             if (conversion == null) return;
 
-            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(fermenterName);
+            var maxProductCount = Config.ProductCountOfSuppressProcessing(fermenterName);
             var origin = piece.transform.position;
             var item = conversion.m_to;
             var itemData = item.m_itemData.m_shared;
@@ -153,15 +153,15 @@ namespace Automatics.AutomaticProcessing
 
         public static bool Run(Smelter piece, string ore, int stack)
         {
-            if (!Config.AutomaticProcessingEnabled) return true;
+            if (!Config.EnableAutomaticProcessing) return true;
 
             var smelterName = piece.m_name;
-            if (!Config.IsAllowAutomaticProcessing(smelterName, Type.Store)) return true;
+            if (!Core.IsAllowProcessing(smelterName, Type.Store)) return true;
 
             var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == ore);
             if (conversion == null) return true;
 
-            var maxProductCount = Config.GetItemCountThatSuppressAutomaticStore(smelterName);
+            var maxProductCount = Config.ProductCountOfSuppressProcessing(smelterName);
             var origin = piece.transform.position;
             var item = conversion.m_to;
             var itemData = item.m_itemData.m_shared;

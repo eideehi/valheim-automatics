@@ -62,6 +62,8 @@ namespace Automatics
             ModLogger = Logger;
             ModConfig = Config;
 
+            Migration.MigrateConfig(ModConfig);
+
             var assembly = Assembly.GetExecutingAssembly();
 
             foreach (var (initializer, _) in AccessTools.GetTypesFromAssembly(assembly)

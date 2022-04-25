@@ -79,19 +79,20 @@ namespace Automatics.AutomaticFeeding
             var inventory = foundFeedBox ? _feedBox.GetInventory() : _feeder.GetInventory();
             if (!inventory.HaveItem(_feedItem.m_shared.m_name)) return false;
 
-            var canFeed = !Config.NeedCloseToEatTheFeed;
-            if (!canFeed)
+            var canEating = true;
+            if (Config.NeedGetCloseToEatTheFeed)
             {
+                canEating = false;
                 var position = foundFeedBox ? _feedBox.transform.position : _feeder.transform.position;
                 var consumeRange = _monsterAI.m_consumeRange + 1f;
                 if (MoveTo(delta, position, consumeRange, false))
                 {
                     LookAt(position);
-                    canFeed = IsLookingAt(position, 20f);
+                    canEating = IsLookingAt(position, 20f);
                 }
             }
 
-            if (canFeed && inventory.RemoveOneItem(_feedItem))
+            if (canEating && inventory.RemoveOneItem(_feedItem))
             {
                 _monsterAI.m_onConsumedItem?.Invoke(null);
                 humanoid.m_consumeItemEffects.Create(_baseAI.transform.position, Quaternion.identity);
@@ -104,7 +105,7 @@ namespace Automatics.AutomaticFeeding
         private void UpdateFeedInfo()
         {
             var range = Config.FeedSearchRange;
-            if (range < 0f)
+            if (range <= 0f)
                 range = _monsterAI.m_consumeSearchRange;
 
             _feeder = null;
@@ -121,7 +122,7 @@ namespace Automatics.AutomaticFeeding
 
         private void FindFeedBox(float range)
         {
-            var needClose = Config.NeedCloseToEatTheFeed;
+            var needGetClose = Config.NeedGetCloseToEatTheFeed;
             var origin = _baseAI.transform.position;
             var closest = float.MaxValue;
 
@@ -131,7 +132,7 @@ namespace Automatics.AutomaticFeeding
                 var distance = Vector3.Distance(position, origin);
 
                 if (distance > range || distance >= closest) continue;
-                if (needClose && !HavePath(position)) continue;
+                if (needGetClose && !HavePath(position)) continue;
 
                 var item = container.GetInventory().GetAllItems().FirstOrDefault(CanConsume);
                 if (item == null) continue;
@@ -144,7 +145,7 @@ namespace Automatics.AutomaticFeeding
 
         private void FindFeeder(float searchRange)
         {
-            var needClose = Config.NeedCloseToEatTheFeed;
+            var needGetClose = Config.NeedGetCloseToEatTheFeed;
             var origin = _baseAI.transform.position;
             var closest = float.MaxValue;
 
@@ -154,7 +155,7 @@ namespace Automatics.AutomaticFeeding
                 var distance = Vector3.Distance(position, origin);
 
                 if (distance > searchRange || distance >= closest) continue;
-                if (needClose && !HavePath(position)) continue;
+                if (needGetClose && !HavePath(position)) continue;
 
                 var item = player.GetInventory().GetAllItems().FirstOrDefault(CanConsume);
                 if (item == null) continue;

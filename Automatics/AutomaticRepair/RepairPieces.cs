@@ -21,10 +21,10 @@ namespace Automatics.AutomaticRepair
             if (repairCount == 0) return;
 
             Log.Debug(() => $"Repaired {repairCount} pieces");
-            if (Config.PieceRepairMessage == RepairMessage.None) return;
+            if (Config.PieceRepairMessage == Message.None) return;
 
-            var type = Config.PieceRepairMessage == RepairMessage.Center ? MessageType.Center : MessageType.TopLeft;
-            player.Message(type, L10N.Localize("@message_repair_pieces", repairCount));
+            var type = Config.PieceRepairMessage == Message.Center ? MessageType.Center : MessageType.TopLeft;
+            player.Message(type, L10N.Localize("@message_automatic_repair_repaired_the_pieces", repairCount));
         }
 
         private static bool CheckCanRemovePiece(Player player, Piece piece)
@@ -40,7 +40,7 @@ namespace Automatics.AutomaticRepair
         public static void Run(Player player, bool takeInput)
         {
             if (!player.InPlaceMode()) return;
-            if (!Config.AutomaticRepairEnabled) return;
+            if (!Config.EnableAutomaticRepair) return;
             if (Config.PieceSearchRange <= 0) return;
             if (!Runnable()) return;
 

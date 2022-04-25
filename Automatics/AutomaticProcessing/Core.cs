@@ -1,7 +1,7 @@
-﻿using static Automatics.ModUtils.Configuration;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -14,12 +14,17 @@ namespace Automatics.AutomaticProcessing
             Config.Initialize();
         }
 
+        public static bool IsAllowProcessing(string target, Type type)
+        {
+            return (Config.AllowProcessing(target) & type) != 0;
+        }
+
         public static IEnumerable<Container> GetNearbyContainers(string target, Vector3 origin)
         {
-            var range = Config.GetContainerSearchRange(target);
-            return range <= 0
-                ? Enumerable.Empty<Container>()
-                : from x in ContainerCache.GetAllInstance()
+            var range = Config.ContainerSearchRange(target);
+            if (range <= 0) return Enumerable.Empty<Container>();
+
+            return from x in ContainerCache.GetAllInstance()
                 let distance = Vector3.Distance(origin, x.transform.position)
                 where distance <= range
                 orderby distance descending
@@ -97,13 +102,13 @@ namespace Automatics.AutomaticProcessing
     {
         None = 0,
 
-        [LocalizedDescription("@config_automatic_processing_type_craft")]
+        [LocalizedDescription("@config_automatic_processing_processing_type_craft")]
         Craft = 1L << 0,
 
-        [LocalizedDescription("@config_automatic_processing_type_refuel")]
+        [LocalizedDescription("@config_automatic_processing_processing_type_refuel")]
         Refuel = 1L << 1,
 
-        [LocalizedDescription("@config_automatic_processing_type_store")]
+        [LocalizedDescription("@config_automatic_processing_processing_type_store")]
         Store = 1L << 2,
 
         [LocalizedDescription("@select_all")]
