@@ -38,7 +38,7 @@ namespace Automatics.AutomaticDoor
         {
             Configuration.ChangeSection(Section);
             _enableAutomaticDoor = Configuration.Bind("enable_automatic_door", true);
-            _allowAutomaticDoor = Configuration.Bind("allow_automatic_door", Door.All);
+            _allowAutomaticDoor = Configuration.Bind("allow_automatic_door", Door.All ^ Door.WoodShutter);
             _allowAutomaticDoorCustom = Configuration.Bind("allow_automatic_door_custom", new StringList());
             _intervalToOpen = Configuration.Bind("interval_to_open", 0.1f, (0f, 8f));
             _intervalToClose = Configuration.Bind("interval_to_close", 0.1f, (0f, 8f));
