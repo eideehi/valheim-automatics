@@ -112,6 +112,6 @@ namespace Automatics.AutomaticProcessing
         Store = 1L << 2,
 
         [LocalizedDescription("@select_all")]
-        All = -1L,
+        All = (1L << 3) - 1,
     }
 }

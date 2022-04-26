@@ -18,6 +18,6 @@ namespace Automatics.AutomaticFeeding
 
         [UsedImplicitly]
         [LocalizedDescription("@select_all")]
-        All = -1L
+        All = (1L << 2) - 1,
     }
 }

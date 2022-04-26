@@ -92,7 +92,7 @@ namespace Automatics.AutomaticMapping
 
             [UsedImplicitly]
             [LocalizedDescription("@select_all")]
-            All = -1L,
+            All = (1L << 3) - 1,
         }
 
         [Flags]
@@ -115,7 +115,7 @@ namespace Automatics.AutomaticMapping
 
             [UsedImplicitly]
             [LocalizedDescription("@select_all")]
-            All = -1L,
+            All = (1L << 4) - 1,
         }
     }
 }

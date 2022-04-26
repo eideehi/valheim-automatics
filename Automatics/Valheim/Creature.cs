@@ -186,7 +186,7 @@ namespace Automatics.Valheim
 
             [UsedImplicitly]
             [LocalizedDescription("@select_all")]
-            All = -1L,
+            All = (1L << 6) - 1,
         }
 
         [Flags]
@@ -284,7 +284,7 @@ namespace Automatics.Valheim
 
             [UsedImplicitly]
             [LocalizedDescription("@select_all")]
-            All = -1L,
+            All = (1L << 29) - 1,
         }
     }
 }

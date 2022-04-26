@@ -64,7 +64,7 @@ namespace Automatics.AutomaticDoor
             WoodShutter = 1L << 4,
 
             [LocalizedDescription("@select_all")]
-            All = -1L,
+            All = (1L << 5) - 1,
         }
     }
 }
