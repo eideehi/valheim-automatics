@@ -16,14 +16,14 @@ Automatics is a mod that automates the tedious tasks of life in Valheim. Most of
 === Automatic door
 Automatically opens and closes the door near the player. The interval and distance to detect the player can be changed from the configuration.
 
-=== Automatic map pinning
+=== Automatic mapping
 Automatic pinning animals, monsters, floras, veins, dungeons, etc. that exist around the player to the map. The pinning allows for each object and the detection range of the object can be changed from the config.
 
 ====
 
 [discrete]
 === Custom map icons
-Using png files and json, you can customize icons for pins added by Automatic map pinning.
+Using png files and json, you can customize icons for pins added by Automatic mapping.
 
 image:{thumbnail-uri-custom_map_icon}[link={image-uri-custom_map_icon},title="Custom Map Icons (Click to view full size)"]
 
@@ -75,6 +75,9 @@ Animals and other creatures that consume food will be able to consume food from 
 
 === Automatic repair
 It can automatically repair items when the player is near a crafting station or when the crafting station GUI is opened or automatically repair nearby pieces when the player has a hammer equipped.
+
+=== Automatic mining
+This feature automatically mines deposits near the player.
 
 == Console commands
 Automatics add a few commands to help the user.

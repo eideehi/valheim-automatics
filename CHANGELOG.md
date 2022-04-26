@@ -1,3 +1,16 @@
+#### v1.3.0 [2022-04-26]
+- Add the feature of 'Automatic Mining'
+- Add option to change the directory to load resources such as translation files and custom icons
+- Add option to change the position of the message displayed when enabling/disabling the automatic door function with a shortcut key
+- Change so that the slider for handling floating decimals in the configurator increases or decreases the numerical value by 0.01 increments
+- Reviewed and corrected the key names and descriptions in the configuration options
+  * The configurations are automatically migrated, but be sure to check the values of the configurations after starting the game to be sure
+- Rewrote most of the automatic mapping feature
+  * Fix inability to apply custom icons with internal names to birds
+  * Change the deposit pinning location to the center of the object
+    - Due to this change, large deposits such as copper may be pinned in duplicate with existing pins
+  * Add custom options for other objects, dungeons, and spots
+
 #### v1.2.1 [2022-04-19]
 - Change the automatic door to not work if there is an obstacle between the player and the door
 - Change the minimum automatic door process interval to 0

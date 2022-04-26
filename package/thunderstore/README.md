@@ -10,7 +10,7 @@ to make it easier for me to use.
 Automatically opens and closes the door near the player. The interval
 and distance to detect the player can be changed from the configuration.
 
-### Automatic map pinning
+### Automatic mapping
 
 Automatic pinning animals, monsters, floras, veins, dungeons, etc. that
 exist around the player to the map. The pinning allows for each object
@@ -19,7 +19,7 @@ and the detection range of the object can be changed from the config.
 **Custom map icons**
 
 Using png files and json, you can customize icons for pins added by
-Automatic map pinning.
+Automatic mapping.
 
 ![Custom Map Icons](https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png)
 
@@ -115,6 +115,10 @@ the ground.
 It can automatically repair items when the player is near a crafting
 station or when the crafting station GUI is opened or automatically
 repair nearby pieces when the player has a hammer equipped.
+
+### Automatic mining
+
+This feature automatically mines deposits near the player.
 
 ## Console commands
 
