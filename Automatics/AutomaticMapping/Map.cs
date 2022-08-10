@@ -14,10 +14,16 @@ namespace Automatics.AutomaticMapping
 
     internal static class Map
     {
+        private static readonly CustomIcon DefaultIcon;
         private static readonly List<CustomIcon> CustomIcons;
 
         static Map()
         {
+            DefaultIcon = new CustomIcon
+            {
+                PinType = PinType.Icon3,
+                Options = new Options(),
+            };
             CustomIcons = new List<CustomIcon>();
         }
 
@@ -68,6 +74,7 @@ namespace Automatics.AutomaticMapping
                     {
                         Target = data.target,
                         Sprite = sprite,
+                        Options = data.options,
                     });
 
                     Automatics.ModLogger.LogInfo($"* Loaded custom icon data for {data.target.name}");
@@ -110,15 +117,25 @@ namespace Automatics.AutomaticMapping
             }
         }
 
-        private static PinType GetCustomIcon(PinningTarget target)
+        private static CustomIcon GetCustomIcon(PinningTarget target)
         {
-            var type = GetCustomIconInternal(target);
-            return type != PinType.Icon3 ? type : Deprecated.Map.GetCustomIcon(target.name);
+            var customIcon = GetCustomIconInternal(target);
+            if (customIcon == DefaultIcon)
+            {
+                var pinType = Deprecated.Map.GetCustomIcon(target.name);
+                customIcon = new CustomIcon
+                {
+                    PinType = pinType,
+                    Options = new Options()
+                };
+            }
+
+            return customIcon;
         }
 
-        private static PinType GetCustomIconInternal(PinningTarget target)
+        private static CustomIcon GetCustomIconInternal(PinningTarget target)
         {
-            if (!CustomIcons.Any()) return PinType.Icon3;
+            if (!CustomIcons.Any()) return DefaultIcon;
 
             var internalName = target.name;
             var displayName = L10N.TranslateInternalNameOnly(internalName);
@@ -130,8 +147,8 @@ namespace Automatics.AutomaticMapping
                           (x.Target.metadata == null || IsMetaDataEquals(x.Target.metadata, meta))
                     orderby x.Target.metadata != null descending,
                         x.Target.metadata
-                    select x.PinType)
-                .DefaultIfEmpty(PinType.Icon3)
+                    select x)
+                .DefaultIfEmpty(DefaultIcon)
                 .FirstOrDefault();
         }
 
@@ -166,7 +183,8 @@ namespace Automatics.AutomaticMapping
 
         public static PinData AddPin(Vector3 pos, string name, bool save, PinningTarget target)
         {
-            return AddPin(pos, GetCustomIcon(target), name, save);
+            var customIcon = GetCustomIcon(target);
+            return AddPin(pos, customIcon.PinType, customIcon.Options.hideNameTag ? "" : name, save);
         }
 
         public static void RemovePin(PinData data)
@@ -187,6 +205,7 @@ namespace Automatics.AutomaticMapping
             public PinningTarget Target;
             public PinType PinType;
             public Sprite Sprite;
+            public Options Options;
         }
     }
 
@@ -195,6 +214,7 @@ namespace Automatics.AutomaticMapping
     {
         public PinningTarget target;
         public SpriteInfo sprite;
+        public Options options;
     }
 
     [Serializable]
@@ -205,16 +225,21 @@ namespace Automatics.AutomaticMapping
     }
 
     [Serializable]
-    public class MetaData : IComparer<MetaData>
+    public class MetaData : IComparable<MetaData>
     {
         public int level = -1;
 
-        public int Compare(MetaData x, MetaData y)
+        public int CompareTo(MetaData other)
         {
-            if (x == null && y == null) return 0;
-            if (x == null) return -1;
-            if (y == null) return 1;
-            return x.level.CompareTo(y.level);
+            if (this == other) return 0;
+            if (other == null) return 1;
+            return level.CompareTo(other.level);
         }
+    }
+
+    [Serializable]
+    public struct Options
+    {
+        public bool hideNameTag;
     }
 }

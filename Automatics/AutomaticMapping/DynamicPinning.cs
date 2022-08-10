@@ -143,7 +143,8 @@ namespace Automatics.AutomaticMapping
             {
                 var data = pin.Data;
 
-                data.m_name = pinName;
+                if (!string.IsNullOrEmpty(data.m_name))
+                    data.m_name = pinName;
 
                 if (data.m_pos != pos)
                     data.m_pos = Vector3.MoveTowards(data.m_pos, pos, 200f * delta);
