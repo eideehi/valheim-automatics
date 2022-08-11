@@ -1,4 +1,5 @@
-﻿using Automatics.ModUtils;
+﻿using System.IO;
+using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics
@@ -10,6 +11,10 @@ namespace Automatics
         {
             LoadTranslations(Automatics.GetDefaultResourcePath("Languages"));
             Config.Initialize();
+
+            foreach (var automaticsChildModDir in Automatics.GetAutomaticsChildModDirs())
+                LoadTranslations(Path.Combine(automaticsChildModDir, "Languages"));
+
             LoadTranslations(Automatics.GetInjectedResourcePath("Languages"));
 
             Automatics.OnInitTerminal += Command.Register;

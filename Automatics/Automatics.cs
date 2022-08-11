@@ -38,6 +38,15 @@ namespace Automatics
             return Path.Combine(ModLocation, resourceName);
         }
 
+        internal static IEnumerable<string> GetAutomaticsChildModDirs()
+        {
+            var root = Paths.PluginPath;
+            if (Directory.Exists(root))
+                return Directory.GetDirectories(root).Where(directory => File.Exists(Path.Combine(directory, "automatics-child-mod"))).ToList();
+
+            return Array.Empty<string>();
+        }
+
         internal static string GetInjectedResourcePath(string resourceName)
         {
             var directory = global::Automatics.Config.ResourcesDirectory;

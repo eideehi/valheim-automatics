@@ -35,6 +35,10 @@ namespace Automatics.AutomaticMapping
             Deprecated.Map.Initialize();
             CustomIcons.Clear();
             LoadCustomIcons(Automatics.GetDefaultResourcePath("Textures"));
+
+            foreach (var automaticsChildModDir in Automatics.GetAutomaticsChildModDirs())
+                LoadCustomIcons(Path.Combine(automaticsChildModDir, "Textures"));
+
             LoadCustomIcons(Automatics.GetInjectedResourcePath("Textures"));
             RegisterCustomIcons();
         }
