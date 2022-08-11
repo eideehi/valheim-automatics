@@ -200,6 +200,23 @@ namespace Automatics.AutomaticMapping
                 RemovePin(pin);
         }
 
+        public static float ResizeCustomIcon(PinData pinData, float originalSize)
+        {
+            var customIcon = CustomIcons.FirstOrDefault(icon => icon.PinType == pinData.m_type);
+            if (customIcon != null)
+            {
+                var options = customIcon.Options;
+                switch (Minimap.instance.m_mode)
+                {
+                    case Minimap.MapMode.Large:
+                        return options.iconScaleLargeMap > 0 ? originalSize * options.iconScaleLargeMap : originalSize;
+                    case Minimap.MapMode.Small:
+                        return options.iconScaleSmallMap > 0 ? originalSize * options.iconScaleSmallMap : originalSize;
+                }
+            }
+            return originalSize;
+        }
+
         private class CustomIcon
         {
             public PinningTarget Target;
@@ -241,5 +258,7 @@ namespace Automatics.AutomaticMapping
     public struct Options
     {
         public bool hideNameTag;
+        public float iconScaleLargeMap;
+        public float iconScaleSmallMap;
     }
 }

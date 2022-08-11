@@ -23,6 +23,55 @@ namespace Automatics.AutomaticMapping
             DynamicPinning.RemoveDynamicPin(pin);
         }
 
+        [HarmonyTranspiler, HarmonyPatch(typeof(Minimap), "UpdatePins")]
+        private static IEnumerable<CodeInstruction> MinimapUpdatePinsTranspiler(
+            IEnumerable<CodeInstruction> instructions)
+        {
+            var RectTransformSetSizeWithCurrentAnchors = AccessTools.Method(typeof(UnityEngine.RectTransform),
+                nameof(UnityEngine.RectTransform.SetSizeWithCurrentAnchors));
+            var IconResizeHook = AccessTools.Method(typeof(Patches), "IconResizeHook");
+
+            var codes = new List<CodeInstruction>(instructions);
+
+            var i = codes.Count;
+            while (--i > 0)
+            {
+                if (!codes[i].Calls(RectTransformSetSizeWithCurrentAnchors)) continue;
+
+                var local = null as LocalBuilder;
+                var j = i;
+                while (--j > 0)
+                {
+                    if (codes[j].opcode != OpCodes.Ldloc_S || !(codes[j].operand is LocalBuilder lb) ||
+                        lb.LocalType != typeof(Minimap.PinData)) continue;
+
+                    local = lb;
+                    break;
+                }
+
+                if (codes[i - 1].opcode == OpCodes.Ldloc_S)
+                {
+                    codes.Insert(i, new CodeInstruction(OpCodes.Call, IconResizeHook));
+                    codes.Insert(i - 1, new CodeInstruction(OpCodes.Ldloc_S, local));
+                }
+                else if (codes[i - 1].opcode == OpCodes.Ldfld)
+                {
+                    codes.Insert(i, new CodeInstruction(OpCodes.Call, IconResizeHook));
+                    codes.Insert(i - 2, new CodeInstruction(OpCodes.Ldloc_S, local));
+                }
+
+                --i;
+            }
+
+            return codes.AsEnumerable();
+        }
+
+        [SuppressMessage("ReSharper", "UnusedMember.Local")]
+        private static float IconResizeHook(Minimap.PinData pin, float size)
+        {
+            return !Core.IsActive() ? size : Map.ResizeCustomIcon(pin, size);
+        }
+
         [HarmonyTranspiler, HarmonyPatch(typeof(Pickable), "SetPicked")]
         private static IEnumerable<CodeInstruction> PickableSetPickedTranspiler(
             IEnumerable<CodeInstruction> instructions)
