@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Automatics.ModUtils;
-using BepInEx;
 using LitJson;
 using UnityEngine;
 
@@ -36,17 +35,8 @@ namespace Automatics.AutomaticMapping
             Deprecated.Map.Initialize();
             CustomIcons.Clear();
             LoadCustomIcons(Automatics.GetDefaultResourcePath("Textures"));
-            LoadCustomIconMods();
             LoadCustomIcons(Automatics.GetInjectedResourcePath("Textures"));
             RegisterCustomIcons();
-        }
-
-        private static void LoadCustomIconMods()
-        {
-            foreach (var directory in Directory.GetDirectories(Paths.PluginPath))
-            {
-                LoadCustomIcons(Path.Combine(directory, "Textures"));
-            }
         }
 
         private static void LoadCustomIcons(string texturesDir)
