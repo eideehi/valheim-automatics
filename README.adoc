@@ -3,8 +3,8 @@
 :uri-litjson: https://litjson.net
 :uri-license: link:LICENSE
 :uri-config: link:CONFIG.adoc
-:uri-custom_map_icons_example: link:/package/extra/custom-icon-example/Automatics/Textures
-:uri-custom_map_icons_zip: https://app.box.com/shared/static/dv8vd8ls83rzxcsl75zrh9rawlu5o2w7.zip
+:uri-custom_map_icons_example: link:/package/extra/custom-icon-example/MyCustomIcons
+:uri-custom_map_icons_zip: link:/package/extra/custom-icon-example/MyCustomIcons.zip
 :thumbnail-uri-config_menu: https://app.box.com/shared/static/3v57rjpauzzyv0xeugohnw8bn2ye3q2h.png
 :image-uri-config_menu: https://app.box.com/shared/static/vfzsn69i950l48er2u69tssod6xxsh8u.jpg
 :thumbnail-uri-custom_map_icon: https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png
@@ -30,31 +30,41 @@ image:{thumbnail-uri-custom_map_icon}[link={image-uri-custom_map_icon},title="Cu
 [discrete]
 ==== Directory structure
 
-Place the necessary files in "/Valheim/BepInEx/plugins/Automatics/Textures" to make the custom icons work.
+Place the necessary files in "/Valheim/BepInEx/plugins/{Your-Custom-Icons}" to make the custom icons work.
 
-* */Valheim/BepInEx/plugins/Automatics/Textures*
-  ** *custom-map-icon.json*
-    *** Describe information such as which icons to customize and which images to use. Details are described in the <<format-of-custom-map-iconjson,Format of custom-map-icon.json>> section.
-  ** *ICON.png*
-    *** Icon image file. PNG files with transparency information are preferred. Prepare the number of icons required.
+/Valheim/BepInEx/plugins/{Your-Custom-Icons}::
+  * *automatics-child-mod* <File> +
+    This file is required for Automatics to recognize the custom icon pack. Note that the contents of the file are not required and the extension does not exist.
+  * *Textures* <Folder>
+    ** *custom-map-icon.json* <File> +
+      Describe information such as which icons to customize and which images to use. Details are described in the <<format-of-custom-map-iconjson,Format of custom-map-icon.json>> section.
+    ** *ICON.png* <File> +
+      Icon image file. PNG files with transparency information are preferred. Prepare the number of icons required.
 
 [discrete]
 ==== Format of custom-map-icon.json
 
 Root <Array>::
   * target <Object>
-    ** name <String>
-      - Specify a display name such as "Boar" or an internal name such as "$enemy_boar"; See the <<Matching by "Display name" and "Internal name">> section for the difference between matching by display name and internal name.
+    ** name <String> +
+      Specify a display name such as "Boar" or an internal name such as "$enemy_boar"; See the <<Matching by "Display name" and "Internal name">> section for the difference between matching by display name and internal name.
     ** metadata <Object> (Optional)
-      *** level <Number>
-        - By setting up this field, you can set up icons for different levels of animals and monsters. Note that the unstarred state is level 1. One star is level 2 and two stars are level 3. Also, do not set the metada field if matching by level is not required.
+      *** level <Number> +
+        By setting up this field, you can set up icons for different levels of animals and monsters. Note that the unstarred state is level 1. One star is level 2 and two stars are level 3. Also, do not set the metada field if matching by level is not required.
   * sprite <Object>
-    ** file <String>
-      - Specify the name of the image file to be used for the icon. It is best to keep the image size between 16x16 and 32x32, as too large an icon will be obtrusive.
-    ** width <Number>
-      - Specify the width of the icon.
-    ** height <Number>
-      - Specify the height of the icon.
+    ** file <String> +
+      Specify the name of the image file to be used for the icon. Large icons can be scaled with the iconScale*Map option.
+    ** width <Number> +
+      Specify the width of the icon.
+    ** height <Number> +
+      Specify the height of the icon.
+  * options <Object> (Optional)
+    ** hideNameTag <Boolean> (Optional) +
+      When true, the name tag on the map pin will be hidden.
+    ** iconScaleLargeMap <Number> (Optional) +
+      Specify the scale of the icon on the map when zoomed in. 0.0 or higher enables it.
+    ** iconScaleSmallMap <Number> (Optional) +
+      Specify the scale of the icon on the minimap. 0.0 or higher enables it.
 
 [discrete]
 ==== Example files

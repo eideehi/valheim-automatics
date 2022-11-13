@@ -1,0 +1,115 @@
+﻿[
+  /* This style of comment is allowed in cutom-map-icon.json */
+
+  /* If no metadata is specified, it matches all levels. In other words, this setting matches Boar levels 1-3
+   * NOTE: Because it is commented out, loading this json will not actually reflect it.
+  {
+    "target": {
+      "name": "$enemy_boar",
+      "metadata": {
+        "level": 1
+      }
+    },
+    "sprite": {
+      "file": "boar.png",
+      "width": 32,
+      "height": 32
+    }
+  },
+   */
+
+  /* The following settings applies a different icon to each of Boar's levels 1-3, and also sets the name tag to be hidden. */
+  {
+    "target": {
+      "name": "$enemy_boar",
+      "metadata": {
+        "level": 1
+      }
+    },
+    "sprite": {
+      "file": "boar.png",
+      "width": 64,
+      "height": 64
+    },
+    "options": {
+      /* Enabling hideNameTag hides the name tag of the map pin. */
+      "hideNameTag": true
+    }
+  },
+  {
+    "target": {
+      "name": "$enemy_boar",
+      "metadata": {
+        "level": 2
+      }
+    },
+    "sprite": {
+      "file": "boar-lv2.png",
+      "width": 64,
+      "height": 64
+    },
+    "options": {
+      "hideNameTag": true,
+      /* The scale is adjusted so that the image is displayed at the same size as "boar.png". */
+      "iconScaleLargeMap": 2.0,
+      "iconScaleSmallMap": 2.0
+    }
+  },
+  {
+    "target": {
+      "name": "$enemy_boar",
+      "metadata": {
+        "level": 3
+      }
+    },
+    "sprite": {
+      "file": "boar-lv3.png",
+      "width": 64,
+      "height": 64
+    },
+    "options": {
+      "hideNameTag": true,
+      "iconScaleLargeMap": 2.0,
+      "iconScaleSmallMap": 2.0
+    }
+  },
+
+  /* Since level 1 is specified in the metadata, this setting will only match level 1 of the Deer. The default icon will be applied to level 2 and 3 Deer. */
+  {
+    "target": {
+      "name": "$enemy_deer",
+      "metadata": {
+        "level": 1
+      }
+    },
+    "sprite": {
+      "file": "deer.png",
+      "width": 32,
+      "height": 32
+    }
+  },
+
+  /* Matches only Raspberries. */
+  {
+    "target": {
+      "name": "$item_raspberries"
+    },
+    "sprite": {
+      "file": "raspberries.png",
+      "width": 32,
+      "height": 32
+    }
+  },
+
+  /* Matches any object whose display name contains mushroom. In other words, it matches both Mushroom and Yellow mushroom. */
+  {
+    "target": {
+      "name": "mushroom"
+    },
+    "sprite": {
+      "file": "mushroom.png",
+      "width": 32,
+      "height": 32
+    }
+  }
+]

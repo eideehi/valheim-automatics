@@ -1,5 +1,5 @@
-[ boar.png ]
-* boar.png was created by processing the "Emojione 2.x" icon.
+[ boar.png, boar-lv2.png, boar-lv3.png ]
+* boar.png (and boar-lv*.png) was created by processing the "Emojione 2.x" icon.
 
 Website:
   https://github.com/EmojiTwo/emojitwo
