@@ -26,21 +26,25 @@ Automatic mapping.
 **Directory structure**
 
 Place the necessary files in
-"/Valheim/BepInEx/plugins/Automatics/Textures" to make the custom icons
+"/Valheim/BepInEx/plugins/{Your-Custom-Icons}" to make the custom icons
 work.
 
--   **/Valheim/BepInEx/plugins/Automatics/Textures**
+/Valheim/BepInEx/plugins/{Your-Custom-Icons}
+-   **automatics-child-mod** &lt;File&gt;
+    This file is required for Automatics to recognize the custom icon
+    pack. Note that the contents of the file are not required and the
+    extension does not exist.
 
-    -   **custom-map-icon.json**
+-   **Textures** &lt;Folder&gt;
 
-        -   Describe information such as which icons to customize and
-            which images to use. Details are described in the
-            `Format of custom-map-icon.json` section.
+    -   **custom-map-icon.json** &lt;File&gt;
+        Describe information such as which icons to customize and which
+        images to use. Details are described in the [Format of
+        custom-map-icon.json](#format-of-custom-map-iconjson) section.
 
-    -   **ICON.png**
-
-        -   Icon image file. PNG files with transparency information are
-            preferred. Prepare the number of icons required.
+    -   **ICON.png** &lt;File&gt;
+        Icon image file. PNG files with transparency information are
+        preferred. Prepare the number of icons required.
 
 **Format of custom-map-icon.json**
 
@@ -48,53 +52,60 @@ Root &lt;Array&gt;
 -   target &lt;Object&gt;
 
     -   name &lt;String&gt;
-
-        -   Specify a display name such as "Boar" or an internal name
-            such as "$enemy\_boar"; See the `Matching by "Display name" and "Internal name"` section
-            for the difference between matching by display name and
-            internal name.
+        Specify a display name such as "Boar" or an internal name such
+        as "$enemy\_boar"; See the [Matching by "Display name" and
+        "Internal name"](#_matching_by_display_name_and_internal_name)
+        section for the difference between matching by display name and
+        internal name.
 
     -   metadata &lt;Object&gt; (Optional)
 
         -   level &lt;Number&gt;
-
-            -   By setting up this field, you can set up icons for
-                different levels of animals and monsters. Note that the
-                unstarred state is level 1. One star is level 2 and two
-                stars are level 3. Also, do not set the metada field if
-                matching by level is not required.
+            By setting up this field, you can set up icons for different
+            levels of animals and monsters. Note that the unstarred
+            state is level 1. One star is level 2 and two stars are
+            level 3. Also, do not set the metada field if matching by
+            level is not required.
 
 -   sprite &lt;Object&gt;
 
     -   file &lt;String&gt;
-
-        -   Specify the name of the image file to be used for the icon.
-            It is best to keep the image size between 16x16 and 32x32,
-            as too large an icon will be obtrusive.
+        Specify the name of the image file to be used for the icon.
+        Large icons can be scaled with the iconScale\*Map option.
 
     -   width &lt;Number&gt;
-
-        -   Specify the width of the icon.
+        Specify the width of the icon.
 
     -   height &lt;Number&gt;
+        Specify the height of the icon.
 
-        -   Specify the height of the icon.
+-   options &lt;Object&gt; (Optional)
+
+    -   hideNameTag &lt;Boolean&gt; (Optional)
+        When true, the name tag on the map pin will be hidden.
+
+    -   iconScaleLargeMap &lt;Number&gt; (Optional)
+        Specify the scale of the icon on the map when zoomed in. 0.0 or
+        higher enables it.
+
+    -   iconScaleSmallMap &lt;Number&gt; (Optional)
+        Specify the scale of the icon on the minimap. 0.0 or higher
+        enables it.
 
 **Example files**
 
 I don’t feel I have explained it very well, so I have prepared a sample
 file. Please click
-[here](https://github.com/eideehi/valheim-automatics/tree/main/package/extra/custom-icon-example/Automatics/Textures) to check
-the structure of the file that actually works. You can also download the
-[zip
-file](https://app.box.com/shared/static/dv8vd8ls83rzxcsl75zrh9rawlu5o2w7.zip)
-and check the operation on your PC.
+[here](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons) to check the
+structure of the file that actually works. You can also download the
+[zip file](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons.zip) and
+check the operation on your PC.
 
 -   [Example files
-    (Github)](https://github.com/eideehi/valheim-automatics/tree/main/package/extra/custom-icon-example/Automatics/Textures)
+    (Github)](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons)
 
 -   [Example files
-    (Zip)](https://app.box.com/shared/static/dv8vd8ls83rzxcsl75zrh9rawlu5o2w7.zip)
+    (Zip)](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons.zip)
 
 NOTE: Zip is not guaranteed to work with mod loaders other than Vortex; if you are using a mod loader other than Vortex, please manually place the files in the Zip into the appropriate directory.
 
@@ -135,7 +146,9 @@ Displays the usage of commands added by Automatics.
 
 ### printnames (WORD|REGEXP)...
 
-Outputs internal or display names that contain the specified string or match the specified regular expression. If multiple arguments are specified, only those matching all of them will be output.
+Outputs internal or display names that contain the specified string or
+match the specified regular expression. If multiple arguments are
+specified, only those matching all of them will be output.
 
 -   WORD: A text contained in the internal or display name. (e.g.
     $enemy\_, $item\_, $piece\_, Boar, Mushroom, Wood door); All
@@ -146,9 +159,11 @@ Outputs internal or display names that contain the specified string or match the
 
 Examples:
 
-- `printnames ling r/^[$]enemy_`
-- `printnames r/^[$@]location_.+(?<!_(enter|exit))$`
-- `printnames mushroom r/^[$]item_.+(?<!_description)$`
+-   `printnames ling r/^[$]enemy_`
+
+-   `printnames r/^[$@]location_.+(?<!_(enter|exit))$`
+
+-   `printnames mushroom r/^[$]item_.+(?<!_description)$`
 
 ## Configurations
 
@@ -181,7 +196,8 @@ Internal names are the names used inside the game program, such as
 $enemy\_boar, $enemy\_deer, $item\_dandelion, etc. The matching rule for
 "Internal name" is an exact match, meaning that if the target internal
 name is identical to the specified string, it matches. It is
-case-insensitive. Note that internal names for translations added by Automatics are prefixed with @, not $, as in `@internal_name`
+case-insensitive. Note that internal names for translations added by
+Automatics are prefixed with @, not $, as in `@internal_name`
 
 #### Matching Samples
 

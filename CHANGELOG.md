@@ -1,3 +1,12 @@
+#### v1.3.1 [2022-11-13]
+- Fix an error that occurred if ConfigurationManager was not installed
+- Custom map icons can now be treated as child mod of Automatics
+  * For details, refer to the "Directory structure" section of the README
+- Add option to hide pin names on custom map icon
+  * For details, refer to the "options" entry in the "Format of custom-map-icon.json" section of the README
+- Add option to set the scale at which custom map icons appear on the map
+  * For details, refer to the "options" entry in the "Format of custom-map-icon.json" section of the README
+
 #### v1.3.0 [2022-04-26]
 - Add the feature of 'Automatic Mining'
 - Add option to change the directory to load resources such as translation files and custom icons
