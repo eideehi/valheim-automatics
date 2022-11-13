@@ -155,6 +155,12 @@ Internal names are the names used inside the game program, such as $enemy_boar, 
 |Japanese |EideeHi           |100%
 |===
 
+== Contacts
+* {uri-issues}[Issues - GitHub] +
+  Only bug reports are accepted under Issues.
+* {uri-discord}[eidee.net - Discord server] +
+  Questions, suggestions, comments, etc. can be directed here.
+
 == Credits
 * Dependencies:
 ** {uri-configuration-manager}[Configuration Manager]
