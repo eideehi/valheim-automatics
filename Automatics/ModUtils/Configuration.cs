@@ -36,6 +36,18 @@ namespace Automatics.ModUtils
                     return string.Join(", ", list.Select(Csv.Escape));
                 },
             });
+
+            if (!TomlTypeConverter.CanConvert(typeof(KeyboardShortcut)))
+            {
+                // Although the same processing exists in the static constructor of KeyboardShortcut,
+                // if BepInEx.ConfigurationManager is not installed, an error will occur that
+                // KeyboardShortcut is not a conversion target.
+                TomlTypeConverter.AddConverter(typeof(KeyboardShortcut), new BepInEx.Configuration.TypeConverter
+                {
+                    ConvertToObject = (str, type) => KeyboardShortcut.Deserialize(str),
+                    ConvertToString = (obj, type) => ((KeyboardShortcut) obj).Serialize()
+                });
+            }
         }
 
         [Conditional("DEBUG")]
