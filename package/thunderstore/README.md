@@ -94,18 +94,11 @@ Root &lt;Array&gt;
 
 **Example files**
 
-I don’t feel I have explained it very well, so I have prepared a sample
-file. Please click
-[here](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons) to check the
-structure of the file that actually works. You can also download the
-[zip file](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons.zip) and
-check the operation on your PC.
+I don’t feel I have explained it very well, so I have prepared a sample file. Please click [here](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons) to check the structure of the file that actually works. You can also download the [zip file](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons.zip) and check the operation on your PC.
 
--   [Example files
-    (Github)](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons)
+-   [Example files (Github)](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons)
 
--   [Example files
-    (Zip)](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons.zip)
+-   [Example files (Zip)](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons.zip)
 
 NOTE: Zip is not guaranteed to work with mod loaders other than Vortex; if you are using a mod loader other than Vortex, please manually place the files in the Zip into the appropriate directory.
 
@@ -135,7 +128,7 @@ This feature automatically mines deposits near the player.
 
 Automatics add a few commands to help the user.
 
-### automatics \[COMMAND\]
+### automatics [COMMAND]
 
 Displays the usage of commands added by Automatics.
 
@@ -193,11 +186,11 @@ it matches. It is case-insensitive.
 #### Internal name
 
 Internal names are the names used inside the game program, such as
-$enemy\_boar, $enemy\_deer, $item\_dandelion, etc. The matching rule for
+`$enemy_boar`, `$enemy_deer`, `$item_dandelion`, etc. The matching rule for
 "Internal name" is an exact match, meaning that if the target internal
 name is identical to the specified string, it matches. It is
 case-insensitive. Note that internal names for translations added by
-Automatics are prefixed with @, not $, as in `@internal_name`
+Automatics are prefixed with `@`, not `$`, as in `@internal_name`
 
 #### Matching Samples
 
@@ -264,6 +257,16 @@ Matching result
 </tr>
 </tbody>
 </table>
+
+## Contacts
+
+[![Bug report on Issues](https://app.box.com/shared/static/g2v3vbju4jazq7kycoigp60ltki2kw8i.png)](https://github.com/eideehi/valheim-better-portal/issues)
+
+**Only bug reports are accepted under Issues.**
+
+[![eidee.net - Discord Server](https://app.box.com/shared/static/0s09ti60hvyyp5k98xyrnkfp683mrt9r.png)](https://discord.gg/DDQqxkK7s6)
+
+**Questions, suggestions and comments are welcome on the Discord Server.**
 
 ## Languages
 

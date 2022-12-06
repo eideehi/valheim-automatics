@@ -1,3 +1,7 @@
+#### v1.3.2 [2022-12-06]
+- Rebuild for Mistlands Update
+  * Content added in the Mistlands Update is not yet available for automation by Automatics
+
 #### v1.3.1 [2022-11-13]
 - Fix an error that occurred if ConfigurationManager was not installed
 - Custom map icons can now be treated as child mod of Automatics

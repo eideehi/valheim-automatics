@@ -17,7 +17,7 @@ namespace Automatics
   {
     private const string ModId = "net.eidee.valheim.automatics";
     private const string ModName = "Automatics";
-    private const string ModVersion = "1.3.1";
+    private const string ModVersion = "1.3.2";
 
     private static readonly Dictionary<string, (Action action, float timestamp, float delay)> InvokeQueue;
 

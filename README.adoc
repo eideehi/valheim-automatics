@@ -11,6 +11,8 @@
 :image-uri-config_menu: https://app.box.com/shared/static/vfzsn69i950l48er2u69tssod6xxsh8u.jpg
 :thumbnail-uri-custom_map_icon: https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png
 :image-uri-custom_map_icon: https://app.box.com/shared/static/yhdd2v0mrwzgh54tbkc7twjen17q22gn.jpg
+:image-uri-bug-report: https://app.box.com/shared/static/g2v3vbju4jazq7kycoigp60ltki2kw8i.png
+:image-uri-discord: https://app.box.com/shared/static/0s09ti60hvyyp5k98xyrnkfp683mrt9r.png
 
 Automatics is a mod that automates the tedious tasks of life in Valheim. Most of its features exist in existing mods, but it has been re-designed to make it easier for me to use.
 
@@ -128,7 +130,7 @@ In some features of Automatics, there is an option that allows the user to add t
 Display names are the names that appear in the game, such as Boar, Deer, Dandelion, etc. The matching rule for "Display name" is a partial match, meaning that if the target display name contains the specified string, it matches. It is case-insensitive.
 
 ==== Internal name
-Internal names are the names used inside the game program, such as $enemy_boar, $enemy_deer, $item_dandelion, etc. The matching rule for "Internal name" is an exact match, meaning that if the target internal name is identical to the specified string, it matches. It is case-insensitive. Note that internal names for translations added by Automatics are prefixed with @, not $, as in `@internal_name`
+Internal names are the names used inside the game program, such as `$enemy_boar`, `$enemy_deer`, `$item_dandelion`, etc. The matching rule for "Internal name" is an exact match, meaning that if the target internal name is identical to the specified string, it matches. It is case-insensitive. Note that internal names for translations added by Automatics are prefixed with `@`, not `$`, as in `@internal_name`
 
 ==== Matching Samples
 .Target data
@@ -158,10 +160,11 @@ Internal names are the names used inside the game program, such as $enemy_boar, 
 |===
 
 == Contacts
-* {uri-issues}[Issues - GitHub] +
-  Only bug reports are accepted under Issues.
-* {uri-discord}[eidee.net - Discord server] +
-  Questions, suggestions, comments, etc. can be directed here.
+image::{image-uri-bug-report}[link={uri-issues},alt="Bug report on Issues"]
+*Only bug reports are accepted under Issues.*
+
+image::{image-uri-discord}[link={uri-discord},alt="eidee.net - Discord Server"]
+*Questions, suggestions and comments are welcome on the Discord Server.*
 
 == Credits
 * Dependencies:
