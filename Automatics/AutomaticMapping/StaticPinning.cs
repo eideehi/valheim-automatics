@@ -7,7 +7,8 @@ using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
-    using static Valheim.Location;
+    using Dungeon = Valheim.Dungeon.Flags;
+    using Spot = Valheim.Spot.Flags;
     using static ValheimObject;
 
     internal static class StaticPinning
@@ -115,7 +116,7 @@ namespace Automatics.AutomaticMapping
 
                 var name = Objects.GetName(component);
                 if (FloraPinning(collider, component, name, knownId)) continue;
-                if (MineralDepositPinning(collider, component, name, knownId)) continue;
+                if (MineralPinning(collider, component, name, knownId)) continue;
                 if (SpawnerPinning(collider, component, name, knownId)) continue;
                 if (OtherPinning(collider, component, name, knownId)) continue;
             }
@@ -156,10 +157,10 @@ namespace Automatics.AutomaticMapping
             return true;
         }
 
-        private static bool MineralDepositPinning(Collider collider, Component component, string name,
+        private static bool MineralPinning(Collider collider, Component component, string name,
             ISet<ZDOID> knownId)
         {
-            if (!Core.IsMineralDeposit(name, out var data)) return false;
+            if (!Core.IsMineral(name, out var data)) return false;
             if (!data.IsAllowed) return true;
 
             if (!(component is IDestructible))
@@ -262,7 +263,7 @@ namespace Automatics.AutomaticMapping
 
             string name;
             if (data.Dungeon != Dungeon.None && !data.IsCustom)
-                GetDungeonName(data.Dungeon, out name);
+                Valheim.Dungeon.GetName(data.Dungeon, out name);
             else
                 name = $"@location_{prefabName.ToLower()}";
 
@@ -295,7 +296,7 @@ namespace Automatics.AutomaticMapping
 
             string name;
             if (data.Spot != Spot.None && !data.IsCustom)
-                GetSpotName(data.Spot, out name);
+                Valheim.Spot.GetName(data.Spot, out name);
             else
                 name = $"@location_{prefabName.ToLower()}";
 
@@ -333,7 +334,7 @@ namespace Automatics.AutomaticMapping
             if (string.IsNullOrEmpty(name)) return null;
 
             if (Core.IsFlora(name, out var flora)) return flora.IsAllowed ? component : null;
-            if (Core.IsMineralDeposit(name, out var deposit)) return deposit.IsAllowed ? component : null;
+            if (Core.IsMineral(name, out var deposit)) return deposit.IsAllowed ? component : null;
             if (Core.IsSpawner(name, out var spawner)) return spawner.IsAllowed ? component : null;
             if (Core.IsOther(name, out var other)) return other.IsAllowed ? component : null;
 

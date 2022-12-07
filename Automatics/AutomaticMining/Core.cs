@@ -7,7 +7,7 @@
         {
             Config.Initialize();
 
-            Automatics.OnPlayerUpdate += AutomaticMining.Run;
+            Hooks.OnPlayerUpdate += AutomaticMining.Run;
         }
     }
 }

@@ -10,7 +10,7 @@ namespace Automatics.AutomaticDoor
         private static void Initialize()
         {
             Config.Initialize();
-            Automatics.OnPlayerUpdate += OnPlayerUpdate;
+            Hooks.OnPlayerUpdate += OnPlayerUpdate;
         }
 
         private static void OnPlayerUpdate(Player player, bool takeInput)

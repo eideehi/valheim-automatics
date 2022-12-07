@@ -6,9 +6,12 @@ using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
-    using static Valheim.Creature;
-    using static Valheim.Object;
-    using static Valheim.Location;
+    using Animal = Valheim.Animal.Flags;
+    using Monster = Valheim.Monster.Flags;
+    using Flora = Valheim.Flora.Flags;
+    using Mineral = Valheim.Mineral.Flags;
+    using Dungeon = Valheim.Dungeon.Flags;
+    using Spot = Valheim.Spot.Flags;
     using static ValheimObject;
 
     internal static class Core
@@ -54,7 +57,7 @@ namespace Automatics.AutomaticMapping
 
         public static bool IsAnimal(string name, out (Animal Animal, bool IsCustom, bool IsAllowed) data)
         {
-            if (GetAnimal(name, out var animal))
+            if (Valheim.Animal.Get(name, out var animal))
             {
                 data = (animal, false, (Config.AllowPinningAnimal & animal) != 0);
                 return true;
@@ -72,7 +75,7 @@ namespace Automatics.AutomaticMapping
 
         public static bool IsMonster(string name, out (Monster Monster, bool IsCustom, bool IsAllowed) data)
         {
-            if (GetMonster(name, out var monster))
+            if (Valheim.Monster.Get(name, out var monster))
             {
                 data = (monster, false, (Config.AllowPinningMonster & monster) != 0);
                 return true;
@@ -90,7 +93,7 @@ namespace Automatics.AutomaticMapping
 
         public static bool IsFlora(string name, out (Flora Flora, bool IsCustom, bool IsAllowed) data)
         {
-            if (GetFlora(name, out var flora))
+            if (Valheim.Flora.Get(name, out var flora))
             {
                 data = (flora, false, (Config.AllowPinningFlora & flora) != 0);
                 return true;
@@ -106,10 +109,10 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
-        public static bool IsMineralDeposit(string name,
-            out (MineralDeposit Deposit, bool IsCustom, bool IsAllowed) data)
+        public static bool IsMineral(string name,
+            out (Mineral Deposit, bool IsCustom, bool IsAllowed) data)
         {
-            if (GetMineralDeposit(name, out var deposit))
+            if (Valheim.Mineral.Get(name, out var deposit))
             {
                 data = (deposit, false, (Config.AllowPinningVein & deposit) != 0);
                 return true;
@@ -117,11 +120,11 @@ namespace Automatics.AutomaticMapping
 
             if (IsInNameList(name, Config.AllowPinningVeinCustom))
             {
-                data = (MineralDeposit.None, true, true);
+                data = (Mineral.None, true, true);
                 return true;
             }
 
-            data = (MineralDeposit.None, false, false);
+            data = (Mineral.None, false, false);
             return false;
         }
 
@@ -163,7 +166,7 @@ namespace Automatics.AutomaticMapping
 
         public static bool IsDungeon(string name, out (Dungeon Dungeon, bool IsCustom, bool IsAllowed) data)
         {
-            if (GetDungeon(name, out var dungeon))
+            if (Valheim.Dungeon.Get(name, out var dungeon))
             {
                 data = (dungeon, false, (Config.AllowPinningDungeon & dungeon) != 0);
                 return true;
@@ -181,7 +184,7 @@ namespace Automatics.AutomaticMapping
 
         public static bool IsSpot(string name, out (Spot Spot, bool IsCustom, bool IsAllowed) data)
         {
-            if (GetSpot(name, out var spot))
+            if (Valheim.Spot.Get(name, out var spot))
             {
                 data = (spot, false, (Config.AllowPinningSpot & spot) != 0);
                 return true;

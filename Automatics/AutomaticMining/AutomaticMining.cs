@@ -6,8 +6,6 @@ using UnityEngine;
 
 namespace Automatics.AutomaticMining
 {
-    using Object = Valheim.Object;
-
     internal static class AutomaticMining
     {
         private static readonly Collider[] ColliderBuffer;
@@ -82,7 +80,7 @@ namespace Automatics.AutomaticMining
         private static MonoBehaviour IsMineral(Collider collider)
         {
             var obj = collider.GetComponentInParent<IDestructible>() as MonoBehaviour;
-            return Object.GetMineralDeposit(Objects.GetName(obj), out _) ? obj : null;
+            return Valheim.Mineral.IsMineral(Objects.GetName(obj)) ? obj : null;
         }
 
         private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range, MineRock rock)

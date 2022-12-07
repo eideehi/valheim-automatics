@@ -3,9 +3,12 @@ using ModUtils;
 
 namespace Automatics.AutomaticMapping
 {
-    using static Valheim.Creature;
-    using static Valheim.Object;
-    using static Valheim.Location;
+    using Animal = Valheim.Animal.Flags;
+    using Monster = Valheim.Monster.Flags;
+    using Flora = Valheim.Flora.Flags;
+    using Mineral = Valheim.Mineral.Flags;
+    using Dungeon = Valheim.Dungeon.Flags;
+    using Spot = Valheim.Spot.Flags;
     using static ValheimObject;
 
     internal static class Config
@@ -22,7 +25,7 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<StringList> _allowPinningMonsterCustom;
         private static ConfigEntry<Flora> _allowPinningFlora;
         private static ConfigEntry<StringList> _allowPinningFloraCustom;
-        private static ConfigEntry<MineralDeposit> _allowPinningVein;
+        private static ConfigEntry<Mineral> _allowPinningVein;
         private static ConfigEntry<StringList> _allowPinningVeinCustom;
         private static ConfigEntry<Spawner> _allowPinningSpawner;
         private static ConfigEntry<StringList> _allowPinningSpawnerCustom;
@@ -49,7 +52,7 @@ namespace Automatics.AutomaticMapping
         public static StringList AllowPinningMonsterCustom => _allowPinningMonsterCustom.Value;
         public static Flora AllowPinningFlora => _allowPinningFlora.Value;
         public static StringList AllowPinningFloraCustom => _allowPinningFloraCustom.Value;
-        public static MineralDeposit AllowPinningVein => _allowPinningVein.Value;
+        public static Mineral AllowPinningVein => _allowPinningVein.Value;
         public static StringList AllowPinningVeinCustom => _allowPinningVeinCustom.Value;
         public static Spawner AllowPinningSpawner => _allowPinningSpawner.Value;
         public static StringList AllowPinningSpawnerCustom => _allowPinningSpawnerCustom.Value;
@@ -81,7 +84,7 @@ namespace Automatics.AutomaticMapping
             _allowPinningMonsterCustom = config.Bind("allow_pinning_monster_custom", new StringList());
             _allowPinningFlora = config.Bind("allow_pinning_flora", Flora.Raspberries | Flora.Mushroom | Flora.Blueberries | Flora.CarrotSeeds | Flora.Thistle | Flora.TurnipSeeds | Flora.Cloudberries);
             _allowPinningFloraCustom = config.Bind("allow_pinning_flora_custom", new StringList());
-            _allowPinningVein = config.Bind("allow_pinning_deposit", MineralDeposit.All ^ MineralDeposit.ObsidianDeposit);
+            _allowPinningVein = config.Bind("allow_pinning_deposit", Mineral.All ^ Mineral.ObsidianDeposit);
             _allowPinningVeinCustom = config.Bind("allow_pinning_deposit_custom", new StringList());
             _allowPinningSpawner = config.Bind("allow_pinning_spawner", Spawner.None);
             _allowPinningSpawnerCustom = config.Bind("allow_pinning_spawner_custom", new StringList());

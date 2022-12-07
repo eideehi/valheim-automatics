@@ -122,7 +122,7 @@ namespace Automatics.AutomaticMapping
         private static void DestructibleAwakePostfix(Destructible __instance, ZNetView ___m_nview)
         {
             if (___m_nview.GetZDO() == null) return;
-            if (Core.IsMineralDeposit(Objects.GetName(__instance), out _)) return;
+            if (Core.IsMineral(Objects.GetName(__instance), out _)) return;
 
             __instance.m_onDestroyed += () =>
             {

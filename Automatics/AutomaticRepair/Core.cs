@@ -6,8 +6,8 @@
         private static void Initialize()
         {
             Config.Initialize();
-            Automatics.OnPlayerUpdate += RepairItems.Run;
-            Automatics.OnPlayerUpdate += RepairPieces.Run;
+            Hooks.OnPlayerUpdate += RepairItems.Run;
+            Hooks.OnPlayerUpdate += RepairPieces.Run;
         }
     }
 }

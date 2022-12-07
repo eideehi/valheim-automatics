@@ -56,10 +56,6 @@ namespace Automatics
         public static Logger Logger { get; private set; }
         public static L10N L10N { get; private set; }
 
-        public static Action OnGameAwake { get; set; }
-        public static Action OnInitTerminal { get; set; }
-        public static Action<Player, bool> OnPlayerUpdate { get; set; }
-
         private static void InitializeModules(Assembly assembly)
         {
             foreach (var (initializer, _) in AccessTools.GetTypesFromAssembly(assembly)
@@ -128,7 +124,7 @@ namespace Automatics
 
             translationsLoader.LoadJson(GetInjectedResourcePath("Languages"));
 
-            OnInitTerminal += Command.Register;
+            Hooks.OnInitTerminal += Command.Register;
 
             var assembly = Assembly.GetExecutingAssembly();
             InitializeModules(assembly);
