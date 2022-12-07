@@ -190,14 +190,15 @@
             <HintPath>$(ManagedDataDirectory)\assembly_utils.dll</HintPath>
         </Reference>
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="**\*.cs" Exclude="bin\**\*;obj\**\*;Libraries\**\*;Debug\**\*" />
+        <Compile Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Include="Debug\**\*.cs" />
+    </ItemGroup>
     <ItemGroup Label="Libraries">
         <Reference Include="LitJSON, Version=0.18.0.0, Culture=neutral, processorArchitecture=MSIL">
             <HintPath>..\packages\LitJson.0.18.0\lib\net45\LitJSON.dll</HintPath>
         </Reference>
-    </ItemGroup>
-    <ItemGroup>
-        <Compile Include="**\*.cs" Exclude="bin\**\*;obj\**\*;Debug\**\*.cs" />
-        <Compile Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Include="Debug\**\*.cs" />
+        <Compile Include="Libraries\**\*.cs" Exclude="Libraries\**\AssemblyInfo.cs" />
     </ItemGroup>
     <ItemGroup>
         <Content Include="Languages\**\*" Exclude="Languages\Debug\**\*">

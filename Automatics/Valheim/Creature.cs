@@ -1,7 +1,7 @@
-﻿using System;
+﻿using JetBrains.Annotations;
+using ModUtils;
+using System;
 using System.Collections.Generic;
-using Automatics.ModUtils;
-using JetBrains.Annotations;
 
 namespace Automatics.Valheim
 {
@@ -178,14 +178,14 @@ namespace Automatics.Valheim
             [LocalizedDescription(Name.Lox)]
             Lox = 1L << 3,
 
-            [LocalizedDescription(Name.Bird)]
+            [LocalizedDescription(Automatics.L10NPrefix, Name.Bird)]
             Bird = 1L << 4,
 
             [LocalizedDescription(Name.Fish)]
             Fish = 1L << 5,
 
             [UsedImplicitly]
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 6) - 1,
         }
 
@@ -283,7 +283,7 @@ namespace Automatics.Valheim
             Ulv = 1L << 28,
 
             [UsedImplicitly]
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 29) - 1,
         }
     }

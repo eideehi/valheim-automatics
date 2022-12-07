@@ -1,7 +1,7 @@
-﻿using System;
+﻿using ModUtils;
+using System;
 using System.Linq;
 using System.Text.RegularExpressions;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapping
@@ -18,13 +18,13 @@ namespace Automatics.AutomaticMapping
         {
             Config.Initialize();
 
-            PickableCache.AddAwakeListener(pickable =>
+            PickableCache.OnCacheAdded += pickable =>
             {
-                if (IsFlora(Obj.GetName(pickable), out _))
+                if (IsFlora(Objects.GetName(pickable), out _))
                     pickable.gameObject.AddComponent<FloraObject>();
-            });
+            };
 
-            ShipCache.AddAwakeListener(ship =>
+            ShipCache.OnCacheAdded += ship =>
             {
                 var shipObj = ship.GetComponent<WearNTear>();
                 if (shipObj == null) return;
@@ -34,7 +34,7 @@ namespace Automatics.AutomaticMapping
                     if (Map.FindPinInRange(ship.transform.position, 4f, out var data))
                         Map.RemovePin(data);
                 };
-            });
+            };
         }
 
         public static void OnUpdateMap(Player player, float delta, bool takeInput)
@@ -201,7 +201,7 @@ namespace Automatics.AutomaticMapping
         {
             if (!list.Any()) return false;
 
-            var displayName = L10N.TranslateInternalNameOnly(internalName);
+            var displayName = Automatics.L10N.TranslateInternalName(internalName);
             return list.Any(x =>
                 L10N.IsInternalName(x)
                     ? internalName.Equals(x, StringComparison.Ordinal)

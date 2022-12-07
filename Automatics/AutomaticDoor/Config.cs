@@ -1,5 +1,5 @@
-﻿using Automatics.ModUtils;
-using BepInEx.Configuration;
+﻿using BepInEx.Configuration;
+using ModUtils;
 
 namespace Automatics.AutomaticDoor
 {
@@ -36,16 +36,18 @@ namespace Automatics.AutomaticDoor
 
         public static void Initialize()
         {
-            Configuration.ChangeSection(Section);
-            _enableAutomaticDoor = Configuration.Bind("enable_automatic_door", true);
-            _allowAutomaticDoor = Configuration.Bind("allow_automatic_door", Door.All ^ Door.WoodShutter);
-            _allowAutomaticDoorCustom = Configuration.Bind("allow_automatic_door_custom", new StringList());
-            _intervalToOpen = Configuration.Bind("interval_to_open", 0.1f, (0f, 8f));
-            _intervalToClose = Configuration.Bind("interval_to_close", 0.1f, (0f, 8f));
-            _distanceForAutomaticOpening = Configuration.Bind("distance_for_automatic_opening", 2.5f, (1f, 8f));
-            _distanceForAutomaticClosing = Configuration.Bind("distance_for_automatic_closing", 2.5f, (1f, 8f));
-            _automaticDoorEnableDisableToggle = Configuration.Bind("automatic_door_enable_disable_toggle", new KeyboardShortcut());
-            _automaticDoorEnableDisableToggleMessage = Configuration.Bind("automatic_door_enable_disable_toggle_message", Message.Center);
+            var config = global::Automatics.Config.Instance;
+
+            config.ChangeSection(Section);
+            _enableAutomaticDoor = config.Bind("enable_automatic_door", true);
+            _allowAutomaticDoor = config.Bind("allow_automatic_door", Door.All ^ Door.WoodShutter);
+            _allowAutomaticDoorCustom = config.Bind("allow_automatic_door_custom", new StringList());
+            _intervalToOpen = config.Bind("interval_to_open", 0.1f, (0f, 8f));
+            _intervalToClose = config.Bind("interval_to_close", 0.1f, (0f, 8f));
+            _distanceForAutomaticOpening = config.Bind("distance_for_automatic_opening", 2.5f, (1f, 8f));
+            _distanceForAutomaticClosing = config.Bind("distance_for_automatic_closing", 2.5f, (1f, 8f));
+            _automaticDoorEnableDisableToggle = config.Bind("automatic_door_enable_disable_toggle", new KeyboardShortcut());
+            _automaticDoorEnableDisableToggleMessage = config.Bind("automatic_door_enable_disable_toggle_message", Message.Center);
 
             _intervalToOpen.SettingChanged += (_, __) => { AutomaticDoor.ChangeInterval(true); };
             _intervalToClose.SettingChanged += (_, __) => { AutomaticDoor.ChangeInterval(false); };

@@ -1,10 +1,10 @@
-﻿using System;
+﻿using BepInEx.Configuration;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using BepInEx.Configuration;
 
 namespace Automatics
 {
@@ -24,7 +24,7 @@ namespace Automatics
             var path = config.ConfigFilePath;
             if (!File.Exists(path))
             {
-                Automatics.ModLogger.LogError("Config file not found: " + path);
+                Automatics.Logger.Error($"Config file not found: {path}");
                 return;
             }
 
@@ -35,7 +35,7 @@ namespace Automatics
             var migrateVersion = new Version(1, 3, 0);
             if (version < migrateVersion)
             {
-                Automatics.ModLogger.LogMessage($"Migrating config from {version} to {migrateVersion}");
+                Automatics.Logger.Message($"Migrating config from {version} to {migrateVersion}");
                 dirty = true;
                 MigrateFor130(lines);
             }
@@ -49,7 +49,7 @@ namespace Automatics
 
         private static void MigrateFor130(List<string> lines)
         {
-            ReplaceAll(lines, new List<(string, string, string)>
+            ReplaceConfigAll(lines, new List<(string, string, string)>
             {
                 ("", "[logging]", "[system]"),
                 ("[system]", "logging_enabled", "enable_logging"),
@@ -77,7 +77,7 @@ namespace Automatics
             });
         }
 
-        private static void ReplaceAll(List<string> lines, List<(string, string, string)> replacements)
+        private static void ReplaceConfigAll(List<string> lines, List<(string, string, string)> replacements)
         {
             var currentSection = string.Empty;
             var skipIndex = 0;
@@ -92,7 +92,7 @@ namespace Automatics
                         if (line != oldValue) continue;
 
                         lines[j] = newValue;
-                        Automatics.ModLogger.LogDebug($"Migrated [{line}] -> [{lines[j]}]");
+                        Automatics.Logger.Debug($"Replaced [{line}] -> [{lines[j]}]");
                         break;
                     }
                 }
@@ -120,7 +120,7 @@ namespace Automatics
                             if (!Regex.IsMatch(line, regex)) continue;
 
                             lines[j] = Regex.Replace(line, regex, newValue);
-                            Automatics.ModLogger.LogDebug($"Migrated [{line}] -> [{lines[j]}]");
+                            Automatics.Logger.Debug($"Replaced [{line}] -> [{lines[j]}]");
                         }
                         else
                         {
@@ -128,7 +128,7 @@ namespace Automatics
                             if (key != oldValue) continue;
 
                             lines[j] = line.Replace(oldValue, newValue);
-                            Automatics.ModLogger.LogDebug($"Migrated [{line}] -> [{lines[j]}]");
+                            Automatics.Logger.Debug($"Replaced [{line}] -> [{lines[j]}]");
                             break;
                         }
                     }
@@ -141,7 +141,7 @@ namespace Automatics
             var match = VersionPattern.Match(line);
             if (!match.Success)
             {
-                Automatics.ModLogger.LogError("Invalid version string: " + line);
+                Automatics.Logger.Error($"Invalid version string: {line}");
                 return new Version(0, 0, 0);
             }
 

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
-using Automatics.ModUtils;
 using UnityEngine;
+using ModUtils;
 
 namespace Automatics.AutomaticMapping
 {
@@ -95,7 +95,7 @@ namespace Automatics.AutomaticMapping
         {
             foreach (var (_, component, _) in GetNearbyObjects(origin))
             {
-                if (Obj.GetZdoid(component, out var id) && knownId.Add(id))
+                if (Objects.GetZdoid(component, out var id) && knownId.Add(id))
                     AddOrUpdatePin(id, component, delta);
             }
         }
@@ -122,9 +122,9 @@ namespace Automatics.AutomaticMapping
                         name = shipPiece.m_name;
 
                     if (string.IsNullOrEmpty(name))
-                        name = Obj.GetName(ship);
+                        name = Objects.GetName(ship);
 
-                    Map.AddPin(pos, L10N.TranslateInternalNameOnly(name), true, CreateTarget(name, 0));
+                    Map.AddPin(pos, Automatics.L10N.TranslateInternalName(name), true, CreateTarget(name, 0));
                 }
             }
         }
@@ -153,7 +153,7 @@ namespace Automatics.AutomaticMapping
 
         private static IEnumerable<(Collider, Component, float)> GetNearbyObjects(Vector3 pos)
         {
-            return Obj.GetInsideSphere(pos, Config.DynamicObjectSearchRange, GetObject, ColliderBuffer, ObjectMask);
+            return Objects.GetInsideSphere(pos, Config.DynamicObjectSearchRange, GetObject, ColliderBuffer, ObjectMask);
         }
 
         private static Component GetObject(Collider collider)
@@ -172,7 +172,7 @@ namespace Automatics.AutomaticMapping
                 return bird;
 
             var fish = collider.GetComponentInParent<Fish>();
-            if (fish != null && Core.IsAnimal(Obj.GetName(fish), out data) && data.IsAllowed)
+            if (fish != null && Core.IsAnimal(Objects.GetName(fish), out data) && data.IsAllowed)
                 return fish;
 
             return null;
@@ -180,7 +180,7 @@ namespace Automatics.AutomaticMapping
 
         private static string GetBirdName(RandomFlyingBird bird)
         {
-            var name = Obj.GetPrefabName(bird.gameObject).ToLower();
+            var name = Objects.GetPrefabName(bird.gameObject).ToLower();
             return $"@animal_{name}";
         }
 
@@ -194,13 +194,13 @@ namespace Automatics.AutomaticMapping
                 case RandomFlyingBird bird:
                 {
                     var name = GetBirdName(bird);
-                    return (CreateTarget(name, 0), L10N.Translate(name));
+                    return (CreateTarget(name, 0), Automatics.L10N.Translate(name));
                 }
 
                 default:
                 {
-                    var name = Obj.GetName(component);
-                    return (CreateTarget(name, 0), L10N.Localize(name));
+                    var name = Objects.GetName(component);
+                    return (CreateTarget(name, 0), Automatics.L10N.Localize(name));
                 }
             }
         }
@@ -211,7 +211,7 @@ namespace Automatics.AutomaticMapping
             var level = character.GetLevel();
             if (level <= 1) return (CreateTarget(name, level), character.GetHoverName());
 
-            var symbol = L10N.Translate("@text_automatic_mapping_creature_level_symbol");
+            var symbol = Automatics.L10N.Translate("@text_automatic_mapping_creature_level_symbol");
             var sb = new StringBuilder(character.GetHoverName()).Append(" ");
             for (var i = 1; i < level; i++) sb.Append(symbol);
 

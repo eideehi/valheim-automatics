@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using ModUtils;
+using System.Collections.Generic;
 using System.Linq;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -10,8 +10,8 @@ namespace Automatics.AutomaticProcessing
         private static string LogMessage(string itemName, int count, string srcName, Vector3 srcPos, Container dest)
         {
             return count == 1
-                ? $"Stored {L10N.Translate(itemName)} in {L10N.Translate(dest.m_name)} {dest.transform.position} from {L10N.Translate(srcName)} {srcPos}"
-                : $"Stored {L10N.Translate(itemName)} x{count} in {L10N.Translate(dest.m_name)} {dest.transform.position} from {L10N.Translate(srcName)} {srcPos}";
+                ? $"Stored {Automatics.L10N.Translate(itemName)} in {Automatics.L10N.Translate(dest.m_name)} {dest.transform.position} from {Automatics.L10N.Translate(srcName)} {srcPos}"
+                : $"Stored {Automatics.L10N.Translate(itemName)} x{count} in {Automatics.L10N.Translate(dest.m_name)} {dest.transform.position} from {Automatics.L10N.Translate(srcName)} {srcPos}";
         }
 
         public static bool Run(Beehive piece, ZNetView zNetView, int increaseCount)
@@ -46,7 +46,7 @@ namespace Automatics.AutomaticProcessing
                 if (!inventory.AddItem(honeyItem.gameObject, honeyRemaining)) continue;
 
                 var storedHoneyCount = inventory.CountItems(honeyName) - honeyCountBefore;
-                Log.Debug(() => LogMessage(honeyName, storedHoneyCount, beehiveName, origin, container));
+                Automatics.Logger.Debug(() => LogMessage(honeyName, storedHoneyCount, beehiveName, origin, container));
                 honeyRemaining -= storedHoneyCount;
             }
 
@@ -67,7 +67,7 @@ namespace Automatics.AutomaticProcessing
             {
                 var slotItem = zNetView.GetZDO().GetString("slot" + i);
                 if (string.IsNullOrEmpty(slotItem)) continue;
-                if (!Reflection.InvokeMethod<bool>(piece, "IsItemDone", slotItem)) continue;
+                if (!Reflections.InvokeMethod<bool>(piece, "IsItemDone", slotItem)) continue;
 
                 doneItems.Add((i, slotItem));
             }
@@ -100,7 +100,7 @@ namespace Automatics.AutomaticProcessing
                 zNetView.GetZDO().Set("slot" + slot, 0f);
                 zNetView.GetZDO().Set("slotstatus" + slot, 0);
                 zNetView.InvokeRPC(ZNetView.Everybody, "SetSlotVisual", slot, "");
-                Log.Debug(() => LogMessage(itemName, 1, stationName, origin, container));
+                Automatics.Logger.Debug(() => LogMessage(itemName, 1, stationName, origin, container));
             }
         }
 
@@ -112,7 +112,7 @@ namespace Automatics.AutomaticProcessing
             var fermenterName = piece.m_name;
             if (!Core.IsAllowProcessing(fermenterName, Type.Store)) return;
 
-            if (Reflection.InvokeMethod<int>(piece, "GetStatus") != 3) return;
+            if (Reflections.InvokeMethod<int>(piece, "GetStatus") != 3) return;
 
             var itemId = zNetView.GetZDO().GetString("Content");
             var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == itemId);
@@ -140,7 +140,7 @@ namespace Automatics.AutomaticProcessing
                 if (!inventory.AddItem(item.gameObject, productRemaining)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;
-                Log.Debug(() => LogMessage(itemName, storedItemCount, fermenterName, origin, container));
+                Automatics.Logger.Debug(() => LogMessage(itemName, storedItemCount, fermenterName, origin, container));
                 productRemaining -= storedItemCount;
             }
 
@@ -184,7 +184,7 @@ namespace Automatics.AutomaticProcessing
                 if (!inventory.AddItem(item.gameObject, stack)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;
-                Log.Debug(() => LogMessage(itemName, storedItemCount, smelterName, origin, container));
+                Automatics.Logger.Debug(() => LogMessage(itemName, storedItemCount, smelterName, origin, container));
                 productRemaining -= storedItemCount;
             }
 

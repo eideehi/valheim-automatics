@@ -1,7 +1,7 @@
-﻿using System;
+﻿using ModUtils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.Debug
@@ -82,7 +82,7 @@ namespace Automatics.Debug
             var items = new List<ItemDrop>();
             foreach (var item in GetAllItems())
             {
-                var itemName = L10N.Translate(item.m_itemData.m_shared.m_name).Replace(" ", "_");
+                var itemName = Automatics.L10N.Translate(item.m_itemData.m_shared.m_name).Replace(" ", "_");
                 if (itemName == name)
                 {
                     GiveItem(item, count, quality);
@@ -103,7 +103,7 @@ namespace Automatics.Debug
             (from x in GetAllItems()
                 let name = x.m_itemData.m_shared.m_name.Trim()
                 where name.StartsWith("$")
-                select L10N.Translate(name).Replace(" ", "_"))
+                select Automatics.L10N.Translate(name).Replace(" ", "_"))
             .Distinct()
             .ToList();
 
@@ -112,12 +112,12 @@ namespace Automatics.Debug
             var name = args.Length >= 2 ? args[1] : "";
             var count = args.TryParameterInt(2);
 
-            Log.Debug(() => $"Run givematerials {name} {count}");
+            Automatics.Logger.Debug(() => $"Run givematerials {name} {count}");
 
             var exit = false;
             foreach (var piece in GetAllPieces())
             {
-                var pieceName = L10N.Translate(piece.m_name.Trim()).Replace(" ", "_");
+                var pieceName = Automatics.L10N.Translate(piece.m_name.Trim()).Replace(" ", "_");
                 if (pieceName != name) continue;
                 exit = true;
                 foreach (var resource in piece.m_resources)
@@ -130,7 +130,7 @@ namespace Automatics.Debug
 
             foreach (var recipe in GetAllRecipes())
             {
-                var itemName = L10N.Translate(recipe.m_item.m_itemData.m_shared.m_name.Trim()).Replace(" ", "_");
+                var itemName = Automatics.L10N.Translate(recipe.m_item.m_itemData.m_shared.m_name.Trim()).Replace(" ", "_");
                 if (itemName != name) continue;
 
                 foreach (var resource in recipe.m_resources)
@@ -144,7 +144,7 @@ namespace Automatics.Debug
         {
             var list = (from x in GetAllPieces() select x.m_name).ToList();
             list.AddRange(from x in GetAllRecipes() select x.m_item.m_itemData.m_shared.m_name);
-            return (from x in list select L10N.Translate(x.Trim()).Replace(" ", "_")).Distinct().ToList();
+            return (from x in list select Automatics.L10N.Translate(x.Trim()).Replace(" ", "_")).Distinct().ToList();
         }
 
         private static void PrintObject(Terminal.ConsoleEventArgs args)
@@ -164,11 +164,11 @@ namespace Automatics.Debug
                 return;
             }
 
-            Log.Debug(() => $"Run command: printobject {type} {range} {filter}");
+            Automatics.Logger.Debug(() => $"Run command: printobject {type} {range} {filter}");
 
             var strings = new HashSet<string>();
             var pos = Player.m_localPlayer.transform.position;
-            foreach (var (_, obj, _) in Obj.GetInsideSphere(pos, range, convertor, range * 16).OrderBy(x => x.distance))
+            foreach (var (_, obj, _) in Objects.GetInsideSphere(pos, range, convertor, range * 16).OrderBy(x => x.distance))
             {
                 switch (obj)
                 {
@@ -177,16 +177,16 @@ namespace Automatics.Debug
 
                     case RandomFlyingBird bird:
                     {
-                        var prefabName = Obj.GetPrefabName(bird.gameObject);
+                        var prefabName = Objects.GetPrefabName(bird.gameObject);
                         var name = $"@animal_{prefabName.ToLower()}";
-                        strings.Add($"{L10N.Translate(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
+                        strings.Add($"{Automatics.L10N.Translate(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
                         break;
                     }
 
                     default:
                     {
-                        var name = Obj.GetName(obj);
-                        strings.Add($"{L10N.Localize(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
+                        var name = Objects.GetName(obj);
+                        strings.Add($"{Automatics.L10N.Localize(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
                         break;
                     }
                 }
@@ -200,14 +200,14 @@ namespace Automatics.Debug
                 foreach (var x in strings)
                 {
                     args.Context.AddString(x);
-                    Log.Debug(() => x);
+                    Automatics.Logger.Debug(() => x);
                 }
 
-                args.Context.AddString(L10N.Localize("@command_print_result", strings.Count));
+                args.Context.AddString(Automatics.L10N.Localize("@command_print_result", strings.Count));
             }
             else
             {
-                args.Context.AddString(L10N.Translate("@command_print_result_empty"));
+                args.Context.AddString(Automatics.L10N.Translate("@command_print_result_empty"));
             }
 
             string Layer(Component @object)

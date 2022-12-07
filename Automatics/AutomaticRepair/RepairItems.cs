@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using ModUtils;
+using System.Collections.Generic;
 using System.Linq;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticRepair
@@ -27,16 +27,16 @@ namespace Automatics.AutomaticRepair
         {
             if (repairCount == 0) return;
 
-            Log.Debug(() => $"Repaired {repairCount} items");
+            Automatics.Logger.Debug(() => $"Repaired {repairCount} items");
             if (Config.ItemRepairMessage == Message.None) return;
 
             var type = Config.ItemRepairMessage == Message.Center ? MessageType.Center : MessageType.TopLeft;
-            player.Message(type, L10N.Localize("@message_automatic_repair_repaired_the_items", repairCount));
+            player.Message(type, Automatics.L10N.Localize("@message_automatic_repair_repaired_the_items", repairCount));
         }
 
         private static IEnumerable<CraftingStation> GetAllCraftingStations()
         {
-            return Reflection.GetStaticField<CraftingStation, List<CraftingStation>>("m_allStations") ??
+            return Reflections.GetStaticField<CraftingStation, List<CraftingStation>>("m_allStations") ??
                    Enumerable.Empty<CraftingStation>();
         }
 
@@ -53,7 +53,7 @@ namespace Automatics.AutomaticRepair
 
             item.m_durability = item.GetMaxDurability();
 
-            Log.Debug(() => $"Repair item: [{item.m_shared.m_name}({L10N.Translate(item.m_shared.m_name)})]");
+            Automatics.Logger.Debug(() => $"Repair item: [{item.m_shared.m_name}({Automatics.L10N.Translate(item.m_shared.m_name)})]");
             return true;
         }
 

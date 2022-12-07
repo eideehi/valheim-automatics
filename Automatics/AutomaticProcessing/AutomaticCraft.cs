@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using ModUtils;
+using System.Collections.Generic;
 using System.Linq;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -11,8 +11,8 @@ namespace Automatics.AutomaticProcessing
             string destName, Vector3 destPos)
         {
             return count == 1
-                ? $"{L10N.Translate(fromItem)} was set from {L10N.Translate(container.m_name)} {container.transform.position} to {L10N.Translate(destName)} {destPos} for crafting {L10N.Translate(toItem)}"
-                : $"{L10N.Translate(fromItem)} x{count} was set from {L10N.Translate(container.m_name)} {container.transform.position} to {L10N.Translate(destName)} {destPos} for crafting {L10N.Translate(toItem)}";
+                ? $"{Automatics.L10N.Translate(fromItem)} was set from {Automatics.L10N.Translate(container.m_name)} {container.transform.position} to {Automatics.L10N.Translate(destName)} {destPos} for crafting {Automatics.L10N.Translate(toItem)}"
+                : $"{Automatics.L10N.Translate(fromItem)} x{count} was set from {Automatics.L10N.Translate(container.m_name)} {container.transform.position} to {Automatics.L10N.Translate(destName)} {destPos} for crafting {Automatics.L10N.Translate(toItem)}";
         }
 
         public static void Run(CookingStation piece, ZNetView zNetView)
@@ -23,7 +23,7 @@ namespace Automatics.AutomaticProcessing
             var stationName = piece.m_name;
             if (!Core.IsAllowProcessing(stationName, Type.Craft)) return;
 
-            if (piece.m_requireFire && !Reflection.InvokeMethod<bool>(piece, "IsFireLit")) return;
+            if (piece.m_requireFire && !Reflections.InvokeMethod<bool>(piece, "IsFireLit")) return;
             if (piece.m_useFuel && zNetView.GetZDO().GetFloat("fuel") <= 0f) return;
 
             var cookingProductCounts = new Dictionary<string, int>();
@@ -37,7 +37,7 @@ namespace Automatics.AutomaticProcessing
                     continue;
                 }
 
-                var conversion = Reflection.InvokeMethod<CookingStation.ItemConversion>(piece, "GetItemConversion", item);
+                var conversion = Reflections.InvokeMethod<CookingStation.ItemConversion>(piece, "GetItemConversion", item);
                 if (conversion == null) continue;
 
                 var productName = conversion.m_to.m_itemData.m_shared.m_name;
@@ -88,7 +88,7 @@ namespace Automatics.AutomaticProcessing
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("AddItem", item.m_dropPrefab.name);
-                    Log.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
                         stationName, origin));
                     break;
                 }
@@ -113,7 +113,7 @@ namespace Automatics.AutomaticProcessing
             var fermenterName = piece.m_name;
             if (!Core.IsAllowProcessing(fermenterName, Type.Craft)) return;
 
-            if (Reflection.InvokeMethod<int>(piece, "GetStatus") != 0) return;
+            if (Reflections.InvokeMethod<int>(piece, "GetStatus") != 0) return;
 
             var minMaterialCount = Config.MaterialCountOfSuppressProcessing(fermenterName);
             var maxProductCount = Config.ProductCountOfSuppressProcessing(fermenterName);
@@ -158,7 +158,7 @@ namespace Automatics.AutomaticProcessing
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("AddItem", item.m_dropPrefab.name);
-                    Log.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
                         fermenterName, origin));
                     break;
                 }
@@ -238,7 +238,7 @@ namespace Automatics.AutomaticProcessing
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("AddOre", item.m_dropPrefab.name);
-                    Log.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
                         smelterName, origin));
                     break;
                 }

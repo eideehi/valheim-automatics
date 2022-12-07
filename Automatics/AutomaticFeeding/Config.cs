@@ -1,5 +1,4 @@
-﻿using Automatics.ModUtils;
-using BepInEx.Configuration;
+﻿using BepInEx.Configuration;
 
 namespace Automatics.AutomaticFeeding
 {
@@ -19,11 +18,13 @@ namespace Automatics.AutomaticFeeding
 
         public static void Initialize()
         {
-            Configuration.ChangeSection(Section);
-            _enableAutomaticFeeding = Configuration.Bind("enable_automatic_feeding", true);
-            _feedSearchRange = Configuration.Bind("feed_search_range", 0, (0, 64));
-            _needGetCloseToEatTheFeed = Configuration.Bind("need_get_close_to_eat_the_feed", false);
-            _allowToFeedFromContainer = Configuration.Bind("allow_to_feed_from_container", Animal.Tamed);
+            var config = global::Automatics.Config.Instance;
+
+            config.ChangeSection(Section);
+            _enableAutomaticFeeding = config.Bind("enable_automatic_feeding", true);
+            _feedSearchRange = config.Bind("feed_search_range", 0, (0, 64));
+            _needGetCloseToEatTheFeed = config.Bind("need_get_close_to_eat_the_feed", false);
+            _allowToFeedFromContainer = config.Bind("allow_to_feed_from_container", Animal.Tamed);
         }
     }
 }

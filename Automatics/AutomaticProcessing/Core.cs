@@ -1,7 +1,7 @@
-﻿using System;
+﻿using ModUtils;
 using System.Collections.Generic;
 using System.Linq;
-using Automatics.ModUtils;
+using System;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -102,16 +102,16 @@ namespace Automatics.AutomaticProcessing
     {
         None = 0,
 
-        [LocalizedDescription("@config_automatic_processing_processing_type_craft")]
+        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_processing_processing_type_craft")]
         Craft = 1L << 0,
 
-        [LocalizedDescription("@config_automatic_processing_processing_type_refuel")]
+        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_processing_processing_type_refuel")]
         Refuel = 1L << 1,
 
-        [LocalizedDescription("@config_automatic_processing_processing_type_store")]
+        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_processing_processing_type_store")]
         Store = 1L << 2,
 
-        [LocalizedDescription("@select_all")]
+        [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
         All = (1L << 3) - 1,
     }
 }

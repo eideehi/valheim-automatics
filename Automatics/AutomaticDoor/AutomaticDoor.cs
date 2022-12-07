@@ -1,6 +1,6 @@
-﻿using System;
+﻿using ModUtils;
+using System;
 using System.Collections.Generic;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticDoor
@@ -119,7 +119,7 @@ namespace Automatics.AutomaticDoor
 
         private bool FindObstaclesBetween(Player player)
         {
-            var from = Reflection.GetField<Collider>(player, "m_collider")?.bounds.center ?? player.m_eye.position;
+            var from = Reflections.GetField<Collider>(player, "m_collider")?.bounds.center ?? player.m_eye.position;
             var to = _door.transform.position;
 
             if (!Physics.Linecast(from, to, out var hitInfo, PieceMask)) return false;
@@ -137,7 +137,7 @@ namespace Automatics.AutomaticDoor
 
         private bool CanInteract()
         {
-            return Reflection.InvokeMethod<bool>(_door, "CanInteract");
+            return Reflections.InvokeMethod<bool>(_door, "CanInteract");
         }
 
         private enum Status

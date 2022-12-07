@@ -1,5 +1,4 @@
-﻿using Automatics.ModUtils;
-using BepInEx.Configuration;
+﻿using BepInEx.Configuration;
 
 namespace Automatics.AutomaticMining
 {
@@ -25,14 +24,16 @@ namespace Automatics.AutomaticMining
 
         public static void Initialize()
         {
-            Configuration.ChangeSection(Section);
-            _enableAutomaticMining = Configuration.Bind("enable_automatic_mining", true);
-            _needToEquipPickaxe = Configuration.Bind("need_to_equip_pickaxe", true);
-            _miningInterval = Configuration.Bind("mining_interval", 1.5f, (0.1f, 4f));
-            _miningKey = Configuration.Bind("mining_key", new KeyboardShortcut());
-            _miningRange = Configuration.Bind("mining_range", 3, (0, 32));
-            _allowMiningUndergroundMinerals = Configuration.Bind("allow_mining_underground_minerals", true);
-            _needToEquipWishboneForMiningUndergroundMinerals = Configuration.Bind("need_to_equip_wishbone_for_mining_underground_minerals", true);
+            var config = global::Automatics.Config.Instance;
+
+            config.ChangeSection(Section);
+            _enableAutomaticMining = config.Bind("enable_automatic_mining", true);
+            _needToEquipPickaxe = config.Bind("need_to_equip_pickaxe", true);
+            _miningInterval = config.Bind("mining_interval", 1.5f, (0.1f, 4f));
+            _miningKey = config.Bind("mining_key", new KeyboardShortcut());
+            _miningRange = config.Bind("mining_range", 3, (0, 32));
+            _allowMiningUndergroundMinerals = config.Bind("allow_mining_underground_minerals", true);
+            _needToEquipWishboneForMiningUndergroundMinerals = config.Bind("need_to_equip_wishbone_for_mining_underground_minerals", true);
         }
     }
 }

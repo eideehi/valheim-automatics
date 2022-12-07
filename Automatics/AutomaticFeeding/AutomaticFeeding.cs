@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using ModUtils;
+using System.Collections.Generic;
 using System.Linq;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticFeeding
@@ -68,7 +68,7 @@ namespace Automatics.AutomaticFeeding
         {
             if (_monsterAI.m_consumeItems == null || _monsterAI.m_consumeItems.Count == 0) return false;
 
-            if (Reflection.GetField<float>(_monsterAI, "m_consumeSearchTimer") == 0f)
+            if (Reflections.GetField<float>(_monsterAI, "m_consumeSearchTimer") == 0f)
                 UpdateFeedInfo();
 
             if (!_tamable.IsHungry()) return false;
@@ -96,7 +96,7 @@ namespace Automatics.AutomaticFeeding
             {
                 _monsterAI.m_onConsumedItem?.Invoke(null);
                 humanoid.m_consumeItemEffects.Create(_baseAI.transform.position, Quaternion.identity);
-                Reflection.GetField<ZSyncAnimation>(_baseAI, "m_animator").SetTrigger("consume");
+                Reflections.GetField<ZSyncAnimation>(_baseAI, "m_animator").SetTrigger("consume");
             }
 
             return true;
@@ -168,27 +168,27 @@ namespace Automatics.AutomaticFeeding
 
         private bool CanConsume(ItemDrop.ItemData item)
         {
-            return Reflection.InvokeMethod<bool>(_monsterAI, "CanConsume", item);
+            return Reflections.InvokeMethod<bool>(_monsterAI, "CanConsume", item);
         }
 
         private bool HavePath(Vector3 target)
         {
-            return Reflection.InvokeMethod<bool>(_baseAI, "HavePath", target);
+            return Reflections.InvokeMethod<bool>(_baseAI, "HavePath", target);
         }
 
         private bool MoveTo(float dt, Vector3 point, float dist, bool run)
         {
-            return Reflection.InvokeMethod<bool>(_baseAI, "MoveTo", dt, point, dist, run);
+            return Reflections.InvokeMethod<bool>(_baseAI, "MoveTo", dt, point, dist, run);
         }
 
         private void LookAt(Vector3 point)
         {
-            Reflection.InvokeMethod(_baseAI, "LookAt", point);
+            Reflections.InvokeMethod(_baseAI, "LookAt", point);
         }
 
         private bool IsLookingAt(Vector3 point, float minAngle)
         {
-            return Reflection.InvokeMethod<bool>(_baseAI, "IsLookingAt", point, minAngle);
+            return Reflections.InvokeMethod<bool>(_baseAI, "IsLookingAt", point, minAngle);
         }
     }
 }

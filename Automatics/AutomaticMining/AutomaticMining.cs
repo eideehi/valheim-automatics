@@ -1,7 +1,7 @@
-﻿using System;
+﻿using ModUtils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMining
@@ -74,7 +74,7 @@ namespace Automatics.AutomaticMining
 
         private static IEnumerable<MonoBehaviour> GetNearbyMinerals(Vector3 origin, float range)
         {
-            return from x in Obj.GetInsideSphere(origin, range, IsMineral, ColliderBuffer, MineralMask)
+            return from x in Objects.GetInsideSphere(origin, range, IsMineral, ColliderBuffer, MineralMask)
                 orderby x.Item3
                 select x.Item2;
         }
@@ -82,14 +82,14 @@ namespace Automatics.AutomaticMining
         private static MonoBehaviour IsMineral(Collider collider)
         {
             var obj = collider.GetComponentInParent<IDestructible>() as MonoBehaviour;
-            return Object.GetMineralDeposit(Obj.GetName(obj), out _) ? obj : null;
+            return Object.GetMineralDeposit(Objects.GetName(obj), out _) ? obj : null;
         }
 
         private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range, MineRock rock)
         {
             if (rock.m_minToolTier > pickaxe.m_shared.m_toolTier) return;
 
-            var areas = Reflection.GetField<Collider[]>(rock, "m_hitAreas");
+            var areas = Reflections.GetField<Collider[]>(rock, "m_hitAreas");
             if (areas == null) return;
 
             var origin = player.transform.position;
@@ -97,11 +97,11 @@ namespace Automatics.AutomaticMining
 
             foreach (var mineral in minerals)
             {
-                Log.Debug(() =>
+                Automatics.Logger.Debug(() =>
                 {
-                    var name = Obj.GetName(rock);
+                    var name = Objects.GetName(rock);
                     return
-                        $"Mining: [type: MineRock, name: {name}({L10N.Translate(name)}), pos: {mineral.bounds.center}]";
+                        $"Mining: [type: MineRock, name: {name}({Automatics.L10N.Translate(name)}), pos: {mineral.bounds.center}]";
                 });
 
                 CreateHitEffect(pickaxe, mineral.bounds.center);
@@ -130,11 +130,11 @@ namespace Automatics.AutomaticMining
 
             foreach (var mineral in minerals)
             {
-                Log.Debug(() =>
+                Automatics.Logger.Debug(() =>
                 {
-                    var name = Obj.GetName(rock);
+                    var name = Objects.GetName(rock);
                     return
-                        $"Mining: [type: MineRock5, name: {name}({L10N.Translate(name)}), pos: {mineral.bounds.center}]";
+                        $"Mining: [type: MineRock5, name: {name}({Automatics.L10N.Translate(name)}), pos: {mineral.bounds.center}]";
                 });
 
                 CreateHitEffect(pickaxe, mineral.bounds.center);
@@ -150,11 +150,11 @@ namespace Automatics.AutomaticMining
             var collider = destructible.GetComponentInChildren<Collider>();
             if (collider == null || !IsInRange(player.transform.position, collider, range)) return;
 
-            Log.Debug(() =>
+            Automatics.Logger.Debug(() =>
             {
-                var name = Obj.GetName(destructible);
+                var name = Objects.GetName(destructible);
                 return
-                    $"Mining: [type: Destructible, name: {name}({L10N.Translate(name)}), pos: {collider.bounds.center}]";
+                    $"Mining: [type: Destructible, name: {name}({Automatics.L10N.Translate(name)}), pos: {collider.bounds.center}]";
             });
 
             CreateHitEffect(pickaxe, collider.bounds.center);

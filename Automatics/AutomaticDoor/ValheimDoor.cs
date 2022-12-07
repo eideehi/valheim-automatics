@@ -1,6 +1,6 @@
-﻿using System;
+﻿using ModUtils;
+using System;
 using System.Collections.Generic;
-using Automatics.ModUtils;
 
 namespace Automatics.AutomaticDoor
 {
@@ -63,7 +63,7 @@ namespace Automatics.AutomaticDoor
             [LocalizedDescription(Name.WoodShutter)]
             WoodShutter = 1L << 4,
 
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 5) - 1,
         }
     }

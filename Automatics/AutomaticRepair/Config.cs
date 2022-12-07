@@ -1,5 +1,4 @@
-﻿using Automatics.ModUtils;
-using BepInEx.Configuration;
+﻿using BepInEx.Configuration;
 
 namespace Automatics.AutomaticRepair
 {
@@ -23,13 +22,15 @@ namespace Automatics.AutomaticRepair
 
         public static void Initialize()
         {
-            Configuration.ChangeSection(Section);
-            _enableAutomaticRepair = Configuration.Bind("enable_automatic_repair", true);
-            _craftingStationSearchRange = Configuration.Bind("crafting_station_search_range", 16, (0, 64));
-            _repairItemsWhenAccessingTheCraftingStation = Configuration.Bind("repair_items_when_accessing_the_crafting_station", false);
-            _itemRepairMessage = Configuration.Bind("item_repair_message", Message.None);
-            _pieceSearchRange = Configuration.Bind("piece_search_range", 16, (0, 64));
-            _pieceRepairMessage = Configuration.Bind("piece_repair_message", Message.None);
+            var config = global::Automatics.Config.Instance;
+
+            config.ChangeSection(Section);
+            _enableAutomaticRepair = config.Bind("enable_automatic_repair", true);
+            _craftingStationSearchRange = config.Bind("crafting_station_search_range", 16, (0, 64));
+            _repairItemsWhenAccessingTheCraftingStation = config.Bind("repair_items_when_accessing_the_crafting_station", false);
+            _itemRepairMessage = config.Bind("item_repair_message", Message.None);
+            _pieceSearchRange = config.Bind("piece_search_range", 16, (0, 64));
+            _pieceRepairMessage = config.Bind("piece_repair_message", Message.None);
         }
     }
 }

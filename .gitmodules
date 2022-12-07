@@ -1,0 +1,3 @@
+[submodule "Automatics/Libraries/mod-utils"]
+	path = Automatics/Libraries/mod-utils
+	url = https://github.com/eideehi/valheim-mod-utils.git

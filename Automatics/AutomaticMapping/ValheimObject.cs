@@ -1,7 +1,7 @@
-﻿using System;
+﻿using JetBrains.Annotations;
+using ModUtils;
+using System;
 using System.Collections.Generic;
-using Automatics.ModUtils;
-using JetBrains.Annotations;
 
 namespace Automatics.AutomaticMapping
 {
@@ -91,7 +91,7 @@ namespace Automatics.AutomaticMapping
             BodyPile = 1L << 2,
 
             [UsedImplicitly]
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 3) - 1,
         }
 
@@ -107,14 +107,14 @@ namespace Automatics.AutomaticMapping
             [LocalizedDescription(Name.Runestone)]
             Runestone = 1L << 1,
 
-            [LocalizedDescription(Name.WildBeehive)]
+            [LocalizedDescription(Automatics.L10NPrefix, Name.WildBeehive)]
             WildBeehive = 1L << 2,
 
             [LocalizedDescription(Name.Portal)]
             Portal = 1L << 3,
 
             [UsedImplicitly]
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 4) - 1,
         }
     }

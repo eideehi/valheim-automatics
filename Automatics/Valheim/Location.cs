@@ -1,7 +1,7 @@
-﻿using System;
+﻿using JetBrains.Annotations;
+using ModUtils;
+using System;
 using System.Collections.Generic;
-using Automatics.ModUtils;
-using JetBrains.Annotations;
 
 namespace Automatics.Valheim
 {
@@ -115,7 +115,7 @@ namespace Automatics.Valheim
             MountainCave = 1L << 3,
 
             [UsedImplicitly]
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 4) - 1,
         }
 
@@ -125,23 +125,23 @@ namespace Automatics.Valheim
             [UsedImplicitly]
             None = 0,
 
-            [LocalizedDescription(Name.InfestedTree)]
+            [LocalizedDescription(Automatics.L10NPrefix, Name.InfestedTree)]
             InfestedTree = 1L << 0,
 
-            [LocalizedDescription(Name.FireHole)]
+            [LocalizedDescription(Automatics.L10NPrefix, Name.FireHole)]
             FireHole = 1L << 1,
 
-            [LocalizedDescription(Name.DrakeNest)]
+            [LocalizedDescription(Automatics.L10NPrefix, Name.DrakeNest)]
             DrakeNest = 1L << 2,
 
-            [LocalizedDescription(Name.GoblinCamp)]
+            [LocalizedDescription(Automatics.L10NPrefix, Name.GoblinCamp)]
             GoblinCamp = 1L << 3,
 
-            [LocalizedDescription(Name.TarPit)]
+            [LocalizedDescription(Automatics.L10NPrefix, Name.TarPit)]
             TarPit = 1L << 4,
 
             [UsedImplicitly]
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 5) - 1,
         }
     }

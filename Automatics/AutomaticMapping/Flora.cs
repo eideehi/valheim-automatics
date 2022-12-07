@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Linq;
-using Automatics.ModUtils;
 using UnityEngine;
+using ModUtils;
 
 namespace Automatics.AutomaticMapping
 {
@@ -16,7 +16,7 @@ namespace Automatics.AutomaticMapping
         private Pickable _pickable;
         private ZNetView _zNetView;
 
-        private string Name => Obj.GetName(_pickable);
+        private string Name => Objects.GetName(_pickable);
 
         public Vector3 Position => _pickable.transform.position;
         public ZDOID ZdoId => _zNetView.GetZDO().m_uid;

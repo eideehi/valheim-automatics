@@ -1,9 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using HarmonyLib;
+using ModUtils;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection.Emit;
-using Automatics.ModUtils;
-using HarmonyLib;
 
 namespace Automatics.AutomaticMapping
 {
@@ -122,7 +122,7 @@ namespace Automatics.AutomaticMapping
         private static void DestructibleAwakePostfix(Destructible __instance, ZNetView ___m_nview)
         {
             if (___m_nview.GetZDO() == null) return;
-            if (Core.IsMineralDeposit(Obj.GetName(__instance), out _)) return;
+            if (Core.IsMineralDeposit(Objects.GetName(__instance), out _)) return;
 
             __instance.m_onDestroyed += () =>
             {

@@ -1,5 +1,5 @@
-﻿using Automatics.ModUtils;
-using BepInEx.Configuration;
+﻿using BepInEx.Configuration;
+using ModUtils;
 
 namespace Automatics.AutomaticMapping
 {
@@ -68,33 +68,35 @@ namespace Automatics.AutomaticMapping
 
         public static void Initialize()
         {
-            Configuration.ChangeSection(Section);
-            _enableAutomaticMapping = Configuration.Bind("enable_automatic_mapping", true);
-            _dynamicObjectSearchRange = Configuration.Bind("dynamic_object_search_range", 64, (0, 256));
-            _staticObjectSearchRange = Configuration.Bind("static_object_search_range", 16, (0, 256));
-            _locationSearchRange = Configuration.Bind("location_search_range", 96, (0, 256));
-            _allowPinningAnimal = Configuration.Bind("allow_pinning_animal", Animal.All);
-            _allowPinningAnimalCustom = Configuration.Bind("allow_pinning_animal_custom", new StringList());
-            _allowPinningMonster = Configuration.Bind("allow_pinning_monster", Monster.All);
-            _allowPinningMonsterCustom = Configuration.Bind("allow_pinning_monster_custom", new StringList());
-            _allowPinningFlora = Configuration.Bind("allow_pinning_flora", Flora.Raspberries | Flora.Mushroom | Flora.Blueberries | Flora.CarrotSeeds | Flora.Thistle | Flora.TurnipSeeds | Flora.Cloudberries);
-            _allowPinningFloraCustom = Configuration.Bind("allow_pinning_flora_custom", new StringList());
-            _allowPinningVein = Configuration.Bind("allow_pinning_deposit", MineralDeposit.All ^ MineralDeposit.ObsidianDeposit);
-            _allowPinningVeinCustom = Configuration.Bind("allow_pinning_deposit_custom", new StringList());
-            _allowPinningSpawner = Configuration.Bind("allow_pinning_spawner", Spawner.None);
-            _allowPinningSpawnerCustom = Configuration.Bind("allow_pinning_spawner_custom", new StringList());
-            _allowPinningOther = Configuration.Bind("allow_pinning_other", Other.WildBeehive);
-            _allowPinningOtherCustom = Configuration.Bind("allow_pinning_other_custom", new StringList());
-            _allowPinningDungeon = Configuration.Bind("allow_pinning_dungeon", Dungeon.All);
-            _allowPinningDungeonCustom = Configuration.Bind("allow_pinning_dungeon_custom", new StringList());
-            _allowPinningSpot = Configuration.Bind("allow_pinning_spot", Spot.All);
-            _allowPinningSpotCustom = Configuration.Bind("allow_pinning_spot_custom", new StringList());
-            _allowPinningShip = Configuration.Bind("allow_pinning_ship", true);
-            _notPinningTamedAnimals = Configuration.Bind("not_pinning_tamed_animals", true);
-            _staticObjectSearchInterval = Configuration.Bind("static_object_search_interval", 0.25f, (0f, 8f));
-            _floraPinMergeRange = Configuration.Bind("flora_pins_merge_range", 8, (0, 16));
-            _needToEquipWishboneForUndergroundDeposits = Configuration.Bind("need_to_equip_wishbone_for_underground_deposits", true);
-            _staticObjectSearchKey = Configuration.Bind("static_object_search_key", new KeyboardShortcut());
+            var config = global::Automatics.Config.Instance;
+
+            config.ChangeSection(Section);
+            _enableAutomaticMapping = config.Bind("enable_automatic_mapping", true);
+            _dynamicObjectSearchRange = config.Bind("dynamic_object_search_range", 64, (0, 256));
+            _staticObjectSearchRange = config.Bind("static_object_search_range", 16, (0, 256));
+            _locationSearchRange = config.Bind("location_search_range", 96, (0, 256));
+            _allowPinningAnimal = config.Bind("allow_pinning_animal", Animal.All);
+            _allowPinningAnimalCustom = config.Bind("allow_pinning_animal_custom", new StringList());
+            _allowPinningMonster = config.Bind("allow_pinning_monster", Monster.All);
+            _allowPinningMonsterCustom = config.Bind("allow_pinning_monster_custom", new StringList());
+            _allowPinningFlora = config.Bind("allow_pinning_flora", Flora.Raspberries | Flora.Mushroom | Flora.Blueberries | Flora.CarrotSeeds | Flora.Thistle | Flora.TurnipSeeds | Flora.Cloudberries);
+            _allowPinningFloraCustom = config.Bind("allow_pinning_flora_custom", new StringList());
+            _allowPinningVein = config.Bind("allow_pinning_deposit", MineralDeposit.All ^ MineralDeposit.ObsidianDeposit);
+            _allowPinningVeinCustom = config.Bind("allow_pinning_deposit_custom", new StringList());
+            _allowPinningSpawner = config.Bind("allow_pinning_spawner", Spawner.None);
+            _allowPinningSpawnerCustom = config.Bind("allow_pinning_spawner_custom", new StringList());
+            _allowPinningOther = config.Bind("allow_pinning_other", Other.WildBeehive);
+            _allowPinningOtherCustom = config.Bind("allow_pinning_other_custom", new StringList());
+            _allowPinningDungeon = config.Bind("allow_pinning_dungeon", Dungeon.All);
+            _allowPinningDungeonCustom = config.Bind("allow_pinning_dungeon_custom", new StringList());
+            _allowPinningSpot = config.Bind("allow_pinning_spot", Spot.All);
+            _allowPinningSpotCustom = config.Bind("allow_pinning_spot_custom", new StringList());
+            _allowPinningShip = config.Bind("allow_pinning_ship", true);
+            _notPinningTamedAnimals = config.Bind("not_pinning_tamed_animals", true);
+            _staticObjectSearchInterval = config.Bind("static_object_search_interval", 0.25f, (0f, 8f));
+            _floraPinMergeRange = config.Bind("flora_pins_merge_range", 8, (0, 16));
+            _needToEquipWishboneForUndergroundDeposits = config.Bind("need_to_equip_wishbone_for_underground_deposits", true);
+            _staticObjectSearchKey = config.Bind("static_object_search_key", new KeyboardShortcut());
 
             _allowPinningAnimal.SettingChanged += DynamicPinning.OnSettingChanged;
             _allowPinningMonster.SettingChanged += DynamicPinning.OnSettingChanged;

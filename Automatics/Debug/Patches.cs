@@ -1,9 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using BepInEx.Configuration;
+using HarmonyLib;
+using ModUtils;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Emit;
-using Automatics.ModUtils;
-using BepInEx.Configuration;
-using HarmonyLib;
 using UnityEngine;
 
 namespace Automatics.Debug
@@ -84,7 +84,7 @@ namespace Automatics.Debug
         {
             if (!___m_cheat)
             {
-                Reflection.SetField(__instance, "m_cheat", true);
+                Reflections.SetField(__instance, "m_cheat", true);
             }
         }
 

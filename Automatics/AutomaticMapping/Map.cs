@@ -1,9 +1,8 @@
-﻿using System;
+﻿using ModUtils;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Automatics.ModUtils;
-using LitJson;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapping
@@ -28,13 +27,12 @@ namespace Automatics.AutomaticMapping
 
         private static Minimap ValheimMap => Minimap.instance;
 
-        private static IEnumerable<PinData> GetAllPins() => Reflection.GetField<List<PinData>>(ValheimMap, "m_pins");
+        private static IEnumerable<PinData> GetAllPins() => Reflections.GetField<List<PinData>>(ValheimMap, "m_pins");
 
         public static void Initialize()
         {
-            Deprecated.Map.Initialize();
             CustomIcons.Clear();
-            LoadCustomIcons(Automatics.GetDefaultResourcePath("Textures"));
+            LoadCustomIcons(Automatics.GetFilePath("Textures"));
 
             foreach (var automaticsChildModDir in Automatics.GetAutomaticsChildModDirs())
                 LoadCustomIcons(Path.Combine(automaticsChildModDir, "Textures"));
@@ -52,16 +50,17 @@ namespace Automatics.AutomaticMapping
 
             try
             {
-                Automatics.ModLogger.LogInfo($"Load custom icon data from {customIconsJson}");
+                Automatics.Logger.Info($"Load custom icon data from {customIconsJson}");
 
-                var reader = new JsonReader(File.ReadAllText(customIconsJson))
-                {
-                    AllowComments = true,
-                };
+                var spriteLoader = new SpriteLoader();
+                spriteLoader.SetDebugLogger(Automatics.Logger);
 
-                foreach (var data in JsonMapper.ToObject<List<CustomIconData>>(reader))
+                var jsonText = File.ReadAllText(customIconsJson);
+                foreach (var data in Json.Parse<List<CustomIconData>>(jsonText))
                 {
-                    var sprite = Image.CreateSprite(texturesDir, data.sprite);
+                    var info = data.sprite;
+                    var path = Path.Combine(texturesDir, info.file);
+                    var sprite = spriteLoader.Load(path, info.width, info.height);
                     if (sprite == null) continue;
 
                     CustomIcons.Add(new CustomIcon
@@ -71,12 +70,12 @@ namespace Automatics.AutomaticMapping
                         Options = data.options,
                     });
 
-                    Automatics.ModLogger.LogInfo($"* Loaded custom icon data for {data.target.name}");
+                    Automatics.Logger.Info($"* Loaded custom icon data for {data.target.name}");
                 }
             }
             catch (Exception e)
             {
-                Automatics.ModLogger.LogError($"Failed to load custom icon data: {customIconsJson}\n{e}");
+                Automatics.Logger.Error($"Failed to load custom icon data: {customIconsJson}\n{e}");
             }
         }
 
@@ -84,14 +83,14 @@ namespace Automatics.AutomaticMapping
         {
             if (!CustomIcons.Any()) return;
 
-            var visibleIconTypes = Reflection.GetField<bool[]>(ValheimMap, "m_visibleIconTypes");
+            var visibleIconTypes = Reflections.GetField<bool[]>(ValheimMap, "m_visibleIconTypes");
             var originalArraySize = visibleIconTypes.Length;
             var newVisibleIconTypes = new bool[originalArraySize + CustomIcons.Count];
             for (var i = 0; i < newVisibleIconTypes.Length; i++)
                 newVisibleIconTypes[i] = i < originalArraySize && visibleIconTypes[i];
-            Reflection.SetField(ValheimMap, "m_visibleIconTypes", newVisibleIconTypes);
+            Reflections.SetField(ValheimMap, "m_visibleIconTypes", newVisibleIconTypes);
 
-            Automatics.ModLogger.LogInfo(
+            Automatics.Logger.Info(
                 $"Minimap.m_visibleIconTypes Expanded: {originalArraySize} -> {newVisibleIconTypes.Length}");
 
             for (var j = 0; j < CustomIcons.Count; j++)
@@ -106,33 +105,17 @@ namespace Automatics.AutomaticMapping
                     m_icon = icon.Sprite
                 });
 
-                Automatics.ModLogger.LogInfo(
-                    $"Register new sprite data: ({pinType}, {Image.GetTextureFileName(icon.Sprite)})");
+                Automatics.Logger.Info(
+                    $"Register new sprite data: ({pinType}, {SpriteLoader.GetTextureFileName(icon.Sprite)})");
             }
         }
 
         private static CustomIcon GetCustomIcon(PinningTarget target)
         {
-            var customIcon = GetCustomIconInternal(target);
-            if (customIcon == DefaultIcon)
-            {
-                var pinType = Deprecated.Map.GetCustomIcon(target.name);
-                customIcon = new CustomIcon
-                {
-                    PinType = pinType,
-                    Options = new Options()
-                };
-            }
-
-            return customIcon;
-        }
-
-        private static CustomIcon GetCustomIconInternal(PinningTarget target)
-        {
             if (!CustomIcons.Any()) return DefaultIcon;
 
             var internalName = target.name;
-            var displayName = L10N.TranslateInternalNameOnly(internalName);
+            var displayName = Automatics.L10N.TranslateInternalName(internalName);
             var meta = target.metadata;
             return (from x in CustomIcons
                     where (L10N.IsInternalName(x.Target.name)
@@ -171,7 +154,7 @@ namespace Automatics.AutomaticMapping
         public static PinData AddPin(Vector3 pos, PinType type, string name, bool save)
         {
             var data = ValheimMap.AddPin(pos, type, name, save, false);
-            Log.Debug(() => $"Add pin: [name: {name}, pos: {data.m_pos}, icon: {(int)type}]");
+            Automatics.Logger.Debug(() => $"Add pin: [name: {name}, pos: {data.m_pos}, icon: {(int)type}]");
             return data;
         }
 
@@ -184,7 +167,7 @@ namespace Automatics.AutomaticMapping
         public static void RemovePin(PinData data)
         {
             ValheimMap.RemovePin(data);
-            Log.Debug(() => $"Remove pin: [name: {data.m_name}, pos: {data.m_pos}, icon: {(int)data.m_type}]");
+            Automatics.Logger.Debug(() => $"Remove pin: [name: {data.m_name}, pos: {data.m_pos}, icon: {(int)data.m_type}]");
         }
 
         public static void RemovePin(Vector3 pos, bool save = true)
@@ -218,6 +201,14 @@ namespace Automatics.AutomaticMapping
             public Sprite Sprite;
             public Options Options;
         }
+    }
+
+    [Serializable]
+    public struct SpriteInfo
+    {
+        public string file;
+        public int width;
+        public int height;
     }
 
     [Serializable]

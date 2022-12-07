@@ -1,123 +1,167 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using JetBrains.Annotations;
+using ModUtils;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
+using Logger = ModUtils.Logger;
+using Random = UnityEngine.Random;
 
 namespace Automatics
 {
-  [BepInPlugin(ModId, ModName, ModVersion)]
-  public class Automatics : BaseUnityPlugin
-  {
-    private const string ModId = "net.eidee.valheim.automatics";
-    private const string ModName = "Automatics";
-    private const string ModVersion = "1.3.2";
-
-    private static readonly Dictionary<string, (Action action, float timestamp, float delay)> InvokeQueue;
-
-    static Automatics()
+    [BepInPlugin(ModId, ModName, ModVersion)]
+    public class UnityPlugin : BaseUnityPlugin
     {
-      InvokeQueue = new Dictionary<string, (Action action, float timestamp, float delay)>();
-    }
+        private const string ModId = "net.eidee.valheim.automatics";
+        private const string ModName = "Automatics";
+        private const string ModVersion = "1.3.2";
 
-    internal static string ModLocation { get; private set; }
-    internal static ManualLogSource ModLogger { get; private set; }
-    internal static ConfigFile ModConfig { get; private set; }
-    internal static Action OnGameAwake { get; set; }
-    internal static Action OnInitTerminal { get; set; }
-    internal static Action<Player, bool> OnPlayerUpdate { get; set; }
-
-    internal static string GetDefaultResourcePath(string resourceName)
-    {
-      return Path.Combine(ModLocation, resourceName);
-    }
-
-    internal static IEnumerable<string> GetAutomaticsChildModDirs()
-    {
-      var root = Paths.PluginPath;
-      if (Directory.Exists(root))
-        return Directory.GetDirectories(root).Where(directory => File.Exists(Path.Combine(directory, "automatics-child-mod"))).ToList();
-
-      return Array.Empty<string>();
-    }
-
-    internal static string GetInjectedResourcePath(string resourceName)
-    {
-      var directory = global::Automatics.Config.ResourcesDirectory;
-      if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
-        return Path.Combine(directory, resourceName);
-      return "";
-    }
-
-    internal static void AddInvoke(string id, Action action, float delay)
-    {
-      InvokeQueue[id] = (action, Time.time, delay);
-    }
-
-    internal static void RemoveInvoke(string id)
-    {
-      InvokeQueue.Remove(id);
-    }
-
-    private void Awake()
-    {
-      ModLocation = Path.GetDirectoryName(Info.Location) ?? "";
-      ModLogger = Logger;
-      ModConfig = Config;
-
-      Migration.MigrateConfig(ModConfig);
-
-      var assembly = Assembly.GetExecutingAssembly();
-
-      foreach (var (initializer, _) in AccessTools.GetTypesFromAssembly(assembly)
-                   .SelectMany(AccessTools.GetDeclaredMethods)
-                   .Select(x => (x,
-                       x.GetCustomAttributes(typeof(AutomaticsInitializerAttribute), false)
-                           .OfType<AutomaticsInitializerAttribute>().FirstOrDefault()))
-                   .Where(x => x.Item2 != null)
-                   .OrderBy(x => x.Item2.Order))
-      {
-        try
+        private void Awake()
         {
-          initializer.Invoke(null, new object[] { });
+            Automatics.Initialize(Info, Config, Logger);
+            InvokeRepeating(nameof(InvokeTimer), Random.Range(1f, 2f), 0.05f);
         }
-        catch (Exception e)
+
+        private void InvokeTimer()
         {
-          ModLogger.LogError($"Error while initializing {initializer.Name}\n{e}");
+            foreach (var queue in Automatics.TimerQueue.ToList())
+            {
+                var timer = queue.Value;
+                if (!(Time.time - timer.timestamp >= timer.delay)) continue;
+                Automatics.TimerQueue.Remove(queue.Key);
+                timer.callback.Invoke();
+            }
         }
-      }
-
-      Harmony.CreateAndPatchAll(assembly, ModId);
     }
 
-    private void Update()
+    internal static class Automatics
     {
-      foreach (var queue in InvokeQueue.ToList())
-      {
-        var (action, timestamp, delay) = queue.Value;
-        if (!(Time.time - timestamp >= delay)) continue;
+        public const string L10NPrefix = "automatics";
 
-        action.Invoke();
-        InvokeQueue.Remove(queue.Key);
-      }
+        public static readonly Dictionary<string, Timer> TimerQueue;
+
+        private static string _modLocation;
+
+        static Automatics()
+        {
+            TimerQueue = new Dictionary<string, Timer>();
+        }
+
+        public static Logger Logger { get; private set; }
+        public static L10N L10N { get; private set; }
+
+        public static Action OnGameAwake { get; set; }
+        public static Action OnInitTerminal { get; set; }
+        public static Action<Player, bool> OnPlayerUpdate { get; set; }
+
+        private static void InitializeModules(Assembly assembly)
+        {
+            foreach (var (initializer, _) in AccessTools.GetTypesFromAssembly(assembly)
+                         .SelectMany(AccessTools.GetDeclaredMethods)
+                         .Select(x => (x,
+                             x.GetCustomAttributes(typeof(AutomaticsInitializerAttribute), false)
+                                 .OfType<AutomaticsInitializerAttribute>().FirstOrDefault()))
+                         .Where(x => x.Item2 != null)
+                         .OrderBy(x => x.Item2.Order))
+                try
+                {
+                    initializer.Invoke(null, new object[] { });
+                }
+                catch (Exception e)
+                {
+                    Logger.Error($"Error while initializing {initializer.Name}\n{e}");
+                }
+        }
+
+        internal static string GetInjectedResourcePath(string resourceName)
+        {
+            var directory = Config.ResourcesDirectory;
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+                return Path.Combine(directory, resourceName);
+            return "";
+        }
+
+        public static string GetFilePath(string pathname)
+        {
+            return Path.Combine(_modLocation, pathname);
+        }
+
+        public static void AddTimer(string id, Action callback, float delay)
+        {
+            TimerQueue[id] = new Timer
+            {
+                timestamp = Time.time,
+                delay = delay,
+                callback = callback
+            };
+        }
+
+        public static void RemoveTimer(string id)
+        {
+            TimerQueue.Remove(id);
+        }
+
+        public static void Initialize(PluginInfo info, ConfigFile config, ManualLogSource logger)
+        {
+            Logger = new Logger(logger, Config.IsLogEnabled);
+
+            Migration.MigrateConfig(config);
+
+            _modLocation = Path.GetDirectoryName(info.Location) ?? "";
+            L10N = new L10N(L10NPrefix);
+
+            Logger.Debug($"Mod location: {_modLocation}");
+
+            var translationsLoader = new TranslationsLoader(L10N);
+            translationsLoader.LoadJson(GetFilePath("Languages"));
+
+            foreach (var automaticsChildModDir in GetAutomaticsChildModDirs())
+                translationsLoader.LoadJson(Path.Combine(automaticsChildModDir, "Languages"));
+
+            Config.Initialize(config);
+
+            translationsLoader.LoadJson(GetInjectedResourcePath("Languages"));
+
+            OnInitTerminal += Command.Register;
+
+            var assembly = Assembly.GetExecutingAssembly();
+            InitializeModules(assembly);
+            Harmony.CreateAndPatchAll(assembly, info.Metadata.GUID);
+        }
+
+        internal static IEnumerable<string> GetAutomaticsChildModDirs()
+        {
+            var root = Paths.PluginPath;
+            if (Directory.Exists(root))
+                return Directory.GetDirectories(root).Where(directory =>
+                    File.Exists(Path.Combine(directory, "automatics-child-mod"))).ToList();
+
+            return Array.Empty<string>();
+        }
+
+        public struct Timer
+        {
+            public float timestamp;
+            public float delay;
+            public Action callback;
+        }
     }
-  }
 
-  [AttributeUsage(AttributeTargets.Method)]
-  [MeansImplicitUse]
-  public class AutomaticsInitializerAttribute : Attribute
-  {
-    public int Order { get; }
-
-    public AutomaticsInitializerAttribute(int order = 0)
+    [AttributeUsage(AttributeTargets.Method)]
+    [MeansImplicitUse]
+    public class AutomaticsInitializerAttribute : Attribute
     {
-      Order = order;
+        public AutomaticsInitializerAttribute(int order = 0)
+        {
+            Order = order;
+        }
+
+        public int Order { get; }
     }
-  }
 }

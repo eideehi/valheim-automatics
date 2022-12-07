@@ -1,8 +1,8 @@
-﻿using System;
+﻿using ModUtils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using Automatics.ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapping
@@ -40,14 +40,14 @@ namespace Automatics.AutomaticMapping
 
         public static void OnFloraSettingChanged(object sender, EventArgs e)
         {
-            Automatics.AddInvoke(nameof(ClearFlora), ClearFlora, 3f);
+            Automatics.AddTimer(nameof(ClearFlora), ClearFlora, 3f);
         }
 
         private static void ClearFlora()
         {
             if (_busy)
             {
-                Automatics.AddInvoke(nameof(ClearFlora), ClearFlora, 0.1f);
+                Automatics.AddTimer(nameof(ClearFlora), ClearFlora, 0.1f);
                 return;
             }
 
@@ -62,14 +62,14 @@ namespace Automatics.AutomaticMapping
                 UnityEngine.Object.Destroy(flora);
             }
 
-            Automatics.AddInvoke(nameof(SetFlora), SetFlora, 0.1f);
+            Automatics.AddTimer(nameof(SetFlora), SetFlora, 0.1f);
         }
 
         private static void SetFlora()
         {
             foreach (var pickable in PickableCache.GetAllInstance())
             {
-                var name = Obj.GetName(pickable);
+                var name = Objects.GetName(pickable);
                 var isAllowedFlora = Core.IsFlora(name, out var data) && data.IsAllowed;
                 if (!isAllowedFlora) continue;
 
@@ -111,9 +111,9 @@ namespace Automatics.AutomaticMapping
             var knownId = new HashSet<ZDOID> { ZDOID.None };
             foreach (var (collider, component, _) in GetNearbyObjects(origin).OrderBy(x => x.distance))
             {
-                if (Obj.GetZdoid(component, out var id) && !knownId.Add(id)) continue;
+                if (Objects.GetZdoid(component, out var id) && !knownId.Add(id)) continue;
 
-                var name = Obj.GetName(component);
+                var name = Objects.GetName(component);
                 if (FloraPinning(collider, component, name, knownId)) continue;
                 if (MineralDepositPinning(collider, component, name, knownId)) continue;
                 if (SpawnerPinning(collider, component, name, knownId)) continue;
@@ -127,7 +127,7 @@ namespace Automatics.AutomaticMapping
             if (!data.IsAllowed) return true;
 
             if (!(component is Pickable))
-                Log.Warning(() => $"Flora {name} {collider.bounds.center} is not Pickable.");
+                Automatics.Logger.Warning(() => $"Flora {name} {collider.bounds.center} is not Pickable.");
 
             var flora = FloraObject.Find(x => x.transform.position == component.transform.position);
             if (flora == null || !flora.IsValid()) return true;
@@ -149,8 +149,8 @@ namespace Automatics.AutomaticMapping
 
             var size = cluster.NodeCount;
             var pinName = size > 1
-                ? L10N.Localize("@text_automatic_mapping_flora_cluster_pin_name", name, size)
-                : L10N.Translate(name);
+                ? Automatics.L10N.Localize("@text_automatic_mapping_flora_cluster_pin_name", name, size)
+                : Automatics.L10N.Translate(name);
 
             Map.AddPin(position, pinName, true, CreateTarget(name));
             return true;
@@ -163,7 +163,7 @@ namespace Automatics.AutomaticMapping
             if (!data.IsAllowed) return true;
 
             if (!(component is IDestructible))
-                Log.Warning(() => $"Mineral deposit {name} {collider.bounds.center} is not IDestructible.");
+                Automatics.Logger.Warning(() => $"Mineral deposit {name} {collider.bounds.center} is not IDestructible.");
 
             var position = collider.bounds.center;
             if (Map.HavePinInRange(position, 1f)) return true;
@@ -178,7 +178,7 @@ namespace Automatics.AutomaticMapping
                 }
             }
 
-            Map.AddPin(position, L10N.Translate(name), true, CreateTarget(name));
+            Map.AddPin(position, Automatics.L10N.Translate(name), true, CreateTarget(name));
             return true;
         }
 
@@ -188,12 +188,12 @@ namespace Automatics.AutomaticMapping
             if (!data.IsAllowed) return true;
 
             if (component.GetComponent<SpawnArea>() == null)
-                Log.Warning(() => $"Spawner {name} {collider.bounds.center} is not SpawnArea.");
+                Automatics.Logger.Warning(() => $"Spawner {name} {collider.bounds.center} is not SpawnArea.");
 
             var position = component.transform.position;
             if (Map.HavePinInRange(position, 1f)) return true;
 
-            Map.AddPin(position, L10N.Translate(name), true, CreateTarget(name));
+            Map.AddPin(position, Automatics.L10N.Translate(name), true, CreateTarget(name));
             return true;
         }
 
@@ -214,7 +214,7 @@ namespace Automatics.AutomaticMapping
                 var position = component.transform.position;
                 if (Map.HavePinInRange(position, 1f)) return true;
 
-                Map.AddPin(position, L10N.Localize(name), true, new PinningTarget { name = name });
+                Map.AddPin(position, Automatics.L10N.Localize(name), true, new PinningTarget { name = name });
             }
 
             return true;
@@ -228,7 +228,7 @@ namespace Automatics.AutomaticMapping
             if (portal)
                 tag = portal.GetText();
 
-            var name = string.IsNullOrEmpty(tag) ? L10N.Translate("@text_automatic_mapping_empty_portal_tag") : tag;
+            var name = string.IsNullOrEmpty(tag) ? Automatics.L10N.Translate("@text_automatic_mapping_empty_portal_tag") : tag;
             var position = component.transform.position;
             if (Map.FindPinInRange(position, 1f, out var data) && data.m_name == name) return;
 
@@ -266,7 +266,7 @@ namespace Automatics.AutomaticMapping
             else
                 name = $"@location_{prefabName.ToLower()}";
 
-            var teleports = Obj.GetInsideSphere(instance.m_position, 16f, GetTeleport, ColliderBuffer, DungeonMask);
+            var teleports = Objects.GetInsideSphere(instance.m_position, 16f, GetTeleport, ColliderBuffer, DungeonMask);
             if (teleports.Count > 0)
             {
                 foreach (var position in teleports
@@ -275,13 +275,13 @@ namespace Automatics.AutomaticMapping
                              .Where(x => !Map.HavePinInRange(x.collider.bounds.center, 1f))
                              .Select(x => x.collider.bounds.center))
                 {
-                    Map.AddPin(position, L10N.Translate(name), true, CreateTarget(name));
+                    Map.AddPin(position, Automatics.L10N.Translate(name), true, CreateTarget(name));
                 }
             }
             else if (!Map.HavePinInRange(instance.m_position, 1f))
             {
-                Map.AddPin(instance.m_position, L10N.Translate(name), true, CreateTarget(name));
-                Log.Warning(() => $"Dungeon {name} has no entrance.");
+                Map.AddPin(instance.m_position, Automatics.L10N.Translate(name), true, CreateTarget(name));
+                Automatics.Logger.Warning(() => $"Dungeon {name} has no entrance.");
             }
 
             return true;
@@ -299,7 +299,7 @@ namespace Automatics.AutomaticMapping
             else
                 name = $"@location_{prefabName.ToLower()}";
 
-            Map.AddPin(instance.m_position, L10N.Translate(name), true, CreateTarget(name));
+            Map.AddPin(instance.m_position, Automatics.L10N.Translate(name), true, CreateTarget(name));
             return true;
         }
 
@@ -310,7 +310,7 @@ namespace Automatics.AutomaticMapping
 
         private static IEnumerable<(Collider, Component, float distance)> GetNearbyObjects(Vector3 pos)
         {
-            return Obj.GetInsideSphere(pos, Config.StaticObjectSearchRange, GetObject, ColliderBuffer, ObjectMask);
+            return Objects.GetInsideSphere(pos, Config.StaticObjectSearchRange, GetObject, ColliderBuffer, ObjectMask);
         }
 
         private static Component GetObject(Collider collider)
@@ -329,7 +329,7 @@ namespace Automatics.AutomaticMapping
                             collider.GetComponentInParent<Interactable>() as Component ??
                             collider.GetComponentInParent<Hoverable>() as Component;
 
-            var name = Obj.GetName(component);
+            var name = Objects.GetName(component);
             if (string.IsNullOrEmpty(name)) return null;
 
             if (Core.IsFlora(name, out var flora)) return flora.IsAllowed ? component : null;

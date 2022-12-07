@@ -1,7 +1,7 @@
-﻿using System;
+﻿using BepInEx.Configuration;
+using ModUtils;
+using System;
 using System.Collections.Generic;
-using Automatics.ModUtils;
-using BepInEx.Configuration;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -45,13 +45,14 @@ namespace Automatics.AutomaticProcessing
             {
                 return x =>
                 {
-                    x.DispName = L10N.Localize($"@config_automatic_processing_{key}_name", displayName);
-                    x.Description = L10N.Localize($"@config_automatic_processing_{key}_description", displayName);
+                    x.DispName = Automatics.L10N.Localize($"@config_automatic_processing_{key}_name", displayName);
+                    x.Description = Automatics.L10N.Localize($"@config_automatic_processing_{key}_description", displayName);
                 };
             }
 
-            Configuration.ChangeSection(Section);
-            _enableAutomaticProcessing = Configuration.Bind("enable_automatic_processing", true);
+            var config = global::Automatics.Config.Instance;
+            config.ChangeSection(Section);
+            _enableAutomaticProcessing = config.Bind("enable_automatic_processing", true);
 
             _allowProcessing = new Dictionary<string, ConfigEntry<Type>>();
             _containerSearchRange = new Dictionary<string, ConfigEntry<int>>();
@@ -99,42 +100,42 @@ namespace Automatics.AutomaticProcessing
             {
                 var (defaultType, acceptableValue) = configData[target];
 
-                var displayName = L10N.Translate(target);
+                var displayName = Automatics.L10N.Translate(target);
                 var rawName = target.Substring(1);
                 var key = $"allow_processing_by_{rawName}";
                 _allowProcessing[target] =
-                    Configuration.Bind(key, defaultType, acceptableValue, Initializer("allow_processing_by", displayName));
+                    config.Bind(key, defaultType, acceptableValue, Initializer("allow_processing_by", displayName));
 
                 key = $"container_search_range_by_{rawName}";
                 _containerSearchRange[target] =
-                    Configuration.Bind(key, 8, (1, 64), Initializer("container_search_range_by", displayName));
+                    config.Bind(key, 8, (1, 64), Initializer("container_search_range_by", displayName));
 
                 if (acceptableValue.IsValid(Type.Craft))
                 {
                     key = $"{rawName}_material_count_of_suppress_processing";
                     _materialCountOfSuppressProcessing[target] =
-                        Configuration.Bind(key, 1, (0, 9999), Initializer("material_count_of_suppress_processing", displayName));
+                        config.Bind(key, 1, (0, 9999), Initializer("material_count_of_suppress_processing", displayName));
                 }
 
                 if (acceptableValue.IsValid(Type.Refuel))
                 {
                     key = $"{rawName}_fuel_count_of_suppress_processing";
                     _fuelCountOfSuppressProcessing[target] =
-                        Configuration.Bind(key, 1, (0, 9999), Initializer("fuel_count_of_suppress_processing", displayName));
+                        config.Bind(key, 1, (0, 9999), Initializer("fuel_count_of_suppress_processing", displayName));
                 }
 
                 if (acceptableValue.IsValid(Type.Store))
                 {
                     key = $"{rawName}_product_count_of_suppress_processing";
                     _productCountOfSuppressProcessing[target] =
-                        Configuration.Bind(key, 0, (0, 9999), Initializer("product_count_of_suppress_processing", displayName));
+                        config.Bind(key, 0, (0, 9999), Initializer("product_count_of_suppress_processing", displayName));
                 }
 
                 if (acceptableValue.IsValid(Type.Refuel) && acceptableValue.IsValid(Type.Craft))
                 {
                     key = $"{rawName}_refuel_only_when_materials_supplied";
                     _refuelOnlyWhenMaterialsSupplied[target] =
-                        Configuration.Bind(key, false, initializer: Initializer("refuel_only_when_materials_supplied", displayName));
+                        config.Bind(key, false, initializer: Initializer("refuel_only_when_materials_supplied", displayName));
                 }
             }
         }

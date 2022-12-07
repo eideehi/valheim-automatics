@@ -1,7 +1,7 @@
-﻿using System;
+﻿using JetBrains.Annotations;
+using ModUtils;
+using System;
 using System.Collections.Generic;
-using Automatics.ModUtils;
-using JetBrains.Annotations;
 
 namespace Automatics.Valheim
 {
@@ -164,7 +164,7 @@ namespace Automatics.Valheim
             Flex = 1L << 14,
 
             [UsedImplicitly]
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 15) - 1,
         }
 
@@ -190,7 +190,7 @@ namespace Automatics.Valheim
             SilverVein = 1L << 4,
 
             [UsedImplicitly]
-            [LocalizedDescription("@select_all")]
+            [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
             All = (1L << 5) - 1,
         }
     }

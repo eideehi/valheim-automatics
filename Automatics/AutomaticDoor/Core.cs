@@ -1,6 +1,6 @@
-﻿using System;
+﻿using ModUtils;
+using System;
 using System.Linq;
-using Automatics.ModUtils;
 
 namespace Automatics.AutomaticDoor
 {
@@ -24,7 +24,7 @@ namespace Automatics.AutomaticDoor
                 var toggleMessage = Config.AutomaticDoorEnableDisableToggleMessage;
                 if (toggleMessage != Message.None)
                 {
-                    var message = L10N.Localize("@message_automatic_door_enable_disable_toggle", $"@{(enabled ? "enabled" : "disabled")}");
+                    var message = Automatics.L10N.Localize("@message_automatic_door_enable_disable_toggle", $"@{(enabled ? "enabled" : "disabled")}");
                     var type = toggleMessage == Message.Center
                         ? MessageHud.MessageType.Center
                         : MessageHud.MessageType.TopLeft;
@@ -35,13 +35,13 @@ namespace Automatics.AutomaticDoor
 
         public static bool IsAllowAutomaticDoor(Door door)
         {
-            var iName = Obj.GetName(door);
+            var iName = Objects.GetName(door);
             if (ValheimDoor.GetFlag(iName, out var flag) && (Config.AllowAutomaticDoor & flag) != 0) return true;
 
             var list = Config.AllowAutomaticDoorCustom;
             if (!list.Any()) return false;
 
-            var dName = L10N.TranslateInternalNameOnly(iName);
+            var dName = Automatics.L10N.TranslateInternalName(iName);
             return list.Any(x =>
                 L10N.IsInternalName(x)
                     ? iName.Equals(x, StringComparison.Ordinal)

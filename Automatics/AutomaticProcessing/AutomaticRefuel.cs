@@ -1,4 +1,4 @@
-﻿using Automatics.ModUtils;
+﻿using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -9,8 +9,8 @@ namespace Automatics.AutomaticProcessing
             Vector3 destPos)
         {
             return count == 1
-                ? $"Refueled {L10N.Translate(fuelName)} in {L10N.Translate(destName)} {destPos} from {L10N.Translate(container.m_name)} {container.transform.position}"
-                : $"Refueled {L10N.Translate(fuelName)} x{count} in {L10N.Translate(destName)} {destPos} from {L10N.Translate(container.m_name)} {container.transform.position}";
+                ? $"Refueled {Automatics.L10N.Translate(fuelName)} in {Automatics.L10N.Translate(destName)} {destPos} from {Automatics.L10N.Translate(container.m_name)} {container.transform.position}"
+                : $"Refueled {Automatics.L10N.Translate(fuelName)} x{count} in {Automatics.L10N.Translate(destName)} {destPos} from {Automatics.L10N.Translate(container.m_name)} {container.transform.position}";
         }
 
         public static void Run(CookingStation piece, ZNetView zNetView)
@@ -26,7 +26,7 @@ namespace Automatics.AutomaticProcessing
 
             if (Config.RefuelOnlyWhenMaterialsSupplied(stationName))
             {
-                if (Reflection.InvokeMethod<int>(piece, "GetFreeSlot") < 0) return;
+                if (Reflections.InvokeMethod<int>(piece, "GetFreeSlot") < 0) return;
             }
 
             var minFuelCount = Config.FuelCountOfSuppressProcessing(stationName);
@@ -41,7 +41,7 @@ namespace Automatics.AutomaticProcessing
 
                 container.GetInventory().RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("AddFuel");
-                Log.Debug(() => LogMessage(fuelName, 1, container, stationName, origin));
+                Automatics.Logger.Debug(() => LogMessage(fuelName, 1, container, stationName, origin));
                 break;
             }
         }
@@ -68,7 +68,7 @@ namespace Automatics.AutomaticProcessing
 
                 container.GetInventory().RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("AddFuel");
-                Log.Debug(() => LogMessage(fuelName, 1, container, fireplaceName, origin));
+                Automatics.Logger.Debug(() => LogMessage(fuelName, 1, container, fireplaceName, origin));
                 break;
             }
         }
@@ -100,7 +100,7 @@ namespace Automatics.AutomaticProcessing
 
                 container.GetInventory().RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("AddFuel");
-                Log.Debug(() => LogMessage(fuelName, 1, container, smelterName, origin));
+                Automatics.Logger.Debug(() => LogMessage(fuelName, 1, container, smelterName, origin));
                 break;
             }
         }
