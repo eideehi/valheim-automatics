@@ -53,6 +53,8 @@ namespace Automatics
             TimerQueue = new Dictionary<string, Timer>();
         }
 
+        private static string GUID { get; set; }
+
         public static Logger Logger { get; private set; }
         public static L10N L10N { get; private set; }
 
@@ -86,6 +88,11 @@ namespace Automatics
         public static string GetFilePath(string pathname)
         {
             return Path.Combine(_modLocation, pathname);
+        }
+
+        public static string GetHarmonyId(string moduleName)
+        {
+            return $"{GUID}.{moduleName}";
         }
 
         public static void AddTimer(string id, Action callback, float delay)
@@ -126,9 +133,10 @@ namespace Automatics
 
             Hooks.OnInitTerminal += Command.Register;
 
-            var assembly = Assembly.GetExecutingAssembly();
-            InitializeModules(assembly);
-            Harmony.CreateAndPatchAll(assembly, info.Metadata.GUID);
+            GUID = info.Metadata.GUID;
+            Harmony.CreateAndPatchAll(typeof(Patches), GUID);
+
+            InitializeModules(Assembly.GetExecutingAssembly());
         }
 
         internal static IEnumerable<string> GetAutomaticsChildModDirs()
