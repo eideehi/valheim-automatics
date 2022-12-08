@@ -1,9 +1,10 @@
-﻿using HarmonyLib;
-using ModUtils;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection.Emit;
+using HarmonyLib;
+using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
@@ -11,24 +12,27 @@ namespace Automatics.AutomaticMapping
     [HarmonyPatch]
     internal static class Patches
     {
-        [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "UpdateMap")]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), "UpdateMap")]
         private static void MinimapUpdateMapPostfix(Player player, float dt, bool takeInput)
         {
             Core.OnUpdateMap(player, dt, takeInput);
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "RemovePin", typeof(Minimap.PinData))]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), "RemovePin", typeof(Minimap.PinData))]
         private static void MinimapRemovePinPostfix(Minimap.PinData pin)
         {
             DynamicPinning.RemoveDynamicPin(pin);
         }
 
-        [HarmonyTranspiler, HarmonyPatch(typeof(Minimap), "UpdatePins")]
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(Minimap), "UpdatePins")]
         private static IEnumerable<CodeInstruction> MinimapUpdatePinsTranspiler(
             IEnumerable<CodeInstruction> instructions)
         {
-            var RectTransformSetSizeWithCurrentAnchors = AccessTools.Method(typeof(UnityEngine.RectTransform),
-                nameof(UnityEngine.RectTransform.SetSizeWithCurrentAnchors));
+            var RectTransformSetSizeWithCurrentAnchors = AccessTools.Method(typeof(RectTransform),
+                nameof(RectTransform.SetSizeWithCurrentAnchors));
             var IconResizeHook = AccessTools.Method(typeof(Patches), "IconResizeHook");
 
             var codes = new List<CodeInstruction>(instructions);
@@ -42,7 +46,8 @@ namespace Automatics.AutomaticMapping
                 var j = i;
                 while (--j > 0)
                 {
-                    if (codes[j].opcode != OpCodes.Ldloc_S || !(codes[j].operand is LocalBuilder lb) ||
+                    if (codes[j].opcode != OpCodes.Ldloc_S ||
+                        !(codes[j].operand is LocalBuilder lb) ||
                         lb.LocalType != typeof(Minimap.PinData)) continue;
 
                     local = lb;
@@ -72,12 +77,14 @@ namespace Automatics.AutomaticMapping
             return !Core.IsActive() ? size : Map.ResizeCustomIcon(pin, size);
         }
 
-        [HarmonyTranspiler, HarmonyPatch(typeof(Pickable), "SetPicked")]
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(Pickable), "SetPicked")]
         private static IEnumerable<CodeInstruction> PickableSetPickedTranspiler(
             IEnumerable<CodeInstruction> instructions)
         {
             var zNetViewDestroy = AccessTools.Method(typeof(ZNetView), "Destroy");
-            var pickablePreDestroyHook = AccessTools.Method(typeof(Patches), "PickablePreDestroyHook");
+            var pickablePreDestroyHook =
+                AccessTools.Method(typeof(Patches), "PickablePreDestroyHook");
 
             var codes = new List<CodeInstruction>(instructions);
 
@@ -103,7 +110,8 @@ namespace Automatics.AutomaticMapping
                 Map.RemovePin(flora.Network.Center);
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(TeleportWorld), "Awake")]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TeleportWorld), "Awake")]
         private static void TeleportWorldAwakePostfix(TeleportWorld __instance, ZNetView ___m_nview)
         {
             if (___m_nview.GetZDO() == null) return;
@@ -118,7 +126,8 @@ namespace Automatics.AutomaticMapping
             };
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Destructible), "Awake")]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Destructible), "Awake")]
         private static void DestructibleAwakePostfix(Destructible __instance, ZNetView ___m_nview)
         {
             if (___m_nview.GetZDO() == null) return;
@@ -131,14 +140,16 @@ namespace Automatics.AutomaticMapping
             };
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Ship), "Awake")]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Ship), "Awake")]
         private static void ShipAwakePostfix(Ship __instance, ZNetView ___m_nview)
         {
             if (___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<ShipCache>();
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Minimap), "Start")]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), "Start")]
         private static void MinimapStartPostfix(Minimap __instance)
         {
             Map.Initialize();

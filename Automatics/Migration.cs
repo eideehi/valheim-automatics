@@ -1,10 +1,10 @@
-﻿using BepInEx.Configuration;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using BepInEx.Configuration;
 
 namespace Automatics
 {
@@ -73,11 +73,12 @@ namespace Automatics
                 ("[automatic_feeding]", "automatic_feeding_enabled", "enable_automatic_feeding"),
                 ("[automatic_feeding]", "need_close_to_eat_the_feed", "need_get_close_to_eat_the_feed"),
                 ("[automatic_feeding]", "automatic_repair_enabled", "enable_automatic_repair"),
-                ("[automatic_feeding]", "automatic_repair_enabled", "enable_automatic_repair"),
+                ("[automatic_feeding]", "automatic_repair_enabled", "enable_automatic_repair")
             });
         }
 
-        private static void ReplaceConfigAll(List<string> lines, List<(string, string, string)> replacements)
+        private static void ReplaceConfigAll(List<string> lines,
+            List<(string, string, string)> replacements)
         {
             var currentSection = string.Empty;
             var skipIndex = 0;

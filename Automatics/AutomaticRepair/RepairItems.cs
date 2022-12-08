@@ -1,12 +1,10 @@
-﻿using ModUtils;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticRepair
 {
-    using MessageType = MessageHud.MessageType;
-
     internal static class RepairItems
     {
         private static readonly List<ItemDrop.ItemData> WornItemsBuffer;
@@ -30,13 +28,18 @@ namespace Automatics.AutomaticRepair
             Automatics.Logger.Debug(() => $"Repaired {repairCount} items");
             if (Config.ItemRepairMessage == Message.None) return;
 
-            var type = Config.ItemRepairMessage == Message.Center ? MessageType.Center : MessageType.TopLeft;
-            player.Message(type, Automatics.L10N.Localize("@message_automatic_repair_repaired_the_items", repairCount));
+            var type = Config.ItemRepairMessage == Message.Center
+                ? MessageHud.MessageType.Center
+                : MessageHud.MessageType.TopLeft;
+            player.Message(type,
+                Automatics.L10N.Localize("@message_automatic_repair_repaired_the_items",
+                    repairCount));
         }
 
         private static IEnumerable<CraftingStation> GetAllCraftingStations()
         {
-            return Reflections.GetStaticField<CraftingStation, List<CraftingStation>>("m_allStations") ??
+            return Reflections.GetStaticField<CraftingStation, List<CraftingStation>>(
+                       "m_allStations") ??
                    Enumerable.Empty<CraftingStation>();
         }
 
@@ -47,17 +50,20 @@ namespace Automatics.AutomaticRepair
             return WornItemsBuffer.Count(x => RepairOne(player, station, x));
         }
 
-        private static bool RepairOne(Player player, CraftingStation station, ItemDrop.ItemData item)
+        private static bool RepairOne(Player player, CraftingStation station,
+            ItemDrop.ItemData item)
         {
             if (!CanRepair(player, station, item)) return false;
 
             item.m_durability = item.GetMaxDurability();
 
-            Automatics.Logger.Debug(() => $"Repair item: [{item.m_shared.m_name}({Automatics.L10N.Translate(item.m_shared.m_name)})]");
+            Automatics.Logger.Debug(() =>
+                $"Repair item: [{item.m_shared.m_name}({Automatics.L10N.Translate(item.m_shared.m_name)})]");
             return true;
         }
 
-        private static bool CanRepair(Player player, CraftingStation station, ItemDrop.ItemData item)
+        private static bool CanRepair(Player player, CraftingStation station,
+            ItemDrop.ItemData item)
         {
             if (!item.m_shared.m_canBeReparied) return false;
             if (player.NoCostCheat()) return true;
@@ -65,8 +71,10 @@ namespace Automatics.AutomaticRepair
             var recipe = ObjectDB.instance.GetRecipe(item);
             return recipe != null
                    && (recipe.m_craftingStation != null || recipe.m_repairStation != null)
-                   && ((recipe.m_craftingStation != null && recipe.m_craftingStation.m_name == station.m_name) ||
-                       (recipe.m_repairStation != null && recipe.m_repairStation.m_name == station.m_name))
+                   && ((recipe.m_craftingStation != null &&
+                        recipe.m_craftingStation.m_name == station.m_name) ||
+                       (recipe.m_repairStation != null &&
+                        recipe.m_repairStation.m_name == station.m_name))
                    && station.GetLevel() >= recipe.m_minStationLevel;
         }
 

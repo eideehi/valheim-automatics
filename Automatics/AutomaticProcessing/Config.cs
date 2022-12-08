@@ -1,7 +1,7 @@
-﻿using BepInEx.Configuration;
-using ModUtils;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using BepInEx.Configuration;
+using ModUtils;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -21,23 +21,42 @@ namespace Automatics.AutomaticProcessing
 
         public static bool EnableAutomaticProcessing => _enableAutomaticProcessing.Value;
 
-        public static Type AllowProcessing(string target) =>
-            _allowProcessing.TryGetValue(target, out var entry) ? entry.Value : Type.None;
+        public static Type AllowProcessing(string target)
+        {
+            return _allowProcessing.TryGetValue(target, out var entry) ? entry.Value : Type.None;
+        }
 
-        public static int ContainerSearchRange(string target) =>
-            _containerSearchRange.TryGetValue(target, out var entry) ? entry.Value : 0;
+        public static int ContainerSearchRange(string target)
+        {
+            return _containerSearchRange.TryGetValue(target, out var entry) ? entry.Value : 0;
+        }
 
-        public static int MaterialCountOfSuppressProcessing(string target) =>
-            _materialCountOfSuppressProcessing.TryGetValue(target, out var entry) ? entry.Value : 0;
+        public static int MaterialCountOfSuppressProcessing(string target)
+        {
+            return _materialCountOfSuppressProcessing.TryGetValue(target, out var entry)
+                ? entry.Value
+                : 0;
+        }
 
-        public static int FuelCountOfSuppressProcessing(string target) =>
-            _fuelCountOfSuppressProcessing.TryGetValue(target, out var entry) ? entry.Value : 0;
+        public static int FuelCountOfSuppressProcessing(string target)
+        {
+            return _fuelCountOfSuppressProcessing.TryGetValue(target, out var entry)
+                ? entry.Value
+                : 0;
+        }
 
-        public static int ProductCountOfSuppressProcessing(string target) =>
-            _productCountOfSuppressProcessing.TryGetValue(target, out var entry) ? entry.Value : 0;
+        public static int ProductCountOfSuppressProcessing(string target)
+        {
+            return _productCountOfSuppressProcessing.TryGetValue(target, out var entry)
+                ? entry.Value
+                : 0;
+        }
 
-        public static bool RefuelOnlyWhenMaterialsSupplied(string target) =>
-            _refuelOnlyWhenMaterialsSupplied.TryGetValue(target, out var entry) && entry.Value;
+        public static bool RefuelOnlyWhenMaterialsSupplied(string target)
+        {
+            return _refuelOnlyWhenMaterialsSupplied.TryGetValue(target, out var entry) &&
+                   entry.Value;
+        }
 
         public static void Initialize()
         {
@@ -45,8 +64,12 @@ namespace Automatics.AutomaticProcessing
             {
                 return x =>
                 {
-                    x.DispName = Automatics.L10N.Localize($"@config_automatic_processing_{key}_name", displayName);
-                    x.Description = Automatics.L10N.Localize($"@config_automatic_processing_{key}_description", displayName);
+                    x.DispName =
+                        Automatics.L10N.Localize($"@config_automatic_processing_{key}_name",
+                            displayName);
+                    x.Description =
+                        Automatics.L10N.Localize($"@config_automatic_processing_{key}_description",
+                            displayName);
                 };
             }
 
@@ -92,7 +115,7 @@ namespace Automatics.AutomaticProcessing
                 { Target.StandingWoodTorch, (Type.Refuel, acceptRefuelOnly) },
                 { Target.StoneOven, (Type.Craft | Type.Refuel | Type.Store, acceptAll) },
                 //{ Target.Stonecutter, (Type.None, new AcceptableType(Type.None, Type.Craft)) },
-                { Target.Windmill, (Type.Store, acceptCraftAndStore) },
+                { Target.Windmill, (Type.Store, acceptCraftAndStore) }
                 //{ Target.Workbench, (Type.None, new AcceptableType(Type.None, Type.Craft)) },
             };
 
@@ -104,38 +127,45 @@ namespace Automatics.AutomaticProcessing
                 var rawName = target.Substring(1);
                 var key = $"allow_processing_by_{rawName}";
                 _allowProcessing[target] =
-                    config.Bind(key, defaultType, acceptableValue, Initializer("allow_processing_by", displayName));
+                    config.Bind(key, defaultType, acceptableValue,
+                        Initializer("allow_processing_by", displayName));
 
                 key = $"container_search_range_by_{rawName}";
                 _containerSearchRange[target] =
-                    config.Bind(key, 8, (1, 64), Initializer("container_search_range_by", displayName));
+                    config.Bind(key, 8, (1, 64),
+                        Initializer("container_search_range_by", displayName));
 
                 if (acceptableValue.IsValid(Type.Craft))
                 {
                     key = $"{rawName}_material_count_of_suppress_processing";
                     _materialCountOfSuppressProcessing[target] =
-                        config.Bind(key, 1, (0, 9999), Initializer("material_count_of_suppress_processing", displayName));
+                        config.Bind(key, 1, (0, 9999),
+                            Initializer("material_count_of_suppress_processing", displayName));
                 }
 
                 if (acceptableValue.IsValid(Type.Refuel))
                 {
                     key = $"{rawName}_fuel_count_of_suppress_processing";
                     _fuelCountOfSuppressProcessing[target] =
-                        config.Bind(key, 1, (0, 9999), Initializer("fuel_count_of_suppress_processing", displayName));
+                        config.Bind(key, 1, (0, 9999),
+                            Initializer("fuel_count_of_suppress_processing", displayName));
                 }
 
                 if (acceptableValue.IsValid(Type.Store))
                 {
                     key = $"{rawName}_product_count_of_suppress_processing";
                     _productCountOfSuppressProcessing[target] =
-                        config.Bind(key, 0, (0, 9999), Initializer("product_count_of_suppress_processing", displayName));
+                        config.Bind(key, 0, (0, 9999),
+                            Initializer("product_count_of_suppress_processing", displayName));
                 }
 
                 if (acceptableValue.IsValid(Type.Refuel) && acceptableValue.IsValid(Type.Craft))
                 {
                     key = $"{rawName}_refuel_only_when_materials_supplied";
                     _refuelOnlyWhenMaterialsSupplied[target] =
-                        config.Bind(key, false, initializer: Initializer("refuel_only_when_materials_supplied", displayName));
+                        config.Bind(key, false,
+                            initializer: Initializer("refuel_only_when_materials_supplied",
+                                displayName));
                 }
             }
         }

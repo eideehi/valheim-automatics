@@ -1,7 +1,7 @@
-﻿using ModUtils;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -38,11 +38,15 @@ namespace Automatics.AutomaticProcessing
         public const string Beehive = "$piece_beehive";
         public const string Bonfire = "$piece_bonfire";
         public const string BlastFurnace = "$piece_blastfurnace";
+
         public const string Campfire = "$piece_firepit";
+
         //public const string Cauldron = "$piece_cauldron";
         public const string CharcoalKiln = "$piece_charcoalkiln";
         public const string CookingStation = "$piece_cookingstation";
+
         public const string Fermenter = "$piece_fermenter";
+
         //public const string Forge = "$piece_forge";
         public const string HangingBrazier = "$piece_brazierceiling01";
         public const string Hearth = "$piece_hearth";
@@ -56,7 +60,9 @@ namespace Automatics.AutomaticProcessing
         public const string StandingGreenBurningIronTorch = "$piece_groundtorchgreen";
         public const string StandingIronTorch = "$piece_groundtorch";
         public const string StandingWoodTorch = "$piece_groundtorchwood";
+
         public const string StoneOven = "$piece_oven";
+
         //public const string Stonecutter = "$piece_stonecutter";
         public const string Windmill = "$piece_windmill";
         //public const string Workbench = "$piece_workbench";
@@ -91,7 +97,7 @@ namespace Automatics.AutomaticProcessing
                 StandingWoodTorch,
                 StoneOven,
                 //Stonecutter,
-                Windmill,
+                Windmill
                 //Workbench,
             });
         }
@@ -102,16 +108,19 @@ namespace Automatics.AutomaticProcessing
     {
         None = 0,
 
-        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_processing_processing_type_craft")]
+        [LocalizedDescription(Automatics.L10NPrefix,
+            "@config_automatic_processing_processing_type_craft")]
         Craft = 1L << 0,
 
-        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_processing_processing_type_refuel")]
+        [LocalizedDescription(Automatics.L10NPrefix,
+            "@config_automatic_processing_processing_type_refuel")]
         Refuel = 1L << 1,
 
-        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_processing_processing_type_store")]
+        [LocalizedDescription(Automatics.L10NPrefix,
+            "@config_automatic_processing_processing_type_store")]
         Store = 1L << 2,
 
         [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
-        All = (1L << 3) - 1,
+        All = (1L << 3) - 1
     }
 }

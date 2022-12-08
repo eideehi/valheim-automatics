@@ -5,7 +5,8 @@ namespace Automatics.AutomaticProcessing
 {
     internal static class AutomaticRefuel
     {
-        private static string LogMessage(string fuelName, int count, Container container, string destName,
+        private static string LogMessage(string fuelName, int count, Container container,
+            string destName,
             Vector3 destPos)
         {
             return count == 1
@@ -25,9 +26,8 @@ namespace Automatics.AutomaticProcessing
             if (zNetView.GetZDO().GetFloat("fuel") > piece.m_maxFuel - 1f) return;
 
             if (Config.RefuelOnlyWhenMaterialsSupplied(stationName))
-            {
-                if (Reflections.InvokeMethod<int>(piece, "GetFreeSlot") < 0) return;
-            }
+                if (Reflections.InvokeMethod<int>(piece, "GetFreeSlot") < 0)
+                    return;
 
             var minFuelCount = Config.FuelCountOfSuppressProcessing(stationName);
             var origin = piece.transform.position;
@@ -41,7 +41,8 @@ namespace Automatics.AutomaticProcessing
 
                 container.GetInventory().RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("AddFuel");
-                Automatics.Logger.Debug(() => LogMessage(fuelName, 1, container, stationName, origin));
+                Automatics.Logger.Debug(() =>
+                    LogMessage(fuelName, 1, container, stationName, origin));
                 break;
             }
         }
@@ -68,7 +69,8 @@ namespace Automatics.AutomaticProcessing
 
                 container.GetInventory().RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("AddFuel");
-                Automatics.Logger.Debug(() => LogMessage(fuelName, 1, container, fireplaceName, origin));
+                Automatics.Logger.Debug(() =>
+                    LogMessage(fuelName, 1, container, fireplaceName, origin));
                 break;
             }
         }
@@ -84,9 +86,8 @@ namespace Automatics.AutomaticProcessing
             if (zNetView.GetZDO().GetFloat("fuel") >= piece.m_maxFuel - 1) return;
 
             if (Config.RefuelOnlyWhenMaterialsSupplied(smelterName))
-            {
-                if (zNetView.GetZDO().GetInt("queued") == 0) return;
-            }
+                if (zNetView.GetZDO().GetInt("queued") == 0)
+                    return;
 
             var minFuelCount = Config.FuelCountOfSuppressProcessing(smelterName);
             var origin = piece.transform.position;
@@ -100,7 +101,8 @@ namespace Automatics.AutomaticProcessing
 
                 container.GetInventory().RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("AddFuel");
-                Automatics.Logger.Debug(() => LogMessage(fuelName, 1, container, smelterName, origin));
+                Automatics.Logger.Debug(() =>
+                    LogMessage(fuelName, 1, container, smelterName, origin));
                 break;
             }
         }

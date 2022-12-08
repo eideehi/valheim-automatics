@@ -1,9 +1,9 @@
-﻿using BepInEx.Configuration;
-using HarmonyLib;
-using ModUtils;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Emit;
+using BepInEx.Configuration;
+using HarmonyLib;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.Debug
@@ -30,7 +30,8 @@ namespace Automatics.Debug
         private static KeyboardShortcut _debug =
             new KeyboardShortcut(KeyCode.P, KeyCode.LeftShift, KeyCode.LeftAlt);
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Player), "Awake")]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Player), "Awake")]
         private static void PlayerAwakePostfix(Player __instance)
         {
             __instance.SetGodMode(true);
@@ -39,33 +40,19 @@ namespace Automatics.Debug
                 __instance.ToggleNoPlacementCost();
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Player), "Update")]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Player), "Update")]
         private static void PlayerUpdatePostfix(Player __instance)
         {
-            if (_toggleGodMode.IsDown())
-            {
-                __instance.SetGodMode(!__instance.InGodMode());
-            }
+            if (_toggleGodMode.IsDown()) __instance.SetGodMode(!__instance.InGodMode());
 
-            if (_toggleGhostMode.IsDown())
-            {
-                __instance.SetGhostMode(!__instance.InGhostMode());
-            }
+            if (_toggleGhostMode.IsDown()) __instance.SetGhostMode(!__instance.InGhostMode());
 
-            if (_toggleFlyMode.IsDown())
-            {
-                Console.instance.TryRunCommand("fly");
-            }
+            if (_toggleFlyMode.IsDown()) Console.instance.TryRunCommand("fly");
 
-            if (_killAll.IsDown())
-            {
-                Console.instance.TryRunCommand("killall");
-            }
+            if (_killAll.IsDown()) Console.instance.TryRunCommand("killall");
 
-            if (_removeDrops.IsDown())
-            {
-                Console.instance.TryRunCommand("removedrops");
-            }
+            if (_removeDrops.IsDown()) Console.instance.TryRunCommand("removedrops");
 
             if (_debug.IsDown())
             {
@@ -73,22 +60,22 @@ namespace Automatics.Debug
             }
         }
 
-        [HarmonyPrefix, HarmonyPatch(typeof(Player), "UseStamina")]
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Player), "UseStamina")]
         private static bool PlayerUseStaminaPrefix(Player __instance, float v)
         {
             return !__instance.InGodMode();
         }
 
-        [HarmonyPostfix, HarmonyPatch(typeof(Terminal), "Awake")]
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Terminal), "Awake")]
         private static void TerminalAwakePostfix(Terminal __instance, bool ___m_cheat)
         {
-            if (!___m_cheat)
-            {
-                Reflections.SetField(__instance, "m_cheat", true);
-            }
+            if (!___m_cheat) Reflections.SetField(__instance, "m_cheat", true);
         }
 
-        [HarmonyTranspiler, HarmonyPatch(typeof(Terminal), "InitTerminal")]
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(Terminal), "InitTerminal")]
         private static IEnumerable<CodeInstruction> TerminalInitTerminalTranspiler(
             IEnumerable<CodeInstruction> instructions)
         {
@@ -103,6 +90,9 @@ namespace Automatics.Debug
             return codes;
         }
 
-        private static void CallInitTerminalHook() => Command.RegisterCommands();
+        private static void CallInitTerminalHook()
+        {
+            Command.RegisterCommands();
+        }
     }
 }

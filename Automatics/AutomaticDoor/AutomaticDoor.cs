@@ -1,38 +1,33 @@
-﻿using ModUtils;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using ModUtils;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 namespace Automatics.AutomaticDoor
 {
-    using Random = UnityEngine.Random;
-
     [DisallowMultipleComponent]
     internal class AutomaticDoor : MonoBehaviour
     {
         private static readonly Lazy<int> LazyPieceMask;
         private static readonly List<AutomaticDoor> AutomaticDoors;
+        private bool _active;
+        private Player _closestPlayer;
+
+        private Door _door;
+        private bool _noObstaclesBetweenPlayer;
+        private Status _status;
+        private ZNetView _zNetView;
 
         static AutomaticDoor()
         {
-            LazyPieceMask = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid", "Default_small", "piece",
+            LazyPieceMask = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid",
+                "Default_small", "piece",
                 "piece_nonsolid", "terrain", "vehicle"));
             AutomaticDoors = new List<AutomaticDoor>();
         }
 
         private static int PieceMask => LazyPieceMask.Value;
-
-        private Door _door;
-        private ZNetView _zNetView;
-        private bool _active;
-        private Status _status;
-        private Player _closestPlayer;
-        private bool _noObstaclesBetweenPlayer;
-
-        public static void ChangeInterval(bool isChangedOpenInterval)
-        {
-            AutomaticDoors.ForEach(x => { x.CancelInvoke(isChangedOpenInterval ? nameof(Open) : nameof(Close)); });
-        }
 
         private void Awake()
         {
@@ -51,6 +46,14 @@ namespace Automatics.AutomaticDoor
             _door = null;
             _zNetView = null;
             _closestPlayer = null;
+        }
+
+        public static void ChangeInterval(bool isChangedOpenInterval)
+        {
+            AutomaticDoors.ForEach(x =>
+            {
+                x.CancelInvoke(isChangedOpenInterval ? nameof(Open) : nameof(Close));
+            });
         }
 
         private void Run()
@@ -83,43 +86,45 @@ namespace Automatics.AutomaticDoor
 
             _closestPlayer = Player.GetClosestPlayer(_door.transform.position,
                 isOpen ? Config.DistanceForAutomaticClosing : Config.DistanceForAutomaticOpening);
-            _noObstaclesBetweenPlayer = _closestPlayer != null && !FindObstaclesBetween(_closestPlayer);
+            _noObstaclesBetweenPlayer =
+                _closestPlayer != null && !FindObstaclesBetween(_closestPlayer);
 
             var foundClosestPlayer = _closestPlayer != null;
             var isInvoking = IsInvoking(invoke);
 
             if (!isInvoking && ((isOpen && (!foundClosestPlayer || !_noObstaclesBetweenPlayer)) ||
                                 (!isOpen && foundClosestPlayer && _noObstaclesBetweenPlayer)))
-            {
                 Invoke(invoke, interval - 0.1f);
-            }
             else if (isInvoking && ((isOpen && foundClosestPlayer && _noObstaclesBetweenPlayer) ||
-                                    (!isOpen && (!foundClosestPlayer || !_noObstaclesBetweenPlayer))))
-            {
+                                    (!isOpen && (!foundClosestPlayer ||
+                                                 !_noObstaclesBetweenPlayer))))
                 CancelInvoke(invoke);
-            }
         }
 
         private void Close()
         {
-            if (IsValid() && _active && _status == Status.Open && (_closestPlayer == null || !_noObstaclesBetweenPlayer))
+            if (IsValid() && _active && _status == Status.Open &&
+                (_closestPlayer == null || !_noObstaclesBetweenPlayer))
                 _zNetView.InvokeRPC("UseDoor", false);
         }
 
         private void Open()
         {
-            if (IsValid() && _active && _status == Status.Close && _closestPlayer != null && _noObstaclesBetweenPlayer)
+            if (IsValid() && _active && _status == Status.Close && _closestPlayer != null &&
+                _noObstaclesBetweenPlayer)
                 _door.Interact(_closestPlayer, false, false);
         }
 
         private bool IsValid()
         {
-            return _door != null && _zNetView != null && _zNetView.IsValid() && Core.IsAllowAutomaticDoor(_door);
+            return _door != null && _zNetView != null && _zNetView.IsValid() &&
+                   Core.IsAllowAutomaticDoor(_door);
         }
 
         private bool FindObstaclesBetween(Player player)
         {
-            var from = Reflections.GetField<Collider>(player, "m_collider")?.bounds.center ?? player.m_eye.position;
+            var from = Reflections.GetField<Collider>(player, "m_collider")?.bounds.center ??
+                       player.m_eye.position;
             var to = _door.transform.position;
 
             if (!Physics.Linecast(from, to, out var hitInfo, PieceMask)) return false;

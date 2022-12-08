@@ -20,7 +20,9 @@ namespace Automatics.AutomaticMining
         public static KeyboardShortcut MiningKey => _miningKey.Value;
         public static int MiningRange => _miningRange.Value;
         public static bool AllowMiningUndergroundMinerals => _allowMiningUndergroundMinerals.Value;
-        public static bool NeedToEquipWishboneForMiningUndergroundMinerals => _needToEquipWishboneForMiningUndergroundMinerals.Value;
+
+        public static bool NeedToEquipWishboneForMiningUndergroundMinerals =>
+            _needToEquipWishboneForMiningUndergroundMinerals.Value;
 
         public static void Initialize()
         {
@@ -32,8 +34,10 @@ namespace Automatics.AutomaticMining
             _miningInterval = config.Bind("mining_interval", 1.5f, (0.1f, 4f));
             _miningKey = config.Bind("mining_key", new KeyboardShortcut());
             _miningRange = config.Bind("mining_range", 3, (0, 32));
-            _allowMiningUndergroundMinerals = config.Bind("allow_mining_underground_minerals", true);
-            _needToEquipWishboneForMiningUndergroundMinerals = config.Bind("need_to_equip_wishbone_for_mining_underground_minerals", true);
+            _allowMiningUndergroundMinerals =
+                config.Bind("allow_mining_underground_minerals", true);
+            _needToEquipWishboneForMiningUndergroundMinerals =
+                config.Bind("need_to_equip_wishbone_for_mining_underground_minerals", true);
         }
     }
 }

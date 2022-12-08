@@ -1,13 +1,14 @@
-﻿using ModUtils;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
 {
     internal static class AutomaticStore
     {
-        private static string LogMessage(string itemName, int count, string srcName, Vector3 srcPos, Container dest)
+        private static string LogMessage(string itemName, int count, string srcName, Vector3 srcPos,
+            Container dest)
         {
             return count == 1
                 ? $"Stored {Automatics.L10N.Translate(itemName)} in {Automatics.L10N.Translate(dest.m_name)} {dest.transform.position} from {Automatics.L10N.Translate(srcName)} {srcPos}"
@@ -42,11 +43,13 @@ namespace Automatics.AutomaticProcessing
 
                 var inventory = container.GetInventory();
 
-                if (maxProductCount > 0 && inventory.CountItems(honeyName) > maxProductCount - honeyRemaining) continue;
+                if (maxProductCount > 0 &&
+                    inventory.CountItems(honeyName) > maxProductCount - honeyRemaining) continue;
                 if (!inventory.AddItem(honeyItem.gameObject, honeyRemaining)) continue;
 
                 var storedHoneyCount = inventory.CountItems(honeyName) - honeyCountBefore;
-                Automatics.Logger.Debug(() => LogMessage(honeyName, storedHoneyCount, beehiveName, origin, container));
+                Automatics.Logger.Debug(() =>
+                    LogMessage(honeyName, storedHoneyCount, beehiveName, origin, container));
                 honeyRemaining -= storedHoneyCount;
             }
 
@@ -81,7 +84,8 @@ namespace Automatics.AutomaticProcessing
 
             foreach (var (slot, itemId) in doneItems)
             {
-                var conversion = piece.m_conversion.FirstOrDefault(x => x.m_to.gameObject.name == itemId);
+                var conversion =
+                    piece.m_conversion.FirstOrDefault(x => x.m_to.gameObject.name == itemId);
                 if (conversion == null) continue;
 
                 var item = conversion.m_to;
@@ -100,7 +104,8 @@ namespace Automatics.AutomaticProcessing
                 zNetView.GetZDO().Set("slot" + slot, 0f);
                 zNetView.GetZDO().Set("slotstatus" + slot, 0);
                 zNetView.InvokeRPC(ZNetView.Everybody, "SetSlotVisual", slot, "");
-                Automatics.Logger.Debug(() => LogMessage(itemName, 1, stationName, origin, container));
+                Automatics.Logger.Debug(() =>
+                    LogMessage(itemName, 1, stationName, origin, container));
             }
         }
 
@@ -115,7 +120,8 @@ namespace Automatics.AutomaticProcessing
             if (Reflections.InvokeMethod<int>(piece, "GetStatus") != 3) return;
 
             var itemId = zNetView.GetZDO().GetString("Content");
-            var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == itemId);
+            var conversion =
+                piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == itemId);
             if (conversion == null) return;
 
             var maxProductCount = Config.ProductCountOfSuppressProcessing(fermenterName);
@@ -136,11 +142,13 @@ namespace Automatics.AutomaticProcessing
 
                 var inventory = container.GetInventory();
 
-                if (maxProductCount > 0 && itemCountBefore > maxProductCount - productRemaining) continue;
+                if (maxProductCount > 0 && itemCountBefore > maxProductCount - productRemaining)
+                    continue;
                 if (!inventory.AddItem(item.gameObject, productRemaining)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;
-                Automatics.Logger.Debug(() => LogMessage(itemName, storedItemCount, fermenterName, origin, container));
+                Automatics.Logger.Debug(() =>
+                    LogMessage(itemName, storedItemCount, fermenterName, origin, container));
                 productRemaining -= storedItemCount;
             }
 
@@ -148,7 +156,8 @@ namespace Automatics.AutomaticProcessing
 
             zNetView.GetZDO().Set("Content", "");
             zNetView.GetZDO().Set("StartTime", 0);
-            piece.m_spawnEffects.Create(piece.m_outputPoint.transform.position, Quaternion.identity);
+            piece.m_spawnEffects.Create(piece.m_outputPoint.transform.position,
+                Quaternion.identity);
         }
 
         public static bool Run(Smelter piece, string ore, int stack)
@@ -158,7 +167,8 @@ namespace Automatics.AutomaticProcessing
             var smelterName = piece.m_name;
             if (!Core.IsAllowProcessing(smelterName, Type.Store)) return true;
 
-            var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == ore);
+            var conversion =
+                piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == ore);
             if (conversion == null) return true;
 
             var maxProductCount = Config.ProductCountOfSuppressProcessing(smelterName);
@@ -180,11 +190,13 @@ namespace Automatics.AutomaticProcessing
 
                 var inventory = container.GetInventory();
 
-                if (maxProductCount > 0 && itemCountBefore > maxProductCount - productRemaining) continue;
+                if (maxProductCount > 0 && itemCountBefore > maxProductCount - productRemaining)
+                    continue;
                 if (!inventory.AddItem(item.gameObject, stack)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;
-                Automatics.Logger.Debug(() => LogMessage(itemName, storedItemCount, smelterName, origin, container));
+                Automatics.Logger.Debug(() =>
+                    LogMessage(itemName, storedItemCount, smelterName, origin, container));
                 productRemaining -= storedItemCount;
             }
 
@@ -193,7 +205,8 @@ namespace Automatics.AutomaticProcessing
             while (productRemaining > 0)
             {
                 Object.Instantiate(conversion.m_to.gameObject, piece.m_outputPoint.position,
-                    piece.m_outputPoint.rotation).GetComponent<ItemDrop>().m_itemData.m_stack = stack;
+                        piece.m_outputPoint.rotation).GetComponent<ItemDrop>().m_itemData.m_stack =
+                    stack;
                 productRemaining--;
             }
 

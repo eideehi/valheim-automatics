@@ -1,15 +1,12 @@
-﻿using ModUtils;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
-    using PinData = Minimap.PinData;
-    using PinType = Minimap.PinType;
-
     internal static class Map
     {
         private static readonly CustomIcon DefaultIcon;
@@ -19,15 +16,18 @@ namespace Automatics.AutomaticMapping
         {
             DefaultIcon = new CustomIcon
             {
-                PinType = PinType.Icon3,
-                Options = new Options(),
+                PinType = Minimap.PinType.Icon3,
+                Options = new Options()
             };
             CustomIcons = new List<CustomIcon>();
         }
 
         private static Minimap ValheimMap => Minimap.instance;
 
-        private static IEnumerable<PinData> GetAllPins() => Reflections.GetField<List<PinData>>(ValheimMap, "m_pins");
+        private static IEnumerable<Minimap.PinData> GetAllPins()
+        {
+            return Reflections.GetField<List<Minimap.PinData>>(ValheimMap, "m_pins");
+        }
 
         public static void Initialize()
         {
@@ -67,7 +67,7 @@ namespace Automatics.AutomaticMapping
                     {
                         Target = data.target,
                         Sprite = sprite,
-                        Options = data.options,
+                        Options = data.options
                     });
 
                     Automatics.Logger.Info($"* Loaded custom icon data for {data.target.name}");
@@ -96,7 +96,7 @@ namespace Automatics.AutomaticMapping
             for (var j = 0; j < CustomIcons.Count; j++)
             {
                 var icon = CustomIcons[j];
-                var pinType = (PinType)(originalArraySize + j);
+                var pinType = (Minimap.PinType)(originalArraySize + j);
 
                 icon.PinType = pinType;
                 ValheimMap.m_icons.Add(new Minimap.SpriteData
@@ -120,7 +120,8 @@ namespace Automatics.AutomaticMapping
             return (from x in CustomIcons
                     where (L10N.IsInternalName(x.Target.name)
                               ? internalName.Equals(x.Target.name, StringComparison.Ordinal)
-                              : displayName.IndexOf(x.Target.name, StringComparison.OrdinalIgnoreCase) >= 0) &&
+                              : displayName.IndexOf(x.Target.name,
+                                  StringComparison.OrdinalIgnoreCase) >= 0) &&
                           (x.Target.metadata == null || IsMetaDataEquals(x.Target.metadata, meta))
                     orderby x.Target.metadata != null descending,
                         x.Target.metadata
@@ -140,44 +141,50 @@ namespace Automatics.AutomaticMapping
             return GetAllPins().Any(data => Utils.DistanceXZ(data.m_pos, pos) <= radius);
         }
 
-        public static bool FindPin(Func<PinData, bool> predicate, out PinData data)
+        public static bool FindPin(Func<Minimap.PinData, bool> predicate, out Minimap.PinData data)
         {
             data = GetAllPins().FirstOrDefault(predicate);
             return data != null;
         }
 
-        public static bool FindPinInRange(Vector3 pos, float radius, out PinData data)
+        public static bool FindPinInRange(Vector3 pos, float radius, out Minimap.PinData data)
         {
             return FindPin(x => Utils.DistanceXZ(x.m_pos, pos) <= radius, out data);
         }
 
-        public static PinData AddPin(Vector3 pos, PinType type, string name, bool save)
+        public static Minimap.PinData AddPin(Vector3 pos, Minimap.PinType type, string name,
+            bool save)
         {
             var data = ValheimMap.AddPin(pos, type, name, save, false);
-            Automatics.Logger.Debug(() => $"Add pin: [name: {name}, pos: {data.m_pos}, icon: {(int)type}]");
+            Automatics.Logger.Debug(() =>
+                $"Add pin: [name: {name}, pos: {data.m_pos}, icon: {(int)type}]");
             return data;
         }
 
-        public static PinData AddPin(Vector3 pos, string name, bool save, PinningTarget target)
+        public static Minimap.PinData AddPin(Vector3 pos, string name, bool save,
+            PinningTarget target)
         {
             var customIcon = GetCustomIcon(target);
-            return AddPin(pos, customIcon.PinType, customIcon.Options.hideNameTag ? "" : name, save);
+            return AddPin(pos, customIcon.PinType, customIcon.Options.hideNameTag ? "" : name,
+                save);
         }
 
-        public static void RemovePin(PinData data)
+        public static void RemovePin(Minimap.PinData data)
         {
             ValheimMap.RemovePin(data);
-            Automatics.Logger.Debug(() => $"Remove pin: [name: {data.m_name}, pos: {data.m_pos}, icon: {(int)data.m_type}]");
+            Automatics.Logger.Debug(() =>
+                $"Remove pin: [name: {data.m_name}, pos: {data.m_pos}, icon: {(int)data.m_type}]");
         }
 
         public static void RemovePin(Vector3 pos, bool save = true)
         {
-            var pin = GetAllPins().FirstOrDefault(x => (save ? x.m_save : !x.m_save) && x.m_pos == pos);
+            var pin = GetAllPins()
+                .FirstOrDefault(x => (save ? x.m_save : !x.m_save) && x.m_pos == pos);
             if (pin != null)
                 RemovePin(pin);
         }
 
-        public static float ResizeCustomIcon(PinData pinData, float originalSize)
+        public static float ResizeCustomIcon(Minimap.PinData pinData, float originalSize)
         {
             var customIcon = CustomIcons.FirstOrDefault(icon => icon.PinType == pinData.m_type);
             if (customIcon != null)
@@ -186,20 +193,25 @@ namespace Automatics.AutomaticMapping
                 switch (Minimap.instance.m_mode)
                 {
                     case Minimap.MapMode.Large:
-                        return options.iconScaleLargeMap > 0 ? originalSize * options.iconScaleLargeMap : originalSize;
+                        return options.iconScaleLargeMap > 0
+                            ? originalSize * options.iconScaleLargeMap
+                            : originalSize;
                     case Minimap.MapMode.Small:
-                        return options.iconScaleSmallMap > 0 ? originalSize * options.iconScaleSmallMap : originalSize;
+                        return options.iconScaleSmallMap > 0
+                            ? originalSize * options.iconScaleSmallMap
+                            : originalSize;
                 }
             }
+
             return originalSize;
         }
 
         private class CustomIcon
         {
-            public PinningTarget Target;
-            public PinType PinType;
-            public Sprite Sprite;
             public Options Options;
+            public Minimap.PinType PinType;
+            public Sprite Sprite;
+            public PinningTarget Target;
         }
     }
 

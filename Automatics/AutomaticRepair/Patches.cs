@@ -9,11 +9,14 @@ namespace Automatics.AutomaticRepair
     [HarmonyPatch]
     internal static class Patches
     {
-        [HarmonyTranspiler, HarmonyPatch(typeof(CraftingStation), nameof(CraftingStation.Interact))]
-        public static IEnumerable<CodeInstruction> Interact(IEnumerable<CodeInstruction> instructions)
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(CraftingStation), nameof(CraftingStation.Interact))]
+        public static IEnumerable<CodeInstruction> Interact(
+            IEnumerable<CodeInstruction> instructions)
         {
             var Show = AccessTools.Method(typeof(InventoryGui), nameof(InventoryGui.Show));
-            var Hook = AccessTools.Method(typeof(RepairItems), nameof(RepairItems.CraftingStationInteractHook));
+            var Hook = AccessTools.Method(typeof(RepairItems),
+                nameof(RepairItems.CraftingStationInteractHook));
 
             var codes = new List<CodeInstruction>(instructions);
 
@@ -22,7 +25,7 @@ namespace Automatics.AutomaticRepair
             {
                 new CodeInstruction(OpCodes.Ldloc_0),
                 new CodeInstruction(OpCodes.Ldarg_0),
-                new CodeInstruction(OpCodes.Call, Hook),
+                new CodeInstruction(OpCodes.Call, Hook)
             });
 
             return codes;

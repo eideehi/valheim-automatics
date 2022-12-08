@@ -15,7 +15,10 @@ namespace Automatics.AutomaticRepair
 
         public static bool EnableAutomaticRepair => _enableAutomaticRepair.Value;
         public static int CraftingStationSearchRange => _craftingStationSearchRange.Value;
-        public static bool RepairItemsWhenAccessingTheCraftingStation => _repairItemsWhenAccessingTheCraftingStation.Value;
+
+        public static bool RepairItemsWhenAccessingTheCraftingStation =>
+            _repairItemsWhenAccessingTheCraftingStation.Value;
+
         public static Message ItemRepairMessage => _itemRepairMessage.Value;
         public static int PieceSearchRange => _pieceSearchRange.Value;
         public static Message PieceRepairMessage => _pieceRepairMessage.Value;
@@ -27,7 +30,8 @@ namespace Automatics.AutomaticRepair
             config.ChangeSection(Section);
             _enableAutomaticRepair = config.Bind("enable_automatic_repair", true);
             _craftingStationSearchRange = config.Bind("crafting_station_search_range", 16, (0, 64));
-            _repairItemsWhenAccessingTheCraftingStation = config.Bind("repair_items_when_accessing_the_crafting_station", false);
+            _repairItemsWhenAccessingTheCraftingStation =
+                config.Bind("repair_items_when_accessing_the_crafting_station", false);
             _itemRepairMessage = config.Bind("item_repair_message", Message.None);
             _pieceSearchRange = config.Bind("piece_search_range", 16, (0, 64));
             _pieceRepairMessage = config.Bind("piece_repair_message", Message.None);

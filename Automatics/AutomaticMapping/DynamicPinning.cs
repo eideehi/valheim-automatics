@@ -3,13 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
-using UnityEngine;
 using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
-    using PinData = Minimap.PinData;
-
     internal static class DynamicPinning
     {
         private static readonly Collider[] ColliderBuffer;
@@ -33,7 +31,7 @@ namespace Automatics.AutomaticMapping
             _objectCache = new ConditionalWeakTable<Collider, Component>();
         }
 
-        public static void RemoveDynamicPin(PinData data)
+        public static void RemoveDynamicPin(Minimap.PinData data)
         {
             if (!data.m_save)
                 DynamicPins.RemoveWhere(x => x.Data.m_pos == data.m_pos);
@@ -58,7 +56,8 @@ namespace Automatics.AutomaticMapping
             CharacterPinning(origin, delta, knownId);
             OtherCreaturePinning(origin, delta, knownId);
 
-            (from x in DynamicPins where !knownId.Contains(x.ObjectId) select x.Data).ToList().ForEach(Map.RemovePin);
+            (from x in DynamicPins where !knownId.Contains(x.ObjectId) select x.Data).ToList()
+                .ForEach(Map.RemovePin);
         }
 
         private static void CharacterPinning(Vector3 origin, float delta, ISet<ZDOID> knownId)
@@ -94,10 +93,8 @@ namespace Automatics.AutomaticMapping
         private static void OtherCreaturePinning(Vector3 origin, float delta, ISet<ZDOID> knownId)
         {
             foreach (var (_, component, _) in GetNearbyObjects(origin))
-            {
                 if (Objects.GetZdoid(component, out var id) && knownId.Add(id))
                     AddOrUpdatePin(id, component, delta);
-            }
         }
 
         private static void ShipPinning(Vector3 origin, float delta)
@@ -124,7 +121,8 @@ namespace Automatics.AutomaticMapping
                     if (string.IsNullOrEmpty(name))
                         name = Objects.GetName(ship);
 
-                    Map.AddPin(pos, Automatics.L10N.TranslateInternalName(name), true, CreateTarget(name, 0));
+                    Map.AddPin(pos, Automatics.L10N.TranslateInternalName(name), true,
+                        CreateTarget(name, 0));
                 }
             }
         }
@@ -153,7 +151,8 @@ namespace Automatics.AutomaticMapping
 
         private static IEnumerable<(Collider, Component, float)> GetNearbyObjects(Vector3 pos)
         {
-            return Objects.GetInsideSphere(pos, Config.DynamicObjectSearchRange, GetObject, ColliderBuffer, ObjectMask);
+            return Objects.GetInsideSphere(pos, Config.DynamicObjectSearchRange, GetObject,
+                ColliderBuffer, ObjectMask);
         }
 
         private static Component GetObject(Collider collider)
@@ -227,10 +226,10 @@ namespace Automatics.AutomaticMapping
 
         private class DynamicPin
         {
+            public readonly Minimap.PinData Data;
             public readonly ZDOID ObjectId;
-            public readonly PinData Data;
 
-            public DynamicPin(ZDOID objectId, PinData data)
+            public DynamicPin(ZDOID objectId, Minimap.PinData data)
             {
                 ObjectId = objectId;
                 Data = data;

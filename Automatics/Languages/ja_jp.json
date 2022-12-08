@@ -9,7 +9,6 @@
     "@message_none": "表示しない",
     "@message_center": "中央に表示",
     "@message_top_left": "左上に表示",
-
     "@config_system_section": "[ #1 システム ]",
     "@config_system_enable_logging_name": "ログ出力",
     "@config_system_enable_logging_description": "ログ出力を有効にするか否かを指定します。Automaticsのシステム初期化ログはこのオプションの値に関係なく、常に出力されます。",
@@ -17,7 +16,6 @@
     "@config_system_log_level_to_allow_logging_description": "ログの出力を許可するログレベルを指定します。",
     "@config_system_resources_directory_name": "リソースディレクトリ",
     "@config_system_resources_directory_description": "ユーザーカスタムの翻訳ファイルや、カスタムマップアイコンなどのリソースが格納されるディレクトリの絶対パスを指定します。このオプションに有効な値が指定されている場合、デフォルトのリソースディレクトリ (Automatics.dllと同じディレクトリ)に続いて、このディレクトリに格納されたリソースが読み込まれます。",
-
     "@config_automatic_door_section": "[ #2 自動ドア ]",
     "@config_automatic_door_enable_automatic_door_name": "自動ドア",
     "@config_automatic_door_enable_automatic_door_description": "ドアを自動で開閉させる機能を有効にするか否かを指定します。",
@@ -37,7 +35,6 @@
     "@config_automatic_door_automatic_door_enable_disable_toggle_description": "自動ドアの有効・無効を切り替えるショートカットキーを指定します。",
     "@config_automatic_door_automatic_door_enable_disable_toggle_message_name": "自動ドアの有効・無効の切り替えメッセージ",
     "@config_automatic_door_automatic_door_enable_disable_toggle_message_description": "ショートカットキーにより、自動ドアの有効・無効が切り替えられた時にメッセージを表示する場所を指定します。",
-
     "@config_automatic_mapping_section": "[ #3 自動マッピング ]",
     "@config_automatic_mapping_enable_automatic_mapping_name": "自動マッピング",
     "@config_automatic_mapping_enable_automatic_mapping_description": "周囲のオブジェクトやロケーションを自動でマップにピン留めする機能を有効にするか否かを指定します。",
@@ -91,7 +88,6 @@
     "@config_automatic_mapping_need_to_equip_wishbone_for_underground_deposits_description": "地中に存在する鉱脈をピン留めするのに叉骨を装備する必要があるか否かを指定します。",
     "@config_automatic_mapping_static_object_search_key_name": "静的オブジェクトの検索",
     "@config_automatic_mapping_static_object_search_key_description": "静的オブジェクトを検索するためのショートカットキーを指定します。この項目を設定すると、一定間隔ごとの静的オブジェクト検索は無効化され、ショートカットキーが押される度に一度だけ実行されるようになります。",
-
     "@config_automatic_processing_section": "[ #4 自動作業 ]",
     "@config_automatic_processing_enable_automatic_processing_name": "自動作業",
     "@config_automatic_processing_enable_automatic_processing_description": "料理や精錬、燃料の補充などの作業を自動で行う機能を有効にするか否かを指定します。",
@@ -110,7 +106,6 @@
     "@config_automatic_processing_processing_type_craft": "作成",
     "@config_automatic_processing_processing_type_refuel": "燃料補給",
     "@config_automatic_processing_processing_type_store": "収納",
-
     "@config_automatic_feeding_section": "[ #5 自動エサやり ]",
     "@config_automatic_feeding_enable_automatic_feeding_name": "自動エサやり",
     "@config_automatic_feeding_enable_automatic_feeding_description": "動物がプレイヤーやコンテナからエサとなるアイテムを自動的に消費する機能を有効にするか否かを指定します。",
@@ -122,7 +117,6 @@
     "@config_automatic_feeding_allow_to_feed_from_container_description": "コンテナからエサを食べることを許可する動物の種類を指定します。",
     "@config_automatic_feeding_animal_type_wild": "野生動物",
     "@config_automatic_feeding_animal_type_tamed": "懐いた動物",
-
     "@config_automatic_repair_section": "[ #6 自動リペア ]",
     "@config_automatic_repair_enable_automatic_repair_name": "自動リペア",
     "@config_automatic_repair_enable_automatic_repair_description": "アイテムや建築物の修理・修繕を自動で行う機能を有効にするか否かを指定します。",
@@ -136,7 +130,6 @@
     "@config_automatic_repair_piece_search_range_description": "修繕する建築物の探索を行う範囲を指定します。0に設定すると定期的な建築物の修繕が無効になります。 (単位: メートル)",
     "@config_automatic_repair_piece_repair_message_name": "建築物の修繕メッセージ",
     "@config_automatic_repair_piece_repair_message_description": "建築物が修繕された時にメッセージを表示する場所を指定します。",
-
     "@config_automatic_mining_section": "[ #7 自動採掘 ]",
     "@config_automatic_mining_enable_automatic_mining_name": "自動採掘",
     "@config_automatic_mining_enable_automatic_mining_description": "鉱物を自動で採掘する機能を有効にするか否かを指定します。",
@@ -152,31 +145,24 @@
     "@config_automatic_mining_allow_mining_underground_minerals_description": "地中に存在する鉱物の採掘を許可します。",
     "@config_automatic_mining_need_to_equip_wishbone_for_mining_underground_minerals_name": "叉骨装備時のみ地中の鉱物を採掘可能",
     "@config_automatic_mining_need_to_equip_wishbone_for_mining_underground_minerals_description": "地中の鉱物を採掘するために叉骨を装備する必要があるか否かを指定します。",
-
     "@text_automatic_mapping_creature_level_symbol": "★",
     "@text_automatic_mapping_empty_portal_tag": "空のタグ",
     "@text_automatic_mapping_flora_cluster_pin_name": "$1 x$2",
-
     "@message_automatic_door_enable_disable_toggle": "自動ドア: $1",
     "@message_automatic_repair_repaired_the_items": "$1個のアイテムを修理した",
     "@message_automatic_repair_repaired_the_pieces": "$1点の建築物を修繕した",
-
     "@animal_bird": "鳥",
     "@animal_seagal": "カモメ",
     "@animal_crow": "カラス",
-
     "@piece_wildbeehive": "蜂の巣",
-
     "@location_infestedtree": "汚泥にまみれた木",
     "@location_firehole": "炎の間欠泉",
     "@location_drakenest": "ドレイクの巣",
     "@location_goblincamp": "フューリングの集落",
     "@location_tarpit": "タールの池",
-
     "@command_description_format": "$1 \"automatics $2\" のコマンドを実行することで使用方法を確認することが出来ます。",
     "@command_syntax_error_format": "構文が間違っています: $1\n$2",
     "@command_argument_error_format": "引数が不正です: $1\n$2",
-
     "@command_automatics_description": "Automaticsにより追加されたコマンドの使用方法を確認することが出来ます。",
     "@command_automatics_usage": "使用方法: automatics [COMMAND]\nAutomatics により追加されたコマンドの使用方法を表示します。\n\nCOMMAND: 使用方法を表示するコマンド名。\n完全に一致するコマンドがある場合はそれを表示し、ない場合は最初に見つかった部分的に一致するコマンドを表示します。\n省略した場合は、automaticsコマンド自体の使用方法を表示します。",
     "@command_automatics_command_not_found": "コマンドが見つかりませんでした: $1",

@@ -1,6 +1,6 @@
-﻿using JetBrains.Annotations;
+﻿using System;
+using JetBrains.Annotations;
 using ModUtils;
-using System;
 
 namespace Automatics.AutomaticFeeding
 {
@@ -18,6 +18,6 @@ namespace Automatics.AutomaticFeeding
 
         [UsedImplicitly]
         [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
-        All = (1L << 2) - 1,
+        All = (1L << 2) - 1
     }
 }

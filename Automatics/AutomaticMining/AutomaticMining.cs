@@ -1,7 +1,8 @@
-﻿using ModUtils;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Automatics.Valheim;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMining
@@ -11,16 +12,17 @@ namespace Automatics.AutomaticMining
         private static readonly Collider[] ColliderBuffer;
         private static readonly Lazy<int> MineralMaskLazy;
 
-        private static int MineralMask => MineralMaskLazy.Value;
+        private static float _lastRunningTime;
 
         static AutomaticMining()
         {
             ColliderBuffer = new Collider[512];
-            MineralMaskLazy = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid", "Default_small", "piece",
+            MineralMaskLazy = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid",
+                "Default_small", "piece",
                 "piece_nonsolid", "hitbox", "vehicle"));
         }
 
-        private static float _lastRunningTime;
+        private static int MineralMask => MineralMaskLazy.Value;
 
         public static void Run(Player player, bool takeInput)
         {
@@ -67,12 +69,15 @@ namespace Automatics.AutomaticMining
                     select x).FirstOrDefault();
 
             var weapon = player.GetCurrentWeapon();
-            return weapon != null && weapon.m_shared.m_skillType == Skills.SkillType.Pickaxes ? weapon : null;
+            return weapon != null && weapon.m_shared.m_skillType == Skills.SkillType.Pickaxes
+                ? weapon
+                : null;
         }
 
         private static IEnumerable<MonoBehaviour> GetNearbyMinerals(Vector3 origin, float range)
         {
-            return from x in Objects.GetInsideSphere(origin, range, IsMineral, ColliderBuffer, MineralMask)
+            return from x in Objects.GetInsideSphere(origin, range, IsMineral, ColliderBuffer,
+                    MineralMask)
                 orderby x.Item3
                 select x.Item2;
         }
@@ -80,10 +85,11 @@ namespace Automatics.AutomaticMining
         private static MonoBehaviour IsMineral(Collider collider)
         {
             var obj = collider.GetComponentInParent<IDestructible>() as MonoBehaviour;
-            return Valheim.Mineral.IsMineral(Objects.GetName(obj)) ? obj : null;
+            return Mineral.IsMineral(Objects.GetName(obj)) ? obj : null;
         }
 
-        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range, MineRock rock)
+        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range,
+            MineRock rock)
         {
             if (rock.m_minToolTier > pickaxe.m_shared.m_toolTier) return;
 
@@ -108,7 +114,8 @@ namespace Automatics.AutomaticMining
             }
         }
 
-        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range, MineRock5 rock)
+        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range,
+            MineRock5 rock)
         {
             if (rock.m_minToolTier > pickaxe.m_shared.m_toolTier) return;
 
@@ -120,7 +127,8 @@ namespace Automatics.AutomaticMining
             var minerals = areas.Where(x =>
             {
                 if (!IsInRange(origin, x, range)) return false;
-                if (x.bounds.max.y >= ZoneSystem.instance.GetGroundHeight(x.bounds.center)) return true;
+                if (x.bounds.max.y >= ZoneSystem.instance.GetGroundHeight(x.bounds.center))
+                    return true;
                 if (!Config.AllowMiningUndergroundMinerals) return false;
                 return !Config.NeedToEquipWishboneForMiningUndergroundMinerals ||
                        equippedItems.Select(y => y.m_shared.m_name).Any(y => y == "$item_wishbone");
@@ -141,7 +149,8 @@ namespace Automatics.AutomaticMining
             }
         }
 
-        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range, Destructible destructible)
+        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range,
+            Destructible destructible)
         {
             if (destructible.m_minToolTier > pickaxe.m_shared.m_toolTier) return;
 
@@ -162,7 +171,8 @@ namespace Automatics.AutomaticMining
 
         private static bool IsInRange(Vector3 origin, Collider collider, float range)
         {
-            if (!Physics.Linecast(origin, collider.bounds.center, out var hitInfo, MineralMask)) return false;
+            if (!Physics.Linecast(origin, collider.bounds.center, out var hitInfo, MineralMask))
+                return false;
             return hitInfo.collider == collider && hitInfo.distance <= range;
         }
 
@@ -172,18 +182,21 @@ namespace Automatics.AutomaticMining
             pickaxe.m_shared.m_attack.m_hitEffect.Create(pos, Quaternion.identity);
         }
 
-        private static HitData CreateHitData(Player player, ItemDrop.ItemData pickaxe, Collider collider, int hitCount)
+        private static HitData CreateHitData(Player player, ItemDrop.ItemData pickaxe,
+            Collider collider, int hitCount)
         {
             var shared = pickaxe.m_shared;
 
             var hitData = new HitData
             {
                 m_toolTier = shared.m_toolTier,
-                m_statusEffect = shared.m_attackStatusEffect != null ? shared.m_attackStatusEffect.name : "",
+                m_statusEffect = shared.m_attackStatusEffect != null
+                    ? shared.m_attackStatusEffect.name
+                    : "",
                 m_skill = shared.m_skillType,
                 m_damage = pickaxe.GetDamage(),
                 m_point = collider.bounds.center,
-                m_hitCollider = collider,
+                m_hitCollider = collider
             };
 
             var attack = shared.m_attack;

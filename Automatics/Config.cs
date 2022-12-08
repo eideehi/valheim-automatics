@@ -58,6 +58,6 @@ namespace Automatics
         Center,
 
         [LocalizedDescription(Automatics.L10NPrefix, "@message_top_left")]
-        TopLeft,
+        TopLeft
     }
 }

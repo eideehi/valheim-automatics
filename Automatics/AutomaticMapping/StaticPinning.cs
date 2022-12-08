@@ -1,14 +1,16 @@
-﻿using ModUtils;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using Automatics.Valheim;
+using ModUtils;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Automatics.AutomaticMapping
 {
-    using Dungeon = Valheim.Dungeon.Flags;
-    using Spot = Valheim.Spot.Flags;
+    using Dungeon = Dungeon.Flags;
+    using Spot = Spot.Flags;
     using static ValheimObject;
 
     internal static class StaticPinning
@@ -24,7 +26,8 @@ namespace Automatics.AutomaticMapping
         static StaticPinning()
         {
             ColliderBuffer = new Collider[4096];
-            ObjectMaskLazy = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid", "Default_small",
+            ObjectMaskLazy = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid",
+                "Default_small",
                 "character_trigger", "piece_nonsolid", "item"));
             DungeonMaskLazy = new Lazy<int>(() => LayerMask.GetMask("character_trigger"));
             _objectCache = new ConditionalWeakTable<Collider, Component>();
@@ -60,7 +63,7 @@ namespace Automatics.AutomaticMapping
                 if (flora == null) continue;
 
                 Map.RemovePin(flora.Network?.Center ?? Vector3.zero);
-                UnityEngine.Object.Destroy(flora);
+                Object.Destroy(flora);
             }
 
             Automatics.AddTimer(nameof(SetFlora), SetFlora, 0.1f);
@@ -110,7 +113,8 @@ namespace Automatics.AutomaticMapping
             if (Config.StaticObjectSearchRange <= 0) return;
 
             var knownId = new HashSet<ZDOID> { ZDOID.None };
-            foreach (var (collider, component, _) in GetNearbyObjects(origin).OrderBy(x => x.distance))
+            foreach (var (collider, component, _) in GetNearbyObjects(origin)
+                         .OrderBy(x => x.distance))
             {
                 if (Objects.GetZdoid(component, out var id) && !knownId.Add(id)) continue;
 
@@ -122,13 +126,15 @@ namespace Automatics.AutomaticMapping
             }
         }
 
-        private static bool FloraPinning(Collider collider, Component component, string name, ISet<ZDOID> knownId)
+        private static bool FloraPinning(Collider collider, Component component, string name,
+            ISet<ZDOID> knownId)
         {
             if (!Core.IsFlora(name, out var data)) return false;
             if (!data.IsAllowed) return true;
 
             if (!(component is Pickable))
-                Automatics.Logger.Warning(() => $"Flora {name} {collider.bounds.center} is not Pickable.");
+                Automatics.Logger.Warning(() =>
+                    $"Flora {name} {collider.bounds.center} is not Pickable.");
 
             var flora = FloraObject.Find(x => x.transform.position == component.transform.position);
             if (flora == null || !flora.IsValid()) return true;
@@ -150,7 +156,8 @@ namespace Automatics.AutomaticMapping
 
             var size = cluster.NodeCount;
             var pinName = size > 1
-                ? Automatics.L10N.Localize("@text_automatic_mapping_flora_cluster_pin_name", name, size)
+                ? Automatics.L10N.Localize("@text_automatic_mapping_flora_cluster_pin_name", name,
+                    size)
                 : Automatics.L10N.Translate(name);
 
             Map.AddPin(position, pinName, true, CreateTarget(name));
@@ -164,7 +171,8 @@ namespace Automatics.AutomaticMapping
             if (!data.IsAllowed) return true;
 
             if (!(component is IDestructible))
-                Automatics.Logger.Warning(() => $"Mineral deposit {name} {collider.bounds.center} is not IDestructible.");
+                Automatics.Logger.Warning(() =>
+                    $"Mineral deposit {name} {collider.bounds.center} is not IDestructible.");
 
             var position = collider.bounds.center;
             if (Map.HavePinInRange(position, 1f)) return true;
@@ -175,7 +183,8 @@ namespace Automatics.AutomaticMapping
                 if (maxHeight < ZoneSystem.instance.GetGroundHeight(position))
                 {
                     var items = Player.m_localPlayer.GetInventory().GetEquipedtems();
-                    if (items.Select(x => x.m_shared.m_name).All(x => x != "$item_wishbone")) return true;
+                    if (items.Select(x => x.m_shared.m_name).All(x => x != "$item_wishbone"))
+                        return true;
                 }
             }
 
@@ -183,13 +192,15 @@ namespace Automatics.AutomaticMapping
             return true;
         }
 
-        private static bool SpawnerPinning(Collider collider, Component component, string name, ISet<ZDOID> knownId)
+        private static bool SpawnerPinning(Collider collider, Component component, string name,
+            ISet<ZDOID> knownId)
         {
             if (!Core.IsSpawner(name, out var data)) return false;
             if (!data.IsAllowed) return true;
 
             if (component.GetComponent<SpawnArea>() == null)
-                Automatics.Logger.Warning(() => $"Spawner {name} {collider.bounds.center} is not SpawnArea.");
+                Automatics.Logger.Warning(() =>
+                    $"Spawner {name} {collider.bounds.center} is not SpawnArea.");
 
             var position = component.transform.position;
             if (Map.HavePinInRange(position, 1f)) return true;
@@ -198,7 +209,8 @@ namespace Automatics.AutomaticMapping
             return true;
         }
 
-        private static bool OtherPinning(Collider collider, Component component, string name, ISet<ZDOID> knownId)
+        private static bool OtherPinning(Collider collider, Component component, string name,
+            ISet<ZDOID> knownId)
         {
             if (!Core.IsOther(name, out var data)) return false;
             if (!data.IsAllowed) return true;
@@ -215,7 +227,8 @@ namespace Automatics.AutomaticMapping
                 var position = component.transform.position;
                 if (Map.HavePinInRange(position, 1f)) return true;
 
-                Map.AddPin(position, Automatics.L10N.Localize(name), true, new PinningTarget { name = name });
+                Map.AddPin(position, Automatics.L10N.Localize(name), true,
+                    new PinningTarget { name = name });
             }
 
             return true;
@@ -229,7 +242,9 @@ namespace Automatics.AutomaticMapping
             if (portal)
                 tag = portal.GetText();
 
-            var name = string.IsNullOrEmpty(tag) ? Automatics.L10N.Translate("@text_automatic_mapping_empty_portal_tag") : tag;
+            var name = string.IsNullOrEmpty(tag)
+                ? Automatics.L10N.Translate("@text_automatic_mapping_empty_portal_tag")
+                : tag;
             var position = component.transform.position;
             if (Map.FindPinInRange(position, 1f, out var data) && data.m_name == name) return;
 
@@ -255,7 +270,10 @@ namespace Automatics.AutomaticMapping
 
         private static bool DungeonPinning(ZoneSystem.LocationInstance instance)
         {
-            Teleport GetTeleport(Collider collider) => collider.GetComponent<Teleport>();
+            Teleport GetTeleport(Collider collider)
+            {
+                return collider.GetComponent<Teleport>();
+            }
 
             var prefabName = instance.m_location.m_prefabName;
             if (!Core.IsDungeon(prefabName, out var data)) return false;
@@ -267,7 +285,8 @@ namespace Automatics.AutomaticMapping
             else
                 name = $"@location_{prefabName.ToLower()}";
 
-            var teleports = Objects.GetInsideSphere(instance.m_position, 16f, GetTeleport, ColliderBuffer, DungeonMask);
+            var teleports = Objects.GetInsideSphere(instance.m_position, 16f, GetTeleport,
+                ColliderBuffer, DungeonMask);
             if (teleports.Count > 0)
             {
                 foreach (var position in teleports
@@ -275,13 +294,12 @@ namespace Automatics.AutomaticMapping
                              .Take(1)
                              .Where(x => !Map.HavePinInRange(x.collider.bounds.center, 1f))
                              .Select(x => x.collider.bounds.center))
-                {
                     Map.AddPin(position, Automatics.L10N.Translate(name), true, CreateTarget(name));
-                }
             }
             else if (!Map.HavePinInRange(instance.m_position, 1f))
             {
-                Map.AddPin(instance.m_position, Automatics.L10N.Translate(name), true, CreateTarget(name));
+                Map.AddPin(instance.m_position, Automatics.L10N.Translate(name), true,
+                    CreateTarget(name));
                 Automatics.Logger.Warning(() => $"Dungeon {name} has no entrance.");
             }
 
@@ -300,7 +318,8 @@ namespace Automatics.AutomaticMapping
             else
                 name = $"@location_{prefabName.ToLower()}";
 
-            Map.AddPin(instance.m_position, Automatics.L10N.Translate(name), true, CreateTarget(name));
+            Map.AddPin(instance.m_position, Automatics.L10N.Translate(name), true,
+                CreateTarget(name));
             return true;
         }
 
@@ -309,9 +328,11 @@ namespace Automatics.AutomaticMapping
             return new PinningTarget { name = name };
         }
 
-        private static IEnumerable<(Collider, Component, float distance)> GetNearbyObjects(Vector3 pos)
+        private static IEnumerable<(Collider, Component, float distance)> GetNearbyObjects(
+            Vector3 pos)
         {
-            return Objects.GetInsideSphere(pos, Config.StaticObjectSearchRange, GetObject, ColliderBuffer, ObjectMask);
+            return Objects.GetInsideSphere(pos, Config.StaticObjectSearchRange, GetObject,
+                ColliderBuffer, ObjectMask);
         }
 
         private static Component GetObject(Collider collider)

@@ -1,17 +1,18 @@
-﻿using ModUtils;
-using System;
+﻿using System;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Automatics.Valheim;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
-    using Animal = Valheim.Animal.Flags;
-    using Monster = Valheim.Monster.Flags;
-    using Flora = Valheim.Flora.Flags;
-    using Mineral = Valheim.Mineral.Flags;
-    using Dungeon = Valheim.Dungeon.Flags;
-    using Spot = Valheim.Spot.Flags;
+    using Animal = Animal.Flags;
+    using Monster = Monster.Flags;
+    using Flora = Flora.Flags;
+    using Mineral = Mineral.Flags;
+    using Dungeon = Dungeon.Flags;
+    using Spot = Spot.Flags;
     using static ValheimObject;
 
     internal static class Core
@@ -55,7 +56,8 @@ namespace Automatics.AutomaticMapping
             return Config.EnableAutomaticMapping && Player.m_localPlayer != null;
         }
 
-        public static bool IsAnimal(string name, out (Animal Animal, bool IsCustom, bool IsAllowed) data)
+        public static bool IsAnimal(string name,
+            out (Animal Animal, bool IsCustom, bool IsAllowed) data)
         {
             if (Valheim.Animal.Get(name, out var animal))
             {
@@ -73,7 +75,8 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
-        public static bool IsMonster(string name, out (Monster Monster, bool IsCustom, bool IsAllowed) data)
+        public static bool IsMonster(string name,
+            out (Monster Monster, bool IsCustom, bool IsAllowed) data)
         {
             if (Valheim.Monster.Get(name, out var monster))
             {
@@ -91,7 +94,8 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
-        public static bool IsFlora(string name, out (Flora Flora, bool IsCustom, bool IsAllowed) data)
+        public static bool IsFlora(string name,
+            out (Flora Flora, bool IsCustom, bool IsAllowed) data)
         {
             if (Valheim.Flora.Get(name, out var flora))
             {
@@ -128,7 +132,8 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
-        public static bool IsSpawner(string name, out (Spawner Spawner, bool IsCustom, bool IsAllowed) data)
+        public static bool IsSpawner(string name,
+            out (Spawner Spawner, bool IsCustom, bool IsAllowed) data)
         {
             if (GetSpawner(name, out var spawner))
             {
@@ -146,7 +151,8 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
-        public static bool IsOther(string name, out (Other Other, bool IsCustom, bool IsAllowed) data)
+        public static bool IsOther(string name,
+            out (Other Other, bool IsCustom, bool IsAllowed) data)
         {
             if (GetOther(name, out var other))
             {
@@ -164,7 +170,8 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
-        public static bool IsDungeon(string name, out (Dungeon Dungeon, bool IsCustom, bool IsAllowed) data)
+        public static bool IsDungeon(string name,
+            out (Dungeon Dungeon, bool IsCustom, bool IsAllowed) data)
         {
             if (Valheim.Dungeon.Get(name, out var dungeon))
             {

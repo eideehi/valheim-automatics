@@ -1,10 +1,10 @@
-﻿using ModUtils;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using ModUtils;
 
 namespace Automatics
 {
@@ -32,12 +32,12 @@ namespace Automatics
                 }
 
                 if (string.IsNullOrEmpty(usage) && command.Contains(filter))
-                {
                     usage = ConsoleCommand.Usage(command);
-                }
             }
 
-            args.Context.AddString(usage ?? Automatics.L10N.Translate("@command_automatics_command_not_found"));
+            args.Context.AddString(usage ??
+                                   Automatics.L10N.Translate(
+                                       "@command_automatics_command_not_found"));
             args.Context.AddString("");
         }
 
@@ -60,9 +60,9 @@ namespace Automatics
             Automatics.Logger.Debug(() => $"Print name: {string.Join(", ", arguments)}");
 
             var filters = arguments.Select(arg =>
-                arg.StartsWith("r/", StringComparison.OrdinalIgnoreCase)
-                    ? (Regex: true, Value: arg.Substring(2))
-                    : (Regex: false, Value: arg))
+                    arg.StartsWith("r/", StringComparison.OrdinalIgnoreCase)
+                        ? (Regex: true, Value: arg.Substring(2))
+                        : (Regex: false, Value: arg))
                 .ToList();
             foreach (var (key, value) in from translation in GetAllTranslations()
                      let key = translation.Key.StartsWith("automatics_")
@@ -77,7 +77,9 @@ namespace Automatics
                                value.IndexOf(filter.Value, StringComparison.OrdinalIgnoreCase) >= 0)
                      select (key, value))
             {
-                var text = Automatics.L10N.LocalizeTextOnly("@command_printnames_result_format", key, value);
+                var text =
+                    Automatics.L10N.LocalizeTextOnly("@command_printnames_result_format", key,
+                        value);
                 args.Context.AddString(text);
                 Automatics.Logger.Debug(() => $"  {text}");
             }
@@ -87,7 +89,8 @@ namespace Automatics
 
         private static Dictionary<string, string> GetAllTranslations()
         {
-            return Reflections.GetField<Dictionary<string, string>>(Localization.instance, "m_translations");
+            return Reflections.GetField<Dictionary<string, string>>(Localization.instance,
+                "m_translations");
         }
 
         private static List<string> ParseArgs(string line)
@@ -98,7 +101,6 @@ namespace Automatics
             var escaped = false;
 
             foreach (var c in line)
-            {
                 if (c == '\\' && !escaped)
                 {
                     escaped = true;
@@ -118,19 +120,16 @@ namespace Automatics
                     buffer.Append(c);
                     escaped = false;
                 }
-            }
 
-            if (buffer.Length > 0)
-            {
-                args.Add(buffer.ToString());
-            }
+            if (buffer.Length > 0) args.Add(buffer.ToString());
 
             return args.Skip(1).ToList();
         }
 
         public static void Register()
         {
-            ConsoleCommand.Register("automatics", Automatics.L10N.Localize("@command_automatics_description"), ShowUsage,
+            ConsoleCommand.Register("automatics",
+                Automatics.L10N.Localize("@command_automatics_description"), ShowUsage,
                 ShowUsageOptions);
             ConsoleCommand.Register("printnames", PrintNames);
         }
@@ -150,9 +149,7 @@ namespace Automatics
         {
             Automatics.Logger.Debug($"[COMMAND]: ### {command}");
             foreach (var line in Usage(command).Split('\n'))
-            {
                 Automatics.Logger.Debug($"[COMMAND]: {line}");
-            }
         }
 
         public static IEnumerable<Terminal.ConsoleCommand> GetAllCommands()
@@ -160,17 +157,25 @@ namespace Automatics
             return Commands.Values.ToList();
         }
 
-        public static void Register(string command, string description, Terminal.ConsoleEvent action, Terminal.ConsoleOptionsFetcher optionsFetcher = null, bool isCheat = false, bool isNetwork = false, bool onlyServer = false, bool isSecret = false, bool allowInDevBuild = false)
+        public static void Register(string command, string description,
+            Terminal.ConsoleEvent action, Terminal.ConsoleOptionsFetcher optionsFetcher = null,
+            bool isCheat = false, bool isNetwork = false, bool onlyServer = false,
+            bool isSecret = false, bool allowInDevBuild = false)
         {
             var lowerCommand = command.ToLower();
-            Commands[lowerCommand] = new Terminal.ConsoleCommand(lowerCommand, description, action, isCheat, isNetwork, onlyServer, isSecret, allowInDevBuild, optionsFetcher);
+            Commands[lowerCommand] = new Terminal.ConsoleCommand(lowerCommand, description, action,
+                isCheat, isNetwork, onlyServer, isSecret, allowInDevBuild, optionsFetcher);
 
             PrintCommand(command);
         }
 
-        public static void Register(string command, Terminal.ConsoleEvent action, Terminal.ConsoleOptionsFetcher optionsFetcher = null, bool isCheat = false, bool isNetwork = false, bool onlyServer = false, bool isSecret = false, bool allowInDevBuild = false)
+        public static void Register(string command, Terminal.ConsoleEvent action,
+            Terminal.ConsoleOptionsFetcher optionsFetcher = null, bool isCheat = false,
+            bool isNetwork = false, bool onlyServer = false, bool isSecret = false,
+            bool allowInDevBuild = false)
         {
-            Register(command, Description(command.ToLower()), action, optionsFetcher, isCheat, isNetwork, onlyServer, isSecret, allowInDevBuild);
+            Register(command, Description(command.ToLower()), action, optionsFetcher, isCheat,
+                isNetwork, onlyServer, isSecret, allowInDevBuild);
         }
 
         public static string Usage(string command)
@@ -180,17 +185,19 @@ namespace Automatics
 
         public static string SyntaxError(string command)
         {
-            return Automatics.L10N.Localize($"@command_syntax_error_format", command, Usage(command));
+            return Automatics.L10N.Localize("@command_syntax_error_format", command,
+                Usage(command));
         }
 
         public static string ArgumentError(string command, string arg)
         {
-            return Automatics.L10N.Localize($"@command_argument_error_format", arg, Usage(command));
+            return Automatics.L10N.Localize("@command_argument_error_format", arg, Usage(command));
         }
 
         private static string Description(string command)
         {
-            return Automatics.L10N.Localize($"@command_description_format", $"@command_{command}_description", command);
+            return Automatics.L10N.Localize("@command_description_format",
+                $"@command_{command}_description", command);
         }
     }
 }

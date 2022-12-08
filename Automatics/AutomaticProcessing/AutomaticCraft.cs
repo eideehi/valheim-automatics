@@ -1,13 +1,14 @@
-﻿using ModUtils;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
 {
     internal static class AutomaticCraft
     {
-        private static string LogMessage(string fromItem, int count, string toItem, Container container,
+        private static string LogMessage(string fromItem, int count, string toItem,
+            Container container,
             string destName, Vector3 destPos)
         {
             return count == 1
@@ -37,12 +38,16 @@ namespace Automatics.AutomaticProcessing
                     continue;
                 }
 
-                var conversion = Reflections.InvokeMethod<CookingStation.ItemConversion>(piece, "GetItemConversion", item);
+                var conversion =
+                    Reflections.InvokeMethod<CookingStation.ItemConversion>(piece,
+                        "GetItemConversion", item);
                 if (conversion == null) continue;
 
                 var productName = conversion.m_to.m_itemData.m_shared.m_name;
-                cookingProductCounts[productName] = cookingProductCounts.TryGetValue(productName, out var count) ? count + 1 : 1;
+                cookingProductCounts[productName] =
+                    cookingProductCounts.TryGetValue(productName, out var count) ? count + 1 : 1;
             }
+
             if (freeSlot == -1) return;
 
             var minMaterialCount = Config.MaterialCountOfSuppressProcessing(stationName);
@@ -69,16 +74,19 @@ namespace Automatics.AutomaticProcessing
                     {
                         var material = inventory.GetItem(materialData.m_name);
                         if (material != null)
-                        {
-                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) > minMaterialCount)
+                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) >
+                                minMaterialCount)
                                 materialContainer = container;
-                        }
                     }
 
                     if (!hasProductContainer)
                     {
-                        var cookingCount = cookingProductCounts.TryGetValue(productData.m_name, out var count) ? count : 0;
-                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) < maxProductCount - cookingCount)
+                        var cookingCount =
+                            cookingProductCounts.TryGetValue(productData.m_name, out var count)
+                                ? count
+                                : 0;
+                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) <
+                            maxProductCount - cookingCount)
                             hasProductContainer = inventory.CanAddItem(productItem, 1);
                     }
                 }
@@ -88,7 +96,8 @@ namespace Automatics.AutomaticProcessing
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("AddItem", item.m_dropPrefab.name);
-                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1,
+                        productData.m_name, materialContainer,
                         stationName, origin));
                     break;
                 }
@@ -139,16 +148,16 @@ namespace Automatics.AutomaticProcessing
                     {
                         var material = inventory.GetItem(materialData.m_name);
                         if (material != null)
-                        {
-                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) > minMaterialCount)
+                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) >
+                                minMaterialCount)
                                 materialContainer = container;
-                        }
                     }
 
                     if (!hasProductContainer)
                     {
                         var count = conversion.m_producedItems;
-                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) < maxProductCount - count)
+                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) <
+                            maxProductCount - count)
                             hasProductContainer = inventory.CanAddItem(productItem, count);
                     }
                 }
@@ -158,7 +167,8 @@ namespace Automatics.AutomaticProcessing
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("AddItem", item.m_dropPrefab.name);
-                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1,
+                        productData.m_name, materialContainer,
                         fermenterName, origin));
                     break;
                 }
@@ -186,12 +196,14 @@ namespace Automatics.AutomaticProcessing
                 var queuedOre = zNetView.GetZDO().GetString("item" + i);
                 if (string.IsNullOrEmpty(queuedOre)) continue;
 
-                var conversion = piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == queuedOre);
+                var conversion =
+                    piece.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == queuedOre);
                 if (conversion == null) continue;
 
                 conversions.Add(conversion);
                 var productName = conversion.m_to.m_itemData.m_shared.m_name;
-                smeltingProductCounts[productName] = smeltingProductCounts.TryGetValue(productName, out var count) ? count + 1 : 1;
+                smeltingProductCounts[productName] =
+                    smeltingProductCounts.TryGetValue(productName, out var count) ? count + 1 : 1;
             }
 
             conversions.Reverse();
@@ -219,16 +231,19 @@ namespace Automatics.AutomaticProcessing
                     {
                         var material = inventory.GetItem(materialData.m_name);
                         if (material != null)
-                        {
-                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) > minMaterialCount)
+                            if (minMaterialCount == 0 || inventory.CountItems(materialData.m_name) >
+                                minMaterialCount)
                                 materialContainer = container;
-                        }
                     }
 
                     if (!hasProductContainer)
                     {
-                        var smeltingCount = smeltingProductCounts.TryGetValue(productData.m_name, out var count) ? count : 0;
-                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) < maxProductCount - smeltingCount)
+                        var smeltingCount =
+                            smeltingProductCounts.TryGetValue(productData.m_name, out var count)
+                                ? count
+                                : 0;
+                        if (maxProductCount == 0 || inventory.CountItems(productData.m_name) <
+                            maxProductCount - smeltingCount)
                             hasProductContainer = inventory.CanAddItem(productItem, 1);
                     }
                 }
@@ -238,7 +253,8 @@ namespace Automatics.AutomaticProcessing
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("AddOre", item.m_dropPrefab.name);
-                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1, productData.m_name, materialContainer,
+                    Automatics.Logger.Debug(() => LogMessage(materialData.m_name, 1,
+                        productData.m_name, materialContainer,
                         smelterName, origin));
                     break;
                 }
