@@ -145,6 +145,8 @@
     "@config_automatic_mining_allow_mining_underground_minerals_description": "地中に存在する鉱物の採掘を許可します。",
     "@config_automatic_mining_need_to_equip_wishbone_for_mining_underground_minerals_name": "叉骨装備時のみ地中の鉱物を採掘可能",
     "@config_automatic_mining_need_to_equip_wishbone_for_mining_underground_minerals_description": "地中の鉱物を採掘するために叉骨を装備する必要があるか否かを指定します。",
+    "@config_common_disable_module_name": "モジュールを無効化",
+    "@config_common_disable_module_description": "この機能を完全に無効化し、不要な処理が追加される事を防ぐことができます。 （このオプションを反映させるためにはゲームの再起動が必要です）",
     "@text_automatic_mapping_creature_level_symbol": "★",
     "@text_automatic_mapping_empty_portal_tag": "空のタグ",
     "@text_automatic_mapping_flora_cluster_pin_name": "$1 x$2",
