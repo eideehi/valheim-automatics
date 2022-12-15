@@ -6,14 +6,14 @@ using UnityEngine;
 
 namespace Automatics.Debug
 {
-    internal static class Command
+    internal static class Commands
     {
         private static readonly Lazy<IEnumerable<Piece>> AllPiecesLazy;
 
         private static readonly Dictionary<string, Func<Collider, MonoBehaviour>>
             ObjectColliderConvertors;
 
-        static Command()
+        static Commands()
         {
             AllPiecesLazy = new Lazy<IEnumerable<Piece>>(() =>
             {
@@ -62,16 +62,17 @@ namespace Automatics.Debug
             };
         }
 
-        public static void RegisterCommands()
+        public static void Register()
         {
             ConsoleCommand.Register("give", Give, GiveOptions, true);
             ConsoleCommand.Register("givematerials", GiveMaterials, GiveMaterialsOptions, true);
             ConsoleCommand.Register("printobject", PrintObject, PrintObjectOptions, true);
+            ConsoleCommand.Register("printlocations2", PrintLocations2);
         }
 
         private static void Give(Terminal.ConsoleEventArgs args)
         {
-            var name = args.Length >= 2 ? args[1] : "";
+            var name = args.Length > 1 ? args[1] : "";
             if (string.IsNullOrEmpty(name))
             {
                 args.Context.AddString(ConsoleCommand.SyntaxError("give"));
@@ -111,7 +112,7 @@ namespace Automatics.Debug
 
         private static void GiveMaterials(Terminal.ConsoleEventArgs args)
         {
-            var name = args.Length >= 2 ? args[1] : "";
+            var name = args.Length > 1 ? args[1] : "";
             var count = args.TryParameterInt(2);
 
             Automatics.Logger.Debug(() => $"Run givematerials {name} {count}");
@@ -149,14 +150,14 @@ namespace Automatics.Debug
 
         private static void PrintObject(Terminal.ConsoleEventArgs args)
         {
-            if (!(args.Length >= 3 && int.TryParse(args[2], out var range)))
+            if (!args.TryParameterInt(2, out var range))
             {
                 args.Context.AddString(ConsoleCommand.SyntaxError("printobject"));
                 return;
             }
 
             var type = args[1];
-            var filter = args.Length >= 4 ? args[3] : "";
+            var filter = args.Length > 3 ? args[3] : "";
 
             if (!ObjectColliderConvertors.TryGetValue(type, out var convertor))
             {
@@ -174,6 +175,13 @@ namespace Automatics.Debug
                 {
                     case Humanoid humanoid when humanoid.IsPlayer():
                         break;
+
+                    case Character character:
+                    {
+                        var name = character.m_name;
+                        strings.Add($"{Automatics.L10N.Translate(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
+                        break;
+                    }
 
                     case RandomFlyingBird bird:
                     {
@@ -221,6 +229,29 @@ namespace Automatics.Debug
         private static List<string> PrintObjectOptions()
         {
             return ObjectColliderConvertors.Keys.ToList();
+        }
+
+        private static void PrintLocations2(Terminal.ConsoleEventArgs args)
+        {
+            var filter = (args.Length > 1 ? args[1] : "").ToLower();
+            var count = args.TryParameterInt(2, 8);
+            var distinct = args.Length > 3 && args[3].ToLower() == "true";
+            var origin = Player.m_localPlayer.transform.position;
+
+            Automatics.Logger.Debug($"Run command: {filter} {count} {distinct}");
+
+            var knownLocation = new HashSet<string>();
+            foreach (var location in ZoneSystem.instance.m_locationInstances.Values
+                         .Where(x => x.m_location.m_prefabName.ToLower().Contains(filter))
+                         .OrderBy(x => Vector3.Distance(origin, x.m_position))
+                         .Take(count))
+            {
+                if (distinct && !knownLocation.Add(location.m_location.m_prefabName)) continue;
+
+                var message = $"\"{location.m_location.m_prefabName}\" {location.m_position}";
+                args.Context.AddString(message);
+                Automatics.Logger.Debug(message);
+            }
         }
 
         private static IEnumerable<ItemDrop> GetAllItems()
