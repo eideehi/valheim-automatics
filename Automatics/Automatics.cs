@@ -4,14 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using BepInEx;
-using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using JetBrains.Annotations;
 using ModUtils;
-using UnityEngine;
 using Logger = ModUtils.Logger;
-using Random = UnityEngine.Random;
 
 namespace Automatics
 {
@@ -24,19 +21,7 @@ namespace Automatics
 
         private void Awake()
         {
-            Automatics.Initialize(Info, Config, Logger);
-            InvokeRepeating(nameof(InvokeTimer), Random.Range(1f, 2f), 0.05f);
-        }
-
-        private void InvokeTimer()
-        {
-            foreach (var queue in Automatics.TimerQueue.ToList())
-            {
-                var timer = queue.Value;
-                if (!(Time.time - timer.timestamp >= timer.delay)) continue;
-                Automatics.TimerQueue.Remove(queue.Key);
-                timer.callback.Invoke();
-            }
+            Automatics.Initialize(this, Logger);
         }
     }
 
@@ -44,17 +29,10 @@ namespace Automatics
     {
         public const string L10NPrefix = "automatics";
 
-        public static readonly Dictionary<string, Timer> TimerQueue;
-
         private static string _modLocation;
+        private static string _guid;
 
-        static Automatics()
-        {
-            TimerQueue = new Dictionary<string, Timer>();
-        }
-
-        private static string GUID { get; set; }
-
+        public static BaseUnityPlugin Plugin { get; private set; }
         public static Logger Logger { get; private set; }
         public static L10N L10N { get; private set; }
 
@@ -92,50 +70,39 @@ namespace Automatics
 
         public static string GetHarmonyId(string moduleName)
         {
-            return $"{GUID}.{moduleName}";
+            return $"{_guid}.{moduleName}";
         }
 
+        [Obsolete]
         public static void AddTimer(string id, Action callback, float delay)
         {
-            TimerQueue[id] = new Timer
-            {
-                timestamp = Time.time,
-                delay = delay,
-                callback = callback
-            };
         }
 
-        public static void RemoveTimer(string id)
+        public static void Initialize(BaseUnityPlugin plugin, ManualLogSource logger)
         {
-            TimerQueue.Remove(id);
-        }
-
-        public static void Initialize(PluginInfo info, ConfigFile config, ManualLogSource logger)
-        {
+            Plugin = plugin;
             Logger = new Logger(logger, Config.IsLogEnabled);
-
-            Migration.MigrateConfig(config);
-
-            _modLocation = Path.GetDirectoryName(info.Location) ?? "";
-            L10N = new L10N(L10NPrefix);
+            _modLocation = Path.GetDirectoryName(Plugin.Info.Location) ?? "";
+            _guid = Plugin.Info.Metadata.GUID;
 
             Logger.Debug($"Mod location: {_modLocation}");
 
+            Migration.MigrateConfig(Plugin.Config);
+
+            L10N = new L10N(L10NPrefix);
             var translationsLoader = new TranslationsLoader(L10N);
             translationsLoader.LoadJson(GetFilePath("Languages"));
 
             foreach (var automaticsChildModDir in GetAutomaticsChildModDirs())
                 translationsLoader.LoadJson(Path.Combine(automaticsChildModDir, "Languages"));
 
-            Config.Initialize(config);
+            Config.Initialize(Plugin.Config);
 
             translationsLoader.LoadJson(GetInjectedResourcePath("Languages"));
 
             Hooks.OnInitTerminal += Command.Register;
 
-            GUID = info.Metadata.GUID;
-            Harmony.CreateAndPatchAll(typeof(Patches), GUID);
-
+            Harmony.CreateAndPatchAll(typeof(Patches), _guid);
             InitializeModules(Assembly.GetExecutingAssembly());
         }
 
@@ -147,13 +114,6 @@ namespace Automatics
                     File.Exists(Path.Combine(directory, "automatics-child-mod"))).ToList();
 
             return Array.Empty<string>();
-        }
-
-        public struct Timer
-        {
-            public float timestamp;
-            public float delay;
-            public Action callback;
         }
     }
 
