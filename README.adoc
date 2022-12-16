@@ -122,6 +122,10 @@ The README would be too large if we described all the details of the configurati
 
 {uri-config}[Open CONFIG.adoc] to see the configuration details.
 
+=== About deprecated options
+- Resources Directory / [resources_directory] +
+Provided to load custom icon packs, this option will be discontinued in the near future as Automatics can now load custom icon packs from the BepInEx plugin folder.
+
 == Supplementary explanation
 === Matching by "Display name" and "Internal name"
 In some features of Automatics, there is an option that allows the user to add targets as needed. The "Display name" and "Internal name" are used to identify these targets. The display name and internal name are matched according to different rules.

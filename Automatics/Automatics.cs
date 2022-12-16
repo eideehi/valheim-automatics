@@ -31,10 +31,36 @@ namespace Automatics
 
         private static string _modLocation;
         private static string _guid;
+        private static List<string> _allResourcesDirectory;
 
         public static BaseUnityPlugin Plugin { get; private set; }
         public static Logger Logger { get; private set; }
         public static L10N L10N { get; private set; }
+
+        private static IEnumerable<string> GetAllResourcesDirectory()
+        {
+            if (!(_allResourcesDirectory is null)) return _allResourcesDirectory;
+            _allResourcesDirectory = new List<string> { _modLocation };
+
+            var root = Paths.PluginPath;
+            if (!Directory.Exists(root)) return _allResourcesDirectory;
+
+            foreach (var directory in Directory.GetDirectories(root))
+            {
+                var marker = Path.Combine(directory, "automatics-child-mod");
+                if (File.Exists(marker))
+                {
+                    _allResourcesDirectory.Add(directory);
+                    continue;
+                }
+
+                marker = Path.Combine(directory, "automatics-resources-marker");
+                if (File.Exists(marker))
+                    _allResourcesDirectory.Add(directory);
+            }
+
+            return _allResourcesDirectory;
+        }
 
         private static void InitializeModules(Assembly assembly)
         {
@@ -55,7 +81,8 @@ namespace Automatics
                 }
         }
 
-        internal static string GetInjectedResourcePath(string resourceName)
+        [Obsolete]
+        public static string GetInjectedResourcePath(string resourceName)
         {
             var directory = Config.ResourcesDirectory;
             if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
@@ -63,9 +90,21 @@ namespace Automatics
             return "";
         }
 
+        [Obsolete]
+        public static IEnumerable<string> GetAutomaticsChildModDirs()
+        {
+            return GetAllResourcesDirectory();
+        }
+
+        [Obsolete]
         public static string GetFilePath(string pathname)
         {
             return Path.Combine(_modLocation, pathname);
+        }
+
+        public static IEnumerable<string> GetAllResourcePath(string pathname)
+        {
+            return GetAllResourcesDirectory().Select(x => Path.Combine(x, pathname));
         }
 
         public static string GetHarmonyId(string moduleName)
@@ -91,10 +130,8 @@ namespace Automatics
 
             L10N = new L10N(L10NPrefix);
             var translationsLoader = new TranslationsLoader(L10N);
-            translationsLoader.LoadJson(GetFilePath("Languages"));
-
-            foreach (var automaticsChildModDir in GetAutomaticsChildModDirs())
-                translationsLoader.LoadJson(Path.Combine(automaticsChildModDir, "Languages"));
+            foreach (var directory in GetAllResourcePath("Languages"))
+                translationsLoader.LoadJson(directory);
 
             Config.Initialize(Plugin.Config);
 
@@ -104,16 +141,6 @@ namespace Automatics
 
             Harmony.CreateAndPatchAll(typeof(Patches), _guid);
             InitializeModules(Assembly.GetExecutingAssembly());
-        }
-
-        internal static IEnumerable<string> GetAutomaticsChildModDirs()
-        {
-            var root = Paths.PluginPath;
-            if (Directory.Exists(root))
-                return Directory.GetDirectories(root).Where(directory =>
-                    File.Exists(Path.Combine(directory, "automatics-child-mod"))).ToList();
-
-            return Array.Empty<string>();
         }
     }
 
