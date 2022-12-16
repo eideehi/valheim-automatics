@@ -1,0 +1,159 @@
+﻿{
+  "type": "flora",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "Dandelion",
+      "label": "$item_dandelion",
+      "matches": [
+        {
+          "value": "$item_dandelion"
+        }
+      ]
+    },
+    {
+      "identifier": "Mushroom",
+      "label": "$item_mushroomcommon",
+      "matches": [
+        {
+          "value": "$item_mushroomcommon"
+        }
+      ]
+    },
+    {
+      "identifier": "Raspberries",
+      "label": "$item_raspberries",
+      "matches": [
+        {
+          "value": "$item_raspberries"
+        }
+      ]
+    },
+    {
+      "identifier": "Blueberries",
+      "label": "$item_blueberries",
+      "matches": [
+        {
+          "value": "$item_blueberries"
+        }
+      ]
+    },
+    {
+      "identifier": "Carrot",
+      "label": "$item_carrot",
+      "matches": [
+        {
+          "value": "$item_carrot"
+        }
+      ]
+    },
+    {
+      "identifier": "CarrotSeeds",
+      "label": "$item_carrotseeds",
+      "matches": [
+        {
+          "value": "$item_carrotseeds"
+        }
+      ]
+    },
+    {
+      "identifier": "YellowMushroom",
+      "label": "$item_mushroomyellow",
+      "matches": [
+        {
+          "value": "$item_mushroomyellow"
+        }
+      ]
+    },
+    {
+      "identifier": "Thistle",
+      "label": "$item_thistle",
+      "matches": [
+        {
+          "value": "$item_thistle"
+        }
+      ]
+    },
+    {
+      "identifier": "Turnip",
+      "label": "$item_turnip",
+      "matches": [
+        {
+          "value": "$item_turnip"
+        }
+      ]
+    },
+    {
+      "identifier": "TurnipSeeds",
+      "label": "$item_turnipseeds",
+      "matches": [
+        {
+          "value": "$item_turnipseeds"
+        }
+      ]
+    },
+    {
+      "identifier": "Onion",
+      "label": "$item_onion",
+      "matches": [
+        {
+          "value": "$item_onion"
+        }
+      ]
+    },
+    {
+      "identifier": "OnionSeeds",
+      "label": "$item_onionseeds",
+      "matches": [
+        {
+          "value": "$item_onionseeds"
+        }
+      ]
+    },
+    {
+      "identifier": "Barley",
+      "label": "$item_barley",
+      "matches": [
+        {
+          "value": "$item_barley"
+        }
+      ]
+    },
+    {
+      "identifier": "Cloudberries",
+      "label": "$item_cloudberries",
+      "matches": [
+        {
+          "value": "$item_cloudberries"
+        }
+      ]
+    },
+    {
+      "identifier": "Flex",
+      "label": "$item_flax",
+      "matches": [
+        {
+          "value": "$item_flax"
+        }
+      ]
+    },
+    {
+      "identifier": "JotunPuffs",
+      "label": "$item_jotunpuffs",
+      "matches": [
+        {
+          "value": "$item_jotunpuffs"
+        }
+      ]
+    },
+    {
+      "identifier": "Magecap",
+      "label": "$item_magecap",
+      "matches": [
+        {
+          "value": "$item_magecap"
+        }
+      ]
+    }
+  ]
+}

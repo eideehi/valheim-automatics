@@ -1,0 +1,118 @@
+{
+  "type": "animal",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "Boar",
+      "label": "$enemy_boar",
+      "matches": [
+        {
+          "value": "$enemy_boar"
+        }
+      ]
+    },
+    {
+      "identifier": "Piggy",
+      "label": "$enemy_boarpiggy",
+      "matches": [
+        {
+          "value": "$enemy_boarpiggy"
+        }
+      ]
+    },
+    {
+      "identifier": "Deer",
+      "label": "$enemy_deer",
+      "matches": [
+        {
+          "value": "$enemy_deer"
+        }
+      ]
+    },
+    {
+      "identifier": "Wolf",
+      "label": "$enemy_wolf",
+      "matches": [
+        {
+          "value": "$enemy_wolf"
+        }
+      ]
+    },
+    {
+      "identifier": "WolfCub",
+      "label": "$enemy_wolfcub",
+      "matches": [
+        {
+          "value": "$enemy_wolfcub"
+        }
+      ]
+    },
+    {
+      "identifier": "Lox",
+      "label": "$enemy_lox",
+      "matches": [
+        {
+          "value": "$enemy_lox"
+        }
+      ]
+    },
+    {
+      "identifier": "LoxCalf",
+      "label": "$enemy_loxcalf",
+      "matches": [
+        {
+          "value": "$enemy_loxcalf"
+        }
+      ]
+    },
+    {
+      "identifier": "Hen",
+      "label": "$enemy_hen",
+      "matches": [
+        {
+          "value": "$enemy_hen"
+        }
+      ]
+    },
+    {
+      "identifier": "Chicken",
+      "label": "$enemy_chicken",
+      "matches": [
+        {
+          "value": "$enemy_chicken"
+        }
+      ]
+    },
+    {
+      "identifier": "Hare",
+      "label": "$enemy_hare",
+      "matches": [
+        {
+          "value": "$enemy_hare"
+        }
+      ]
+    },
+    {
+      "identifier": "Bird",
+      "label": "@animal_bird",
+      "matches": [
+        {
+          "value": "$Seagal"
+        },
+        {
+          "value": "$Crow"
+        }
+      ]
+    },
+    {
+      "identifier": "Fish",
+      "label": "$animal_fish",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^\\$animal_fish\\d{1,}$"
+        }
+      ]
+    }
+  ]
+}

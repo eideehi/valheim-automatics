@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Automatics.Valheim;
 using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -128,6 +129,8 @@ namespace Automatics
 
             Migration.MigrateConfig(Plugin.Config);
 
+            ValheimObject.Initialize(GetAllResourcePath("Data"));
+
             L10N = new L10N(L10NPrefix);
             var translationsLoader = new TranslationsLoader(L10N);
             foreach (var directory in GetAllResourcePath("Languages"))
@@ -141,6 +144,8 @@ namespace Automatics
 
             Harmony.CreateAndPatchAll(typeof(Patches), _guid);
             InitializeModules(Assembly.GetExecutingAssembly());
+
+            ValheimObject.PostInitialize();
         }
     }
 

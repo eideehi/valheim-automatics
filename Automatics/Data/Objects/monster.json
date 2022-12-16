@@ -1,0 +1,330 @@
+﻿{
+  "type": "monster",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "Greyling",
+      "label": "$enemy_greyling",
+      "matches": [
+        {
+          "value": "$enemy_greyling"
+        }
+      ]
+    },
+    {
+      "identifier": "Neck",
+      "label": "$enemy_neck",
+      "matches": [
+        {
+          "value": "$enemy_neck"
+        }
+      ]
+    },
+    {
+      "identifier": "Ghost",
+      "label": "$enemy_ghost",
+      "matches": [
+        {
+          "value": "$enemy_ghost"
+        }
+      ]
+    },
+    {
+      "identifier": "Greydwarf",
+      "label": "$enemy_greydwarf",
+      "matches": [
+        {
+          "value": "$enemy_greydwarf"
+        }
+      ]
+    },
+    {
+      "identifier": "GreydwarfBrute",
+      "label": "$enemy_greydwarfbrute",
+      "matches": [
+        {
+          "value": "$enemy_greydwarfbrute"
+        }
+      ]
+    },
+    {
+      "identifier": "GreydwarfShaman",
+      "label": "$enemy_greydwarfshaman",
+      "matches": [
+        {
+          "value": "$enemy_greydwarfshaman"
+        }
+      ]
+    },
+    {
+      "identifier": "RancidRemains",
+      "label": "$enemy_skeletonpoison",
+      "matches": [
+        {
+          "value": "$enemy_skeletonpoison"
+        }
+      ]
+    },
+    {
+      "identifier": "Skeleton",
+      "label": "$enemy_skeleton",
+      "matches": [
+        {
+          "value": "$enemy_skeleton"
+        }
+      ]
+    },
+    {
+      "identifier": "Troll",
+      "label": "$enemy_troll",
+      "matches": [
+        {
+          "value": "$enemy_troll"
+        }
+      ]
+    },
+    {
+      "identifier": "Abomination",
+      "label": "$enemy_abomination",
+      "matches": [
+        {
+          "value": "$enemy_abomination"
+        }
+      ]
+    },
+    {
+      "identifier": "Blob",
+      "label": "$enemy_blob",
+      "matches": [
+        {
+          "value": "$enemy_blob"
+        }
+      ]
+    },
+    {
+      "identifier": "Draugr",
+      "label": "$enemy_draugr",
+      "matches": [
+        {
+          "value": "$enemy_draugr"
+        }
+      ]
+    },
+    {
+      "identifier": "DraugrElite",
+      "label": "$enemy_draugrelite",
+      "matches": [
+        {
+          "value": "$enemy_draugrelite"
+        }
+      ]
+    },
+    {
+      "identifier": "Leech",
+      "label": "$enemy_leech",
+      "matches": [
+        {
+          "value": "$enemy_leech"
+        }
+      ]
+    },
+    {
+      "identifier": "Oozer",
+      "label": "$enemy_blobelite",
+      "matches": [
+        {
+          "value": "$enemy_blobelite"
+        }
+      ]
+    },
+    {
+      "identifier": "Surtling",
+      "label": "$enemy_surtling",
+      "matches": [
+        {
+          "value": "$enemy_surtling"
+        }
+      ]
+    },
+    {
+      "identifier": "Wraith",
+      "label": "$enemy_wraith",
+      "matches": [
+        {
+          "value": "$enemy_wraith"
+        }
+      ]
+    },
+    {
+      "identifier": "Drake",
+      "label": "$enemy_drake",
+      "matches": [
+        {
+          "value": "$enemy_drake"
+        }
+      ]
+    },
+    {
+      "identifier": "Fenring",
+      "label": "$enemy_fenring",
+      "matches": [
+        {
+          "value": "$enemy_fenring"
+        }
+      ]
+    },
+    {
+      "identifier": "StoneGolem",
+      "label": "$enemy_stonegolem",
+      "matches": [
+        {
+          "value": "$enemy_stonegolem"
+        }
+      ]
+    },
+    {
+      "identifier": "Deathsquito",
+      "label": "$enemy_deathsquito",
+      "matches": [
+        {
+          "value": "$enemy_deathsquito"
+        }
+      ]
+    },
+    {
+      "identifier": "Fuling",
+      "label": "$enemy_goblin",
+      "matches": [
+        {
+          "value": "$enemy_goblin"
+        }
+      ]
+    },
+    {
+      "identifier": "FulingBerserker",
+      "label": "$enemy_goblinbrute",
+      "matches": [
+        {
+          "value": "$enemy_goblinbrute"
+        }
+      ]
+    },
+    {
+      "identifier": "FulingShaman",
+      "label": "$enemy_goblinshaman",
+      "matches": [
+        {
+          "value": "$enemy_goblinshaman"
+        }
+      ]
+    },
+    {
+      "identifier": "Growth",
+      "label": "$enemy_blobtar",
+      "matches": [
+        {
+          "value": "$enemy_blobtar"
+        }
+      ]
+    },
+    {
+      "identifier": "Serpent",
+      "label": "$enemy_serpent",
+      "matches": [
+        {
+          "value": "$enemy_serpent"
+        }
+      ]
+    },
+    {
+      "identifier": "Bat",
+      "label": "$enemy_bat",
+      "matches": [
+        {
+          "value": "$enemy_bat"
+        }
+      ]
+    },
+    {
+      "identifier": "FenringCultist",
+      "label": "$enemy_fenringcultist",
+      "matches": [
+        {
+          "value": "$enemy_fenringcultist"
+        }
+      ]
+    },
+    {
+      "identifier": "Ulv",
+      "label": "$enemy_ulv",
+      "matches": [
+        {
+          "value": "$enemy_ulv"
+        }
+      ]
+    },
+    {
+      "identifier": "DvergrRogue",
+      "label": "$enemy_dvergr",
+      "matches": [
+        {
+          "value": "$enemy_dvergr"
+        }
+      ]
+    },
+    {
+      "identifier": "DvergrMage",
+      "label": "$enemy_dvergr_mage",
+      "matches": [
+        {
+          "value": "$enemy_dvergr_mage"
+        }
+      ]
+    },
+    {
+      "identifier": "Tick",
+      "label": "$enemy_tick",
+      "matches": [
+        {
+          "value": "$enemy_tick"
+        }
+      ]
+    },
+    {
+      "identifier": "Seeker",
+      "label": "$enemy_seeker",
+      "matches": [
+        {
+          "value": "$enemy_seeker"
+        }
+      ]
+    },
+    {
+      "identifier": "SeekerBrood",
+      "label": "$enemy_babyseeker",
+      "matches": [
+        {
+          "value": "$enemy_babyseeker"
+        }
+      ]
+    },
+    {
+      "identifier": "Gjall",
+      "label": "$enemy_gjall",
+      "matches": [
+        {
+          "value": "$enemy_gjall"
+        }
+      ]
+    },
+    {
+      "identifier": "SeekerSoldier",
+      "label": "$enemy_seekerbrute",
+      "matches": [
+        {
+          "value": "$enemy_seekerbrute"
+        }
+      ]
+    }
+  ]
+}

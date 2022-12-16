@@ -205,6 +205,10 @@
             <Link>Languages\%(RecursiveDir)%(FileName)%(Extension)</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Include="Data\**\*">
+            <Link>Data\%(RecursiveDir)%(FileName)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
         <Content Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Include="Languages\Debug\**\*">
             <Link>Languages\Debug\%(RecursiveDir)%(FileName)%(Extension)</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

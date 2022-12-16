@@ -1,0 +1,56 @@
+﻿{
+  "type": "dungeon",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "BurialChambers",
+      "label": "$location_forestcrypt",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Crypt\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "TrollCave",
+      "label": "$location_forestcave",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^TrollCave\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "SunkenCrypts",
+      "label": "$location_sunkencrypt",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^SunkenCrypt\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "MountainCave",
+      "label": "$location_mountaincave",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^MountainCave\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "InfestedMine",
+      "label": "$location_dvergrtown",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Mistlands_DvergrTownEntrance\\d{0,}$"
+        }
+      ]
+    }
+  ]
+}

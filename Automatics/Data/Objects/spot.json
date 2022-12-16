@@ -1,0 +1,106 @@
+﻿{
+  "type": "spot",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "InfestedTree",
+      "label": "@location_infestedtree",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^InfestedTree\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "FireHole",
+      "label": "@location_firehole",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^FireHole\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "DrakeNest",
+      "label": "@location_drakenest",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^DrakeNest\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "GoblinCamp",
+      "label": "@location_goblincamp",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^GoblinCamp\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "TarPit",
+      "label": "@location_tarpit",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^TarPit\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "DvergrExcavation",
+      "label": "@location_mistlands_excavation",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Mistlands_Excavation\\d{1,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "DvergrGuardTower",
+      "label": "@location_mistlands_guardtower",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Mistlands_GuardTower\\d{1,}_new$"
+        }
+      ]
+    },
+    {
+      "identifier": "DvergrHarbour",
+      "label": "@location_mistlands_harbour",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Mistlands_Harbour\\d{1,}"
+        }
+      ]
+    },
+    {
+      "identifier": "DvergrLighthouse",
+      "label": "@location_mistlands_lighthouse",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Mistlands_Lighthouse\\d{1,}_new$"
+        }
+      ]
+    },
+    {
+      "identifier": "PetrifiedBone",
+      "label": "$piece_giant_bone",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Mistlands_Giant\\d{1,}$"
+        }
+      ]
+    }
+  ]
+}

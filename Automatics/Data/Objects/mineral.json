@@ -1,0 +1,69 @@
+﻿{
+  "type": "mineral",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "CopperDeposit",
+      "label": "$piece_deposit_copper",
+      "matches": [
+        {
+          "value": "$piece_deposit_copper"
+        }
+      ]
+    },
+    {
+      "identifier": "TinDeposit",
+      "label": "$piece_deposit_tin",
+      "matches": [
+        {
+          "value": "$piece_deposit_tin"
+        }
+      ]
+    },
+    {
+      "identifier": "MudPile",
+      "label": "$piece_mudpile",
+      "matches": [
+        {
+          "value": "$piece_mudpile"
+        }
+      ]
+    },
+    {
+      "identifier": "ObsidianDeposit",
+      "label": "$piece_deposit_obsidian",
+      "matches": [
+        {
+          "value": "$piece_deposit_obsidian"
+        }
+      ]
+    },
+    {
+      "identifier": "SilverVein",
+      "label": "$piece_deposit_silvervein",
+      "matches": [
+        {
+          "value": "$piece_deposit_silvervein"
+        }
+      ]
+    },
+    {
+      "identifier": "PetrifiedBone",
+      "label": "$piece_giant_bone",
+      "matches": [
+        {
+          "value": "$piece_giant_bone"
+        }
+      ]
+    },
+    {
+      "identifier": "SoftTissue",
+      "label": "$piece_giant_brain",
+      "matches": [
+        {
+          "value": "$piece_giant_brain"
+        }
+      ]
+    }
+  ]
+}

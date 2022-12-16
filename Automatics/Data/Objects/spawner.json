@@ -1,0 +1,33 @@
+﻿{
+  "type": "spawner",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "GreydwarfNest",
+      "label": "$enemy_greydwarfspawner",
+      "matches": [
+        {
+          "value": "$enemy_greydwarfspawner"
+        }
+      ]
+    },
+    {
+      "identifier": "EvilBonePile",
+      "label": "$enemy_skeletonspawner",
+      "matches": [
+        {
+          "value": "$enemy_skeletonspawner"
+        }
+      ]
+    },
+    {
+      "identifier": "BodyPile",
+      "label": "$enemy_draugrspawner",
+      "matches": [
+        {
+          "value": "$enemy_draugrspawner"
+        }
+      ]
+    }
+  ]
+}
