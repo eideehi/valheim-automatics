@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Emit;
 using HarmonyLib;
+using ModUtils;
 
 namespace Automatics
 {
@@ -14,7 +15,8 @@ namespace Automatics
         [HarmonyPatch(typeof(Player), "Awake")]
         private static void Player_Awake_Postfix(Player __instance)
         {
-            Hooks.OnPlayerAwake?.Invoke(__instance);
+            if (Objects.GetZNetView(__instance, out var zNetView))
+                Hooks.OnPlayerAwake?.Invoke(__instance, zNetView);
         }
 
         [HarmonyTranspiler]
