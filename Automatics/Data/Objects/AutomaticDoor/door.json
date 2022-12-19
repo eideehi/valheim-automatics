@@ -1,0 +1,51 @@
+﻿{
+  "type": "door",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "WoodDoor",
+      "label": "$piece_wooddoor",
+      "matches": [
+        {
+          "value": "$piece_wooddoor"
+        }
+      ]
+    },
+    {
+      "identifier": "WoodGate",
+      "label": "$piece_woodgate",
+      "matches": [
+        {
+          "value": "$piece_woodgate"
+        }
+      ]
+    },
+    {
+      "identifier": "IronGate",
+      "label": "$piece_irongate",
+      "matches": [
+        {
+          "value": "$piece_irongate"
+        }
+      ]
+    },
+    {
+      "identifier": "DarkwoodGate",
+      "label": "$piece_darkwoodgate",
+      "matches": [
+        {
+          "value": "$piece_darkwoodgate"
+        }
+      ]
+    },
+    {
+      "identifier": "WoodShutter",
+      "label": "$piece_woodwindowshutter",
+      "matches": [
+        {
+          "value": "$piece_woodwindowshutter"
+        }
+      ]
+    }
+  ]
+}
