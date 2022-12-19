@@ -185,14 +185,23 @@
     "@location_mistlands_guardtower": "Dvergr guard tower",
     "@location_mistlands_harbour": "Dvergr harbour",
     "@location_mistlands_lighthouse": "Dvergr lighthouse",
+    "@command_common_help_description": "Displays a help message and exits the command.",
+    "@command_common_help_options_label": "OPTIONS:",
+    "@command_common_option_parse_error": "Try `$1 --help' for more information.",
+    "@command_automatics_usage": "Usage: automatics [COMMAND]",
+    "@command_automatics_description": "Displays the usage of commands added by Automatics.",
+    "@command_automatics_extra_option": "COMMAND: Command name to display usage. If there is an exact match, it will be displayed. Otherwise, it will display the first partially matched command found. If omitted, the usage of the automatics command itself is displayed.",
+    "@command_automatics_option_all_description": "Displays all commands matching COMMAND.",
+    "@command_automatics_option_verbose_description": "Displays detailed usage of the command.",
+    "@command_automatics_command_not_found": "Command not found: $1",
+    "@command_printnames_usage": "Usage: printnames (OPTIONS...) (WORD|REGEXP)...",
+    "@command_printnames_description": "Outputs internal or display names that contain the specified string or match the specified regular expression. If multiple arguments are specified, only those matching all of them will be output.",
+    "@command_printnames_extra_option": "WORD:   A text contained in the internal or display name. (e.g. $enemy_, $item_, $piece_, Boar, Mushroom, Wood door); All partially matching internal and display names are output.\nREGEXP: A regular expression of the internal or display name to be output. Must be prefixed with r/ (e.g. r/^[$]item_, r/^boar$)",
+    "@command_printnames_extra_description": "Examples:\nprintnames ling r/^[$]enemy_\nprintnames r/^[$@]location_.+(?<!_(enter|exit))$\nprintnames mushroom r/^[$]item_.+(?<!_description)$",
+    "@command_printnames_result_format": "Internal name: [$1], Display name: [$2]",
+
     "@command_description_format": "$1 The command \"automatics $2\" can be used to confirm usage.",
     "@command_syntax_error_format": "Syntax error: $1\n$2",
-    "@command_argument_error_format": "Illegal argument: $1\n$2",
-    "@command_automatics_description": "Displays the usage of commands added by Automatics.",
-    "@command_automatics_usage": "Usage: automatics [COMMAND]\nDisplays the usage of commands added by Automatics.\n\nCOMMAND: Command name to display usage. If there is an exact match, it will be displayed. Otherwise, it will display the first partially matched command found. If omitted, the usage of the automatics command itself is displayed.",
-    "@command_automatics_command_not_found": "Command not found: $1",
-    "@command_printnames_description": "Output internal and display names.",
-    "@command_printnames_usage": "Usage: printnames (WORD|REGEXP)...\nOutputs internal or display names that contain the specified string or match the specified regular expression. If multiple arguments are specified, only those matching all of them will be output.\n\nWORD: A text contained in the internal or display name. (e.g. $enemy_, $item_, $piece_, Boar, Mushroom, Wood door); All partially matching internal and display names are output.\nREGEXP: A regular expression of the internal or display name to be output. Must be prefixed with \"r/\". (e.g. r/^[$]item_, r/^boar$)\n\nExamples:\nprintnames ling r/^[$]enemy_\nprintnames r/^[$@]location_.+(?<!_(enter|exit))$\nprintnames mushroom r/^[$]item_.+(?<!_description)$",
-    "@command_printnames_result_format": "Internal name: [$1], Display name: [$2]"
+    "@command_argument_error_format": "Illegal argument: $1\n$2"
   }
 }

@@ -1,6 +1,7 @@
 = Automatics - Valheim Mod
 :uri-configuration-manager: https://github.com/BepInEx/BepInEx.ConfigurationManager
 :uri-litjson: https://litjson.net
+:uri-ndesk-options: http://ndesk.org/Options
 :uri-license: link:LICENSE
 :uri-config: link:CONFIG.adoc
 :uri-issues: https://github.com/eideehi/valheim-automatics/issues
@@ -174,6 +175,7 @@ image::{image-uri-discord}[link={uri-discord},alt="eidee.net - Discord Server"]
 * Dependencies:
 ** {uri-configuration-manager}[Configuration Manager]
 ** {uri-litjson}[LitJSON]
+** {uri-ndesk-options}[NDesk.Options]
 
 == License
 Automatics is developed and released under the MIT license. For the full text of the license, please see the {uri-license}[LICENSE] file.

@@ -140,7 +140,7 @@ namespace Automatics
 
             translationsLoader.LoadJson(GetInjectedResourcePath("Languages"));
 
-            Hooks.OnInitTerminal += Command.Register;
+            Hooks.OnInitTerminal += Commands.Register;
 
             Harmony.CreateAndPatchAll(typeof(Patches), _guid);
             InitializeModules(Assembly.GetExecutingAssembly());

@@ -301,6 +301,8 @@ Matching result
 
     -   [LitJSON](https://litjson.net)
 
+    -   [NDesk.Options](http://ndesk.org/Options)
+
 ## License
 
 Automatics is developed and released under the MIT license. For the full

@@ -4,6 +4,7 @@
         <ItemGroup>
             <InputAssemblies Include="$(TargetPath)"/>
             <InputAssemblies Include="$(OutputPath)LitJSON.dll"/>
+            <InputAssemblies Include="$(OutputPath)NDesk.Options.dll"/>
         </ItemGroup>
         <ILRepack
                 Parallel="true"

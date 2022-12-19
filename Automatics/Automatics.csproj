@@ -198,6 +198,9 @@
         <Reference Include="LitJSON, Version=0.18.0.0, Culture=neutral, processorArchitecture=MSIL">
             <HintPath>..\packages\LitJson.0.18.0\lib\net45\LitJSON.dll</HintPath>
         </Reference>
+        <Reference Include="NDesk.Options, Version=0.2.1.0, Culture=neutral, processorArchitecture=MSIL">
+            <HintPath>Libraries\NDesk.Options.dll</HintPath>
+        </Reference>
         <Compile Include="Libraries\**\*.cs" Exclude="Libraries\**\AssemblyInfo.cs" />
     </ItemGroup>
     <ItemGroup>
