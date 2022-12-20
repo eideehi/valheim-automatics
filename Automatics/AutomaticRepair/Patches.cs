@@ -11,24 +11,20 @@ namespace Automatics.AutomaticRepair
     {
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(CraftingStation), nameof(CraftingStation.Interact))]
-        public static IEnumerable<CodeInstruction> Interact(
+        public static IEnumerable<CodeInstruction> CraftingStation_Interact_Transpiler(
             IEnumerable<CodeInstruction> instructions)
         {
-            var Show = AccessTools.Method(typeof(InventoryGui), nameof(InventoryGui.Show));
-            var Hook = AccessTools.Method(typeof(RepairItems),
-                nameof(RepairItems.CraftingStationInteractHook));
-
-            var codes = new List<CodeInstruction>(instructions);
-
-            var index = codes.FindIndex(x => x.Calls(Show));
-            codes.InsertRange(index, new[]
-            {
-                new CodeInstruction(OpCodes.Ldloc_0),
-                new CodeInstruction(OpCodes.Ldarg_0),
-                new CodeInstruction(OpCodes.Call, Hook)
-            });
-
-            return codes;
+            return new CodeMatcher(instructions)
+                .MatchStartForward(new CodeMatch(OpCodes.Callvirt,
+                    AccessTools.Method(typeof(InventoryGui), nameof(InventoryGui.Show))))
+                .Advance(1)
+                .Insert(
+                    new CodeInstruction(OpCodes.Ldloc_0),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Call,
+                        AccessTools.Method(typeof(ItemRepair),
+                            nameof(ItemRepair.CraftingStationInteractHook))))
+                .InstructionEnumeration();
         }
     }
 }

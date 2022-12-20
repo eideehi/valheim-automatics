@@ -5,20 +5,13 @@ using UnityEngine;
 
 namespace Automatics.AutomaticRepair
 {
-    internal static class RepairItems
+    internal static class ItemRepair
     {
         private static readonly List<ItemDrop.ItemData> WornItemsBuffer;
 
-        private static float _lastRunningTime;
-
-        static RepairItems()
+        static ItemRepair()
         {
             WornItemsBuffer = new List<ItemDrop.ItemData>();
-        }
-
-        private static bool Runnable()
-        {
-            return !Game.IsPaused() && Time.time - _lastRunningTime >= 1f;
         }
 
         private static void ShowRepairMessage(Player player, int repairCount)
@@ -90,11 +83,9 @@ namespace Automatics.AutomaticRepair
             ShowRepairMessage(player, count);
         }
 
-        public static void Run(Player player, bool takeInput)
+        public static void Repair(Player player)
         {
-            if (!Config.EnableAutomaticRepair) return;
             if (Config.CraftingStationSearchRange <= 0) return;
-            if (!Runnable()) return;
 
             var range = Config.CraftingStationSearchRange;
             var origin = player.transform.position;
@@ -105,8 +96,6 @@ namespace Automatics.AutomaticRepair
                 select RepairAll(player, x)).Sum();
 
             ShowRepairMessage(player, count);
-
-            _lastRunningTime = Time.time;
         }
     }
 }

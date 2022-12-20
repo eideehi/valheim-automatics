@@ -5,15 +5,8 @@ using UnityEngine;
 
 namespace Automatics.AutomaticRepair
 {
-    internal static class RepairPieces
+    internal static class PieceRepair
     {
-        private static float _lastRunningTime;
-
-        private static bool Runnable()
-        {
-            return !Game.IsPaused() && Time.time - _lastRunningTime >= 1f;
-        }
-
         private static void ShowRepairMessage(Player player, int repairCount)
         {
             if (repairCount == 0) return;
@@ -29,9 +22,11 @@ namespace Automatics.AutomaticRepair
                     repairCount));
         }
 
-        private static bool CheckCanRemovePiece(Player player, Piece piece)
+        private static bool CheckCanRepairPiece(Player player, Piece piece)
         {
-            return Reflections.InvokeMethod<bool>(player, "CheckCanRemovePiece", piece);
+            return player.NoCostCheat() || piece.m_craftingStation == null ||
+                   CraftingStation.HaveBuildStationInRange(piece.m_craftingStation.m_name,
+                       player.transform.position);
         }
 
         private static IEnumerable<Piece> GetAllPieces()
@@ -40,12 +35,10 @@ namespace Automatics.AutomaticRepair
                    Enumerable.Empty<Piece>();
         }
 
-        public static void Run(Player player, bool takeInput)
+        public static void Repair(Player player)
         {
-            if (!player.InPlaceMode()) return;
-            if (!Config.EnableAutomaticRepair) return;
             if (Config.PieceSearchRange <= 0) return;
-            if (!Runnable()) return;
+            if (!player.InPlaceMode()) return;
 
             var tool = player.GetRightItem();
             var toolData = tool.m_shared;
@@ -58,7 +51,7 @@ namespace Automatics.AutomaticRepair
                 var position = piece.transform.position;
 
                 if (Vector3.Distance(origin, position) > range) continue;
-                if (!CheckCanRemovePiece(player, piece) || !PrivateArea.CheckAccess(position))
+                if (!PrivateArea.CheckAccess(position) || !CheckCanRepairPiece(player, piece))
                     continue;
 
                 var wearNTear = piece.GetComponent<WearNTear>();
@@ -81,8 +74,6 @@ namespace Automatics.AutomaticRepair
 
                 ShowRepairMessage(player, count);
             }
-
-            _lastRunningTime = Time.time;
         }
     }
 }

@@ -140,7 +140,7 @@
     "@config_automatic_feeding_allow_to_feed_from_player_description": "Specify the types of animals allowed to feed from the player inventory.",
     "@config_automatic_feeding_animal_type_wild": "Wild",
     "@config_automatic_feeding_animal_type_tamed": "Tamed",
-    "@config_automatic_repair_section": "[ #6 Automatic Repair ]",
+    "@config_automatic_repair_section": "[ #7 Automatic Repair ]",
     "@config_automatic_repair_enable_automatic_repair_name": "Automatic Repair",
     "@config_automatic_repair_enable_automatic_repair_description": "Specify whether to enable the feature that automatically repair items and pieces.",
     "@config_automatic_repair_crafting_station_search_range_name": "Crafting Station Search Range",
