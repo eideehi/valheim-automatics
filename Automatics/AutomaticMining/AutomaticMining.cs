@@ -7,173 +7,183 @@ using UnityEngine;
 
 namespace Automatics.AutomaticMining
 {
-    internal static class AutomaticMining
+    [DisallowMultipleComponent]
+    public class AutomaticMining : MonoBehaviour
     {
-        private static readonly Collider[] ColliderBuffer;
+        private static readonly IList<AutomaticMining> AllInstance;
+        private static readonly RaycastHit[] RaycastHitBuffer;
         private static readonly Lazy<int> MineralMaskLazy;
 
-        private static float _lastRunningTime;
+        private Component _component;
+        private ZNetView _zNetView;
 
         static AutomaticMining()
         {
-            ColliderBuffer = new Collider[512];
-            MineralMaskLazy = new Lazy<int>(() => LayerMask.GetMask("Default", "static_solid",
-                "Default_small", "piece",
-                "piece_nonsolid", "hitbox", "vehicle"));
+            AllInstance = new List<AutomaticMining>();
+            RaycastHitBuffer = new RaycastHit[128];
+            MineralMaskLazy = new Lazy<int>(() =>
+                LayerMask.GetMask("piece", "Default", "static_solid", "Default_small"));
         }
 
         private static int MineralMask => MineralMaskLazy.Value;
 
-        public static void Run(Player player, bool takeInput)
+        private void Awake()
         {
-            if (!Config.EnableAutomaticMining) return;
-            if (player == null || Player.m_localPlayer != player) return;
+            _component = GetDestructibleComponent();
+            if (!_component)
+                throw new Exception("Component must inherit IDestructible.");
 
-            if (Config.MiningKey.MainKey != KeyCode.None)
-            {
-                if (!Config.MiningKey.IsDown()) return;
-            }
-            else if (Time.time - _lastRunningTime < Config.MiningInterval)
-            {
-                return;
-            }
+            if (!Objects.GetZNetView(_component, out _zNetView))
+                throw new Exception("Component does not have ZNetView");
 
+            AllInstance.Add(this);
+        }
+
+        private void OnDestroy()
+        {
+            AllInstance.Remove(this);
+
+            _component = null;
+            _zNetView = null;
+        }
+
+        public static void TryMining(Player player)
+        {
+            //TODO: Improve position taking method. Petrified bone and soft tissue position is not being obtained correctly.
+            var origin = player.transform.position;
+            var automaticMining = (from x in AllInstance
+                    let distance = Vector3.Distance(origin, x.transform.position)
+                    where x._zNetView.IsValid() && x._zNetView.IsOwner() &&
+                          IsAllowMiningMinerals(x._component)
+                    orderby distance
+                    select x)
+                .FirstOrDefault();
+
+            if (automaticMining)
+                automaticMining.Mining(player);
+
+            bool IsAllowMiningMinerals(Component component)
+            {
+                var name = Objects.GetName(component);
+                return ValheimObject.Mineral.GetIdentify(name, out var identifier) &&
+                       Config.AllowMiningMinerals.Contains(identifier);
+            }
+        }
+
+        private Component GetDestructibleComponent()
+        {
+            switch (GetComponent<IDestructible>())
+            {
+                case MineRock rock: return rock;
+                case MineRock5 rock5: return rock5;
+                case Destructible destructible: return destructible;
+                case Component component: return component;
+                default: return null;
+            }
+        }
+
+        private void Mining(Player player)
+        {
             var pickaxe = GetPickaxe(player);
             if (pickaxe == null) return;
 
             var attack = pickaxe.m_shared.m_attack;
             var range = Config.MiningRange > 0 ? Config.MiningRange : attack.m_attackRange;
 
-            var done = new HashSet<Vector3>();
-            foreach (var mineral in GetNearbyMinerals(player.transform.position, range))
+            switch (_component)
             {
-                if (!done.Add(mineral.transform.position)) continue;
-
-                if (mineral is MineRock rock)
-                    Mining(player, pickaxe, range, rock);
-                else if (mineral is MineRock5 rock5)
-                    Mining(player, pickaxe, range, rock5);
-                else if (mineral is Destructible destructible)
-                    Mining(player, pickaxe, range, destructible);
+                case MineRock rock:
+                    if (rock.m_minToolTier <= pickaxe.m_shared.m_toolTier)
+                        Mining(player, pickaxe, range, rock,
+                            Reflections.GetField<Collider[]>(rock, "m_hitAreas"));
+                    break;
+                case MineRock5 rock5:
+                    if (rock5.m_minToolTier <= pickaxe.m_shared.m_toolTier)
+                        Mining(player, pickaxe, range, rock5,
+                            rock5.gameObject.GetComponentsInChildren<Collider>());
+                    break;
+                case Destructible destructible:
+                    if (destructible.m_minToolTier <= pickaxe.m_shared.m_toolTier)
+                        Mining(player, pickaxe, range, destructible,
+                            destructible.GetComponentInChildren<Collider>());
+                    break;
             }
+        }
 
-            _lastRunningTime = Time.time;
+        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range,
+            IDestructible parent, params Collider[] colliders)
+        {
+            if (colliders == null || colliders.Length == 0) return;
+
+            var equipments = player.GetInventory().GetEquipedtems();
+            var parts = (from collider in colliders
+                let result = GetHitPosition(player.m_eye.position, collider, range)
+                where result.Position != Vector3.zero &&
+                      IsMineableMineral(collider, equipments)
+                orderby result.Distance
+                select (collider, result.Position)).Take(3).ToList();
+            foreach (var (collider, hit) in parts)
+            {
+                if (!IsValidPickaxe(player, pickaxe)) continue;
+                if (Vector3.Distance(player.m_eye.position, hit) > Config.MiningRange) continue;
+
+                CreateHitEffect(pickaxe, hit);
+                parent.Damage(CreateHitData(player, pickaxe, hit, collider, parts.Count));
+                UsePickaxe(player, pickaxe);
+
+                Automatics.Logger.Debug(() =>
+                {
+                    var name = "Unknown";
+                    if (parent is Component component)
+                        name = Automatics.L10N.Translate(Objects.GetName(component));
+                    return $"Mining: [name: {name}, pos: {collider.bounds.center}]";
+                });
+            }
+        }
+
+        private static bool IsValidPickaxe(Player player, ItemDrop.ItemData pickaxe)
+        {
+            if (pickaxe.m_shared.m_skillType != Skills.SkillType.Pickaxes) return false;
+            if (Config.NeedToEquipPickaxe && !player.IsItemEquiped(pickaxe)) return false;
+            return pickaxe.m_durability > 0f;
         }
 
         private static ItemDrop.ItemData GetPickaxe(Player player)
         {
-            if (!Config.NeedToEquipPickaxe)
-                return (from x in player.GetInventory().GetAllItems()
-                    where x.m_shared.m_skillType == Skills.SkillType.Pickaxes
-                    orderby x.m_shared.m_toolTier
-                    select x).FirstOrDefault();
-
             var weapon = player.GetCurrentWeapon();
-            return weapon != null && weapon.m_shared.m_skillType == Skills.SkillType.Pickaxes
-                ? weapon
-                : null;
+            if (weapon != null)
+                if (weapon.m_durability > 0f &&
+                    weapon.m_shared.m_skillType == Skills.SkillType.Pickaxes)
+                    return weapon;
+
+            if (Config.NeedToEquipPickaxe) return null;
+
+            return (from x in player.GetInventory().GetAllItems()
+                where x.m_durability > 0f &&
+                      x.m_shared.m_skillType == Skills.SkillType.Pickaxes
+                orderby x.m_shared.m_toolTier
+                select x).FirstOrDefault();
         }
 
-        private static IEnumerable<MonoBehaviour> GetNearbyMinerals(Vector3 origin, float range)
+        private static (Vector3 Position, float Distance) GetHitPosition(Vector3 origin,
+            Collider target, float range)
         {
-            return from x in Objects.GetInsideSphere(origin, range, IsMineral, ColliderBuffer,
-                    MineralMask)
-                orderby x.Item3
-                select x.Item2;
+            var direction = target.bounds.center - origin;
+            Physics.RaycastNonAlloc(origin, direction, RaycastHitBuffer, range, MineralMask);
+            foreach (var hit in RaycastHitBuffer.Where(hit =>
+                         hit.collider == target && hit.distance <= range))
+                return (hit.point, hit.distance);
+            return (Vector3.zero, -1f);
         }
 
-        private static MonoBehaviour IsMineral(Collider collider)
+        private static bool IsMineableMineral(Collider mineral,
+            IEnumerable<ItemDrop.ItemData> equipments)
         {
-            var obj = collider.GetComponentInParent<IDestructible>() as MonoBehaviour;
-            return Mineral.IsMineral(Objects.GetName(obj)) ? obj : null;
-        }
-
-        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range,
-            MineRock rock)
-        {
-            if (rock.m_minToolTier > pickaxe.m_shared.m_toolTier) return;
-
-            var areas = Reflections.GetField<Collider[]>(rock, "m_hitAreas");
-            if (areas == null) return;
-
-            var origin = player.transform.position;
-            var minerals = areas.Where(x => IsInRange(origin, x, range)).ToList();
-
-            foreach (var mineral in minerals)
-            {
-                Automatics.Logger.Debug(() =>
-                {
-                    var name = Objects.GetName(rock);
-                    return
-                        $"Mining: [type: MineRock, name: {name}({Automatics.L10N.Translate(name)}), pos: {mineral.bounds.center}]";
-                });
-
-                CreateHitEffect(pickaxe, mineral.bounds.center);
-                rock.Damage(CreateHitData(player, pickaxe, mineral, minerals.Count));
-                UsePickaxe(player, pickaxe);
-            }
-        }
-
-        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range,
-            MineRock5 rock)
-        {
-            if (rock.m_minToolTier > pickaxe.m_shared.m_toolTier) return;
-
-            var areas = rock.gameObject.GetComponentsInChildren<Collider>();
-            if (areas == null) return;
-
-            var origin = player.transform.position;
-            var equippedItems = player.GetInventory().GetEquipedtems();
-            var minerals = areas.Where(x =>
-            {
-                if (!IsInRange(origin, x, range)) return false;
-                if (x.bounds.max.y >= ZoneSystem.instance.GetGroundHeight(x.bounds.center))
-                    return true;
-                if (!Config.AllowMiningUndergroundMinerals) return false;
-                return !Config.NeedToEquipWishboneForMiningUndergroundMinerals ||
-                       equippedItems.Select(y => y.m_shared.m_name).Any(y => y == "$item_wishbone");
-            }).ToList();
-
-            foreach (var mineral in minerals)
-            {
-                Automatics.Logger.Debug(() =>
-                {
-                    var name = Objects.GetName(rock);
-                    return
-                        $"Mining: [type: MineRock5, name: {name}({Automatics.L10N.Translate(name)}), pos: {mineral.bounds.center}]";
-                });
-
-                CreateHitEffect(pickaxe, mineral.bounds.center);
-                rock.Damage(CreateHitData(player, pickaxe, mineral, minerals.Count));
-                UsePickaxe(player, pickaxe);
-            }
-        }
-
-        private static void Mining(Player player, ItemDrop.ItemData pickaxe, float range,
-            Destructible destructible)
-        {
-            if (destructible.m_minToolTier > pickaxe.m_shared.m_toolTier) return;
-
-            var collider = destructible.GetComponentInChildren<Collider>();
-            if (collider == null || !IsInRange(player.transform.position, collider, range)) return;
-
-            Automatics.Logger.Debug(() =>
-            {
-                var name = Objects.GetName(destructible);
-                return
-                    $"Mining: [type: Destructible, name: {name}({Automatics.L10N.Translate(name)}), pos: {collider.bounds.center}]";
-            });
-
-            CreateHitEffect(pickaxe, collider.bounds.center);
-            destructible.Damage(CreateHitData(player, pickaxe, collider, 1));
-            UsePickaxe(player, pickaxe);
-        }
-
-        private static bool IsInRange(Vector3 origin, Collider collider, float range)
-        {
-            if (!Physics.Linecast(origin, collider.bounds.center, out var hitInfo, MineralMask))
-                return false;
-            return hitInfo.collider == collider && hitInfo.distance <= range;
+            if (mineral.bounds.max.y >= ZoneSystem.instance.GetGroundHeight(mineral.bounds.center))
+                return true;
+            if (!Config.AllowMiningUndergroundMinerals) return false;
+            return !Config.NeedToEquipWishboneForUndergroundMinerals ||
+                   equipments.Any(x => x.m_shared.m_name == "$item_wishbone");
         }
 
         private static void CreateHitEffect(ItemDrop.ItemData pickaxe, Vector3 pos)
@@ -183,7 +193,7 @@ namespace Automatics.AutomaticMining
         }
 
         private static HitData CreateHitData(Player player, ItemDrop.ItemData pickaxe,
-            Collider collider, int hitCount)
+            Vector3 hit, Collider collider, int hitCount)
         {
             var shared = pickaxe.m_shared;
 
@@ -195,7 +205,7 @@ namespace Automatics.AutomaticMining
                     : "",
                 m_skill = shared.m_skillType,
                 m_damage = pickaxe.GetDamage(),
-                m_point = collider.bounds.center,
+                m_point = hit,
                 m_hitCollider = collider
             };
 
