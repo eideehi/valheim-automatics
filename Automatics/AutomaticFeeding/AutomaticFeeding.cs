@@ -5,89 +5,101 @@ using UnityEngine;
 
 namespace Automatics.AutomaticFeeding
 {
+    [DisallowMultipleComponent]
     internal class AutomaticFeeding : MonoBehaviour
     {
-        private static readonly List<AutomaticFeeding> AutomaticFeedings;
+        private static readonly IList<AutomaticFeeding> AllInstance;
 
-        private BaseAI _baseAI;
-        private Character _character;
-        private Container _feedBox;
-
-        private Humanoid _feeder;
-        private ItemDrop.ItemData _feedItem;
-        private MonsterAI _monsterAI;
         private Tameable _tamable;
+        private Character _character;
+        private MonsterAI _monsterAI;
+        private BaseAI _baseAI;
+        private float _consumeSearchTimer;
+        private Container _closestFeedBox;
+        private Humanoid _closestFeeder;
+        private ItemDrop.ItemData _consumeTargetItem;
 
         static AutomaticFeeding()
         {
-            AutomaticFeedings = new List<AutomaticFeeding>();
+            AllInstance = new List<AutomaticFeeding>();
         }
 
         private void Awake()
         {
-            _baseAI = GetComponent<BaseAI>();
-            _monsterAI = GetComponent<MonsterAI>();
             _tamable = GetComponent<Tameable>();
             _character = GetComponent<Character>();
+            _monsterAI = GetComponent<MonsterAI>();
+            _baseAI = GetComponent<BaseAI>();
 
-            AutomaticFeedings.Add(this);
+            AllInstance.Add(this);
         }
 
         private void OnDestroy()
         {
-            AutomaticFeedings.Remove(this);
+            AllInstance.Remove(this);
 
             _baseAI = null;
             _monsterAI = null;
             _tamable = null;
             _character = null;
-            _feeder = null;
-            _feedBox = null;
-            _feedItem = null;
+            _closestFeeder = null;
+            _closestFeedBox = null;
+            _consumeTargetItem = null;
         }
 
-        public static bool IsFeedBox(BaseAI baseAI, StaticTarget target)
+        public static bool CancelAttackOnFeedBox(BaseAI baseAI, StaticTarget target)
         {
-            return AutomaticFeedings.Any(x => x._baseAI == baseAI && x.IsFeedBox(target));
+            return AllInstance.Any(x => x._baseAI == baseAI && x.CancelAttackOnFeedBox(target));
         }
 
         public static bool Feeding(MonsterAI monsterAI, Humanoid humanoid, float delta)
         {
-            return AutomaticFeedings.Any(x =>
+            return AllInstance.Any(x =>
                 x._monsterAI == monsterAI && x.Feeding(humanoid, delta));
         }
 
-        private bool IsFeedBox(StaticTarget target)
+        private bool CancelAttackOnFeedBox(StaticTarget target)
         {
+            if (!_character.IsTamed() && !Logics.IsAllowToFeedFromContainer(AnimalType.Wild))
+                return false;
+
             var container = target.GetComponentInChildren<Container>();
             if (container == null) return false;
 
-            return container == _feedBox || container.GetInventory().GetAllItems().Any(CanConsume);
+            return ReferenceEquals(container, _closestFeedBox) ||
+                   container.GetInventory().GetAllItems().Any(CanConsume);
         }
 
         private bool Feeding(Humanoid humanoid, float delta)
         {
-            if (_monsterAI.m_consumeItems == null || _monsterAI.m_consumeItems.Count == 0)
+            if (_monsterAI.m_consumeItems == null || !_monsterAI.m_consumeItems.Any())
                 return false;
 
-            if (Reflections.GetField<float>(_monsterAI, "m_consumeSearchTimer") == 0f)
+            _consumeSearchTimer += delta;
+            if (_consumeSearchTimer >= _monsterAI.m_consumeSearchInterval)
+            {
+                _consumeSearchTimer = 0f;
+                if (!_tamable.IsHungry()) return false;
                 UpdateFeedInfo();
+            }
 
-            if (!_tamable.IsHungry()) return false;
-            if (_feedBox == null && _feeder == null) return false;
-            if (_feedItem == null) return false;
+            if (!_closestFeedBox && !_closestFeeder) return false;
+            if (_consumeTargetItem == null) return false;
 
-            var foundFeedBox = _feedBox != null;
-            var inventory = foundFeedBox ? _feedBox.GetInventory() : _feeder.GetInventory();
-            if (!inventory.HaveItem(_feedItem.m_shared.m_name)) return false;
+            var feedBoxFound = (bool)_closestFeedBox;
+            var inventory = feedBoxFound
+                ? _closestFeedBox.GetInventory()
+                : _closestFeeder.GetInventory();
+            if (!inventory.HaveItem(_consumeTargetItem.m_shared.m_name)) return false;
 
             var canEating = true;
             if (Config.NeedGetCloseToEatTheFeed)
             {
                 canEating = false;
-                var position = foundFeedBox
-                    ? _feedBox.transform.position
-                    : _feeder.transform.position;
+                var position = feedBoxFound
+                    ? _closestFeedBox.transform.position
+                    : _closestFeeder.transform.position;
+                // 1f is added to account for the width of the container
                 var consumeRange = _monsterAI.m_consumeRange + 1f;
                 if (MoveTo(delta, position, consumeRange, false))
                 {
@@ -96,12 +108,17 @@ namespace Automatics.AutomaticFeeding
                 }
             }
 
-            if (canEating && inventory.RemoveOneItem(_feedItem))
+            if (canEating && inventory.RemoveOneItem(_consumeTargetItem))
             {
-                _monsterAI.m_onConsumedItem?.Invoke(null);
+                _monsterAI.m_onConsumedItem?.Invoke(
+                    _consumeTargetItem.m_dropPrefab.GetComponent<ItemDrop>());
                 humanoid.m_consumeItemEffects.Create(_baseAI.transform.position,
                     Quaternion.identity);
                 Reflections.GetField<ZSyncAnimation>(_baseAI, "m_animator").SetTrigger("consume");
+
+                _closestFeeder = null;
+                _closestFeedBox = null;
+                _consumeTargetItem = null;
             }
 
             return true;
@@ -113,15 +130,15 @@ namespace Automatics.AutomaticFeeding
             if (range <= 0f)
                 range = _monsterAI.m_consumeSearchRange;
 
-            _feeder = null;
-            _feedBox = null;
-            _feedItem = null;
+            _closestFeeder = null;
+            _closestFeedBox = null;
+            _consumeTargetItem = null;
 
-            var type = _character.IsTamed() ? Animal.Tamed : Animal.Wild;
-            if ((Config.AllowToFeedFromContainer & type) != 0)
+            var animalType = _character.IsTamed() ? AnimalType.Tamed : AnimalType.Wild;
+            if (Logics.IsAllowToFeedFromContainer(animalType))
                 FindFeedBox(range);
 
-            if (_feedBox == null)
+            if (_closestFeedBox == null && Logics.IsAllowToFeedFromPlayer(animalType))
                 FindFeeder(range);
         }
 
@@ -143,8 +160,8 @@ namespace Automatics.AutomaticFeeding
                 if (item == null) continue;
 
                 closest = distance;
-                _feedBox = container;
-                _feedItem = item;
+                _closestFeedBox = container;
+                _consumeTargetItem = item;
             }
         }
 
@@ -166,8 +183,8 @@ namespace Automatics.AutomaticFeeding
                 if (item == null) continue;
 
                 closest = distance;
-                _feeder = player;
-                _feedItem = item;
+                _closestFeeder = player;
+                _consumeTargetItem = item;
             }
         }
 

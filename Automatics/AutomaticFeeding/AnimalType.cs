@@ -5,7 +5,7 @@ using ModUtils;
 namespace Automatics.AutomaticFeeding
 {
     [Flags]
-    internal enum Animal : long
+    internal enum AnimalType : long
     {
         [UsedImplicitly]
         None = 0,

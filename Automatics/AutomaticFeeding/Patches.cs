@@ -8,33 +8,33 @@ namespace Automatics.AutomaticFeeding
     internal static class Patches
     {
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(MonsterAI), "Awake")]
-        private static void MonsterAIAwakePostfix(MonsterAI __instance)
+        [HarmonyPatch(typeof(Tameable), "Awake")]
+        private static void Tameable_Awake_Postfix(Tameable __instance, ZNetView ___m_nview)
         {
-            if (__instance.GetComponent<Tameable>())
+            if (___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<AutomaticFeeding>();
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MonsterAI), "UpdateConsumeItem")]
-        private static void MonsterAIUpdateConsumeItemPostfix(MonsterAI __instance,
+        private static void MonsterAI_UpdateConsumeItem_Postfix(MonsterAI __instance,
             ref bool __result,
             Humanoid humanoid, float dt)
         {
             if (!Config.EnableAutomaticFeeding) return;
 
-            if (!__result && AutomaticFeeding.Feeding(__instance, humanoid, dt)) __result = true;
+            if (!__result && AutomaticFeeding.Feeding(__instance, humanoid, dt))
+                __result = true;
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BaseAI), "FindClosestStaticPriorityTarget")]
-        private static void BaseAIFindClosestStaticPriorityTargetPostfix(BaseAI __instance,
+        private static void BaseAI_FindClosestStaticPriorityTarget_Postfix(BaseAI __instance,
             ref StaticTarget __result)
         {
             if (!Config.EnableAutomaticFeeding) return;
-            if ((Config.AllowToFeedFromContainer & Animal.Wild) == 0) return;
 
-            if (__result != null && AutomaticFeeding.IsFeedBox(__instance, __result))
+            if (__result != null && AutomaticFeeding.CancelAttackOnFeedBox(__instance, __result))
                 __result = null;
         }
     }
