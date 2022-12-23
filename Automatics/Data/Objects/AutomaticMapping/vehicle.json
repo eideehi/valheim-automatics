@@ -1,0 +1,42 @@
+﻿{
+  "type": "vehicle",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "Raft",
+      "label": "$ship_raft",
+      "matches": [
+        {
+          "value": "$ship_raft"
+        }
+      ]
+    },
+    {
+      "identifier": "Cart",
+      "label": "$tool_cart",
+      "matches": [
+        {
+          "value": "$tool_cart"
+        }
+      ]
+    },
+    {
+      "identifier": "Karve",
+      "label": "$ship_karve",
+      "matches": [
+        {
+          "value": "$ship_karve"
+        }
+      ]
+    },
+    {
+      "identifier": "Longship",
+      "label": "$ship_longship",
+      "matches": [
+        {
+          "value": "$ship_longship"
+        }
+      ]
+    }
+  ]
+}

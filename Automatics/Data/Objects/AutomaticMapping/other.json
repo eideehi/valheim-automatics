@@ -1,0 +1,33 @@
+﻿{
+  "type": "other",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "Vegvisir",
+      "label": "$piece_vegvisir",
+      "matches": [
+        {
+          "value": "$piece_vegvisir"
+        }
+      ]
+    },
+    {
+      "identifier": "Runestone",
+      "label": "$piece_lorestone",
+      "matches": [
+        {
+          "value": "$piece_vegvisir"
+        }
+      ]
+    },
+    {
+      "identifier": "WildBeehive",
+      "label": "@piece_wildbeehive",
+      "matches": [
+        {
+          "value": "Beehive"
+        }
+      ]
+    }
+  ]
+}

@@ -6,7 +6,7 @@ using UnityEngine;
 namespace Automatics.AutomaticMapping
 {
     [DisallowMultipleComponent]
-    internal class FloraObject : ObjectNode<FloraObject, FloraCluster>
+    internal class FloraNode : ObjectNode<FloraNode, FloraNetwork>
     {
         private Pickable _pickable;
         private ZNetView _zNetView;
@@ -14,7 +14,7 @@ namespace Automatics.AutomaticMapping
         private string Name => Objects.GetName(_pickable);
 
         public Vector3 Position => _pickable.transform.position;
-        public ZDOID ZdoId => _zNetView.GetZDO().m_uid;
+        public ZDOID UniqueId => _zNetView.GetZDO().m_uid;
 
         protected override void Awake()
         {
@@ -35,7 +35,7 @@ namespace Automatics.AutomaticMapping
             _zNetView = null;
         }
 
-        public static FloraObject Find(Predicate<Pickable> predicate)
+        public static FloraNode Find(Predicate<Pickable> predicate)
         {
             return ObjectNodes.Where(x => x.IsValid()).FirstOrDefault(x => predicate(x._pickable));
         }
@@ -45,12 +45,12 @@ namespace Automatics.AutomaticMapping
             Network?.RemoveNode(this);
         }
 
-        protected override FloraCluster CreateNetwork()
+        protected override FloraNetwork CreateNetwork()
         {
-            return new FloraCluster();
+            return new FloraNetwork();
         }
 
-        protected override bool IsConnectable(FloraObject other)
+        protected override bool IsConnectable(FloraNode other)
         {
             return Vector3.Distance(Position, other.Position) <= Config.FloraPinMergeRange &&
                    Name == other.Name;
@@ -58,13 +58,13 @@ namespace Automatics.AutomaticMapping
 
         public bool IsValid()
         {
-            return _pickable != null && _zNetView != null && _zNetView.GetZDO() != null;
+            return _pickable && _zNetView && _zNetView.GetZDO() != null;
         }
     }
 
-    internal class FloraCluster : ObjectNetwork<FloraObject, FloraCluster>
+    internal class FloraNetwork : ObjectNetwork<FloraNode, FloraNetwork>
     {
-        public FloraCluster()
+        public FloraNetwork()
         {
             Center = Vector3.zero;
 
