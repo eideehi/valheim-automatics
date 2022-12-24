@@ -1,13 +1,20 @@
 ﻿{
   "language": "japanese",
   "translations": {
+    "@command_give_usage": "使用方法: give (OPTIONS...) [ITEM]",
     "@command_give_description": "アイテムをプレイヤーのインベントリに追加します。",
-    "@command_give_usage": "使用方法: give アイテム名 [数量] [品質]",
+    "@command_give_extra_option": "ITEM: 入手したいアイテムの名前",
+    "@command_give_option_quality_description": "アイテムの品質",
+    "@command_give_option_stack_size_description": "アイテムの数量",
+    "@command_givematerials_usage": "使用方法: givematerials (OPTIONS...) [TARGET]",
     "@command_givematerials_description": "アイテムや建築物の素材となるアイテムをプレイヤーのインベントリに追加します。",
-    "@command_givematerials_usage": "使用方法: givematerials ターゲット [数量]",
-    "@command_printobject_description": "範囲内に存在するオブジェクトの情報を出力します。",
-    "@command_printobject_usage": "使用方法: printobject オブジェクトの種類 探索範囲 [フィルター]",
-    "@command_print_result": "$1 件の情報を出力しました。",
-    "@command_print_result_empty": "条件にあう情報は見つかりませんでした。"
+    "@command_givematerials_extra_option": "TARGET: 素材を入手したいアイテムや建築物の名前",
+    "@command_givematerials_option_multiplier_description": "入手する素材アイテムの乗数",
+    "@command_printlocations_usage": "使用方法: printlocations (OPTIONS...)",
+    "@command_printlocations_description": "ワールドに存在するロケーションを表示します。",
+    "@command_printlocations_option_include_description": "プレハブ名にこの文字列が含まれるロケーションのみ表示します。",
+    "@command_printlocations_option_exclude_description": "プレハブ名にこの文字列が含まれるロケーションを除外して表示します。",
+    "@command_printlocations_option_count_description": "ロケーションを何件まで表示するかを指定します。 [初期値: 8]",
+    "@command_printlocations_option_verbose_description": "重複するプレハブ名のロケーションを表示するようにします。"
   }
 }

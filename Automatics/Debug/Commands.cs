@@ -2,16 +2,267 @@
 using System.Collections.Generic;
 using System.Linq;
 using ModUtils;
+using NDesk.Options;
 using UnityEngine;
 
 namespace Automatics.Debug
 {
     internal static class Commands
     {
-        private static readonly Lazy<IEnumerable<Piece>> AllPiecesLazy;
+        private class Give : Command
+        {
+            private int _quality;
+            private int _stackSize;
 
-        private static readonly Dictionary<string, Func<Collider, MonoBehaviour>>
-            ObjectColliderConvertors;
+            public Give() : base("give")
+            {
+            }
+
+            protected override OptionSet CreateOptionSet()
+            {
+                return new OptionSet
+                {
+                    {
+                        "q|quality=",
+                        Automatics.L10N.Translate("@command_give_option_quality_description"),
+                        (int x) => _quality = x
+                    },
+                    {
+                        "n|stack-size=",
+                        Automatics.L10N.Translate("@command_give_option_stack_size_description"),
+                        (int x) => _stackSize = x
+                    }
+                };
+            }
+
+            protected override void ResetOptions()
+            {
+                base.ResetOptions();
+                _quality = 1;
+                _stackSize = 1;
+            }
+
+            protected override List<string> GetSuggestions()
+            {
+                return (from x in GetAllItems()
+                        let name = x.m_itemData.m_shared.m_name.Trim()
+                        where name.StartsWith("$")
+                        select Csv.Escape(Automatics.L10N.Translate(name)))
+                    .Distinct()
+                    .ToList();
+            }
+
+            protected override void CommandAction(Terminal.ConsoleEventArgs args)
+            {
+                if (!ParseArgs(args)) return;
+
+                if (showHelp)
+                {
+                    args.Context.AddString(Help());
+                    return;
+                }
+
+                foreach (var target in extraOptions.Take(1))
+                {
+                    var matches = new List<ItemDrop>();
+                    foreach (var item in GetAllItems())
+                    {
+                        var name = item.m_itemData.m_shared.m_name;
+                        var itemName = Csv.Escape(Automatics.L10N.Translate(name));
+                        if (itemName == target)
+                        {
+                            GiveItem(item, _stackSize, _quality);
+                            return;
+                        }
+
+                        if (itemName.Contains(name))
+                            matches.Add(item);
+                    }
+
+                    var result = matches.Count;
+                    switch (result)
+                    {
+                        case 0:
+                            args.Context.AddString("item not found");
+                            break;
+                        case 1:
+                            GiveItem(matches[0], _stackSize, _quality);
+                            break;
+                        default:
+                            args.Context.AddString("item many matches");
+                            break;
+                    }
+                }
+            }
+        }
+
+        private class GiveMaterials : Command
+        {
+            private int _mult;
+
+            public GiveMaterials() : base("givematerials")
+            {
+            }
+
+            protected override OptionSet CreateOptionSet()
+            {
+                return new OptionSet
+                {
+                    {
+                        "n|multiplier=",
+                        Automatics.L10N.Translate(
+                            "@command_givematerials_option_multiplier_description"),
+                        (int x) => _mult = x
+                    }
+                };
+            }
+
+            protected override void ResetOptions()
+            {
+                base.ResetOptions();
+                _mult = 1;
+            }
+
+            protected override List<string> GetSuggestions()
+            {
+                var list = (from x in GetAllPieces() select x.m_name).ToList();
+                list.AddRange(from x in GetAllRecipes() select x.m_item.m_itemData.m_shared.m_name);
+
+                return (from x in list select Csv.Escape(Automatics.L10N.Translate(x)))
+                    .Distinct().ToList();
+            }
+
+            protected override void CommandAction(Terminal.ConsoleEventArgs args)
+            {
+                if (!ParseArgs(args)) return;
+
+                if (showHelp)
+                {
+                    args.Context.AddString(Help());
+                    return;
+                }
+
+                foreach (var target in extraOptions.Take(1))
+                {
+                    foreach (var piece in GetAllPieces())
+                    {
+                        var pieceName = Csv.Escape(Automatics.L10N.Translate(piece.m_name));
+                        if (pieceName != target) continue;
+
+                        foreach (var resource in piece.m_resources)
+                            GiveItem(resource.m_resItem, resource.m_amount * _mult, 1);
+                        return;
+                    }
+
+                    foreach (var recipe in GetAllRecipes())
+                    {
+                        var itemName =
+                            Csv.Escape(
+                                Automatics.L10N.Translate(recipe.m_item.m_itemData.m_shared
+                                    .m_name));
+                        if (itemName != target) continue;
+
+                        foreach (var resource in recipe.m_resources)
+                            GiveItem(resource.m_resItem, resource.m_amount * _mult, 1);
+                        return;
+                    }
+
+                    args.Context.AddString("item not found");
+                    break;
+                }
+            }
+        }
+
+        private class PrintLocations2 : Command
+        {
+            private string _include;
+            private string _exclude;
+            private int _count;
+            private bool _verbose;
+
+            public PrintLocations2() : base("printlocations")
+            {
+            }
+
+            private bool Matches(string name)
+            {
+                if (!string.IsNullOrEmpty(_include) &&
+                    name.IndexOf(_include, StringComparison.OrdinalIgnoreCase) < 0) return false;
+                if (!string.IsNullOrEmpty(_exclude) &&
+                    name.IndexOf(_exclude, StringComparison.OrdinalIgnoreCase) >= 0) return false;
+                return true;
+            }
+
+            protected override OptionSet CreateOptionSet()
+            {
+                return new OptionSet
+                {
+                    {
+                        "i|include=",
+                        Automatics.L10N.Translate(
+                            "@command_printlocations_option_include_description"),
+                        x => _include = x
+                    },
+                    {
+                        "e|exclude=",
+                        Automatics.L10N.Translate(
+                            "@command_printlocations_option_exclude_description"),
+                        x => _exclude = x
+                    },
+                    {
+                        "n|count=",
+                        Automatics.L10N.Translate(
+                            "@command_printlocations_option_count_description"),
+                        (int x) => _count = x
+                    },
+                    {
+                        "v|verbose",
+                        Automatics.L10N.Translate(
+                            "@command_printlocations_option_verbose_description"),
+                        x => _verbose = x != null
+                    }
+                };
+            }
+
+            protected override void ResetOptions()
+            {
+                base.ResetOptions();
+                _include = "";
+                _exclude = "";
+                _count = 8;
+                _verbose = false;
+            }
+
+            protected override void CommandAction(Terminal.ConsoleEventArgs args)
+            {
+                if (!ParseArgs(args)) return;
+
+                if (showHelp)
+                {
+                    args.Context.AddString(Help());
+                    return;
+                }
+
+                var origin = Player.m_localPlayer.transform.position;
+
+                Automatics.Logger.Debug($"Run command: {args.FullLine}");
+
+                var knownLocation = new HashSet<string>();
+                foreach (var location in ZoneSystem.instance.m_locationInstances.Values
+                             .Where(x => Matches(x.m_location.m_prefabName))
+                             .OrderBy(x => Vector3.Distance(origin, x.m_position))
+                             .Take(_count))
+                {
+                    if (!_verbose && !knownLocation.Add(location.m_location.m_prefabName)) continue;
+
+                    var message = $"  \"{location.m_location.m_prefabName}\" {location.m_position}";
+                    args.Context.AddString(message);
+                    Automatics.Logger.Debug(message);
+                }
+            }
+        }
+
+        private static readonly Lazy<IEnumerable<Piece>> AllPiecesLazy;
 
         static Commands()
         {
@@ -49,209 +300,13 @@ namespace Automatics.Debug
 
                 return pieces.AsEnumerable();
             });
-
-            ObjectColliderConvertors = new Dictionary<string, Func<Collider, MonoBehaviour>>
-            {
-                { "Character", x => x.GetComponentInParent<Character>() },
-                { "Bird", x => x.GetComponentInParent<RandomFlyingBird>() },
-                { "Fish", x => x.GetComponentInParent<Fish>() },
-                { "Pickable", x => x.GetComponentInParent<Pickable>() },
-                { "Destructible", x => x.GetComponentInParent<IDestructible>() as MonoBehaviour },
-                { "Interactable", x => x.GetComponentInParent<Interactable>() as MonoBehaviour },
-                { "Hoverable", x => x.GetComponentInParent<Hoverable>() as MonoBehaviour }
-            };
         }
 
         public static void Register()
         {
-            ConsoleCommand.Register("give", Give, GiveOptions, true);
-            ConsoleCommand.Register("givematerials", GiveMaterials, GiveMaterialsOptions, true);
-            ConsoleCommand.Register("printobject", PrintObject, PrintObjectOptions, true);
-            ConsoleCommand.Register("printlocations2", PrintLocations2);
-        }
-
-        private static void Give(Terminal.ConsoleEventArgs args)
-        {
-            var name = args.Length > 1 ? args[1] : "";
-            if (string.IsNullOrEmpty(name))
-            {
-                args.Context.AddString(ConsoleCommand.SyntaxError("give"));
-                return;
-            }
-
-            var count = args.TryParameterInt(2);
-            var quality = args.TryParameterInt(3);
-
-            var items = new List<ItemDrop>();
-            foreach (var item in GetAllItems())
-            {
-                var itemName = Automatics.L10N.Translate(item.m_itemData.m_shared.m_name)
-                    .Replace(" ", "_");
-                if (itemName == name)
-                {
-                    GiveItem(item, count, quality);
-                    return;
-                }
-
-                if (itemName.Contains(name))
-                    items.Add(item);
-            }
-
-            if (items.Count == 1) GiveItem(items[0], count, quality);
-        }
-
-        private static List<string> GiveOptions()
-        {
-            return (from x in GetAllItems()
-                    let name = x.m_itemData.m_shared.m_name.Trim()
-                    where name.StartsWith("$")
-                    select Automatics.L10N.Translate(name).Replace(" ", "_"))
-                .Distinct()
-                .ToList();
-        }
-
-        private static void GiveMaterials(Terminal.ConsoleEventArgs args)
-        {
-            var name = args.Length > 1 ? args[1] : "";
-            var count = args.TryParameterInt(2);
-
-            Automatics.Logger.Debug(() => $"Run givematerials {name} {count}");
-
-            var exit = false;
-            foreach (var piece in GetAllPieces())
-            {
-                var pieceName = Automatics.L10N.Translate(piece.m_name.Trim()).Replace(" ", "_");
-                if (pieceName != name) continue;
-                exit = true;
-                foreach (var resource in piece.m_resources)
-                    GiveItem(resource.m_resItem, resource.m_amount * count, 1);
-            }
-
-            if (exit) return;
-
-            foreach (var recipe in GetAllRecipes())
-            {
-                var itemName = Automatics.L10N
-                    .Translate(recipe.m_item.m_itemData.m_shared.m_name.Trim()).Replace(" ", "_");
-                if (itemName != name) continue;
-
-                foreach (var resource in recipe.m_resources)
-                    GiveItem(resource.m_resItem, resource.m_amount * count, 1);
-            }
-        }
-
-        private static List<string> GiveMaterialsOptions()
-        {
-            var list = (from x in GetAllPieces() select x.m_name).ToList();
-            list.AddRange(from x in GetAllRecipes() select x.m_item.m_itemData.m_shared.m_name);
-            return (from x in list select Automatics.L10N.Translate(x.Trim()).Replace(" ", "_"))
-                .Distinct().ToList();
-        }
-
-        private static void PrintObject(Terminal.ConsoleEventArgs args)
-        {
-            if (!args.TryParameterInt(2, out var range))
-            {
-                args.Context.AddString(ConsoleCommand.SyntaxError("printobject"));
-                return;
-            }
-
-            var type = args[1];
-            var filter = args.Length > 3 ? args[3] : "";
-
-            if (!ObjectColliderConvertors.TryGetValue(type, out var convertor))
-            {
-                args.Context.AddString(ConsoleCommand.ArgumentError("printobject", type));
-                return;
-            }
-
-            Automatics.Logger.Debug(() => $"Run command: printobject {type} {range} {filter}");
-
-            var strings = new HashSet<string>();
-            var pos = Player.m_localPlayer.transform.position;
-            foreach (var (_, obj, _) in Objects.GetInsideSphere(pos, range, convertor, range * 16)
-                         .OrderBy(x => x.distance))
-                switch (obj)
-                {
-                    case Humanoid humanoid when humanoid.IsPlayer():
-                        break;
-
-                    case Character character:
-                    {
-                        var name = character.m_name;
-                        strings.Add($"{Automatics.L10N.Translate(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
-                        break;
-                    }
-
-                    case RandomFlyingBird bird:
-                    {
-                        var prefabName = Objects.GetPrefabName(bird.gameObject);
-                        var name = $"@animal_{prefabName.ToLower()}";
-                        strings.Add(
-                            $"{Automatics.L10N.Translate(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
-                        break;
-                    }
-
-                    default:
-                    {
-                        var name = Objects.GetName(obj);
-                        strings.Add(
-                            $"{Automatics.L10N.Localize(name)}: [type: {obj.GetType()}, raw_name: {name}, layer: {Layer(obj)}]");
-                        break;
-                    }
-                }
-
-            if (!string.IsNullOrEmpty(filter))
-                strings.RemoveWhere(x => !x.Contains(filter));
-
-            if (strings.Count > 0)
-            {
-                foreach (var x in strings)
-                {
-                    args.Context.AddString(x);
-                    Automatics.Logger.Debug(() => x);
-                }
-
-                args.Context.AddString(Automatics.L10N.Localize("@command_print_result",
-                    strings.Count));
-            }
-            else
-            {
-                args.Context.AddString(Automatics.L10N.Translate("@command_print_result_empty"));
-            }
-
-            string Layer(Component @object)
-            {
-                return LayerMask.LayerToName(@object.gameObject.layer);
-            }
-        }
-
-        private static List<string> PrintObjectOptions()
-        {
-            return ObjectColliderConvertors.Keys.ToList();
-        }
-
-        private static void PrintLocations2(Terminal.ConsoleEventArgs args)
-        {
-            var filter = (args.Length > 1 ? args[1] : "").ToLower();
-            var count = args.TryParameterInt(2, 8);
-            var distinct = args.Length > 3 && args[3].ToLower() == "true";
-            var origin = Player.m_localPlayer.transform.position;
-
-            Automatics.Logger.Debug($"Run command: {filter} {count} {distinct}");
-
-            var knownLocation = new HashSet<string>();
-            foreach (var location in ZoneSystem.instance.m_locationInstances.Values
-                         .Where(x => x.m_location.m_prefabName.ToLower().Contains(filter))
-                         .OrderBy(x => Vector3.Distance(origin, x.m_position))
-                         .Take(count))
-            {
-                if (distinct && !knownLocation.Add(location.m_location.m_prefabName)) continue;
-
-                var message = $"\"{location.m_location.m_prefabName}\" {location.m_position}";
-                args.Context.AddString(message);
-                Automatics.Logger.Debug(message);
-            }
+            new Give().Register(true);
+            new GiveMaterials().Register(true);
+            new PrintLocations2().Register(true);
         }
 
         private static IEnumerable<ItemDrop> GetAllItems()

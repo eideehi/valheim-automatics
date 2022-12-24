@@ -1,13 +1,20 @@
 ﻿{
   "language": "english",
   "translations": {
-    "@command_give_description": "Adds an item to the player's inventory.",
-    "@command_give_usage": "Usage: give ITEM [AMOUNT] [QUALITY]",
-    "@command_givematerials_description": "Add items to the player's inventory that will materials for creating items and buildings.",
-    "@command_givematerials_usage": "Usage: givematerials TARGET [AMOUNT]",
-    "@command_printobject_description": "Outputs information the objects that exist in the range.",
-    "@command_printobject_usage": "Usage: printobject TYPE RANGE [FILTER]",
-    "@command_print_result": "$1 information was output.",
-    "@command_print_result_empty": "No information matching criteria was found."
+    "@command_give_usage": "Usage: give (OPTIONS...) [ITEM]",
+    "@command_give_description": "Add the item to the player's inventory.",
+    "@command_give_extra_option": "ITEM: Name of the item you wish to obtain",
+    "@command_give_option_quality_description": "Quality of item",
+    "@command_give_option_stack_size_description": "Size of item stack",
+    "@command_givematerials_usage": "Usage: givematerials (OPTIONS...) [TARGET]",
+    "@command_givematerials_description": "Add crafting or building materials to the player's inventory.",
+    "@command_givematerials_extra_option": "TARGET: The name of the item or piece whose material you want to obtain.",
+    "@command_givematerials_option_multiplier_description": "Multiplier of the material item to be obtained",
+    "@command_printlocations_usage": "Usage: printlocations (OPTIONS...)",
+    "@command_printlocations_description": "Displays locations that exist in the world.",
+    "@command_printlocations_option_include_description": "Only show locations where the prefab name contains this string",
+    "@command_printlocations_option_exclude_description": "Locations with this string in the prefab name are excluded",
+    "@command_printlocations_option_count_description": "Specify how many locations to display. [Default: 8]",
+    "@command_printlocations_option_verbose_description": "Allow duplicate prefab name locations to be displayed"
   }
 }
