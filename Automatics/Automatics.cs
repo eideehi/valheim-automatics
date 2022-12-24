@@ -110,7 +110,7 @@ namespace Automatics
 
             Logger.Debug($"Mod location: {_modLocation}");
 
-            Migration.MigrateConfig(Plugin.Config);
+            ConfigMigration.Migration(Plugin.Config);
 
             ValheimObject.Initialize(GetAllResourcePath("Data"));
 
