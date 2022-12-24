@@ -56,12 +56,6 @@ namespace Automatics.Debug
             {
                 if (!ParseArgs(args)) return;
 
-                if (showHelp)
-                {
-                    args.Context.AddString(Help());
-                    return;
-                }
-
                 foreach (var target in extraOptions.Take(1))
                 {
                     var matches = new List<ItemDrop>();
@@ -135,12 +129,6 @@ namespace Automatics.Debug
             protected override void CommandAction(Terminal.ConsoleEventArgs args)
             {
                 if (!ParseArgs(args)) return;
-
-                if (showHelp)
-                {
-                    args.Context.AddString(Help());
-                    return;
-                }
 
                 foreach (var target in extraOptions.Take(1))
                 {
@@ -236,12 +224,6 @@ namespace Automatics.Debug
             protected override void CommandAction(Terminal.ConsoleEventArgs args)
             {
                 if (!ParseArgs(args)) return;
-
-                if (showHelp)
-                {
-                    args.Context.AddString(Help());
-                    return;
-                }
 
                 var origin = Player.m_localPlayer.transform.position;
 

@@ -51,12 +51,6 @@ namespace Automatics
             {
                 if (!ParseArgs(args)) return;
 
-                if (showHelp)
-                {
-                    args.Context.AddString(Help());
-                    return;
-                }
-
                 if (!extraOptions.Any())
                 {
                     args.Context.AddString(Print(_verbose));
@@ -83,12 +77,6 @@ namespace Automatics
             protected override void CommandAction(Terminal.ConsoleEventArgs args)
             {
                 if (!ParseArgs(args)) return;
-
-                if (showHelp)
-                {
-                    args.Context.AddString(Help());
-                    return;
-                }
 
                 Automatics.Logger.Message(() => $"Command exec: {args.FullLine}");
 
@@ -155,7 +143,8 @@ namespace Automatics
         protected OptionSet options => _optionsLazy.Value;
 
         protected List<string> extraOptions;
-        protected bool showHelp;
+
+        private bool _showHelp;
 
         protected bool HaveExtraOption { get; set; }
         protected bool HaveExtraDescription { get; set; }
@@ -168,7 +157,7 @@ namespace Automatics
                 var optionSet = CreateOptionSet();
                 optionSet.Add("h|help",
                     Automatics.L10N.Translate("@command_common_help_description"),
-                    v => showHelp = v != null);
+                    v => _showHelp = v != null);
                 return optionSet;
             });
             extraOptions = new List<string>();
@@ -236,7 +225,7 @@ namespace Automatics
 
         protected virtual void ResetOptions()
         {
-            showHelp = false;
+            _showHelp = false;
         }
 
         protected bool ParseArgs(Terminal.ConsoleEventArgs args)
@@ -245,7 +234,6 @@ namespace Automatics
             try
             {
                 extraOptions = options.Parse(ParseArgs(args.FullLine));
-                return true;
             }
             catch (OptionException e)
             {
@@ -256,6 +244,11 @@ namespace Automatics
                         command));
                 return false;
             }
+
+            if (!_showHelp) return true;
+
+            args.Context.AddString(Help());
+            return false;
         }
 
         protected string Usage()

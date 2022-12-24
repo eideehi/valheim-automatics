@@ -123,12 +123,6 @@ namespace Automatics.AutomaticMapping
             {
                 if (!ParseArgs(args)) return;
 
-                if (showHelp)
-                {
-                    args.Context.AddString(Help());
-                    return;
-                }
-
                 Automatics.Logger.Message(() => $"Command exec: {args.FullLine}");
 
                 var type = (extraOptions.FirstOrDefault() ?? "").ToLower();
