@@ -91,18 +91,6 @@ namespace Automatics
             return "";
         }
 
-        [Obsolete]
-        public static IEnumerable<string> GetAutomaticsChildModDirs()
-        {
-            return GetAllResourcesDirectory();
-        }
-
-        [Obsolete]
-        public static string GetFilePath(string pathname)
-        {
-            return Path.Combine(_modLocation, pathname);
-        }
-
         public static IEnumerable<string> GetAllResourcePath(string pathname)
         {
             return GetAllResourcesDirectory().Select(x => Path.Combine(x, pathname));
@@ -111,11 +99,6 @@ namespace Automatics
         public static string GetHarmonyId(string moduleName)
         {
             return $"{_guid}.{moduleName}";
-        }
-
-        [Obsolete]
-        public static void AddTimer(string id, Action callback, float delay)
-        {
         }
 
         public static void Initialize(BaseUnityPlugin plugin, ManualLogSource logger)
