@@ -239,7 +239,7 @@
             <PackageTempDir>$(ProjectDir)$(BaseOutputPath)tmp\</PackageTempDir>
             <NexusPackageDir>$(PackageTempDir)$(TargetName)\</NexusPackageDir>
             <ThunderstorePackageDir>$(PackageTempDir)plugins\</ThunderstorePackageDir>
-            <ThunderstoreAssetsDir>$(SolutionDir)\package\thunderstore\</ThunderstoreAssetsDir>
+            <ThunderstoreAssetsDir>$(SolutionDir)\distributor\thunderstore\</ThunderstoreAssetsDir>
         </PropertyGroup>
         <ItemGroup>
             <ModFiles Include="$(TargetPath)" />
