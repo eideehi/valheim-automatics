@@ -15,12 +15,12 @@ namespace Automatics
     {
         private class ShowCommands : Command
         {
-            private bool _showAll;
+            private string _include;
+            private string _exclude;
             private bool _verbose;
 
             public ShowCommands() : base("automatics")
             {
-                HaveExtraOption = true;
             }
 
             protected override OptionSet CreateOptionSet()
@@ -28,14 +28,19 @@ namespace Automatics
                 return new OptionSet
                 {
                     {
-                        "a|all",
-                        Automatics.L10N.Translate("@command_automatics_option_all_description"),
-                        v => _showAll = v != null
+                        "i|include=",
+                        Automatics.L10N.Translate("@command_automatics_option_include_description"),
+                        x => _include = x
+                    },
+                    {
+                        "e|exclude=",
+                        Automatics.L10N.Translate("@command_automatics_option_exclude_description"),
+                        x => _exclude = x
                     },
                     {
                         "v|verbose",
                         Automatics.L10N.Translate("@command_automatics_option_verbose_description"),
-                        v => _verbose = v != null
+                        x => _verbose = x != null
                     }
                 };
             }
@@ -43,7 +48,8 @@ namespace Automatics
             protected override void ResetOptions()
             {
                 base.ResetOptions();
-                _showAll = false;
+                _include = "";
+                _exclude = "";
                 _verbose = false;
             }
 
@@ -51,18 +57,12 @@ namespace Automatics
             {
                 if (!ParseArgs(args)) return;
 
-                if (!extraOptions.Any())
-                {
-                    args.Context.AddString(Print(_verbose));
-                    return;
-                }
-
                 foreach (var (cmd, instance) in GetAllCommands())
-                    if (extraOptions.Any(x => cmd.Contains(x)))
-                    {
-                        args.Context.AddString(instance.Print(_verbose));
-                        if (!_showAll) break;
-                    }
+                {
+                    if (!string.IsNullOrEmpty(_include) && cmd.IndexOf(_include, StringComparison.OrdinalIgnoreCase) == -1) continue;
+                    if (!string.IsNullOrEmpty(_exclude) && cmd.IndexOf(_exclude, StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    args.Context.AddString(instance.Print(_verbose));
+                }
             }
         }
 
