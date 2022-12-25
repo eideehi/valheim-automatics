@@ -5,8 +5,8 @@
 :uri-license: link:LICENSE
 :uri-config: link:CONFIG.adoc
 :uri-issues: https://github.com/eideehi/valheim-automatics/issues
-:uri-custom_map_icons_example: link:/package/extra/custom-icon-example/MyCustomIcons
-:uri-custom_map_icons_zip: link:/package/extra/custom-icon-example/MyCustomIcons.zip
+:uri-custom_map_icons_example: link:/examples/custom-icon-pack/MyCustomIcons
+:uri-custom_map_icons_zip: link:/examples/custom-icon-pack/MyCustomIcons.zip
 :uri-discord: https://discord.gg/DDQqxkK7s6
 :thumbnail-uri-config_menu: https://app.box.com/shared/static/3v57rjpauzzyv0xeugohnw8bn2ye3q2h.png
 :image-uri-config_menu: https://app.box.com/shared/static/vfzsn69i950l48er2u69tssod6xxsh8u.jpg

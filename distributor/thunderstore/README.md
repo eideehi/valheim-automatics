@@ -94,11 +94,11 @@ Root &lt;Array&gt;
 
 **Example files**
 
-I don’t feel I have explained it very well, so I have prepared a sample file. Please click [here](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons) to check the structure of the file that actually works. You can also download the [zip file](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons.zip) and check the operation on your PC.
+I don’t feel I have explained it very well, so I have prepared a sample file. Please click [here](https://github.com/eideehi/valheim-automatics/examples/custom-icon-pack/MyCustomIcons) to check the structure of the file that actually works. You can also download the [zip file](https://github.com/eideehi/valheim-automatics/examples/custom-icon-pack/MyCustomIcons.zip) and check the operation on your PC.
 
--   [Example files (Github)](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons)
+-   [Example files (Github)](https://github.com/eideehi/valheim-automatics/examples/custom-icon-pack/MyCustomIcons)
 
--   [Example files (Zip)](https://github.com/eideehi/valheim-automatics/package/extra/custom-icon-example/MyCustomIcons.zip)
+-   [Example files (Zip)](https://github.com/eideehi/valheim-automatics/examples/custom-icon-pack/MyCustomIcons.zip)
 
 NOTE: Zip is not guaranteed to work with mod loaders other than Vortex; if you are using a mod loader other than Vortex, please manually place the files in the Zip into the appropriate directory.
 
