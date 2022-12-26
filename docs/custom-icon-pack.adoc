@@ -6,7 +6,7 @@
 :uri-custom-icon-pack-image: {box}/ggj61oyrdik1jk08lohdqr91e1q5isqv.png
 :uri-custom-icon-pack-example-github: {uri-base}examples/custom-icon-pack/MyCustomIcons
 :uri-custom-icon-pack-example-zip: {uri-base}examples/custom-icon-pack/MyCustomIcons.zip
-:uri-name-matching: {uri-base}README.adoc#matching_by_display_name_and_internal_name
+:uri-name-matching: {uri-base}README.adoc#matching-by-display-name-and-internal-name
 
 Using png files and json, you can customize icons for pins added by Automatic mapping.
 
