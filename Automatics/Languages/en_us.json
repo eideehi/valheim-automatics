@@ -4,8 +4,6 @@
     "@enabled": "Enabled",
     "@disabled": "Disabled",
     "@select_all": "All",
-    "@add": "+",
-    "@remove": "×",
     "@message_none": "Do Not Display",
     "@message_center": "Display In The Center",
     "@message_top_left": "Display In Top Left",
@@ -235,10 +233,6 @@
     "@command_printobjects_message_result": "\"$1\" ($2)\n  Pos: $3 [Distance: $4]\n  Recommend identifier: $5\n  Pattern: $6",
     "@command_printobjects_message_result_defined": "\"$1\" ($2) [Already defined as an $3]\n  Pos: $4 [Distance: $5]\n  Identifier: $6",
     "@command_printobjects_message_result_more": "In addition to this, found $1 types of objects that can be treated as $2.",
-    "@command_printobjects_message_result_empty": "No $1 matching the criteria were found.",
-
-    "@command_description_format": "$1 The command \"automatics $2\" can be used to confirm usage.",
-    "@command_syntax_error_format": "Syntax error: $1\n$2",
-    "@command_argument_error_format": "Illegal argument: $1\n$2"
+    "@command_printobjects_message_result_empty": "No $1 matching the criteria were found."
   }
 }

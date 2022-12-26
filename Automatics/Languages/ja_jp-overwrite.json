@@ -1,0 +1,9 @@
+﻿{
+  "language": "japanese",
+  "translations": {
+    "mod_utils_config_button_enabled": "有効",
+    "mod_utils_config_button_disabled": "無効",
+    "mod_utils_config_button_add":"追加",
+    "mod_utils_config_button_remove": "削除"
+  }
+}

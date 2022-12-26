@@ -4,8 +4,6 @@
     "@enabled": "有効",
     "@disabled": "無効",
     "@select_all": "すべて選択",
-    "@add": "+",
-    "@remove": "×",
     "@message_none": "表示しない",
     "@message_center": "中央に表示",
     "@message_top_left": "左上に表示",
@@ -235,10 +233,6 @@
     "@command_printobjects_message_result": "\"$1\" ($2)\n  位置: $3 [距離: $4]\n  推奨される識別子: $5\n  パターン: $6",
     "@command_printobjects_message_result_defined": "\"$1\" ($2) [$3として定義済み]\n  位置: $4 [距離: $5]\n  識別子: $6",
     "@command_printobjects_message_result_more": "他に $1 種類の $2 として扱うことのできるオブジェクトを発見しました。",
-    "@command_printobjects_message_result_empty": "条件に一致する $1 が見つかりませんでした。",
-
-    "@command_description_format": "$1 \"automatics $2\" のコマンドを実行することで使用方法を確認することが出来ます。",
-    "@command_syntax_error_format": "構文が間違っています: $1\n$2",
-    "@command_argument_error_format": "引数が不正です: $1\n$2"
+    "@command_printobjects_message_result_empty": "条件に一致する $1 が見つかりませんでした。"
   }
 }
