@@ -11,12 +11,68 @@ Specify the log level that allows logging.
 - Acceptable values: None, Fatal, Error, Warning, Message, Info, Debug, All
 - Multiple values can be set at the same time by separating them with , (e.g. Fatal, Error)
 
-==== Resources Directory / [resources_directory]
-Specify the absolute path of the directory where your custom translation files and resources such as custom map icons are stored. If a valid value is specified for this option, the default resource directory (the same directory as Automations.dll) is followed by the resources stored in this directory.
+==== [Deprecated] Resources Directory / [resources_directory]
+[This option will be discontinued in the near future. Check the README for details]
 
 - Default value:
 
-=== [ #2 Automatic Door ] / [automatic_door]
+=== [ #2 General ] / [general]
+==== User-defined Animal / [custom_animal]
+Any animal can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the animal. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the animal. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Dungeon / [custom_dungeon]
+Any dungeon can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the dungeon. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the dungeon. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Flora / [custom_flora]
+Any flora can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the flora. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the flora. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Mineral / [custom_mineral]
+Any mineral can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the mineral. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the mineral. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Monster / [custom_monster]
+Any monster can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the monster. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the monster. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Spawner / [custom_spawner]
+Any spawner can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the spawner. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the spawner. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Spot / [custom_spot]
+Any spot can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the spot. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the spot. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Door / [custom_door]
+Any door can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the door. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the door. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Vehicle / [custom_vehicle]
+Any vehicle can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the vehicle. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the vehicle. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+==== User-defined Other Object / [custom_other]
+Any object can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the object. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal or prefab name of the object. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
+=== [ #3 Automatic Door ] / [automatic_door]
+==== Disable Module / [disable_module]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: false
+
 ==== Automatic Door / [enable_automatic_door]
 Specify whether to enable the feature that automatically opens and closes the door.
 
@@ -26,13 +82,6 @@ Specify whether to enable the feature that automatically opens and closes the do
 Specify which doors are allowed to open and close automatically.
 
 - Default value: WoodDoor, WoodGate, IronGate, DarkwoodGate
-- Acceptable values: None, WoodDoor, WoodGate, IronGate, DarkwoodGate, WoodShutter, All
-- Multiple values can be set at the same time by separating them with , (e.g. WoodDoor, WoodGate)
-
-==== Allow Automatic Door (Custom) / [allow_automatic_door_custom]
-Specify the display or internal name of any door that is allowed to open and close automatically. A display name is a name displayed in the game, such as "Wood door", and the specified value will enable the automatic door if it partially matches the target display name. The internal name is the name used on the program side, such as "$piece_wooddoor", and the specified value must exactly match the target's internal name for the automatic door to be enabled.
-
-- Default value:
 
 ==== Interval To Open / [interval_to_open]
 Specify the interval at which the process of automatically opening the door is called. If set to less than 0.1, the function to automatically open the door will be disabled. (Unit: second)
@@ -58,139 +107,93 @@ Specify how far the player must be from the door for the door to close automatic
 - Default value: 2.5
 - Acceptable value range: From 1 to 8
 
-==== Automatic Door Enable/Disable Toggle / [automatic_door_enable_disable_toggle]
-Specify a shortcut key to enable/disable the automatic door.
-
-- Default value:
-
 ==== Automatic Door Enable/Disable Toggle Message / [automatic_door_enable_disable_toggle_message]
 Specify where a message is displayed when the automatic door is enabled or disabled by a shortcut key.
 
 - Default value: Center
 - Acceptable values: None, Center, TopLeft
 
-=== [ #3 Automatic Mapping ] / [automatic_mapping]
+==== Automatic Door Enable/Disable Toggle / [automatic_door_enable_disable_toggle]
+Specify a shortcut key to enable/disable the automatic door.
+
+- Default value:
+
+=== [ #4 Automatic Mapping ] / [automatic_mapping]
+==== Disable Module / [module_disable]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: false
+
 ==== Automatic Mapping / [enable_automatic_mapping]
 Specify whether to enable the feature that automatically pinning objects and locations to the map.
 
 - Default value: true
 
-==== Dynamic Object Search Range / [dynamic_object_search_range]
+==== Dynamic Object Search Range / [dynamic_object_mapping_range]
 Specify the range of dynamic objects to be explored. "Dynamic Object" are objects that change position, such as animals, monsters, etc. Set to 0 to disable pinning of dynamic objects. (Unit: meter)
 
 - Default value: 64
-- Acceptable value range: From 0 to 256
+- Acceptable value range: From 0 to 128
 
-==== Static Object Search Range / [static_object_search_range]
-Specify the range of static objects to be explored. "Static Object" are objects that do not change their position, such as plants, deposit, etc. Setting this to 0 disables pinning of static objects. (Unit: meter)
+==== Static Object Search Range / [static_object_mapping_range]
+Specify the range of static objects to be explored. "Static Object" are objects that do not change their position, such as flora, mineral, etc. Setting this to 0 disables pinning of static objects. (Unit: meter)
 
-- Default value: 16
-- Acceptable value range: From 0 to 256
+- Default value: 32
+- Acceptable value range: From 0 to 128
 
-==== Location Search Range / [location_search_range]
+==== Location Search Range / [location_mapping_range]
 Specify the range of location to be explored. "Location" is a specific place, such as dungeon, fuling village, etc. Setting this to 0 disables location pinning. (Unit: meter)
 
 - Default value: 96
-- Acceptable value range: From 0 to 256
+- Acceptable value range: From 0 to 128
 
 ==== Allow Pinning Animal / [allow_pinning_animal]
 Specify the animals to be automatic pinning.
 
-- Default value: All
-- Acceptable values: None, Boar, Deer, Wolf, Lox, Bird, Fish, All
-- Multiple values can be set at the same time by separating them with , (e.g. Boar, Deer)
-
-==== Allow Pinning Animal (Custom) / [allow_pinning_animal_custom]
-Specify the display or internal name of any animals that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Boar", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$enemy_boar", and the specified value must exactly match the target's internal name for the pinning to be enabled.
-
-- Default value:
+- Default value: Boar, Piggy, Deer, Wolf, WolfCub, Lox, LoxCalf, Hen, Chicken, Hare, Bird, Fish
 
 ==== Allow Pinning Monster / [allow_pinning_monster]
 Specify the monsters to be automatic pinning.
 
-- Default value: All
-- Acceptable values: None, Greyling, Neck, Ghost, Greydwarf, GreydwarfBrute, GreydwarfShaman, RancidRemains, Skeleton, Troll, Abomination, Blob, Draugr, DraugrElite, Leech, Oozer, Surtling, Wraith, Drake, Fenring, StoneGolem, Deathsquito, Fuling, FulingBerserker, FulingShaman, Growth, Serpent, Bat, FenringCultist, Ulv, All
-- Multiple values can be set at the same time by separating them with , (e.g. Greyling, Neck)
-
-==== Allow Pinning Monster (Custom) / [allow_pinning_monster_custom]
-Specify the display or internal name of any monster that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Greyling", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$enemy_greyling", and the specified value must exactly match the target's internal name for the pinning to be enabled.
-
-- Default value:
+- Default value: Greyling, Neck, Ghost, Greydwarf, GreydwarfBrute, GreydwarfShaman, RancidRemains, Skeleton, Troll, Abomination, Blob, Draugr, DraugrElite, Leech, Oozer, Surtling, Wraith, Drake, Fenring, StoneGolem, Deathsquito, Fuling, FulingBerserker, FulingShaman, Growth, Serpent, Bat, FenringCultist, Ulv, DvergrRogue, DvergrMage, Tick, Seeker, SeekerBrood, Gjall, SeekerSoldier
 
 ==== Allow Pinning Flora / [allow_pinning_flora]
 Specify the flora to be automatic pinning.
 
-- Default value: Mushroom, Raspberries, Blueberries, CarrotSeeds, Thistle, TurnipSeeds, Cloudberries
-- Acceptable values: None, Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flex, All
-- Multiple values can be set at the same time by separating them with , (e.g. Dandelion, Mushroom)
+- Default value: Mushroom, Raspberries, Blueberries, CarrotSeeds, Thistle, TurnipSeeds, Cloudberries, JotunPuffs, Magecap
 
-==== Allow Pinning Flora (Custom) / [allow_pinning_flora_custom]
-Specify the display or internal name of any flora that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Dandelion", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$item_dandelion", and the specified value must exactly match the target's internal name for the pinning to be enabled.
+==== Allow Pinning Mineral / [allow_pinning_mineral]
+Specify the mineral to be automatic pinning.
 
-- Default value:
-
-==== Allow Pinning Deposit / [allow_pinning_deposit]
-Specify the deposit to be automatic pinning.
-
-- Default value: CopperDeposit, TinDeposit, MudPile, SilverVein
-- Acceptable values: None, CopperDeposit, TinDeposit, MudPile, ObsidianDeposit, SilverVein, All
-- Multiple values can be set at the same time by separating them with , (e.g. CopperDeposit, TinDeposit)
-
-==== Allow Pinning Deposit (Custom) / [allow_pinning_deposit_custom]
-Specify the display or internal name of any deposit that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Copper deposit", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$piece_deposit_copper", and the specified value must exactly match the target's internal name for the pinning to be enabled.
-
-- Default value:
+- Default value: CopperDeposit, TinDeposit, MudPile, SilverVein, PetrifiedBone, SoftTissue
 
 ==== Allow Pinning Spawner / [allow_pinning_spawner]
 Specify the spawners to be automatic pinning.
 
-- Default value: None
-- Acceptable values: None, GreydwarfNest, EvilBonePile, BodyPile, All
-- Multiple values can be set at the same time by separating them with , (e.g. GreydwarfNest, EvilBonePile)
-
-==== Allow Pinning Spawner (Custom) / [allow_pinning_spawner_custom]
-Specify the display or internal name of any spawners that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Greydwarf nest", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$enemy_greydwarfspawner", and the specified value must exactly match the target's internal name for the pinning to be enabled.
-
 - Default value:
+
+==== Allow Pinning Vehicle / [allow_pinning_vehicle]
+Specify the vehicles to be automatic pinning.
+
+- Default value: Karve, Longship
 
 ==== Allow Pinning Other Object / [allow_pinning_other]
 Specify the other objects to be automatic pinning.
 
 - Default value: WildBeehive
-- Acceptable values: None, Vegvisir, Runestone, WildBeehive, Portal, All
-- Multiple values can be set at the same time by separating them with , (e.g. Vegvisir, Runestone)
-
-==== Allow Pinning Other Object (Custom) / [allow_pinning_other_custom]
-Specify the display or internal name of any other objects that is allowed to automatic map pinning. A display name is the name displayed in the game, such as "Oak", and the specified value will enable the pinning if it partially matches the target display name. Internal name is the name used on the program side, such as "$prop_oak", and the specified value must exactly match the target's internal name for the pinning to be enabled.
-
-- Default value:
 
 ==== Allow Pinning Dungeon / [allow_pinning_dungeon]
 Specify the dungeons to be automatic pinning.
 
-- Default value: All
-- Acceptable values: None, BurialChambers, TrollCave, SunkenCrypts, MountainCave, All
-- Multiple values can be set at the same time by separating them with , (e.g. BurialChambers, TrollCave)
-
-==== Allow Pinning Dungeon (Custom) / [allow_pinning_dungeon_custom]
-Specify the prefab name of the any dungeon as a string or regular expression. The prefab name is the name given to the dungeon's appearance object. (e.g. Crypt2, TrollCave, SunkenCrypt1); If a string is specified, pinning is allowed if it is a partial match to the target prefab name. If a regular expression is specified, pinning is allowed if the target prefab name matches the regular expression. The regular expression must be prefixed with "r/"
-
-- Default value:
+- Default value: BurialChambers, TrollCave, SunkenCrypts, MountainCave, InfestedMine
 
 ==== Allow Pinning Spot / [allow_pinning_spot]
 Specify the spots to be automatic pinning.
 
-- Default value: All
-- Acceptable values: None, InfestedTree, FireHole, DrakeNest, GoblinCamp, TarPit, All
-- Multiple values can be set at the same time by separating them with , (e.g. InfestedTree, FireHole)
+- Default value: InfestedTree, FireHole, DrakeNest, GoblinCamp, TarPit, DvergrExcavation, DvergrGuardTower, DvergrHarbour, DvergrLighthouse, PetrifiedBone
 
-==== Allow Pinning Spot (Custom) / [allow_pinning_spot_custom]
-Specify the prefab name of the any spot as a string or regular expression. The prefab name is the name given to the spot's structure. (e.g. AbandonedLogCabin02, Dolmen01, ShipWreck01); If a string is specified, pinning is allowed if it is a partial match to the target prefab name. If a regular expression is specified, pinning is allowed if the target prefab name matches the regular expression. The regular expression must be prefixed with "r/"
-
-- Default value:
-
-==== Allow Pinning Ship / [allow_pinning_ship]
-Enable automatic pinning for the ship.
+==== Allow Pinning Portal / [allow_pinning_portal]
+Enable automatic pinning for the portal. Portal is treated as a static object.
 
 - Default value: true
 
@@ -199,11 +202,27 @@ Exclude tamed animals from automatic pinning.
 
 - Default value: true
 
-==== Static Object Search Interval / [static_object_search_interval]
-Specify the interval at which static object search. Setting to 0 disables periodic static object search. (Unit: second)
+==== Static Object Mapping Interval / [static_object_mapping_interval]
+Specify the interval at which static object mapping. Setting to 0 disables periodic static object mapping. (Unit: second)
 
 - Default value: 0.25
-- Acceptable value range: From 0 to 8
+- Acceptable value range: From 0 to 4
+
+==== Static Object Caching Interval / [static_object_caching_interval]
+Specify the interval at which static objects will be cached. Mapping of static objects uses this cache. (Unit: second)
+
+- Default value: 3
+- Acceptable value range: From 1 to 8
+
+==== Save Static Object Pins / [save_static_object_pins]
+Specify whether to save the pins of static objects.
+
+- Default value: false
+
+==== Remove Pins Of Destroyed Object / [remove_pins_of_destroyed_object]
+Specify whether or not to automatically remove pins of objects that have been destroyed and no longer exist.
+
+- Default value: true
 
 ==== Flora Pins Merge Range / [flora_pins_merge_range]
 When pinning flora, it recursively searches for the same flora that exist within a specified range and merge them into a single pin. (Unit: meter)
@@ -211,17 +230,22 @@ When pinning flora, it recursively searches for the same flora that exist within
 - Default value: 8
 - Acceptable value range: From 0 to 16
 
-==== Need To Equip Wishbone For Underground Deposits / [need_to_equip_wishbone_for_underground_deposits]
-Specify whether the wishbone needs to be equipped to attempt to pinning underground deposits.
+==== Need To Equip Wishbone For Underground Minerals / [need_to_equip_wishbone_for_underground_minerals]
+Specify whether the wishbone needs to be equipped to attempt to pinning underground minerals.
 
 - Default value: true
 
-==== Static Object Search / [static_object_search_key]
-Specify shortcut keys for searching static objects. Setting this item disables the static object search at regular intervals, so that it is performed only once each time the shortcut key is pressed.
+==== Static Object Mapping / [static_object_mapping_key]
+Specify shortcut keys for mapping static objects. Setting this item disables the static object mapping at regular intervals, so that it is performed only once each time the shortcut key is pressed.
 
 - Default value:
 
-=== [ #4 Automatic Processing ] / [automatic_processing]
+=== [ #5 Automatic Processing ] / [automatic_processing]
+==== Disable Module / [module_disable]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: false
+
 ==== Automatic Processing / [enable_automatic_processing]
 Specify whether to enable or disable the ability to automatically perform tasks such as cooking, refining, and refuel.
 
@@ -239,12 +263,6 @@ Specify the maximum distance which Beehive will search for containers. (Unit: me
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Product Count Of Suppress Processing For Beehive / [piece_beehive_product_count_of_suppress_processing]
-Suppresses automatic processing of Beehive to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
-
-- Default value: 0
-- Acceptable value range: From 0 to 9999
-
 ==== Allow Processing By Bonfire / [allow_processing_by_piece_bonfire]
 Specify the automatic processing to be allowed for Bonfire
 
@@ -261,7 +279,12 @@ Specify the maximum distance which Bonfire will search for containers. (Unit: me
 Suppresses automatic processing of Bonfire to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Bonfire Only When Out Of Fuel / [piece_bonfire_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Bonfire is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Blast furnace / [allow_processing_by_piece_blastfurnace]
 Specify the automatic processing to be allowed for Blast furnace
@@ -280,19 +303,29 @@ Specify the maximum distance which Blast furnace will search for containers. (Un
 Suppresses automatic processing of Blast furnace to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Product Stacks Of Suppress Processing For Blast furnace / [piece_blastfurnace_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Blast furnace to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+
+- Default value: 0
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Blast furnace Only When Materials Run Out / [piece_blastfurnace_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Blast furnace run out.
+
+- Default value: false
 
 ==== Fuel Count Of Suppress Processing For Blast furnace / [piece_blastfurnace_fuel_count_of_suppress_processing]
 Suppresses automatic processing of Blast furnace to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Blast furnace / [piece_blastfurnace_product_count_of_suppress_processing]
-Suppresses automatic processing of Blast furnace to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Refuel Blast furnace Only When Out Of Fuel / [piece_blastfurnace_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Blast furnace is out of fuel.
 
-- Default value: 0
-- Acceptable value range: From 0 to 9999
+- Default value: false
 
 ==== Refuel Blast furnace Only When Materials Supplied / [piece_blastfurnace_refuel_only_when_materials_supplied]
 Performs automatic refuel only when materials are supplied to Blast furnace.
@@ -315,7 +348,12 @@ Specify the maximum distance which Campfire will search for containers. (Unit: m
 Suppresses automatic processing of Campfire to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Campfire Only When Out Of Fuel / [piece_firepit_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Campfire is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Charcoal kiln / [allow_processing_by_piece_charcoalkiln]
 Specify the automatic processing to be allowed for Charcoal kiln
@@ -334,13 +372,18 @@ Specify the maximum distance which Charcoal kiln will search for containers. (Un
 Suppresses automatic processing of Charcoal kiln to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Charcoal kiln / [piece_charcoalkiln_product_count_of_suppress_processing]
-Suppresses automatic processing of Charcoal kiln to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Product Stacks Of Suppress Processing For Charcoal kiln / [piece_charcoalkiln_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Charcoal kiln to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
 
 - Default value: 0
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Charcoal kiln Only When Materials Run Out / [piece_charcoalkiln_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Charcoal kiln run out.
+
+- Default value: false
 
 ==== Allow Processing By Cooking station / [allow_processing_by_piece_cookingstation]
 Specify the automatic processing to be allowed for Cooking station
@@ -359,13 +402,18 @@ Specify the maximum distance which Cooking station will search for containers. (
 Suppresses automatic processing of Cooking station to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Cooking station / [piece_cookingstation_product_count_of_suppress_processing]
-Suppresses automatic processing of Cooking station to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Product Stacks Of Suppress Processing For Cooking station / [piece_cookingstation_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Cooking station to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
 
 - Default value: 0
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Cooking station Only When Materials Run Out / [piece_cookingstation_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Cooking station run out.
+
+- Default value: false
 
 ==== Allow Processing By Fermenter / [allow_processing_by_piece_fermenter]
 Specify the automatic processing to be allowed for Fermenter
@@ -384,13 +432,18 @@ Specify the maximum distance which Fermenter will search for containers. (Unit: 
 Suppresses automatic processing of Fermenter to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Fermenter / [piece_fermenter_product_count_of_suppress_processing]
-Suppresses automatic processing of Fermenter to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Product Stacks Of Suppress Processing For Fermenter / [piece_fermenter_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Fermenter to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
 
 - Default value: 0
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Fermenter Only When Materials Run Out / [piece_fermenter_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Fermenter run out.
+
+- Default value: false
 
 ==== Allow Processing By Hanging brazier / [allow_processing_by_piece_brazierceiling01]
 Specify the automatic processing to be allowed for Hanging brazier
@@ -408,7 +461,12 @@ Specify the maximum distance which Hanging brazier will search for containers. (
 Suppresses automatic processing of Hanging brazier to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Hanging brazier Only When Out Of Fuel / [piece_brazierceiling01_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Hanging brazier is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Hearth / [allow_processing_by_piece_hearth]
 Specify the automatic processing to be allowed for Hearth
@@ -426,7 +484,12 @@ Specify the maximum distance which Hearth will search for containers. (Unit: met
 Suppresses automatic processing of Hearth to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Hearth Only When Out Of Fuel / [piece_hearth_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Hearth is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Iron cooking station / [allow_processing_by_piece_cookingstation_iron]
 Specify the automatic processing to be allowed for Iron cooking station
@@ -445,13 +508,18 @@ Specify the maximum distance which Iron cooking station will search for containe
 Suppresses automatic processing of Iron cooking station to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Iron cooking station / [piece_cookingstation_iron_product_count_of_suppress_processing]
-Suppresses automatic processing of Iron cooking station to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Product Stacks Of Suppress Processing For Iron cooking station / [piece_cookingstation_iron_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Iron cooking station to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
 
 - Default value: 0
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Iron cooking station Only When Materials Run Out / [piece_cookingstation_iron_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Iron cooking station run out.
+
+- Default value: false
 
 ==== Allow Processing By Jack-o-turnip / [allow_processing_by_piece_jackoturnip]
 Specify the automatic processing to be allowed for Jack-o-turnip
@@ -469,7 +537,12 @@ Specify the maximum distance which Jack-o-turnip will search for containers. (Un
 Suppresses automatic processing of Jack-o-turnip to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Jack-o-turnip Only When Out Of Fuel / [piece_jackoturnip_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Jack-o-turnip is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Sconce / [allow_processing_by_piece_sconce]
 Specify the automatic processing to be allowed for Sconce
@@ -487,7 +560,12 @@ Specify the maximum distance which Sconce will search for containers. (Unit: met
 Suppresses automatic processing of Sconce to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Sconce Only When Out Of Fuel / [piece_sconce_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Sconce is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Smelter / [allow_processing_by_piece_smelter]
 Specify the automatic processing to be allowed for Smelter
@@ -506,19 +584,29 @@ Specify the maximum distance which Smelter will search for containers. (Unit: me
 Suppresses automatic processing of Smelter to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Product Stacks Of Suppress Processing For Smelter / [piece_smelter_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Smelter to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+
+- Default value: 0
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Smelter Only When Materials Run Out / [piece_smelter_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Smelter run out.
+
+- Default value: false
 
 ==== Fuel Count Of Suppress Processing For Smelter / [piece_smelter_fuel_count_of_suppress_processing]
 Suppresses automatic processing of Smelter to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Smelter / [piece_smelter_product_count_of_suppress_processing]
-Suppresses automatic processing of Smelter to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Refuel Smelter Only When Out Of Fuel / [piece_smelter_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Smelter is out of fuel.
 
-- Default value: 0
-- Acceptable value range: From 0 to 9999
+- Default value: false
 
 ==== Refuel Smelter Only When Materials Supplied / [piece_smelter_refuel_only_when_materials_supplied]
 Performs automatic refuel only when materials are supplied to Smelter.
@@ -542,13 +630,18 @@ Specify the maximum distance which Spinning wheel will search for containers. (U
 Suppresses automatic processing of Spinning wheel to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Spinning wheel / [piece_spinningwheel_product_count_of_suppress_processing]
-Suppresses automatic processing of Spinning wheel to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Product Stacks Of Suppress Processing For Spinning wheel / [piece_spinningwheel_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Spinning wheel to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
 
 - Default value: 0
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Spinning wheel Only When Materials Run Out / [piece_spinningwheel_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Spinning wheel run out.
+
+- Default value: false
 
 ==== Allow Processing By Standing blue-burning iron torch / [allow_processing_by_piece_groundtorchblue]
 Specify the automatic processing to be allowed for Standing blue-burning iron torch
@@ -566,7 +659,12 @@ Specify the maximum distance which Standing blue-burning iron torch will search 
 Suppresses automatic processing of Standing blue-burning iron torch to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Standing blue-burning iron torch Only When Out Of Fuel / [piece_groundtorchblue_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Standing blue-burning iron torch is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Standing brazier / [allow_processing_by_piece_brazierfloor01]
 Specify the automatic processing to be allowed for Standing brazier
@@ -584,7 +682,12 @@ Specify the maximum distance which Standing brazier will search for containers. 
 Suppresses automatic processing of Standing brazier to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Standing brazier Only When Out Of Fuel / [piece_brazierfloor01_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Standing brazier is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Standing green-burning iron torch / [allow_processing_by_piece_groundtorchgreen]
 Specify the automatic processing to be allowed for Standing green-burning iron torch
@@ -602,7 +705,12 @@ Specify the maximum distance which Standing green-burning iron torch will search
 Suppresses automatic processing of Standing green-burning iron torch to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Standing green-burning iron torch Only When Out Of Fuel / [piece_groundtorchgreen_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Standing green-burning iron torch is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Standing iron torch / [allow_processing_by_piece_groundtorch]
 Specify the automatic processing to be allowed for Standing iron torch
@@ -620,7 +728,12 @@ Specify the maximum distance which Standing iron torch will search for container
 Suppresses automatic processing of Standing iron torch to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Standing iron torch Only When Out Of Fuel / [piece_groundtorch_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Standing iron torch is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Standing wood torch / [allow_processing_by_piece_groundtorchwood]
 Specify the automatic processing to be allowed for Standing wood torch
@@ -638,7 +751,12 @@ Specify the maximum distance which Standing wood torch will search for container
 Suppresses automatic processing of Standing wood torch to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Refuel Standing wood torch Only When Out Of Fuel / [piece_groundtorchwood_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Standing wood torch is out of fuel.
+
+- Default value: false
 
 ==== Allow Processing By Stone oven / [allow_processing_by_piece_oven]
 Specify the automatic processing to be allowed for Stone oven
@@ -657,19 +775,29 @@ Specify the maximum distance which Stone oven will search for containers. (Unit:
 Suppresses automatic processing of Stone oven to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
+
+==== Product Stacks Of Suppress Processing For Stone oven / [piece_oven_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Stone oven to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+
+- Default value: 0
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Stone oven Only When Materials Run Out / [piece_oven_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Stone oven run out.
+
+- Default value: false
 
 ==== Fuel Count Of Suppress Processing For Stone oven / [piece_oven_fuel_count_of_suppress_processing]
 Suppresses automatic processing of Stone oven to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Stone oven / [piece_oven_product_count_of_suppress_processing]
-Suppresses automatic processing of Stone oven to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Refuel Stone oven Only When Out Of Fuel / [piece_oven_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Stone oven is out of fuel.
 
-- Default value: 0
-- Acceptable value range: From 0 to 9999
+- Default value: false
 
 ==== Refuel Stone oven Only When Materials Supplied / [piece_oven_refuel_only_when_materials_supplied]
 Performs automatic refuel only when materials are supplied to Stone oven.
@@ -693,15 +821,95 @@ Specify the maximum distance which Windmill will search for containers. (Unit: m
 Suppresses automatic processing of Windmill to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
 
 - Default value: 1
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 999
 
-==== Product Count Of Suppress Processing For Windmill / [piece_windmill_product_count_of_suppress_processing]
-Suppresses automatic processing of Windmill to prevent the count of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Product Stacks Of Suppress Processing For Windmill / [piece_windmill_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Windmill to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
 
 - Default value: 0
-- Acceptable value range: From 0 to 9999
+- Acceptable value range: From 0 to 99
 
-=== [ #5 Automatic Feeding ] / [automatic_feeding]
+==== Material Supply To Windmill Only When Materials Run Out / [piece_windmill_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Windmill run out.
+
+- Default value: false
+
+==== Allow Processing By Wisp fountain / [allow_processing_by_piece_wisplure]
+Specify the automatic processing to be allowed for Wisp fountain
+
+- Default value: Store
+- Acceptable values: None, Store
+
+==== Container Search Range By Wisp fountain / [container_search_range_by_piece_wisplure]
+Specify the maximum distance which Wisp fountain will search for containers. (Unit: meter)
+
+- Default value: 8
+- Acceptable value range: From 1 to 64
+
+==== Allow Processing By Sap extractor  / [allow_processing_by_piece_sapcollector]
+Specify the automatic processing to be allowed for Sap extractor
+
+- Default value: Store
+- Acceptable values: None, Store
+
+==== Container Search Range By Sap extractor  / [container_search_range_by_piece_sapcollector]
+Specify the maximum distance which Sap extractor  will search for containers. (Unit: meter)
+
+- Default value: 8
+- Acceptable value range: From 1 to 64
+
+==== Allow Processing By Eitr refinery / [allow_processing_by_piece_eitrrefinery]
+Specify the automatic processing to be allowed for Eitr refinery
+
+- Default value: Store
+- Acceptable values: None, Craft, Refuel, Store, All
+- Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
+
+==== Container Search Range By Eitr refinery / [container_search_range_by_piece_eitrrefinery]
+Specify the maximum distance which Eitr refinery will search for containers. (Unit: meter)
+
+- Default value: 8
+- Acceptable value range: From 1 to 64
+
+==== Material Count Of Suppress Processing For Eitr refinery / [piece_eitrrefinery_material_count_of_suppress_processing]
+Suppresses automatic processing of Eitr refinery to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+
+- Default value: 1
+- Acceptable value range: From 0 to 999
+
+==== Product Stacks Of Suppress Processing For Eitr refinery / [piece_eitrrefinery_product_stacks_of_suppress_processing]
+Suppresses automatic processing of Eitr refinery to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+
+- Default value: 0
+- Acceptable value range: From 0 to 99
+
+==== Material Supply To Eitr refinery Only When Materials Run Out / [piece_eitrrefinery_supply_only_when_materials_run_out]
+Performs automatic craft only when materials of Eitr refinery run out.
+
+- Default value: false
+
+==== Fuel Count Of Suppress Processing For Eitr refinery / [piece_eitrrefinery_fuel_count_of_suppress_processing]
+Suppresses automatic processing of Eitr refinery to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+
+- Default value: 1
+- Acceptable value range: From 0 to 999
+
+==== Refuel Eitr refinery Only When Out Of Fuel / [piece_eitrrefinery_refuel_only_when_out_of_fuel]
+Performs automatic refuel only when Eitr refinery is out of fuel.
+
+- Default value: false
+
+==== Refuel Eitr refinery Only When Materials Supplied / [piece_eitrrefinery_refuel_only_when_materials_supplied]
+Performs automatic refuel only when materials are supplied to Eitr refinery.
+
+- Default value: false
+
+=== [ #6 Automatic Feeding ] / [automatic_feeding]
+==== Disable Module / [module_disable]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: false
+
 ==== Automatic Feeding / [enable_automatic_feeding]
 Specify whether to enable the feature for animals to automatically consume feed items from players and containers.
 
@@ -725,7 +933,19 @@ Specify the types of animals allowed to feed from the container.
 - Acceptable values: None, Wild, Tamed, All
 - Multiple values can be set at the same time by separating them with , (e.g. Wild, Tamed)
 
-=== [ #6 Automatic Repair ] / [automatic_repair]
+==== Allow To Feed From Player / [allow_to_feed_from_player]
+Specify the types of animals allowed to feed from the player inventory.
+
+- Default value: None
+- Acceptable values: None, Wild, Tamed, All
+- Multiple values can be set at the same time by separating them with , (e.g. Wild, Tamed)
+
+=== [ #7 Automatic Repair ] / [automatic_repair]
+==== Disable Module / [module_disable]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: false
+
 ==== Automatic Repair / [enable_automatic_repair]
 Specify whether to enable the feature that automatically repair items and pieces.
 
@@ -760,14 +980,14 @@ Specify where the message is displayed when a piece is repaired.
 - Default value: None
 - Acceptable values: None, Center, TopLeft
 
-=== [ #7 Automatic Mining ] / [automatic_mining]
+=== [ #8 Automatic Mining ] / [automatic_mining]
+==== Disable Module / [module_disable]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: false
+
 ==== Automatic Mining / [enable_automatic_mining]
 Specify whether to enable the feature that mine minerals automatically.
-
-- Default value: true
-
-==== Need To Equip Pickaxe For Mining / [need_to_equip_pickaxe]
-Specify whether a pickaxe needs to be equipped to attempt automatic mining. Disabling this option will use the most advanced pickaxe in the player's inventory. If there is no pickaxe in the player's inventory, automatic mining will not be attempted.
 
 - Default value: true
 
@@ -777,16 +997,21 @@ Specify the interval between mining attempts. (Unit: seconds)
 - Default value: 1.5
 - Acceptable value range: From 0.1 to 4
 
-==== Attempt Mining / [mining_key]
-Specify a shortcut key to attempt mining. If a valid shortcut key is assigned to this option, mining at regular intervals is disabled.
-
-- Default value:
-
 ==== Mining Range / [mining_range]
 Specify the maximum distance to search for a mineral. Setting to 0 the pickaxe's attack range is used. (Unit: meters)
 
 - Default value: 3
 - Acceptable value range: From 0 to 32
+
+==== Allow Mining Mineral / [allow_mining_mineral]
+Specify the minerals to be automatically mined.
+
+- Default value: CopperDeposit, TinDeposit, MudPile, ObsidianDeposit, SilverVein, PetrifiedBone, SoftTissue
+
+==== Need To Equip Pickaxe For Mining / [need_to_equip_pickaxe]
+Specify whether a pickaxe needs to be equipped to attempt automatic mining. Disabling this option will use the most advanced pickaxe in the player's inventory. If there is no pickaxe in the player's inventory, automatic mining will not be attempted.
+
+- Default value: true
 
 ==== Allow Mining Underground Minerals / [allow_mining_underground_minerals]
 Specify whether or not to allow mining underground minerals.
@@ -797,3 +1022,31 @@ Specify whether or not to allow mining underground minerals.
 Specify whether or not to require a wishbone to mine underground minerals.
 
 - Default value: true
+
+==== Attempt Mining / [mining_key]
+Specify a shortcut key to attempt mining. If a valid shortcut key is assigned to this option, mining at regular intervals is disabled.
+
+- Default value:
+
+=== [ #9 Automatic Pickup ] / [automatic_pickup]
+==== Disable Module / [module_disable]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: false
+
+==== Automatic Pickup Range / [automatic_pickup_range]
+Specify the range within which objects are automatically pickup. (Unit: meters)
+
+- Default value: 4
+- Acceptable value range: From 1 to 64
+
+==== Automatic Pickup Interval / [automatic_pickup_interval]
+Specify the interval within which objects are automatically pickup. Setting it to 0 disables periodic automatic pickup. (Unit: second)
+
+- Default value: 0.5
+- Acceptable value range: From 0 to 4
+
+==== Pickup All Nearby / [pickup_all_nearby_key]
+Interacting with pickable objects using this key makes it possible to pick up the same object in a range at once. If a valid shortcut key is assigned to this option, pickup at regular intervals is disabled.
+
+- Default value:

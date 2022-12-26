@@ -1,3 +1,32 @@
+#### v1.4.0 [2022-12-26]
+- Overall Rewriting
+  * AutomaticDoor
+    - Logic Improvements
+  * AutomaticFeeding
+    - A little refactoring
+  * AutomaticMapping
+    - Add Vehicle category
+    - Portal pinning is now a stand-alone option, not in the Other category
+    - Static object pins are no longer saved by default. They can be changed to be saved in the options
+    - You can now hold down the left Shift key and click on a pin on the map to force the pin to change to save
+    - Added option to automatically remove pins when destructible objects are destroyed. (probably won't work perfectly, so don't expect too much)
+  * AutomaticMining
+    - Limit the number of parts that can be damaged by automatic mining to a maximum of 3 at a time
+  * AutomaticProcessing
+    - Removed the option to limit crafting by the total number of items in a product, instead added an option to limit crafting by the number of product stacks
+    - Added option to replenish material only when the material in the processor runs out
+    - Added option to refuel only when the fuel in the processor runs out
+    - Smelter's automatic crafting has been improved to process time-based quantities of material even when away from it for extended periods of time
+  * AutomaticRepair
+    - A little refactoring
+- Added AutomaticPickup feature
+- Custom objects have been renamed User-defined objects and moved to the General category of the Config
+  * I have documentation on how to add user-defined objects, so please read through it if necessary
+  * https://github.com/eideehi/valheim-automatics/blob/1.4.0/docs/add-user-defined-object.adoc
+- Mistlands content has been added to the automation
+- Added options to completely disable each feature
+- Change the console command to take arguments like the CLI
+
 #### v1.3.2 [2022-12-06]
 - Rebuild for Mistlands Update
   * Content added in the Mistlands Update is not yet available for automation by Automatics
