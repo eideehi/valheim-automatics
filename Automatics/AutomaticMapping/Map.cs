@@ -48,10 +48,7 @@ namespace Automatics.AutomaticMapping
             foreach (var pinData in GetAllPins())
             {
                 var distance = Utils.DistanceXZ(pos, pinData.m_pos);
-                if (result != null)
-                    if (distance > radius || distance >= minDistance)
-                        continue;
-
+                if (distance > radius || distance >= minDistance) continue;
                 if (!predicate.Invoke(pinData)) continue;
 
                 result = pinData;
