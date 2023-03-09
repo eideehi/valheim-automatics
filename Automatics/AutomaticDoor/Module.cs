@@ -16,7 +16,6 @@ namespace Automatics.AutomaticDoor
 
         private static void OnPlayerUpdate(Player player, bool takeInput)
         {
-            if (!Config.EnableAutomaticDoor) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
 
