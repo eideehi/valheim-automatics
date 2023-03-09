@@ -119,8 +119,7 @@ namespace Automatics.AutomaticMapping
             if (pinData.m_uiElement)
                 UnityEngine.Object.Destroy(pinData.m_uiElement.gameObject);
 
-            var removed = GetAllPins().Remove(pinData);
-            if (!removed) return null;
+            if (!GetAllPins().Remove(pinData)) return null;
 
             Automatics.Logger.Debug(() =>
                 $"Remove pin: [name: {EscapePinName(pinData.m_name)}, pos: {pinData.m_pos}, icon: {(int)pinData.m_type}]");
