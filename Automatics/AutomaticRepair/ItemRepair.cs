@@ -90,9 +90,8 @@ namespace Automatics.AutomaticRepair
             var range = Config.CraftingStationSearchRange;
             var origin = player.transform.position;
             var count = (from x in GetAllCraftingStations()
-                where x.CheckUsable(player, false)
                 let distance = Vector3.Distance(origin, x.transform.position)
-                where distance <= range
+                where distance <= range && x.CheckUsable(player, false)
                 select RepairAll(player, x)).Sum();
 
             ShowRepairMessage(player, count);
