@@ -20,6 +20,12 @@ namespace Automatics.AutomaticProcessing
             Containers = new Dictionary<int, ContainerList>();
         }
 
+        public static void Cleanup()
+        {
+            Containers.Clear();
+            _lastContainersReset = 0f;
+        }
+
         public static void CraftingLog(string materialName, int count, string fromName,
             Vector3 fromPos, string toName, Vector3 toPos, string productName)
         {

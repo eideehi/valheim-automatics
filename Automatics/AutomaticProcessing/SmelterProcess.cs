@@ -29,6 +29,14 @@ namespace Automatics.AutomaticProcessing
             return smelter.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == queuedOre);
         }
 
+        public static void Cleanup()
+        {
+            SkipQuickCraft.Clear();
+            FirstQuickCraft.Clear();
+            SkipQuickRefuel.Clear();
+            FirstQuickRefuel.Clear();
+        }
+
         [UsedImplicitly]
         public static string QuickCraft(Smelter smelter, ZNetView zNetView, float loopCount,
             string ore)

@@ -14,12 +14,19 @@ namespace Automatics.AutomaticRepair
             PieceRepairTimers = new Dictionary<long, float>();
         }
 
+        private static void Cleanup()
+        {
+            ItemRepairTimers.Clear();
+            PieceRepairTimers.Clear();
+        }
+
         [AutomaticsInitializer(5)]
         private static void Initialize()
         {
             Config.Initialize();
             if (Config.IsModuleDisabled) return;
 
+            Hooks.OnGameStart += (startup, isHost) => { Cleanup(); };
             Hooks.OnPlayerFixedUpdate += OnPlayerFixedUpdate;
             Harmony.CreateAndPatchAll(typeof(Patches), Automatics.GetHarmonyId("automatic-repair"));
         }

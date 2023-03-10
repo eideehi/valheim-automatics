@@ -13,12 +13,18 @@ namespace Automatics.AutomaticMining
             MiningTimers = new Dictionary<long, float>();
         }
 
+        private static void Cleanup()
+        {
+            MiningTimers.Clear();
+        }
+
         [AutomaticsInitializer(6)]
         private static void Initialize()
         {
             Config.Initialize();
             if (Config.IsModuleDisabled) return;
 
+            Hooks.OnGameStart += (startup, isHost) => { Cleanup(); };
             Hooks.OnPlayerUpdate += OnPlayerUpdate;
             Hooks.OnPlayerFixedUpdate += OnPlayerFixedUpdate;
             Harmony.CreateAndPatchAll(typeof(Patches), Automatics.GetHarmonyId("automatic-mining"));
