@@ -27,6 +27,12 @@ namespace Automatics.AutomaticMapping
             return true;
         }
 
+        public static void Cleanup()
+        {
+            DynamicObjectMapping.Cleanup();
+            StaticObjectMapping.Cleanup();
+        }
+
         public static void Mapping(Player player, float delta, bool takeInput)
         {
             if (Game.IsPaused()) return;
@@ -107,6 +113,12 @@ namespace Automatics.AutomaticMapping
 
             data = ("", false);
             return false;
+        }
+
+        public static void Cleanup()
+        {
+            PinDataCache.Clear();
+            KnownObjects.Clear();
         }
 
         public static bool SetSaveFlag(Minimap.PinData pinData)
@@ -434,6 +446,13 @@ namespace Automatics.AutomaticMapping
                     (current, collider) => current + collider.bounds.center);
                 return pos / colliders.Count;
             }
+        }
+
+        public static void Cleanup()
+        {
+            StaticObjectCache.Clear();
+            PinDataCache.Clear();
+            KnownObjects.Clear();
         }
 
         public static bool SetSaveFlag(Minimap.PinData pinData)

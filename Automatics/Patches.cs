@@ -12,6 +12,16 @@ namespace Automatics
     internal static class Patches
     {
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(FejdStartup), "Awake")]
+        private static void FejdStartup_Awake_Postfix(FejdStartup __instance)
+        {
+            __instance.startGameEvent += (sender, args) =>
+            {
+                Hooks.OnGameStart(FejdStartup.instance, args.isHost);
+            };
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(Player), "Awake")]
         private static void Player_Awake_Postfix(Player __instance)
         {

@@ -28,6 +28,7 @@ namespace Automatics.AutomaticMapping
                     };
             };
 
+            Hooks.OnGameStart += (startup, isHost) => { AutomaticMapping.Cleanup(); };
             Hooks.OnInitTerminal += Commands.Register;
 
             Harmony.CreateAndPatchAll(typeof(Patches),
