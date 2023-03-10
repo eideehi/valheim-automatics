@@ -8,7 +8,7 @@ namespace Automatics.AutomaticDoor
         private static void Initialize()
         {
             Config.Initialize();
-            if (Config.IsModuleDisabled) return;
+            if (Config.IsModuleDisabled || Config.ModuleDisabled) return;
 
             Hooks.OnPlayerUpdate += OnPlayerUpdate;
             Harmony.CreateAndPatchAll(typeof(Patches), Automatics.GetHarmonyId("automatic-door"));

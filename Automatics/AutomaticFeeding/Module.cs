@@ -8,7 +8,7 @@ namespace Automatics.AutomaticFeeding
         private static void Initialize()
         {
             Config.Initialize();
-            if (Config.IsModuleDisabled) return;
+            if (Config.IsModuleDisabled || Config.ModuleDisabled) return;
 
             Harmony.CreateAndPatchAll(typeof(Patches),
                 Automatics.GetHarmonyId("automatic-feeding"));

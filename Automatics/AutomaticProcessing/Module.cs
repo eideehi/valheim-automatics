@@ -8,7 +8,7 @@ namespace Automatics.AutomaticProcessing
         private static void Initialize()
         {
             Config.Initialize();
-            if (Config.IsModuleDisabled) return;
+            if (Config.IsModuleDisabled || Config.ModuleDisabled) return;
 
             Hooks.OnGameStart += (startup, isHost) =>
             {

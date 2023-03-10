@@ -6,11 +6,13 @@ namespace Automatics.AutomaticPickup
     {
         private const string Section = "automatic_pickup";
 
+        private static ConfigEntry<AutomaticsModule> _module;
         private static ConfigEntry<bool> _moduleDisable;
         private static ConfigEntry<float> _automaticPickupRange;
         private static ConfigEntry<float> _automaticPickupInterval;
         private static ConfigEntry<KeyboardShortcut> _pickupAllNearbyKey;
 
+        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool IsModuleDisabled => _moduleDisable.Value;
 
         public static float AutomaticPickupRange => _automaticPickupRange.Value;
@@ -24,10 +26,22 @@ namespace Automatics.AutomaticPickup
             config.ChangeSection(Section);
             _moduleDisable = config.Bind("module_disable", false, initializer: x =>
             {
+                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_old_name");
+                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+            });
+            _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
+            {
                 x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
                 x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
             });
-            if (_moduleDisable.Value) return;
+            if (_moduleDisable.Value) _module.Value = AutomaticsModule.Disabled;
+            _moduleDisable.SettingChanged += (_, __) =>
+            {
+                _module.Value = _moduleDisable.Value
+                    ? AutomaticsModule.Disabled
+                    : AutomaticsModule.Enabled;
+            };
+            if (_moduleDisable.Value || _module.Value == AutomaticsModule.Disabled) return;
 
             _automaticPickupRange = config.Bind("automatic_pickup_range", 4f, (1f, 64f));
             _automaticPickupInterval = config.Bind("automatic_pickup_interval", 0.5f, (0f, 4f));

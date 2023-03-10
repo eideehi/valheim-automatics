@@ -95,6 +95,15 @@ namespace Automatics
         }
     }
 
+    public enum AutomaticsModule
+    {
+        [LocalizedDescription(Automatics.L10NPrefix, "@message_module_enabled")]
+        Enabled,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "@message_module_disabled")]
+        Disabled,
+    }
+
     public enum Message
     {
         [LocalizedDescription(Automatics.L10NPrefix, "@message_none")]

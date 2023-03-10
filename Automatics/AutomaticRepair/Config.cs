@@ -6,6 +6,7 @@ namespace Automatics.AutomaticRepair
     {
         private const string Section = "automatic_repair";
 
+        private static ConfigEntry<AutomaticsModule> _module;
         private static ConfigEntry<bool> _moduleDisable;
         private static ConfigEntry<bool> _enableAutomaticRepair;
         private static ConfigEntry<int> _craftingStationSearchRange;
@@ -14,6 +15,7 @@ namespace Automatics.AutomaticRepair
         private static ConfigEntry<int> _pieceSearchRange;
         private static ConfigEntry<Message> _pieceRepairMessage;
 
+        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool IsModuleDisabled => _moduleDisable.Value;
         public static bool EnableAutomaticRepair => _enableAutomaticRepair.Value;
         public static int CraftingStationSearchRange => _craftingStationSearchRange.Value;
@@ -32,10 +34,22 @@ namespace Automatics.AutomaticRepair
             config.ChangeSection(Section);
             _moduleDisable = config.Bind("module_disable", false, initializer: x =>
             {
+                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_old_name");
+                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+            });
+            _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
+            {
                 x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
                 x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
             });
-            if (_moduleDisable.Value) return;
+            if (_moduleDisable.Value) _module.Value = AutomaticsModule.Disabled;
+            _moduleDisable.SettingChanged += (_, __) =>
+            {
+                _module.Value = _moduleDisable.Value
+                    ? AutomaticsModule.Disabled
+                    : AutomaticsModule.Enabled;
+            };
+            if (_moduleDisable.Value || _module.Value == AutomaticsModule.Disabled) return;
 
             _enableAutomaticRepair = config.Bind("enable_automatic_repair", true);
             _craftingStationSearchRange = config.Bind("crafting_station_search_range", 16, (0, 64));

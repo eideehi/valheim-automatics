@@ -12,6 +12,7 @@ namespace Automatics.AutomaticProcessing
     {
         private const string Section = "automatic_processing";
 
+        private static ConfigEntry<AutomaticsModule> _module;
         private static ConfigEntry<bool> _moduleDisable;
         private static ConfigEntry<bool> _enableAutomaticProcessing;
         private static Dictionary<string, ConfigEntry<Process>> _allowProcessing;
@@ -23,6 +24,7 @@ namespace Automatics.AutomaticProcessing
         private static Dictionary<string, ConfigEntry<bool>> _refuelOnlyWhenMaterialsSupplied;
         private static Dictionary<string, ConfigEntry<bool>> _refuelOnlyWhenOutOfFuel;
 
+        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool IsModuleDisabled => _moduleDisable.Value;
         public static bool EnableAutomaticProcessing => _enableAutomaticProcessing.Value;
 
@@ -82,11 +84,22 @@ namespace Automatics.AutomaticProcessing
             config.ChangeSection(Section);
             _moduleDisable = config.Bind("module_disable", false, initializer: x =>
             {
-                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
-                x.Description =
-                    Automatics.L10N.Translate("@config_common_disable_module_description");
+                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_old_name");
+                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
             });
-            if (_moduleDisable.Value) return;
+            _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
+            {
+                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
+                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+            });
+            if (_moduleDisable.Value) _module.Value = AutomaticsModule.Disabled;
+            _moduleDisable.SettingChanged += (_, __) =>
+            {
+                _module.Value = _moduleDisable.Value
+                    ? AutomaticsModule.Disabled
+                    : AutomaticsModule.Enabled;
+            };
+            if (_moduleDisable.Value || _module.Value == AutomaticsModule.Disabled) return;
 
             _enableAutomaticProcessing = config.Bind("enable_automatic_processing", true);
 

@@ -7,6 +7,7 @@ namespace Automatics.AutomaticDoor
     {
         private const string Section = "automatic_door";
 
+        private static ConfigEntry<AutomaticsModule> _module;
         private static ConfigEntry<bool> _moduleDisabled;
         private static ConfigEntry<bool> _enableAutomaticDoor;
         private static ConfigEntry<StringList> _allowAutomaticDoor;
@@ -17,6 +18,7 @@ namespace Automatics.AutomaticDoor
         private static ConfigEntry<Message> _automaticDoorEnableDisableToggleMessage;
         private static ConfigEntry<KeyboardShortcut> _automaticDoorEnableDisableToggle;
 
+        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool IsModuleDisabled => _moduleDisabled.Value;
 
         public static bool EnableAutomaticDoor
@@ -42,12 +44,24 @@ namespace Automatics.AutomaticDoor
             var config = global::Automatics.Config.Instance;
 
             config.ChangeSection(Section);
-            _moduleDisabled = config.Bind("disable_module", false, initializer: x =>
+            _moduleDisabled = config.Bind("module_disable", false, initializer: x =>
+            {
+                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_old_name");
+                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+            });
+            _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
             {
                 x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
                 x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
             });
-            if (_moduleDisabled.Value) return;
+            if (_moduleDisabled.Value) _module.Value = AutomaticsModule.Disabled;
+            _moduleDisabled.SettingChanged += (_, __) =>
+            {
+                _module.Value = _moduleDisabled.Value
+                    ? AutomaticsModule.Disabled
+                    : AutomaticsModule.Enabled;
+            };
+            if (_moduleDisabled.Value || _module.Value == AutomaticsModule.Disabled) return;
 
             _enableAutomaticDoor = config.Bind("enable_automatic_door", true);
             _allowAutomaticDoor = config.BindValheimObjectList("allow_automatic_door", Globals.Door, excludes: new[] { "WoodShutter" });
