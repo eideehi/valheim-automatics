@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Automatics.ConsoleCommands;
 using ModUtils;
 using NDesk.Options;
 using UnityEngine;
