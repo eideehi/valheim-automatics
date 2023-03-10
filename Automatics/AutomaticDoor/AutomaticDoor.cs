@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using ModUtils;
@@ -78,24 +79,29 @@ namespace Automatics.AutomaticDoor
 
         private void TryOpen()
         {
-            if (IsDoorOpen()) return;
-            var (player, distance) = GetClosestPlayer();
-            if (!player || distance > Config.DistanceForAutomaticOpening) return;
-            if (IsExistsObstaclesBetweenTo(player) || !CanInteract(player)) return;
+            if (IsDoorOpen() || !CanInteract()) return;
+
+            var player = GetClosestPlayers()
+                .FirstOrDefault(x => CanOpen(x) && !IsExistsObstaclesBetweenTo(x));
+            if (!player) return;
+
             if (_door.m_keyItem)
                 player.Message(MessageHud.MessageType.Center,
                     Localization.instance.Localize("$msg_door_usingkey",
                         _door.m_keyItem.m_itemData.m_shared.m_name));
-            Reflections.InvokeMethod(_door, "Open", (player.transform.position - _door.transform.position).normalized);
+
+            Reflections.InvokeMethod(_door, "Open",
+                (player.transform.position - _door.transform.position).normalized);
         }
 
         private void TryClose()
         {
-            if (!IsDoorOpen()) return;
-            var (player, distance) = GetClosestPlayer();
-            if (!player || distance <= Config.DistanceForAutomaticClosing) return;
-            if (IsExistsObstaclesBetweenTo(player) || !CanInteract(player)) return;
-            Reflections.InvokeMethod(_door, "Open", (player.transform.position - _door.transform.position).normalized);
+            if (!Player.m_localPlayer) return;
+            if (!IsDoorOpen() || !CanInteract()) return;
+            if (GetClosestPlayers().Any()) return;
+
+            Reflections.InvokeMethod(_door, "Open",
+                (Player.m_localPlayer.transform.position - _door.transform.position).normalized);
         }
 
         private bool IsOwner()
@@ -108,22 +114,27 @@ namespace Automatics.AutomaticDoor
             return _zNetView.GetZDO().GetInt("state") != 0;
         }
 
-        private bool CanInteract(Player player)
+        private bool CanInteract()
         {
             if (_door.m_checkGuardStone && !PrivateArea.CheckAccess(_door.transform.position))
                 return false;
-            if (!Reflections.InvokeMethod<bool>(_door, "CanInteract")) return false;
+            return Reflections.InvokeMethod<bool>(_door, "CanInteract");
+        }
+
+        private bool CanOpen(Player player)
+        {
             return !_door.m_keyItem || Reflections.InvokeMethod<bool>(_door, "HaveKey", player);
         }
 
-        private (Player player, float distance) GetClosestPlayer()
+        private IEnumerable<Player> GetClosestPlayers()
         {
             var origin = _door.transform.position;
             return (from x in Player.GetAllPlayers()
                     let distance = Vector3.Distance(origin, x.transform.position)
+                    where distance <= Config.DistanceForAutomaticClosing
                     orderby distance
-                    select (x, distance))
-                .FirstOrDefault();
+                    select x)
+                .ToList();
         }
 
         private bool IsExistsObstaclesBetweenTo(Player player)
