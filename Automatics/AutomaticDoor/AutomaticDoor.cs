@@ -81,7 +81,7 @@ namespace Automatics.AutomaticDoor
         {
             if (IsDoorOpen() || !CanInteract()) return;
 
-            var player = GetClosestPlayers()
+            var player = GetClosestPlayers(Config.DistanceForAutomaticOpening)
                 .FirstOrDefault(x => CanOpen(x) && !IsExistsObstaclesBetweenTo(x));
             if (!player) return;
 
@@ -98,7 +98,7 @@ namespace Automatics.AutomaticDoor
         {
             if (!Player.m_localPlayer) return;
             if (!IsDoorOpen() || !CanInteract()) return;
-            if (GetClosestPlayers().Any()) return;
+            if (GetClosestPlayers(Config.DistanceForAutomaticClosing).Any()) return;
 
             Reflections.InvokeMethod(_door, "Open",
                 (Player.m_localPlayer.transform.position - _door.transform.position).normalized);
@@ -126,12 +126,12 @@ namespace Automatics.AutomaticDoor
             return !_door.m_keyItem || Reflections.InvokeMethod<bool>(_door, "HaveKey", player);
         }
 
-        private IEnumerable<Player> GetClosestPlayers()
+        private IEnumerable<Player> GetClosestPlayers(float range)
         {
             var origin = _door.transform.position;
             return (from x in Player.GetAllPlayers()
                     let distance = Vector3.Distance(origin, x.transform.position)
-                    where distance <= Config.DistanceForAutomaticClosing
+                    where distance <= range
                     orderby distance
                     select x)
                 .ToList();
