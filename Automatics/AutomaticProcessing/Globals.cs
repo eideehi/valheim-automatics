@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using Automatics.Valheim;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -8,6 +10,7 @@ namespace Automatics.AutomaticProcessing
 
     internal static class Globals
     {
+        public static ValheimObject Container { get; } = new ValheimObject("container");
     }
 
     internal static class Logics
@@ -56,6 +59,12 @@ namespace Automatics.AutomaticProcessing
                     Automatics.L10N.Translate(fromName), fromPos));
         }
 
+        public static bool IsAllowContainer(Container container)
+        {
+            return Globals.Container.GetIdentify(Objects.GetName(container), out var identifier) &&
+                   Config.AllowContainer.Contains(identifier);
+        }
+
         public static bool IsAllowProcessing(string target, Process type)
         {
             return (Config.AllowProcessing(target) & type) != 0;
@@ -80,7 +89,7 @@ namespace Automatics.AutomaticProcessing
             if (range > 0)
                 containers.AddRange(from x in ContainerCache.GetAllInstance()
                     let distance = Vector3.Distance(origin, x.transform.position)
-                    where distance <= range
+                    where distance <= range && IsAllowContainer(x)
                     orderby distance
                     select (x, distance));
 

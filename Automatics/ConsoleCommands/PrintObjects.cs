@@ -100,6 +100,7 @@ namespace Automatics.ConsoleCommands
                 "animal",
                 "dungeon",
                 "door",
+                "container",
                 "flora",
                 "mineral",
                 "monster",
@@ -157,6 +158,9 @@ namespace Automatics.ConsoleCommands
                     return;
                 case "door":
                     PrintDoor(args);
+                    return;
+                case "container":
+                    PrintContainer(args);
                     return;
             }
         }
@@ -414,6 +418,12 @@ namespace Automatics.ConsoleCommands
         {
             PrintObject(args, "door", AutomaticDoor.Globals.Door,
                 GetObjects(x => x.GetComponent<Door>()));
+        }
+
+        private void PrintContainer(Terminal.ConsoleEventArgs args)
+        {
+            PrintObject(args, "container", AutomaticProcessing.Globals.Container,
+                ContainerCache.GetAllInstance());
         }
 
         private IEnumerable<MonoBehaviour> GetObjects(

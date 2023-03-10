@@ -15,6 +15,7 @@ namespace Automatics.AutomaticProcessing
         private static ConfigEntry<AutomaticsModule> _module;
         private static ConfigEntry<bool> _moduleDisable;
         private static ConfigEntry<bool> _enableAutomaticProcessing;
+        private static ConfigEntry<StringList> _allowContainer;
         private static Dictionary<string, ConfigEntry<Process>> _allowProcessing;
         private static Dictionary<string, ConfigEntry<int>> _containerSearchRange;
         private static Dictionary<string, ConfigEntry<int>> _materialCountOfSuppressProcessing;
@@ -27,6 +28,7 @@ namespace Automatics.AutomaticProcessing
         public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool IsModuleDisabled => _moduleDisable.Value;
         public static bool EnableAutomaticProcessing => _enableAutomaticProcessing.Value;
+        public static StringList AllowContainer => _allowContainer.Value;
 
         public static Process AllowProcessing(string processor)
         {
@@ -103,6 +105,7 @@ namespace Automatics.AutomaticProcessing
 
             _enableAutomaticProcessing = config.Bind("enable_automatic_processing", true);
 
+            _allowContainer = config.BindValheimObjectList("allow_container", Globals.Container, excludes: new[] { "PieceChestPrivate" });
             _allowProcessing = new Dictionary<string, ConfigEntry<Process>>();
             _containerSearchRange = new Dictionary<string, ConfigEntry<int>>();
             _materialCountOfSuppressProcessing = new Dictionary<string, ConfigEntry<int>>();
@@ -170,6 +173,9 @@ namespace Automatics.AutomaticProcessing
                                 displayName));
                 }
             }
+
+            config.ChangeSection("general", 192);
+            config.BindCustomValheimObject("custom_container", Globals.Container);
 
             Action<ConfigurationManagerAttributes> Initializer(string key, string displayName)
             {

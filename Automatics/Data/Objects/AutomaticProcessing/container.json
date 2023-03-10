@@ -1,0 +1,42 @@
+﻿{
+  "type": "container",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "PieceChestWood",
+      "label": "$piece_chestwood",
+      "matches": [
+        {
+          "value": "$piece_chestwood"
+        }
+      ]
+    },
+    {
+      "identifier": "PieceChest",
+      "label": "$piece_chest",
+      "matches": [
+        {
+          "value": "$piece_chest"
+        }
+      ]
+    },
+    {
+      "identifier": "PieceChestBlackmetal",
+      "label": "$piece_chestblackmetal",
+      "matches": [
+        {
+          "value": "$piece_chestblackmetal"
+        }
+      ]
+    },
+    {
+      "identifier": "PieceChestPrivate",
+      "label": "$piece_chestprivate",
+      "matches": [
+        {
+          "value": "$piece_chestprivate"
+        }
+      ]
+    }
+  ]
+}
