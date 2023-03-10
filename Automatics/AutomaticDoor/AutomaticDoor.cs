@@ -96,12 +96,14 @@ namespace Automatics.AutomaticDoor
 
         private void TryClose()
         {
-            if (!Player.m_localPlayer) return;
             if (!IsDoorOpen() || !CanInteract()) return;
             if (GetClosestPlayers(Config.DistanceForAutomaticClosing).Any()) return;
 
-            Reflections.InvokeMethod(_door, "Open",
-                (Player.m_localPlayer.transform.position - _door.transform.position).normalized);
+            // If there are no players within the effective range of the door, the closest player to the door will be asked to close it.
+            var player = GetClosestPlayers().FirstOrDefault();
+            if (player)
+                Reflections.InvokeMethod(_door, "Open",
+                    (player.transform.position - _door.transform.position).normalized);
         }
 
         private bool IsOwner()
@@ -126,12 +128,13 @@ namespace Automatics.AutomaticDoor
             return !_door.m_keyItem || Reflections.InvokeMethod<bool>(_door, "HaveKey", player);
         }
 
-        private IEnumerable<Player> GetClosestPlayers(float range)
+        private IEnumerable<Player> GetClosestPlayers(float range = -1f)
         {
+            var ignoreDistance = range <= 0;
             var origin = _door.transform.position;
             return (from x in Player.GetAllPlayers()
                     let distance = Vector3.Distance(origin, x.transform.position)
-                    where distance <= range
+                    where ignoreDistance || distance <= range
                     orderby distance
                     select x)
                 .ToList();
