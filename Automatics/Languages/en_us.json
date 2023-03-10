@@ -230,6 +230,7 @@
     "@command_printobjects_message_type_spawner": "Spawner",
     "@command_printobjects_message_type_spot": "Spot",
     "@command_printobjects_message_type_vehicle": "Vehicle",
+    "@command_printobjects_message_type_door": "Door",
     "@command_printobjects_message_result": "\"$1\" ($2)\n  Pos: $3 [Distance: $4]\n  Recommend identifier: $5\n  Pattern: $6",
     "@command_printobjects_message_result_defined": "\"$1\" ($2) [Already defined as an $3]\n  Pos: $4 [Distance: $5]\n  Identifier: $6",
     "@command_printobjects_message_result_more": "In addition to this, found $1 types of objects that can be treated as $2.",

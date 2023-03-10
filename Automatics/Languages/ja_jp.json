@@ -230,6 +230,7 @@
     "@command_printobjects_message_type_spawner": "スポナー",
     "@command_printobjects_message_type_spot": "スポット",
     "@command_printobjects_message_type_vehicle": "乗り物",
+    "@command_printobjects_message_type_door": "ドア",
     "@command_printobjects_message_result": "\"$1\" ($2)\n  位置: $3 [距離: $4]\n  推奨される識別子: $5\n  パターン: $6",
     "@command_printobjects_message_result_defined": "\"$1\" ($2) [$3として定義済み]\n  位置: $4 [距離: $5]\n  識別子: $6",
     "@command_printobjects_message_result_more": "他に $1 種類の $2 として扱うことのできるオブジェクトを発見しました。",

@@ -155,6 +155,9 @@ namespace Automatics.ConsoleCommands
                 case "spot":
                     PrintSpot(args);
                     return;
+                case "door":
+                    PrintDoor(args);
+                    return;
             }
         }
 
@@ -405,6 +408,12 @@ namespace Automatics.ConsoleCommands
                 PrintLine(args,
                     Automatics.L10N.Localize("@command_printobjects_message_result_empty",
                         objectType));
+        }
+
+        private void PrintDoor(Terminal.ConsoleEventArgs args)
+        {
+            PrintObject(args, "door", AutomaticDoor.Globals.Door,
+                GetObjects(x => x.GetComponent<Door>()));
         }
 
         private IEnumerable<MonoBehaviour> GetObjects(
