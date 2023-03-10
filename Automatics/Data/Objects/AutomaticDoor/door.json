@@ -46,6 +46,15 @@
           "value": "$piece_woodwindowshutter"
         }
       ]
+    },
+    {
+      "identifier": "PieceHexagonalDoor",
+      "label": "$piece_hexagonalgate",
+      "matches": [
+        {
+          "value": "$piece_hexagonalgate"
+        }
+      ]
     }
   ]
 }
