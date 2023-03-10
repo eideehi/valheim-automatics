@@ -28,6 +28,7 @@ namespace Automatics.AutomaticPickup
             {
                 x.DispName = Automatics.L10N.Translate("@config_common_disable_module_old_name");
                 x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+                x.Browsable = false;
             });
             _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
             {
@@ -35,11 +36,9 @@ namespace Automatics.AutomaticPickup
                 x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
             });
             if (_moduleDisable.Value) _module.Value = AutomaticsModule.Disabled;
-            _moduleDisable.SettingChanged += (_, __) =>
+            _module.SettingChanged += (_, __) =>
             {
-                _module.Value = _moduleDisable.Value
-                    ? AutomaticsModule.Disabled
-                    : AutomaticsModule.Enabled;
+                _moduleDisable.Value = _module.Value == AutomaticsModule.Disabled;
             };
             if (_moduleDisable.Value || _module.Value == AutomaticsModule.Disabled) return;
 
