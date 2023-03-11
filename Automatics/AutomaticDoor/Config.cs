@@ -44,7 +44,7 @@ namespace Automatics.AutomaticDoor
             var config = global::Automatics.Config.Instance;
 
             config.ChangeSection(Section);
-            _moduleDisabled = config.Bind("module_disable", false, initializer: x =>
+            _moduleDisabled = config.Bind("disable_module", false, initializer: x =>
             {
                 x.DispName = Automatics.L10N.Translate("@config_common_disable_module_old_name");
                 x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
