@@ -1,3 +1,6 @@
+#### v1.4.2 [2023-03-12]
+- Fixed a bug where the game won't start if some modules are disabled.
+
 #### v1.4.1 [2023-03-11]
 - Fixed a bug where the toggle key for automatic doors would become disabled after using it to turn off the function.
 - Fixed a bug where the automatic mapping function would delete unrelated pins, such as pins added by users or boss pins.
