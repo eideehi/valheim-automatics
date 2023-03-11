@@ -1,3 +1,14 @@
+#### v1.4.1 [2023-03-11]
+- Fixed a bug where the toggle key for automatic doors would become disabled after using it to turn off the function.
+- Fixed a bug where the automatic mapping function would delete unrelated pins, such as pins added by users or boss pins.
+- Fixed a bug where the automatic mapping function would cause an exception when loading the world without exiting the game after logging out of the world.
+- Fixed a bug where the automatic door closing function would not work, causing the door to remain open.
+- The "printobjects" command can now output doors and containers.
+- Fixed a bug where the automatic repair function would cause an exception under certain conditions.
+- Fixed a bug where the "Distance For Automatic Opening" configuration for automatic doors was not functioning and instead referenced "Distance For Automatic Closing."
+- Modified the "Disable Module" item in the configuration to be more intuitive.
+- Added "Hexagonal gate" to the door presets.
+
 #### v1.4.0 [2022-12-26]
 - Overall Rewriting
   * AutomaticDoor

@@ -67,11 +67,22 @@ Any object can be added. Identifier: a unique string that does not overlap with 
 
 - Default value:
 
+==== User-defined Container / [custom_container]
+Any container can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the container. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal or prefab name of the container. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+
+- Default value:
+
 === [ #3 Automatic Door ] / [automatic_door]
-==== Disable Module / [disable_module]
+==== [Deprecated] Disable Module / [module_disable]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: false
+
+==== Disable Module (Reboot Required) / [module]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: Enabled
+- Acceptable values: Enabled, Disabled
 
 ==== Automatic Door / [enable_automatic_door]
 Specify whether to enable the feature that automatically opens and closes the door.
@@ -81,7 +92,7 @@ Specify whether to enable the feature that automatically opens and closes the do
 ==== Allow Automatic Door / [allow_automatic_door]
 Specify which doors are allowed to open and close automatically.
 
-- Default value: WoodDoor, WoodGate, IronGate, DarkwoodGate
+- Default value: WoodDoor, WoodGate, IronGate, DarkwoodGate, PieceHexagonalDoor
 
 ==== Interval To Open / [interval_to_open]
 Specify the interval at which the process of automatically opening the door is called. If set to less than 0.1, the function to automatically open the door will be disabled. (Unit: second)
@@ -119,10 +130,16 @@ Specify a shortcut key to enable/disable the automatic door.
 - Default value:
 
 === [ #4 Automatic Mapping ] / [automatic_mapping]
-==== Disable Module / [module_disable]
+==== [Deprecated] Disable Module / [module_disable]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: false
+
+==== Disable Module (Reboot Required) / [module]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: Enabled
+- Acceptable values: Enabled, Disabled
 
 ==== Automatic Mapping / [enable_automatic_mapping]
 Specify whether to enable the feature that automatically pinning objects and locations to the map.
@@ -241,15 +258,26 @@ Specify shortcut keys for mapping static objects. Setting this item disables the
 - Default value:
 
 === [ #5 Automatic Processing ] / [automatic_processing]
-==== Disable Module / [module_disable]
+==== [Deprecated] Disable Module / [module_disable]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: false
+
+==== Disable Module (Reboot Required) / [module]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: Enabled
+- Acceptable values: Enabled, Disabled
 
 ==== Automatic Processing / [enable_automatic_processing]
 Specify whether to enable or disable the ability to automatically perform tasks such as cooking, refining, and refuel.
 
 - Default value: true
+
+==== Allow Container / [allow_container]
+Specify containers that allow automatic operations such as item supply and storage.
+
+- Default value: PieceChestWood, PieceChest, PieceChestBlackmetal
 
 ==== Allow Processing By Beehive / [allow_processing_by_piece_beehive]
 Specify the automatic processing to be allowed for Beehive
@@ -905,10 +933,16 @@ Performs automatic refuel only when materials are supplied to Eitr refinery.
 - Default value: false
 
 === [ #6 Automatic Feeding ] / [automatic_feeding]
-==== Disable Module / [module_disable]
+==== [Deprecated] Disable Module / [module_disable]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: false
+
+==== Disable Module (Reboot Required) / [module]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: Enabled
+- Acceptable values: Enabled, Disabled
 
 ==== Automatic Feeding / [enable_automatic_feeding]
 Specify whether to enable the feature for animals to automatically consume feed items from players and containers.
@@ -941,10 +975,16 @@ Specify the types of animals allowed to feed from the player inventory.
 - Multiple values can be set at the same time by separating them with , (e.g. Wild, Tamed)
 
 === [ #7 Automatic Repair ] / [automatic_repair]
-==== Disable Module / [module_disable]
+==== [Deprecated] Disable Module / [module_disable]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: false
+
+==== Disable Module (Reboot Required) / [module]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: Enabled
+- Acceptable values: Enabled, Disabled
 
 ==== Automatic Repair / [enable_automatic_repair]
 Specify whether to enable the feature that automatically repair items and pieces.
@@ -981,10 +1021,16 @@ Specify where the message is displayed when a piece is repaired.
 - Acceptable values: None, Center, TopLeft
 
 === [ #8 Automatic Mining ] / [automatic_mining]
-==== Disable Module / [module_disable]
+==== [Deprecated] Disable Module / [module_disable]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: false
+
+==== Disable Module (Reboot Required) / [module]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: Enabled
+- Acceptable values: Enabled, Disabled
 
 ==== Automatic Mining / [enable_automatic_mining]
 Specify whether to enable the feature that mine minerals automatically.
@@ -1029,10 +1075,16 @@ Specify a shortcut key to attempt mining. If a valid shortcut key is assigned to
 - Default value:
 
 === [ #9 Automatic Pickup ] / [automatic_pickup]
-==== Disable Module / [module_disable]
+==== [Deprecated] Disable Module / [module_disable]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: false
+
+==== Disable Module (Reboot Required) / [module]
+You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+
+- Default value: Enabled
+- Acceptable values: Enabled, Disabled
 
 ==== Automatic Pickup Range / [automatic_pickup_range]
 Specify the range within which objects are automatically pickup. (Unit: meters)
