@@ -17,7 +17,7 @@ namespace Automatics
         {
             __instance.startGameEvent += (sender, args) =>
             {
-                Hooks.OnGameStart(FejdStartup.instance, args.isHost);
+                Hooks.OnGameStart?.Invoke(FejdStartup.instance, args.isHost);
             };
         }
 
