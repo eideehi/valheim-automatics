@@ -2,7 +2,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Emit;
 using HarmonyLib;
-using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
@@ -92,53 +91,63 @@ namespace Automatics.AutomaticMapping
         private static IEnumerable<CodeInstruction> Minimap_UpdatePins_Transpiler(
             IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
+            /*
+             *   float size = (pin.m_doubleSize ? (num * 2f) : num);
+             * + size = Map.ResizeIcon(pin, size);
+             *   pin.m_uiElement.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size);
+             * ...
+             *   float num2 = (pin.m_doubleSize ? (num * 2f) : num);
+             * + num2 = Map.ResizeIcon(pin, num2);
+             *   num2 *= 0.8f + Mathf.Sin(Time.time * 5f) * 0.2f;
+             */
             return new CodeMatcher(instructions, generator)
                 .MatchEndForward(
-                    new CodeMatch(OpCodes.Callvirt,
-                        AccessTools.Method(typeof(Transform), "SetParent",
-                            new[] { typeof(Transform) })),
-                    new CodeMatch(OpCodes.Ldloc_S),
-                    new CodeMatch(OpCodes.Ldfld,
-                        AccessTools.Field(typeof(Minimap.PinData), "m_doubleSize")))
-                .MatchStartForward(
+                    new CodeMatch(OpCodes.Ldloc_1),
+                    new CodeMatch(OpCodes.Ldc_R4, 2f),
+                    new CodeMatch(OpCodes.Mul),
                     new CodeMatch(OpCodes.Stloc_S))
-                .Advance(1)
-                .Insert(
-                    new CodeInstruction(OpCodes.Ldloc_S, 5),
-                    new CodeInstruction(OpCodes.Ldloc_S, 10),
-                    new CodeInstruction(OpCodes.Call,
-                        AccessTools.Method(typeof(Map), "ResizeIcon")),
-                    new CodeInstruction(OpCodes.Stloc_S, 10))
-                .MatchStartForward(
-                    new CodeMatch(OpCodes.Ldloc_S),
+                .Repeat(x =>
+                {
+                    var numIndex = x.Operand;
+                    x.Advance(1);
+                    x.InsertAndAdvance(
+                        new CodeInstruction(OpCodes.Ldloc_S, 4),
+                        new CodeInstruction(OpCodes.Ldloc_S, numIndex),
+                        new CodeInstruction(OpCodes.Call,
+                            AccessTools.Method(typeof(Map), "ResizeIcon")),
+                        new CodeInstruction(OpCodes.Stloc_S, numIndex));
+                })
+                .InstructionEnumeration();
+        }
+
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.AddPin))]
+        private static IEnumerable<CodeInstruction> Minimap_AddPin_Transpiler(
+            IEnumerable<CodeInstruction> instructions, ILGenerator generator)
+        {
+            /*
+             * - if (!string.IsNullOrEmpty(pinData.m_name)) {
+             * + if (!string.IsNullOrEmpty(pinData.m_name) && !Map.IsNameTagHidden(pinData)) {
+             *       pinData.m_NamePinData = new PinNameData(pinData);
+             *   }
+             */
+            var matcher = new CodeMatcher(instructions, generator)
+                .MatchEndForward(
+                    new CodeMatch(OpCodes.Ldloc_0),
                     new CodeMatch(OpCodes.Ldfld,
-                        AccessTools.Field(typeof(Minimap.PinData), "m_nameElement")),
-                    new CodeMatch(OpCodes.Callvirt,
-                        AccessTools.Method(typeof(Component), "get_gameObject")),
-                    new CodeMatch(OpCodes.Ldc_I4_1),
-                    new CodeMatch(OpCodes.Callvirt,
-                        AccessTools.Method(typeof(GameObject), "SetActive")))
-                .CreateLabel(out var originalCodes)
-                .MatchStartForward(
-                    new CodeMatch(OpCodes.Br))
-                .CreateLabel(out var skipOriginalCodes)
-                .MatchStartBackwards(
-                    new CodeMatch(OpCodes.Bge_Un))
+                        AccessTools.Field(typeof(Minimap.PinData), "m_name")),
+                    new CodeMatch(OpCodes.Call,
+                        AccessTools.Method(typeof(string), nameof(string.IsNullOrEmpty))),
+                    new CodeMatch(OpCodes.Brtrue));
+            var skipLabel = matcher.Operand;
+            matcher.Set(OpCodes.Brtrue_S, skipLabel);
+            return matcher
                 .Advance(1)
                 .Insert(
-                    new CodeInstruction(OpCodes.Ldloc_S, 5),
+                    new CodeInstruction(OpCodes.Ldloc_0),
                     new CodeInstruction(OpCodes.Call,
                         AccessTools.Method(typeof(Map), "IsNameTagHidden")),
-                    new CodeInstruction(OpCodes.Brfalse, originalCodes),
-                    new CodeInstruction(OpCodes.Ldloc_S, 5),
-                    new CodeInstruction(OpCodes.Ldfld,
-                        AccessTools.Field(typeof(Minimap.PinData), "m_nameElement")),
-                    new CodeInstruction(OpCodes.Callvirt,
-                        AccessTools.Method(typeof(Component), "get_gameObject")),
-                    new CodeInstruction(OpCodes.Ldc_I4_0),
-                    new CodeInstruction(OpCodes.Callvirt,
-                        AccessTools.Method(typeof(GameObject), "SetActive")),
-                    new CodeInstruction(OpCodes.Br, skipOriginalCodes))
+                    new CodeInstruction(OpCodes.Brtrue_S, skipLabel))
                 .InstructionEnumeration();
         }
 
