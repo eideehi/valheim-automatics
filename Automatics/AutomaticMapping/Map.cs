@@ -32,6 +32,11 @@ namespace Automatics.AutomaticMapping
             return Reflections.GetField<List<Minimap.PinData>>(ValheimMap, "m_pins");
         }
 
+        private static void DestroyPinMarker(Minimap.PinData pinData)
+        {
+            Reflections.InvokeMethod(ValheimMap, "DestroyPinMarker", pinData);
+        }
+
         public static Minimap.PinData GetPin(Predicate<Minimap.PinData> predicate)
         {
             return GetAllPins().FirstOrDefault(predicate.Invoke);
@@ -117,7 +122,7 @@ namespace Automatics.AutomaticMapping
         public static Minimap.PinData RemovePin(Minimap.PinData pinData)
         {
             if (pinData.m_uiElement)
-                UnityEngine.Object.Destroy(pinData.m_uiElement.gameObject);
+                DestroyPinMarker(pinData);
 
             if (!GetAllPins().Remove(pinData)) return null;
 
