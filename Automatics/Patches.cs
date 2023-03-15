@@ -34,32 +34,25 @@ namespace Automatics
         private static IEnumerable<CodeInstruction> Player_Update_Transpiler(
             IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
-            var codeMatcher = new CodeMatcher(instructions, generator)
-                .End()
-                .MatchStartBackwards(new CodeMatch(OpCodes.Call,
+            return new CodeMatcher(instructions, generator)
+                .MatchEndForward(new CodeMatch(OpCodes.Call,
                     AccessTools.Method(typeof(Player), "UpdatePlacement")))
-                .MatchStartBackwards(new CodeMatch(OpCodes.Ldarg_0));
-
-            var originalLabels = new List<Label>(codeMatcher.Labels);
-            codeMatcher.Labels.Clear();
-
-            return codeMatcher
-                .CreateLabel(out var skip)
+                .Advance(1)
+                .CreateLabel(out var ifNull)
                 .Insert(
                     new CodeInstruction(OpCodes.Ldarg_0),
-                    new CodeInstruction(OpCodes.Ldloc_0),
+                    new CodeInstruction(OpCodes.Ldloc_1),
                     new CodeInstruction(OpCodes.Callvirt,
                         AccessTools.Method(typeof(Action<Player, bool>), "Invoke")))
-                .CreateLabel(out var exec)
+                .CreateLabel(out var invoke)
                 .MatchStartBackwards(new CodeMatch(OpCodes.Ldarg_0))
                 .Insert(
                     new CodeInstruction(OpCodes.Call,
                         AccessTools.Method(typeof(Hooks), "get_OnPlayerUpdate")),
                     new CodeInstruction(OpCodes.Dup),
-                    new CodeInstruction(OpCodes.Brtrue_S, exec),
+                    new CodeInstruction(OpCodes.Brtrue_S, invoke),
                     new CodeInstruction(OpCodes.Pop),
-                    new CodeInstruction(OpCodes.Br_S, skip))
-                .AddLabels(originalLabels)
+                    new CodeInstruction(OpCodes.Br_S, ifNull))
                 .InstructionEnumeration();
         }
 
