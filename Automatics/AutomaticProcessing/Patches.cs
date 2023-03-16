@@ -22,6 +22,12 @@ namespace Automatics.AutomaticProcessing
         public static IEnumerable<CodeInstruction> CookingStation_UpdateFuel_Transpiler(
             IEnumerable<CodeInstruction> instructions)
         {
+            /*
+             *   if (fuel < 0.0)
+             *     fuel = 0.0f;
+             * + fuel = CookingStationProcess.Refuel(this, this.m_nview, fuel);
+             *   this.SetFuel(fuel);
+             */
             return new CodeMatcher(instructions)
                 .MatchStartForward(
                     new CodeMatch(OpCodes.Ldarg_0),
@@ -46,6 +52,21 @@ namespace Automatics.AutomaticProcessing
         public static IEnumerable<CodeInstruction> CookingStation_UpdateCooking_Transpiler(
             IEnumerable<CodeInstruction> instructions)
         {
+            /*
+             *   ItemConversion itemConversion = this.GetItemConversion(itemName);
+             *   ...
+             * + CookingStationProcess.Store(this, this.m_nview, slot, itemConversion);
+             *   this.SetSlot(slot, "", 0.0f, CookingStation.Status.NotDone);
+             *   ...
+             * + CookingStationProcess.Store(this, this.m_nview, slot, itemConversion);
+             *   this.SetSlot(slot, this.m_overCookedItem.name, cookedTime, CookingStation.Status.Burnt);
+             *   ...
+             * + CookingStationProcess.Store(this, this.m_nview, slot, itemConversion);
+             *   this.SetSlot(slot, itemConversion.m_to.name, cookedTime, CookingStation.Status.Done);
+             *   ...
+             * + CookingStationProcess.Store(this, this.m_nview, slot, itemConversion);
+             *   this.SetSlot(slot, itemName, cookedTime, status);
+             */
             void InsertCodes(CodeMatcher codeMatcher, object label)
             {
                 codeMatcher.Insert(
@@ -107,6 +128,14 @@ namespace Automatics.AutomaticProcessing
         public static IEnumerable<CodeInstruction> Fireplace_UpdateFireplace_Transpiler(
             IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
+            /*
+             *     if (this.IsBurning()) {
+             *       ...
+             *     }
+             * +   FireplaceProcess.Refuel(this, this.m_piece, this.m_nview);
+             *   }
+             *   this.UpdateState();
+             */
             return new CodeMatcher(instructions, generator)
                 .End()
                 .MatchEndBackwards(
@@ -141,6 +170,14 @@ namespace Automatics.AutomaticProcessing
         public static IEnumerable<CodeInstruction> Smelter_UpdateSmelter_Transpiler(
             IEnumerable<CodeInstruction> instructions)
         {
+            /*
+             *   while (accumulator >= 1f) {
+             *     accumulator -= 1f;
+             *     float fuel = this.GetFuel();
+             * +   fuel = SmelterProcess.QuickRefuel(this, this.m_nview, accumulator, fuel);
+             *     string queuedOre = this.GetQueuedOre();
+             * +   queuedOre = SmelterProcess.QuickCraft(this, this.m_nview, accumulator, queuedOre);
+             */
             return new CodeMatcher(instructions)
                 .MatchEndForward(
                     new CodeMatch(OpCodes.Ldarg_0),
@@ -206,6 +243,13 @@ namespace Automatics.AutomaticProcessing
         public static IEnumerable<CodeInstruction> WispSpawner_TrySpawn_Transpiler(
             IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
+            /*
+             *   Vector3 position = this.m_spawnPoint.position + Quaternion.Euler(0f, UnityEngine.Random.Range(0, 360), 0f) * Vector3.forward * this.m_spawnDistance;
+             * + if (WispSpawnerProcess.Store(this, this.m_nview)) return;
+             *   UnityEngine.Object.Instantiate(this.m_wispPrefab, position, Quaternion.identity);
+             *   this.m_nview.GetZDO().Set("LastSpawn", ZNet.instance.GetTime().Ticks);
+             *   TODO: If other mods add code to this location, if the return value of WispSpawnerProcess.Store is true, the code added by other mods will no longer be called.
+             */
             return new CodeMatcher(instructions, generator)
                 .MatchEndForward(
                     new CodeMatch(OpCodes.Ldarg_0),

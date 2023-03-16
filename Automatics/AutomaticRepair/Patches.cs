@@ -14,6 +14,13 @@ namespace Automatics.AutomaticRepair
         public static IEnumerable<CodeInstruction> CraftingStation_Interact_Transpiler(
             IEnumerable<CodeInstruction> instructions)
         {
+            /*
+             *   Player player = user as Player;
+             *   ...
+             *   InventoryGui.instance.Show((Container) null, 3);
+             * + ItemRepair.CraftingStationInteractHook(player, this);
+             *   return false;
+             */
             return new CodeMatcher(instructions)
                 .MatchStartForward(new CodeMatch(OpCodes.Callvirt,
                     AccessTools.Method(typeof(InventoryGui), nameof(InventoryGui.Show))))

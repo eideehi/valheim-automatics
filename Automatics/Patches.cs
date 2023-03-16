@@ -34,6 +34,11 @@ namespace Automatics
         private static IEnumerable<CodeInstruction> Player_Update_Transpiler(
             IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
+            /*
+             *     this.UpdatePlacement(input, Time.deltaTime);
+             * +   Hooks.OnPlayerUpdate?.Invoke(this, input);
+             *   }
+             */
             return new CodeMatcher(instructions, generator)
                 .MatchEndForward(new CodeMatch(OpCodes.Call,
                     AccessTools.Method(typeof(Player), "UpdatePlacement")))
@@ -61,6 +66,11 @@ namespace Automatics
         private static IEnumerable<CodeInstruction> Player_FixedUpdate_Transpiler(
             IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
+            /*
+             *   this.UpdateStealth(fixedDeltaTime);
+             * + Hooks.OnPlayerFixedUpdate(this, fixedDeltaTime);
+             *   if ((bool) (UnityEngine.Object) GameCamera.instance && (double) Vector3.Distance(GameCamera.instance.transform.position, this.transform.position) < 2.0)
+             */
             return new CodeMatcher(instructions, generator)
                 .MatchStartForward(new CodeMatch(OpCodes.Call,
                     AccessTools.Method(typeof(Player), "UpdateStealth")))

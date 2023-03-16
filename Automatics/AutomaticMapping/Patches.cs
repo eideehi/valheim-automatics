@@ -200,6 +200,12 @@ namespace Automatics.AutomaticMapping
         private static IEnumerable<CodeInstruction> Pickable_SetPicked_Transpiler(
             IEnumerable<CodeInstruction> instructions)
         {
+            /*
+             *   if (!picked)
+             *     return;
+             * + StaticObjectMapping.OnObjectDestroy(this, this.m_nview);
+             *   this.m_nview.Destroy();
+             */
             return new CodeMatcher(instructions)
                 .End()
                 .MatchStartBackwards(
@@ -222,6 +228,13 @@ namespace Automatics.AutomaticMapping
         private static IEnumerable<CodeInstruction> MineRock5_DamageArea_Transpiler(
             IEnumerable<CodeInstruction> instructions)
         {
+            /*
+             *   if (this.AllDestroyed()) {
+             * +   StaticObjectMapping.OnObjectDestroy(this, this.m_nview);
+             *     this.m_nview.Destroy();
+             *   }
+             *   return true;
+             */
             return new CodeMatcher(instructions)
                 .End()
                 .MatchStartBackwards(
