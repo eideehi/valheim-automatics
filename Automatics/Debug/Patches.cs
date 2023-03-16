@@ -55,7 +55,9 @@ namespace Automatics.Debug
         [HarmonyPatch(typeof(Terminal), "Awake")]
         private static void Terminal_Awake_Postfix(Terminal __instance, bool ___m_cheat)
         {
-            if (!___m_cheat) Reflections.SetField(__instance, "m_cheat", true);
+            if (___m_cheat) return;
+            Reflections.SetField(__instance, "m_cheat", true);
+            Reflections.InvokeMethod(__instance, "updateCommandList");
         }
     }
 }
