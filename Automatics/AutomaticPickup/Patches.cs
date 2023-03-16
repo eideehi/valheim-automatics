@@ -8,6 +8,14 @@ namespace Automatics.AutomaticPickup
     [HarmonyPatch]
     internal static class Patches
     {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Player), "Interact")]
+        private static bool Player_Interact_Prefix(GameObject go)
+        {
+            if (!go.GetComponentInParent<ItemPicker>()) return true;
+            return !Config.PickupAllNearbyKey.IsPressed();
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Pickable), "Awake")]
         private static void Pickable_Awake_Postfix(Pickable __instance, ZNetView ___m_nview)
