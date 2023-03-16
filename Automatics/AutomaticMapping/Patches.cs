@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Reflection.Emit;
 using HarmonyLib;
 
@@ -48,11 +49,40 @@ namespace Automatics.AutomaticMapping
             AutomaticMapping.Mapping(player, dt, takeInput);
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(Minimap), "OnMapLeftClick")]
-        private static bool Minimap_OnMapLeftClick_Postfix()
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.OnMapLeftClick))]
+        private static IEnumerable<CodeInstruction> Minimap_OnMapLeftClick_Transpiler(
+            IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
-            return !AutomaticMapping.SetSaveFlag();
+            /*
+             *   Vector3 pos = this.ScreenToWorldPoint(ZInput.mousePosition);
+             * + if (AutomaticMapping.SetSaveFlag(Map.GetClosestPin(pos, this.m_removeRadius * (this.m_largeZoom * 2f)))
+             * +   return;
+             *   PinData closestPin = this.GetClosestPin(pos, this.m_removeRadius * (this.m_largeZoom * 2f));
+             */
+            return new CodeMatcher(instructions, generator)
+                .MatchEndForward(
+                    new CodeMatch(OpCodes.Call,
+                        AccessTools.Method(typeof(Minimap), "ScreenToWorldPoint")),
+                    new CodeMatch(OpCodes.Stloc_0))
+                .Advance(1)
+                .CreateLabel(out var originalCodes)
+                .Insert(
+                    new CodeInstruction(OpCodes.Ldloc_0),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldfld,
+                        AccessTools.Field(typeof(Minimap), "m_removeRadius")),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldfld,
+                        AccessTools.Field(typeof(Minimap), "m_largeZoom")),
+                    new CodeInstruction(OpCodes.Ldc_R4, 2f),
+                    new CodeInstruction(OpCodes.Mul),
+                    new CodeInstruction(OpCodes.Mul),
+                    new CodeInstruction(OpCodes.Call,
+                        AccessTools.Method(typeof(AutomaticMapping), "SetSaveFlag")),
+                    new CodeInstruction(OpCodes.Brfalse_S, originalCodes),
+                    new CodeInstruction(OpCodes.Ret))
+                .InstructionEnumeration();
         }
 
         [HarmonyTranspiler]
@@ -60,29 +90,43 @@ namespace Automatics.AutomaticMapping
         private static IEnumerable<CodeInstruction> Minimap_UpdateMap_Transpiler(
             IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
+            /*
+             *   Vector3 pos3 = this.ScreenToWorldPoint(new Vector3(Screen.width / 2, Screen.height / 2));
+             *   PinData closestPin = this.GetClosestPin(pos3, this.m_removeRadius * (this.m_largeZoom * 2f));
+             *   if (closestPin != null)
+             *     if (closestPin.m_ownerID != 0L)
+             *       closestPin.m_ownerID = 0L;
+             *     else
+             *       closestPin.m_checked = !closestPin.m_checked;
+             * + else
+             * +   AutomaticMapping.SetSaveFlag(Map.GetClosestPin(pos3, this.m_removeRadius * (this.m_largeZoom * 2f));
+             */
             return new CodeMatcher(instructions, generator)
+                .MatchEndForward(
+                    new CodeMatch(OpCodes.Call,
+                        AccessTools.Method(typeof(Minimap), "GetClosestPin")),
+                    new CodeMatch(OpCodes.Stloc_S))
                 .MatchStartForward(
-                    new CodeMatch(OpCodes.Ldloc_S),
-                    new CodeMatch(OpCodes.Ldloc_S),
-                    new CodeMatch(OpCodes.Ldfld,
-                        AccessTools.Field(typeof(Minimap.PinData), "m_checked")),
-                    new CodeMatch(OpCodes.Ldc_I4_0),
-                    new CodeMatch(OpCodes.Ceq),
-                    new CodeMatch(OpCodes.Stfld,
-                        AccessTools.Field(typeof(Minimap.PinData), "m_checked")))
-                .CreateLabel(out var originalCodes)
-                .Advance(6)
-                .CreateLabel(out var skipOriginalCodes)
-                .MatchStartBackwards(
-                    new CodeMatch(OpCodes.Ldloc_S),
-                    new CodeMatch(OpCodes.Ldloc_S))
+                    new CodeMatch(OpCodes.Brfalse))
+                .Advance(1)
+                .CreateLabel(out var ifPinNotNull)
+                .Advance(-1)
                 .Insert(
-                    new CodeInstruction(OpCodes.Ldloc_S, 11),
+                    new CodeInstruction(OpCodes.Brtrue_S, ifPinNotNull),
+                    new CodeInstruction(OpCodes.Ldloc_S, 10),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldfld,
+                        AccessTools.Field(typeof(Minimap), "m_removeRadius")),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldfld,
+                        AccessTools.Field(typeof(Minimap), "m_largeZoom")),
+                    new CodeInstruction(OpCodes.Ldc_R4, 2f),
+                    new CodeInstruction(OpCodes.Mul),
+                    new CodeInstruction(OpCodes.Mul),
                     new CodeInstruction(OpCodes.Call,
-                        AccessTools.Method(typeof(AutomaticMapping), "SetSaveFlag",
-                            new[] { typeof(Minimap.PinData) })),
-                    new CodeInstruction(OpCodes.Brtrue_S, skipOriginalCodes),
-                    new CodeInstruction(OpCodes.Br, originalCodes))
+                        AccessTools.Method(typeof(AutomaticMapping), "SetSaveFlag")),
+                    new CodeInstruction(OpCodes.Pop),
+                    new CodeInstruction(OpCodes.Ldc_I4_0))
                 .InstructionEnumeration();
         }
 

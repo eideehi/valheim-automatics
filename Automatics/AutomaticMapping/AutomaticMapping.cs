@@ -46,25 +46,13 @@ namespace Automatics.AutomaticMapping
         }
 
         [UsedImplicitly]
-        public static bool SetSaveFlag(Minimap.PinData pinData)
+        public static bool SetSaveFlag(Vector3 pos, float radius)
         {
-            if (pinData.m_save) return false;
-            if (pinData.m_ownerID != 0L) return true;
-            if (!ZInput.GetButton("AltPlace") && !ZInput.GetButton("JoyAltPlace")) return false;
+            var pinData = Map.GetClosestPin(pos, radius, x => x.m_ownerID == 0L && !x.m_save);
+            if (pinData is null) return false;
 
             return StaticObjectMapping.SetSaveFlag(pinData) ||
                    DynamicObjectMapping.SetSaveFlag(pinData);
-        }
-
-        public static bool SetSaveFlag()
-        {
-            var map = Minimap.instance;
-            var largeZoom = Reflections.GetField<float>(map, "m_largeZoom");
-            var pos = Reflections.InvokeMethod<Vector3>(map, "ScreenToWorldPoint",
-                Input.mousePosition);
-
-            var pinData = Map.GetClosestPin(pos, map.m_removeRadius * (largeZoom * 2f));
-            return pinData != null && SetSaveFlag(pinData);
         }
     }
 
