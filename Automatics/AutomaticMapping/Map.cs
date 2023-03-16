@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using JetBrains.Annotations;
 using ModUtils;
 using UnityEngine;
@@ -39,7 +40,9 @@ namespace Automatics.AutomaticMapping
 
         public static Minimap.PinData GetPin(Predicate<Minimap.PinData> predicate)
         {
-            return GetAllPins().FirstOrDefault(predicate.Invoke);
+            return GetAllPins()
+                .Where(x => x.m_uiElement && x.m_uiElement.gameObject.activeInHierarchy)
+                .FirstOrDefault(predicate.Invoke);
         }
 
         public static Minimap.PinData GetClosestPin(Vector3 pos, float radius = 1f,
@@ -50,7 +53,8 @@ namespace Automatics.AutomaticMapping
 
             Minimap.PinData result = null;
             var minDistance = float.MaxValue;
-            foreach (var pinData in GetAllPins())
+            foreach (var pinData in GetAllPins().Where(x =>
+                         x.m_uiElement && x.m_uiElement.gameObject.activeInHierarchy))
             {
                 var distance = Utils.DistanceXZ(pos, pinData.m_pos);
                 if (distance > radius || distance >= minDistance) continue;
@@ -66,11 +70,15 @@ namespace Automatics.AutomaticMapping
         public static bool HavePinInRange(Vector3 pos, float radius,
             Predicate<Minimap.PinData> predicate = null)
         {
-            if (predicate == null)
-                predicate = x => true;
+            bool IsInRange(Minimap.PinData x) => Utils.DistanceXZ(x.m_pos, pos) <= radius;
 
-            return GetAllPins().Any(x =>
-                Utils.DistanceXZ(x.m_pos, pos) <= radius && predicate.Invoke(x));
+            Predicate<Minimap.PinData> isValidPin;
+            if (predicate == null)
+                isValidPin = IsInRange;
+            else
+                isValidPin = x => IsInRange(x) && predicate(x);
+
+            return GetPin(isValidPin) != null;
         }
 
         public static Minimap.PinData AddPin(Vector3 pos, string name, bool save, Target target)
