@@ -28,14 +28,15 @@ namespace Automatics.AutomaticFeeding
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(BaseAI), "FindClosestStaticPriorityTarget")]
-        private static void BaseAI_FindClosestStaticPriorityTarget_Postfix(BaseAI __instance,
-            ref StaticTarget __result)
+        [HarmonyPatch(typeof(BaseAI), nameof(BaseAI.CanSeeTarget), new[] { typeof(StaticTarget) })]
+        private static void BaseAI_CanSeeTarget_Postfix(BaseAI __instance,
+            ref bool __result,
+            StaticTarget target)
         {
+            if (!__result) return;
             if (!Config.EnableAutomaticFeeding) return;
-
-            if (__result != null && AutomaticFeeding.CancelAttackOnFeedBox(__instance, __result))
-                __result = null;
+            if (AutomaticFeeding.CancelAttackOnFeedBox(__instance, target))
+                __result = false;
         }
     }
 }
