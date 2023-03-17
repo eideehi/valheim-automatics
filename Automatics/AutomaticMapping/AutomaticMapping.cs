@@ -533,6 +533,7 @@ namespace Automatics.AutomaticMapping
                 component = collider.GetComponentInParent<Interactable>() as Component;
             if (!component)
                 component = collider.GetComponentInParent<Hoverable>() as Component;
+            if (!component) return null;
 
             var name = Objects.GetName(component);
             if (string.IsNullOrEmpty(name)) return null;
@@ -541,6 +542,9 @@ namespace Automatics.AutomaticMapping
             if (GetMineral(name, out data)) return data.IsAllowed ? component : null;
             if (GetSpawner(name, out data)) return data.IsAllowed ? component : null;
             if (GetOther(name, out data)) return data.IsAllowed ? component : null;
+
+            var component2 = component.GetComponent<TeleportWorld>() as Component;
+            if (component2) return Config.AllowPinningPortal ? component2 : null;
 
             return null;
         }
