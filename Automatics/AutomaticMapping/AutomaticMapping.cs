@@ -36,8 +36,13 @@ namespace Automatics.AutomaticMapping
         public static void Mapping(Player player, float delta, bool takeInput)
         {
             if (Game.IsPaused()) return;
-            if (!Config.EnableAutomaticMapping) return;
             if (player != Player.m_localPlayer || !player.IsOwner()) return;
+            if (!Config.EnableAutomaticMapping)
+            {
+                DynamicObjectMapping.RemoveCachedPins();
+                StaticObjectMapping.RemoveCachedPins();
+                return;
+            }
 
             DynamicObjectMapping.Mapping(delta);
 
@@ -60,11 +65,13 @@ namespace Automatics.AutomaticMapping
     {
         private static readonly Dictionary<ZDOID, Minimap.PinData> PinDataCache;
         private static readonly HashSet<ZDOID> KnownObjects;
+        private static readonly ISet<ZDOID> EmptyCacheKeys;
 
         static DynamicObjectMapping()
         {
             PinDataCache = new Dictionary<ZDOID, Minimap.PinData>();
             KnownObjects = new HashSet<ZDOID>();
+            EmptyCacheKeys = new HashSet<ZDOID>(0);
         }
 
         private static bool GetAnimal(string name, out (string Identifier, bool IsAllowed) data)
@@ -107,6 +114,19 @@ namespace Automatics.AutomaticMapping
         {
             PinDataCache.Clear();
             KnownObjects.Clear();
+        }
+
+        public static void RemoveCachedPins(ISet<ZDOID> excludes = null)
+        {
+            if (excludes is null)
+                excludes = EmptyCacheKeys;
+
+            foreach (var pair in PinDataCache.Where(x => !excludes.Contains(x.Key)).ToList())
+            {
+                PinDataCache.Remove(pair.Key);
+                if (!pair.Value.m_save)
+                    Map.RemovePin(pair.Value);
+            }
         }
 
         public static bool SetSaveFlag(Minimap.PinData pinData)
@@ -193,12 +213,7 @@ namespace Automatics.AutomaticMapping
                 }
             }
 
-            foreach (var pair in PinDataCache.Where(x => !KnownObjects.Contains(x.Key)).ToList())
-            {
-                PinDataCache.Remove(pair.Key);
-                if (!pair.Value.m_save)
-                    Map.RemovePin(pair.Value);
-            }
+            RemoveCachedPins(KnownObjects);
         }
 
         private static void AddOrUpdatePin(Character character, float delta)
@@ -278,6 +293,7 @@ namespace Automatics.AutomaticMapping
         private static readonly Dictionary<Collider, Component> StaticObjectCache;
         private static readonly Dictionary<MapPinIdentify, Minimap.PinData> PinDataCache;
         private static readonly HashSet<MapPinIdentify> KnownObjects;
+        private static readonly ISet<MapPinIdentify> EmptyCacheKeys;
 
         private static float _lastCacheUpdateTime;
 
@@ -294,6 +310,7 @@ namespace Automatics.AutomaticMapping
             StaticObjectCache = new Dictionary<Collider, Component>();
             PinDataCache = new Dictionary<MapPinIdentify, Minimap.PinData>();
             KnownObjects = new HashSet<MapPinIdentify>();
+            EmptyCacheKeys = new HashSet<MapPinIdentify>(0);
         }
 
         private static bool GetFlora(string name, out (string Identifier, bool IsAllowed) data)
@@ -443,6 +460,19 @@ namespace Automatics.AutomaticMapping
             KnownObjects.Clear();
         }
 
+        public static void RemoveCachedPins(ISet<MapPinIdentify> excludes = null)
+        {
+            if (excludes is null)
+                excludes = EmptyCacheKeys;
+
+            foreach (var pair in PinDataCache.Where(x => !excludes.Contains(x.Key)).ToList())
+            {
+                PinDataCache.Remove(pair.Key);
+                if (!pair.Value.m_save)
+                    Map.RemovePin(pair.Value);
+            }
+        }
+
         public static bool SetSaveFlag(Minimap.PinData pinData)
         {
             foreach (var pair in PinDataCache
@@ -494,12 +524,7 @@ namespace Automatics.AutomaticMapping
                 if (SpotMapping(location)) continue;
             }
 
-            foreach (var pair in PinDataCache.Where(x => !KnownObjects.Contains(x.Key)).ToList())
-            {
-                PinDataCache.Remove(pair.Key);
-                if (!pair.Value.m_save)
-                    Map.RemovePin(pair.Value);
-            }
+            RemoveCachedPins(KnownObjects);
         }
 
         private static void CacheStaticObjects(Vector3 origin)
@@ -806,7 +831,7 @@ namespace Automatics.AutomaticMapping
             return new Target { name = name };
         }
 
-        private struct MapPinIdentify : IEquatable<MapPinIdentify>
+        public struct MapPinIdentify : IEquatable<MapPinIdentify>
         {
             public readonly ZDOID UniqueId;
             public readonly Vector3 Pos;
