@@ -1,3 +1,10 @@
+#### v1.4.3 [2023-03-18]
+- Updated for changes in Valheim 0.214.2.
+- Fixed a bug where the "Pickup All Nearby" shortcut key wouldn't work if it included an interact key (e.g. Shift + E).
+- Fixed a bug that caused wild animals to attack containers with food under certain conditions, even if they were allowed to eat from them.
+- Fixed a bug where portals wouldn't be automatically pinned, even if "Allow Pinning Portal" was enabled.
+- Fixed a bug where pins would remain on the map even after disabling automatic mapping in the configuration.
+
 #### v1.4.2 [2023-03-12]
 - Fixed a bug where the game won't start if some modules are disabled.
 
