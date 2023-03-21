@@ -64,12 +64,14 @@ namespace Automatics.AutomaticMapping
     internal static class DynamicObjectMapping
     {
         private static readonly Dictionary<ZDOID, Minimap.PinData> PinDataCache;
+        private static readonly IDictionary<ZDOID, Minimap.PinData> VehiclePinCache;
         private static readonly HashSet<ZDOID> KnownObjects;
         private static readonly ISet<ZDOID> EmptyCacheKeys;
 
         static DynamicObjectMapping()
         {
             PinDataCache = new Dictionary<ZDOID, Minimap.PinData>();
+            VehiclePinCache = new Dictionary<ZDOID, Minimap.PinData>();
             KnownObjects = new HashSet<ZDOID>();
             EmptyCacheKeys = new HashSet<ZDOID>(0);
         }
@@ -113,7 +115,19 @@ namespace Automatics.AutomaticMapping
         public static void Cleanup()
         {
             PinDataCache.Clear();
+            VehiclePinCache.Clear();
             KnownObjects.Clear();
+        }
+
+        public static void OnObjectDestroy(Component component)
+        {
+            if (!Config.EnableAutomaticMapping) return;
+            if (component.GetComponent<Ship>() || component.GetComponent<Vagon>())
+            {
+                if (!Objects.GetZdoid(component, out var uniqueId)) return;
+                if (!VehiclePinCache.TryGetValue(uniqueId, out var pin)) return;
+                Map.RemovePin(pin);
+            }
         }
 
         public static void RemoveCachedPins(ISet<ZDOID> excludes = null)
@@ -190,30 +204,42 @@ namespace Automatics.AutomaticMapping
                     AddOrUpdatePin(bird, delta);
                 }
 
-            if (Config.AllowPinningVehicle.Any())
-            {
-                var vehicles = new List<(string, Vector3)>();
-                var ships = ShipCache.GetAllInstance();
-                var wagons = Reflections.GetStaticField<Vagon, List<Vagon>>("m_instances") ??
-                             new List<Vagon>(0);
-
-                vehicles.AddRange(ships.Select(x => (x.m_name, x.transform.position)));
-                vehicles.AddRange(wagons.Select(x => (x.m_name, x.transform.position)));
-
-                foreach (var (name, pos) in vehicles)
-                {
-                    if (Vector3.Distance(origin, pos) > Config.DynamicObjectMappingRange) continue;
-                    if (!GetVehicle(name, out var vehicle) || !vehicle.IsAllowed) continue;
-
-                    var pinData = Map.GetClosestPin(pos, 8f, x => x.m_name == name);
-                    if (pinData == null)
-                        Map.AddPin(pos, name, true, CreateTarget(name));
-                    else if (pinData.m_pos != pos)
-                        pinData.m_pos = Vector3.MoveTowards(pinData.m_pos, pos, 200f * delta);
-                }
-            }
+            VehicleMapping(delta);
 
             RemoveCachedPins(KnownObjects);
+        }
+
+        private static void VehicleMapping(float delta)
+        {
+            if (!Config.AllowPinningVehicle.Any()) return;
+
+            var vehicles = new List<Component>();
+
+            vehicles.AddRange(ShipCache.GetAllInstance());
+            vehicles.AddRange(Reflections.GetStaticField<Vagon, List<Vagon>>("m_instances") ??
+                              new List<Vagon>(0));
+
+            var origin = Player.m_localPlayer.transform.position;
+            foreach (var vehicle in vehicles)
+            {
+                if (!Objects.GetZdoid(vehicle, out var uniqueId)) continue;
+
+                var pos = vehicle.transform.position;
+                if (Vector3.Distance(origin, pos) > Config.DynamicObjectMappingRange) continue;
+
+                var name = Objects.GetName(vehicle);
+                if (!GetVehicle(name, out var vehicleData) || !vehicleData.IsAllowed) continue;
+
+                if (VehiclePinCache.TryGetValue(uniqueId, out var pin))
+                {
+                    pin.m_pos = Vector3.MoveTowards(pin.m_pos, pos, 200f * delta);
+                }
+                else
+                {
+                    pin = Map.AddPin(pos, name, true, CreateTarget(name));
+                    VehiclePinCache.Add(uniqueId, pin);
+                }
+            }
         }
 
         private static void AddOrUpdatePin(Character character, float delta)

@@ -289,11 +289,7 @@ namespace Automatics.AutomaticMapping
             var wearNTear = __instance.GetComponent<WearNTear>();
             if (wearNTear)
                 wearNTear.m_onDestroyed += () =>
-                {
-                    if (!Config.EnableAutomaticMapping) return;
-                    if (!Config.AllowPinningPortal) return;
-                    Map.RemovePin(__instance.transform.position);
-                };
+                    DynamicObjectMapping.OnObjectDestroy(__instance);
         }
     }
 }

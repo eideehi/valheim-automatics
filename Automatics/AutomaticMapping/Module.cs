@@ -22,10 +22,7 @@ namespace Automatics.AutomaticMapping
             {
                 var wearNTear = ship.GetComponent<WearNTear>();
                 if (wearNTear)
-                    wearNTear.m_onDestroyed += () =>
-                    {
-                        Map.RemovePin(ship.transform.position, 8f, x => x.m_name == ship.m_name);
-                    };
+                    wearNTear.m_onDestroyed += () => DynamicObjectMapping.OnObjectDestroy(ship);
             };
 
             Hooks.OnGameStart += (startup, isHost) => { AutomaticMapping.Cleanup(); };
