@@ -32,14 +32,12 @@ namespace Automatics.AutomaticDoor
             _door = GetComponent<Door>();
             Objects.GetZNetView(_door, out _zNetView);
 
-            if (_zNetView.IsValid() && _zNetView.IsOwner())
-                StartCoroutine(nameof(UpdateAutomaticDoor));
+            StartCoroutine(nameof(UpdateAutomaticDoor));
         }
 
         private void OnDestroy()
         {
-            if (_zNetView.IsValid() && _zNetView.IsOwner())
-                StopCoroutine(nameof(UpdateAutomaticDoor));
+            StopCoroutine(nameof(UpdateAutomaticDoor));
 
             _door = null;
             _zNetView = null;
@@ -56,8 +54,8 @@ namespace Automatics.AutomaticDoor
                     yield return new WaitForSeconds(0.1f);
 
                     if (!Config.EnableAutomaticDoor) continue;
+                    if (!IsValid()) continue;
                     if (!Logics.IsAllowAutomaticDoor(_door)) continue;
-                    if (_zNetView.GetZDO() == null || !IsOwner()) continue;
                     active = true;
                 }
 
@@ -106,9 +104,9 @@ namespace Automatics.AutomaticDoor
                     (player.transform.position - _door.transform.position).normalized);
         }
 
-        private bool IsOwner()
+        private bool IsValid()
         {
-            return _zNetView.IsValid() && _zNetView.IsOwner();
+            return _zNetView.GetZDO() != null && _zNetView.IsValid() && _zNetView.IsOwner();
         }
 
         private bool IsDoorOpen()
