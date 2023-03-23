@@ -1,3 +1,7 @@
+#### v1.4.4 [2023-03-23]
+- Fixed a bug where the automatic door stops functioning when the player moves a certain distance away from it.
+- Fixed a bug where pins would be duplicated and added when the vehicle moves, if the vehicle's automatic mapping is enabled.
+
 #### v1.4.3 [2023-03-18]
 - Updated for changes in Valheim 0.214.2.
 - Fixed a bug where the "Pickup All Nearby" shortcut key wouldn't work if it included an interact key (e.g. Shift + E).
