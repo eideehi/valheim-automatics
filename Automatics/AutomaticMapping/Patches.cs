@@ -195,6 +195,14 @@ namespace Automatics.AutomaticMapping
                 .InstructionEnumeration();
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), "RemovePin", new[] { typeof(Minimap.PinData) })]
+        private static void Minimap_RemovePin_Postfix(Minimap.PinData pin)
+        {
+            if (pin != null)
+                AutomaticMapping.OnRemovePin(pin);
+        }
+
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(Pickable), "SetPicked")]
         private static IEnumerable<CodeInstruction> Pickable_SetPicked_Transpiler(

@@ -51,6 +51,12 @@ namespace Automatics.AutomaticMapping
                 StaticObjectMapping.Mapping();
         }
 
+        public static void OnRemovePin(Minimap.PinData pinData)
+        {
+            DynamicObjectMapping.OnRemovePin(pinData);
+            StaticObjectMapping.OnRemovePin(pinData);
+        }
+
         [UsedImplicitly]
         public static bool SetSaveFlag(Vector3 pos, float radius)
         {
@@ -141,6 +147,15 @@ namespace Automatics.AutomaticMapping
                 PinDataCache.Remove(pair.Key);
                 if (!pair.Value.m_save)
                     Map.RemovePin(pair.Value);
+            }
+        }
+
+        public static void OnRemovePin(Minimap.PinData pinData)
+        {
+            foreach (var pair in PinDataCache.Where(x => ReferenceEquals(x.Value, pinData))
+                         .ToList())
+            {
+                PinDataCache.Remove(pair.Key);
             }
         }
 
@@ -291,7 +306,18 @@ namespace Automatics.AutomaticMapping
 
         private static void AddPin(ZDOID uniqueId, Vector3 pos, string pinName, Target target)
         {
-            PinDataCache.Add(uniqueId, Map.AddPin(pos, pinName, false, target));
+            var pinData = Map.AddPin(pos, pinName, false, target);
+            try
+            {
+                PinDataCache.Add(uniqueId, pinData);
+            }
+            catch (ArgumentException)
+            {
+                var data = PinDataCache[uniqueId];
+                PinDataCache[uniqueId] = pinData;
+                Automatics.Logger.Warning(() =>
+                    $"PinData is already exists: [Existing: {data.m_name}{data.m_pos}, New: {pinName}{pos}]");
+            }
         }
 
         private static void UpdatePin(Minimap.PinData pinData, string pinName, Vector3 pos,
@@ -497,6 +523,15 @@ namespace Automatics.AutomaticMapping
                 PinDataCache.Remove(pair.Key);
                 if (!pair.Value.m_save)
                     Map.RemovePin(pair.Value);
+            }
+        }
+
+        public static void OnRemovePin(Minimap.PinData pinData)
+        {
+            foreach (var pair in PinDataCache.Where(x => ReferenceEquals(x.Value, pinData))
+                         .ToList())
+            {
+                PinDataCache.Remove(pair.Key);
             }
         }
 
@@ -845,7 +880,17 @@ namespace Automatics.AutomaticMapping
             var identify = uniqueId.IsNone()
                 ? new MapPinIdentify(pos)
                 : new MapPinIdentify(uniqueId);
-            PinDataCache.Add(identify, pinData);
+            try
+            {
+                PinDataCache.Add(identify, pinData);
+            }
+            catch (ArgumentException)
+            {
+                var data = PinDataCache[identify];
+                PinDataCache[identify] = pinData;
+                Automatics.Logger.Warning(() =>
+                    $"PinData is already exists: [Existing: {data.m_name}{data.m_pos}, New: {pinName}{pos}]");
+            }
         }
 
         private static void AddPin(ZDOID uniqueId, Vector3 pos, string pinName, Target target)
