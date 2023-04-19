@@ -37,6 +37,7 @@ namespace Automatics.AutomaticMapping
         {
             if (Game.IsPaused()) return;
             if (player != Player.m_localPlayer || !player.IsOwner()) return;
+            if (!ZNetScene.instance.IsAreaReady(player.transform.position)) return;
             if (!Config.EnableAutomaticMapping)
             {
                 DynamicObjectMapping.RemoveCachedPins();
