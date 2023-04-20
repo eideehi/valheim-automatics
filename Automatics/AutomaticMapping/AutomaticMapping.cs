@@ -576,8 +576,9 @@ namespace Automatics.AutomaticMapping
                 var component = pair.Value;
                 if (!collider || !component) continue;
 
-                if (Vector3.Distance(origin, component.transform.position) >
-                    Config.StaticObjectMappingRange) continue;
+                var pos = component.transform.position;
+                if (Vector3.Distance(origin, pos) > Config.StaticObjectMappingRange) continue;
+                if (!ZNetScene.instance.IsAreaReady(pos)) continue;
 
                 var name = Objects.GetName(component);
                 if (FloraMapping(component, name)) continue;
