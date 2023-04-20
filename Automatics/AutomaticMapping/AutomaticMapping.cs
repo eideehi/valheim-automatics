@@ -11,22 +11,6 @@ namespace Automatics.AutomaticMapping
 {
     internal static class AutomaticMapping
     {
-        private static float _staticObjectMappingTimer;
-
-        private static bool CanStaticObjectMapping(float delta, bool takeInput)
-        {
-            if (Config.StaticObjectMappingKey.MainKey != KeyCode.None)
-                return takeInput && Config.StaticObjectMappingKey.IsDown();
-
-            if (Config.StaticObjectMappingInterval <= 0) return false;
-
-            _staticObjectMappingTimer += delta;
-            if (_staticObjectMappingTimer < Config.StaticObjectMappingInterval) return false;
-            _staticObjectMappingTimer = 0f;
-
-            return true;
-        }
-
         public static void Cleanup()
         {
             DynamicObjectMapping.Cleanup();
@@ -46,9 +30,7 @@ namespace Automatics.AutomaticMapping
             }
 
             DynamicObjectMapping.Mapping(delta);
-
-            if (CanStaticObjectMapping(delta, takeInput))
-                StaticObjectMapping.Mapping();
+            StaticObjectMapping.Mapping(delta, takeInput);
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
@@ -139,6 +121,8 @@ namespace Automatics.AutomaticMapping
 
         public static void RemoveCachedPins(ISet<ZDOID> excludes = null)
         {
+            if (!PinDataCache.Any()) return;
+
             if (excludes is null)
                 excludes = EmptyCacheKeys;
 
@@ -177,7 +161,11 @@ namespace Automatics.AutomaticMapping
 
         public static void Mapping(float delta)
         {
-            if (Config.DynamicObjectMappingRange <= 0) return;
+            if (Config.DynamicObjectMappingRange <= 0)
+            {
+                RemoveCachedPins();
+                return;
+            }
 
             var origin = Player.m_localPlayer.transform.position;
 
@@ -349,6 +337,7 @@ namespace Automatics.AutomaticMapping
         private static readonly ISet<MapPinIdentify> EmptyCacheKeys;
 
         private static float _lastCacheUpdateTime;
+        private static float _mappingTimer;
 
         private static int ObjectMask => ObjectMaskLazy.Value;
         private static int DungeonMask => DungeonMaskLazy.Value;
@@ -364,6 +353,20 @@ namespace Automatics.AutomaticMapping
             PinDataCache = new Dictionary<MapPinIdentify, Minimap.PinData>();
             KnownObjects = new HashSet<MapPinIdentify>();
             EmptyCacheKeys = new HashSet<MapPinIdentify>(0);
+        }
+
+        private static bool CanMapping(float delta, bool takeInput)
+        {
+            if (Config.StaticObjectMappingKey.MainKey != KeyCode.None)
+                return takeInput && Config.StaticObjectMappingKey.IsDown();
+
+            if (Config.StaticObjectMappingInterval <= 0) return false;
+
+            _mappingTimer += delta;
+            if (_mappingTimer < Config.StaticObjectMappingInterval) return false;
+            _mappingTimer = 0f;
+
+            return true;
         }
 
         private static bool GetFlora(string name, out (string Identifier, bool IsAllowed) data)
@@ -515,6 +518,8 @@ namespace Automatics.AutomaticMapping
 
         public static void RemoveCachedPins(ISet<MapPinIdentify> excludes = null)
         {
+            if (!PinDataCache.Any()) return;
+
             if (excludes is null)
                 excludes = EmptyCacheKeys;
 
@@ -551,9 +556,13 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
-        public static void Mapping()
+        public static void Mapping(float delta, bool takeInput)
         {
-            if (Config.StaticObjectMappingRange <= 0) return;
+            if (!CanMapping(delta, takeInput) || Config.StaticObjectMappingRange <= 0)
+            {
+                RemoveCachedPins();
+                return;
+            }
 
             var origin = Player.m_localPlayer.transform.position;
 
