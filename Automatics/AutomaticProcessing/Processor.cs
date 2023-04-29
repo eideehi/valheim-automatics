@@ -14,8 +14,8 @@ namespace Automatics.AutomaticProcessing
             new Processor("$piece_bonfire", Process.Refuel, Process.None, Process.Refuel);
 
         public static readonly Processor BlastFurnace =
-            new Processor("$piece_blastfurnace", Process.All, Process.None, Process.Craft,
-                Process.Refuel, Process.Store);
+            new Processor("$piece_blastfurnace", Process.All ^ Process.Charge, Process.None,
+                Process.Craft, Process.Refuel, Process.Store);
 
         public static readonly Processor Campfire =
             new Processor("$piece_firepit", Process.Refuel, Process.None, Process.Refuel);
@@ -49,8 +49,8 @@ namespace Automatics.AutomaticProcessing
             new Processor("$piece_sconce", Process.Refuel, Process.None, Process.Refuel);
 
         public static readonly Processor Smelter =
-            new Processor("$piece_smelter", Process.All, Process.None, Process.Craft,
-                Process.Refuel, Process.Store);
+            new Processor("$piece_smelter", Process.All ^ Process.Charge, Process.None,
+                Process.Craft, Process.Refuel, Process.Store);
 
         public static readonly Processor SpinningWheel =
             new Processor("$piece_spinningwheel", Process.Store, Process.None, Process.Craft,
@@ -72,8 +72,8 @@ namespace Automatics.AutomaticProcessing
             new Processor("$piece_groundtorchwood", Process.Refuel, Process.None, Process.Refuel);
 
         public static readonly Processor StoneOven =
-            new Processor("$piece_oven", Process.All, Process.None, Process.Craft, Process.Refuel,
-                Process.Store);
+            new Processor("$piece_oven", Process.All ^ Process.Charge, Process.None, Process.Craft,
+                Process.Refuel, Process.Store);
 
         public static readonly Processor Windmill =
             new Processor("$piece_windmill", Process.Store, Process.None, Process.Craft,
@@ -88,6 +88,9 @@ namespace Automatics.AutomaticProcessing
         public static readonly Processor EitrRefinery =
             new Processor("$piece_eitrrefinery", Process.Store, Process.None, Process.Craft,
                 Process.Refuel, Process.Store);
+
+        public static readonly Processor Ballista =
+            new Processor("$piece_turret", Process.Charge, Process.None, Process.Charge);
 
         private static readonly List<Processor> AllInstance;
 
@@ -118,7 +121,8 @@ namespace Automatics.AutomaticProcessing
                 Windmill,
                 WispFountain,
                 SapExtractor,
-                EitrRefinery
+                EitrRefinery,
+                Ballista,
             };
         }
 
@@ -156,7 +160,11 @@ namespace Automatics.AutomaticProcessing
             "@config_automatic_processing_processing_type_store")]
         Store = 1L << 2,
 
+        [LocalizedDescription(Automatics.L10NPrefix,
+            "@config_automatic_processing_processing_type_charge")]
+        Charge = 1L << 3,
+
         [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
-        All = (1L << 3) - 1
+        All = (1L << 4) - 1
     }
 }

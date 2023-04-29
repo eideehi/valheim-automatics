@@ -59,6 +59,16 @@ namespace Automatics.AutomaticProcessing
                     Automatics.L10N.Translate(fromName), fromPos));
         }
 
+        public static void ChargeLog(string itemName, int count, string toName, Vector3 toPos,
+            string fromName, Vector3 fromPos)
+        {
+            const string format = "Charge {0} x{1} to {2}{3} from {4}{5}";
+            Automatics.Logger.Debug(() =>
+                string.Format(format, Automatics.L10N.Translate(itemName), count,
+                    Automatics.L10N.Translate(toName), toPos,
+                    Automatics.L10N.Translate(fromName), fromPos));
+        }
+
         public static bool IsAllowContainer(Container container)
         {
             return Globals.Container.GetIdentify(Objects.GetName(container), out var identifier) &&

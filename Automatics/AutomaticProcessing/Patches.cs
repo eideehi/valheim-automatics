@@ -268,5 +268,19 @@ namespace Automatics.AutomaticProcessing
                     new CodeInstruction(OpCodes.Ret))
                 .Instructions();
         }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Turret), "UpdateAttack")]
+        private static void Turret_UpdateAttack_Postfix(Turret __instance, ZNetView ___m_nview, float dt)
+        {
+            TurretProcess.Charge(__instance, ___m_nview, dt);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Turret), "OnDestroyed")]
+        private static void Turret_OnDestroyed_Postfix(Turret turret)
+        {
+            TurretProcess.ClearTimer(turret);
+        }
     }
 }

@@ -25,6 +25,7 @@ namespace Automatics.AutomaticProcessing
         private static Dictionary<string, ConfigEntry<bool>> _refuelOnlyWhenMaterialsSupplied;
         private static Dictionary<string, ConfigEntry<bool>> _refuelOnlyWhenOutOfFuel;
         private static Dictionary<string, ConfigEntry<bool>> _storeOnlyIfProductExists;
+        private static Dictionary<string, ConfigEntry<int>> _numberOfItemsToStopCharge;
 
         public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool IsModuleDisabled => _moduleDisable.Value;
@@ -86,6 +87,13 @@ namespace Automatics.AutomaticProcessing
             return _storeOnlyIfProductExists.TryGetValue(processor, out var entry) && entry.Value;
         }
 
+        public static int NumberOfItemsToStopCharge(string processor)
+        {
+            return _numberOfItemsToStopCharge.TryGetValue(processor, out var entry)
+                ? entry.Value
+                : 0;
+        }
+
         public static void Initialize()
         {
             var config = global::Automatics.Config.Instance;
@@ -120,6 +128,7 @@ namespace Automatics.AutomaticProcessing
             _refuelOnlyWhenMaterialsSupplied = new Dictionary<string, ConfigEntry<bool>>();
             _refuelOnlyWhenOutOfFuel = new Dictionary<string, ConfigEntry<bool>>();
             _storeOnlyIfProductExists = new Dictionary<string, ConfigEntry<bool>>();
+            _numberOfItemsToStopCharge = new Dictionary<string, ConfigEntry<int>>();
 
             foreach (var processor in Processor.GetAllInstance())
             {
@@ -186,6 +195,13 @@ namespace Automatics.AutomaticProcessing
                         config.Bind(key, false,
                             initializer: Initializer("store_only_if_product_exists",
                                 displayName));
+                }
+
+                if (processes.Contains(Process.Charge))
+                {
+                    key = $"{rawName}_number_of_items_to_stop_charge";
+                    _numberOfItemsToStopCharge[processorName] = config.Bind(key, 1, (0, 999),
+                        initializer: Initializer("number_of_items_to_stop_charge", displayName));
                 }
             }
 
