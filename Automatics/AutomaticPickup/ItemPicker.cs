@@ -65,15 +65,14 @@ namespace Automatics.AutomaticPickup
             if (!_zNetView.IsOwner() || Reflections.GetField<bool>(pickable, "m_picked"))
                 return;
 
-            var inventory = player.GetInventory();
-            if (!inventory.CanAddItem(pickable.m_itemPrefab, pickable.m_amount))
-                return;
+            if (!CanAddItem(player, pickable.m_itemPrefab, pickable.m_amount)) return;
 
             pickable.m_pickEffector.Create(
                 pickable.m_pickEffectAtSpawnPoint
                     ? pickable.transform.position + Vector3.up * pickable.m_spawnOffset
                     : pickable.transform.position, Quaternion.identity);
 
+            var inventory = player.GetInventory();
             inventory.AddItem(pickable.m_itemPrefab, pickable.m_amount);
 
             if (!pickable.m_extraDrops.IsEmpty())
@@ -81,7 +80,7 @@ namespace Automatics.AutomaticPickup
                 var offset = 0;
                 foreach (var item in pickable.m_extraDrops.GetDropListItems())
                 {
-                    if (!inventory.CanAddItem(item.m_dropPrefab, item.m_stack))
+                    if (!CanAddItem(player, item.m_dropPrefab, item.m_stack))
                     {
                         Reflections.InvokeMethod(pickable, "Drop", item.m_dropPrefab, offset++,
                             item.m_stack);
@@ -108,14 +107,13 @@ namespace Automatics.AutomaticPickup
                 return;
 
             var stackSize = Reflections.InvokeMethod<int>(pickableItem, "GetStackSize");
-            var inventory = player.GetInventory();
-            if (!inventory.CanAddItem(pickableItem.m_itemPrefab.m_itemData, stackSize))
+            if (!CanAddItem(player, pickableItem.m_itemPrefab.m_itemData, stackSize))
                 return;
 
             Reflections.SetField(pickableItem, "m_picked", true);
             pickableItem.m_pickEffector.Create(pickableItem.transform.position,
                 Quaternion.identity);
-            inventory.AddItem(pickableItem.m_itemPrefab.gameObject, stackSize);
+            player.GetInventory().AddItem(pickableItem.m_itemPrefab.gameObject, stackSize);
             _zNetView.Destroy();
         }
 
@@ -123,9 +121,22 @@ namespace Automatics.AutomaticPickup
         {
             var player = Player.GetPlayer(playerId);
             if (!player) return;
-            if (!player.GetInventory().CanAddItem(itemDrop.m_itemData)) return;
+            if (!CanAddItem(player, itemDrop.m_itemData)) return;
 
             itemDrop.Pickup(player);
+        }
+
+        private static bool CanAddItem(Player player, ItemDrop.ItemData itemData, int stack = -1)
+        {
+            var inventory = player.GetInventory();
+            if (!inventory.CanAddItem(itemData, stack)) return false;
+            return inventory.GetTotalWeight() + itemData.GetWeight() < player.m_maxCarryWeight;
+        }
+
+        private static bool CanAddItem(Player player, GameObject prefab, int stack = -1)
+        {
+            var itemDrop = prefab.GetComponent<ItemDrop>();
+            return itemDrop != null && CanAddItem(player, itemDrop.m_itemData, stack);
         }
     }
 }
