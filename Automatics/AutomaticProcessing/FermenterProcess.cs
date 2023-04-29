@@ -108,6 +108,8 @@ namespace Automatics.AutomaticProcessing
 
                 var inventory = container.GetInventory();
                 var itemCountBefore = inventory.CountItems(itemName);
+                if (Config.StoreOnlyIfProductExists(fermenterName) &&
+                    !Inventories.HaveItem(inventory, itemName, 1)) continue;
                 if (!inventory.AddItem(item.gameObject, productRemaining)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;

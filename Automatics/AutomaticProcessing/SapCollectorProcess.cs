@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -39,6 +40,8 @@ namespace Automatics.AutomaticProcessing
                     amount = Mathf.Min(amount, freeStackSpace);
                 }
 
+                if (Config.StoreOnlyIfProductExists(sapCollectorName) &&
+                    !Inventories.HaveItem(inventory, sapName, 1)) continue;
                 if (!inventory.AddItem(sapItem.gameObject, amount)) continue;
 
                 var storedSapCount = inventory.CountItems(sapName) - sapCountInContainer;

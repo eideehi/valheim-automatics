@@ -128,6 +128,8 @@
     "@config_automatic_processing_refuel_only_when_materials_supplied_description": "$1に素材アイテムが供給されている時だけ自動燃料補給を実行します。",
     "@config_automatic_processing_refuel_only_when_out_of_fuel_name": "燃料がなくなったときだけ$1の燃料を補給する",
     "@config_automatic_processing_refuel_only_when_out_of_fuel_description": "$1の燃料アイテムがなくなった時だけ自動燃料補給を実行します。",
+    "@config_automatic_processing_store_only_if_product_exists_name": "$1の製品アイテムがコンテナの中に存在する場合だけ収納する",
+    "@config_automatic_processing_store_only_if_product_exists_description": "$1の製品アイテムが既にコンテナに収納されている場合だけ収納を実行します。範囲内に製品アイテムが収納されているコンテナが存在しない場合は、通常通りにアイテムが生産されます。",
     "@config_automatic_processing_processing_type_craft": "作成",
     "@config_automatic_processing_processing_type_refuel": "燃料補給",
     "@config_automatic_processing_processing_type_store": "収納",

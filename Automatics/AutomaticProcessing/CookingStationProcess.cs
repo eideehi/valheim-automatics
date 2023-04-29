@@ -159,6 +159,8 @@ namespace Automatics.AutomaticProcessing
             foreach (var (container, _) in Logics.GetNearbyContainers(stationName, origin))
             {
                 var inventory = container.GetInventory();
+                if (Config.StoreOnlyIfProductExists(stationName) &&
+                    !Inventories.HaveItem(inventory, itemName, 1)) continue;
                 if (!inventory.AddItem(item.gameObject, 1)) continue;
 
                 zNetView.GetZDO().Set("slot" + slot, "");

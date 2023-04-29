@@ -24,6 +24,7 @@ namespace Automatics.AutomaticProcessing
         private static Dictionary<string, ConfigEntry<int>> _productStacksOfSuppressProcessing;
         private static Dictionary<string, ConfigEntry<bool>> _refuelOnlyWhenMaterialsSupplied;
         private static Dictionary<string, ConfigEntry<bool>> _refuelOnlyWhenOutOfFuel;
+        private static Dictionary<string, ConfigEntry<bool>> _storeOnlyIfProductExists;
 
         public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool IsModuleDisabled => _moduleDisable.Value;
@@ -80,6 +81,11 @@ namespace Automatics.AutomaticProcessing
             return _refuelOnlyWhenOutOfFuel.TryGetValue(processor, out var entry) && entry.Value;
         }
 
+        public static bool StoreOnlyIfProductExists(string processor)
+        {
+            return _storeOnlyIfProductExists.TryGetValue(processor, out var entry) && entry.Value;
+        }
+
         public static void Initialize()
         {
             var config = global::Automatics.Config.Instance;
@@ -113,6 +119,7 @@ namespace Automatics.AutomaticProcessing
             _productStacksOfSuppressProcessing = new Dictionary<string, ConfigEntry<int>>();
             _refuelOnlyWhenMaterialsSupplied = new Dictionary<string, ConfigEntry<bool>>();
             _refuelOnlyWhenOutOfFuel = new Dictionary<string, ConfigEntry<bool>>();
+            _storeOnlyIfProductExists = new Dictionary<string, ConfigEntry<bool>>();
 
             foreach (var processor in Processor.GetAllInstance())
             {
@@ -169,6 +176,15 @@ namespace Automatics.AutomaticProcessing
                     _refuelOnlyWhenMaterialsSupplied[processorName] =
                         config.Bind(key, false,
                             initializer: Initializer("refuel_only_when_materials_supplied",
+                                displayName));
+                }
+
+                if (processes.Contains(Process.Store))
+                {
+                    key = $"{rawName}_store_only_if_product_exists";
+                    _storeOnlyIfProductExists[processorName] =
+                        config.Bind(key, false,
+                            initializer: Initializer("store_only_if_product_exists",
                                 displayName));
                 }
             }

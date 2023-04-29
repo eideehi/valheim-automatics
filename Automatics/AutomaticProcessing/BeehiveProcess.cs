@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -39,6 +40,8 @@ namespace Automatics.AutomaticProcessing
                     amount = Mathf.Min(amount, freeStackSpace);
                 }
 
+                if (Config.StoreOnlyIfProductExists(beehiveName) &&
+                    !Inventories.HaveItem(inventory, honeyName, 1)) continue;
                 if (!inventory.AddItem(honeyItem.gameObject, amount)) continue;
 
                 var storedHoneyCount = inventory.CountItems(honeyName) - honeyCountInContainer;

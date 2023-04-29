@@ -325,6 +325,8 @@ namespace Automatics.AutomaticProcessing
 
                 var inventory = container.GetInventory();
                 var itemCountBefore = inventory.CountItems(itemName);
+                if (Config.StoreOnlyIfProductExists(smelterName) &&
+                    !Inventories.HaveItem(inventory, itemName, 1)) continue;
                 if (!inventory.AddItem(item.gameObject, stack)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;

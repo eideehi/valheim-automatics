@@ -128,6 +128,8 @@
     "@config_automatic_processing_refuel_only_when_materials_supplied_description": "Performs automatic refuel only when materials are supplied to $1.",
     "@config_automatic_processing_refuel_only_when_out_of_fuel_name": "Refuel $1 Only When Out Of Fuel",
     "@config_automatic_processing_refuel_only_when_out_of_fuel_description": "Performs automatic refuel only when $1 is out of fuel.",
+    "@config_automatic_processing_store_only_if_product_exists_name": "Store $1 Only If Product Exists",
+    "@config_automatic_processing_store_only_if_product_exists_description": "Store is performed only if the $1 product item is already stored in a container. If there is no container with a product item stored within the range, the item is produced as usual.",
     "@config_automatic_processing_processing_type_craft": "Craft",
     "@config_automatic_processing_processing_type_refuel": "Refuel",
     "@config_automatic_processing_processing_type_store": "Store",

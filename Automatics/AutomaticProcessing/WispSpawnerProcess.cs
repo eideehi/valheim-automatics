@@ -1,4 +1,5 @@
 ﻿using JetBrains.Annotations;
+using ModUtils;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -38,6 +39,8 @@ namespace Automatics.AutomaticProcessing
                     if (freeStackSpace == 0) continue;
                 }
 
+                if (Config.StoreOnlyIfProductExists(wispSpawnerName) &&
+                    !Inventories.HaveItem(inventory, wispName, 1)) continue;
                 if (!inventory.AddItem(wispItem.gameObject, 1)) continue;
 
                 zNetView.GetZDO().Set("LastSpawn", ZNet.instance.GetTime().Ticks);
