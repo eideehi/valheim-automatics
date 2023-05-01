@@ -278,9 +278,9 @@ namespace Automatics.AutomaticProcessing
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Turret), "OnDestroyed")]
-        private static void Turret_OnDestroyed_Postfix(Turret turret)
+        private static void Turret_OnDestroyed_Postfix(Turret __instance)
         {
-            TurretProcess.ClearTimer(turret);
+            TurretProcess.ClearTimer(__instance);
         }
     }
 }
