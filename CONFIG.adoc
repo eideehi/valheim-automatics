@@ -73,7 +73,7 @@ Any container can be added. Identifier: a unique string that does not overlap wi
 - Default value:
 
 === [ #3 Automatic Door ] / [automatic_door]
-==== [Deprecated] Disable Module / [module_disable]
+==== [Deprecated] Disable Module / [disable_module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: false
@@ -279,658 +279,741 @@ Specify containers that allow automatic operations such as item supply and stora
 
 - Default value: PieceChestWood, PieceChest, PieceChestBlackmetal
 
-==== Allow Processing By Beehive / [allow_processing_by_piece_beehive]
-Specify the automatic processing to be allowed for Beehive
+==== Beehive: Allow Process / [allow_processing_by_piece_beehive]
+Specify the automatic processes to allow for Beehive. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Store
 
-==== Container Search Range By Beehive / [container_search_range_by_piece_beehive]
-Specify the maximum distance which Beehive will search for containers. (Unit: meter)
+==== Beehive: Container Search Range / [container_search_range_by_piece_beehive]
+Specifies the maximum distance Beehive will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Allow Processing By Bonfire / [allow_processing_by_piece_bonfire]
-Specify the automatic processing to be allowed for Bonfire
+==== Beehive: Store Only If Product Exists In Container / [piece_beehive_store_only_if_product_exists]
+Store only if the product item for Beehive is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Bonfire: Allow Process / [allow_processing_by_piece_bonfire]
+Specify the automatic processes to allow for Bonfire. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Bonfire / [container_search_range_by_piece_bonfire]
-Specify the maximum distance which Bonfire will search for containers. (Unit: meter)
+==== Bonfire: Container Search Range / [container_search_range_by_piece_bonfire]
+Specifies the maximum distance Bonfire will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Bonfire / [piece_bonfire_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Bonfire to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Bonfire: Number Of Fuels To Stop Refuel / [piece_bonfire_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Bonfire will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Bonfire Only When Out Of Fuel / [piece_bonfire_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Bonfire is out of fuel.
+==== Bonfire: Refuel Only If Fuels Run Out / [piece_bonfire_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Bonfire runs out.
 
 - Default value: false
 
-==== Allow Processing By Blast furnace / [allow_processing_by_piece_blastfurnace]
-Specify the automatic processing to be allowed for Blast furnace
+==== Blast furnace: Allow Process / [allow_processing_by_piece_blastfurnace]
+Specify the automatic processes to allow for Blast furnace. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
-- Default value: All
-- Acceptable values: None, Craft, Refuel, Store, All
+- Default value: Craft, Refuel, Store
+- Acceptable values: None, Craft, Refuel, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
-==== Container Search Range By Blast furnace / [container_search_range_by_piece_blastfurnace]
-Specify the maximum distance which Blast furnace will search for containers. (Unit: meter)
+==== Blast furnace: Container Search Range / [container_search_range_by_piece_blastfurnace]
+Specifies the maximum distance Blast furnace will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Blast furnace / [piece_blastfurnace_material_count_of_suppress_processing]
-Suppresses automatic processing of Blast furnace to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Blast furnace: Number Of Materials To Stop Supplying / [piece_blastfurnace_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Blast furnace will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Blast furnace / [piece_blastfurnace_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Blast furnace to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Blast furnace: Number Of Product Stacks To Stop Craft / [piece_blastfurnace_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Blast furnace will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Blast furnace Only When Materials Run Out / [piece_blastfurnace_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Blast furnace run out.
+==== Blast furnace: Supply Only If Materials Run Out / [piece_blastfurnace_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Blast furnace run out.
 
 - Default value: false
 
-==== Fuel Count Of Suppress Processing For Blast furnace / [piece_blastfurnace_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Blast furnace to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Blast furnace: Number Of Fuels To Stop Refuel / [piece_blastfurnace_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Blast furnace will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Blast furnace Only When Out Of Fuel / [piece_blastfurnace_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Blast furnace is out of fuel.
+==== Blast furnace: Refuel Only If Fuels Run Out / [piece_blastfurnace_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Blast furnace runs out.
 
 - Default value: false
 
-==== Refuel Blast furnace Only When Materials Supplied / [piece_blastfurnace_refuel_only_when_materials_supplied]
-Performs automatic refuel only when materials are supplied to Blast furnace.
+==== Blast furnace: Refuel Only When Materials Supplied / [piece_blastfurnace_refuel_only_when_materials_supplied]
+Refuel only when material items are supplied to Blast furnace.
 
 - Default value: false
 
-==== Allow Processing By Campfire / [allow_processing_by_piece_firepit]
-Specify the automatic processing to be allowed for Campfire
+==== Blast furnace: Store Only If Product Exists In Container / [piece_blastfurnace_store_only_if_product_exists]
+Store only if the product item for Blast furnace is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Campfire: Allow Process / [allow_processing_by_piece_firepit]
+Specify the automatic processes to allow for Campfire. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Campfire / [container_search_range_by_piece_firepit]
-Specify the maximum distance which Campfire will search for containers. (Unit: meter)
+==== Campfire: Container Search Range / [container_search_range_by_piece_firepit]
+Specifies the maximum distance Campfire will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Campfire / [piece_firepit_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Campfire to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Campfire: Number Of Fuels To Stop Refuel / [piece_firepit_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Campfire will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Campfire Only When Out Of Fuel / [piece_firepit_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Campfire is out of fuel.
+==== Campfire: Refuel Only If Fuels Run Out / [piece_firepit_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Campfire runs out.
 
 - Default value: false
 
-==== Allow Processing By Charcoal kiln / [allow_processing_by_piece_charcoalkiln]
-Specify the automatic processing to be allowed for Charcoal kiln
+==== Charcoal kiln: Allow Process / [allow_processing_by_piece_charcoalkiln]
+Specify the automatic processes to allow for Charcoal kiln. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Craft, Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Container Search Range By Charcoal kiln / [container_search_range_by_piece_charcoalkiln]
-Specify the maximum distance which Charcoal kiln will search for containers. (Unit: meter)
+==== Charcoal kiln: Container Search Range / [container_search_range_by_piece_charcoalkiln]
+Specifies the maximum distance Charcoal kiln will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Charcoal kiln / [piece_charcoalkiln_material_count_of_suppress_processing]
-Suppresses automatic processing of Charcoal kiln to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Charcoal kiln: Number Of Materials To Stop Supplying / [piece_charcoalkiln_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Charcoal kiln will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Charcoal kiln / [piece_charcoalkiln_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Charcoal kiln to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Charcoal kiln: Number Of Product Stacks To Stop Craft / [piece_charcoalkiln_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Charcoal kiln will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Charcoal kiln Only When Materials Run Out / [piece_charcoalkiln_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Charcoal kiln run out.
+==== Charcoal kiln: Supply Only If Materials Run Out / [piece_charcoalkiln_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Charcoal kiln run out.
 
 - Default value: false
 
-==== Allow Processing By Cooking station / [allow_processing_by_piece_cookingstation]
-Specify the automatic processing to be allowed for Cooking station
+==== Charcoal kiln: Store Only If Product Exists In Container / [piece_charcoalkiln_store_only_if_product_exists]
+Store only if the product item for Charcoal kiln is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Cooking station: Allow Process / [allow_processing_by_piece_cookingstation]
+Specify the automatic processes to allow for Cooking station. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Container Search Range By Cooking station / [container_search_range_by_piece_cookingstation]
-Specify the maximum distance which Cooking station will search for containers. (Unit: meter)
+==== Cooking station: Container Search Range / [container_search_range_by_piece_cookingstation]
+Specifies the maximum distance Cooking station will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Cooking station / [piece_cookingstation_material_count_of_suppress_processing]
-Suppresses automatic processing of Cooking station to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Cooking station: Number Of Materials To Stop Supplying / [piece_cookingstation_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Cooking station will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Cooking station / [piece_cookingstation_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Cooking station to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Cooking station: Number Of Product Stacks To Stop Craft / [piece_cookingstation_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Cooking station will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Cooking station Only When Materials Run Out / [piece_cookingstation_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Cooking station run out.
+==== Cooking station: Supply Only If Materials Run Out / [piece_cookingstation_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Cooking station run out.
 
 - Default value: false
 
-==== Allow Processing By Fermenter / [allow_processing_by_piece_fermenter]
-Specify the automatic processing to be allowed for Fermenter
+==== Cooking station: Store Only If Product Exists In Container / [piece_cookingstation_store_only_if_product_exists]
+Store only if the product item for Cooking station is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Fermenter: Allow Process / [allow_processing_by_piece_fermenter]
+Specify the automatic processes to allow for Fermenter. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Craft, Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Container Search Range By Fermenter / [container_search_range_by_piece_fermenter]
-Specify the maximum distance which Fermenter will search for containers. (Unit: meter)
+==== Fermenter: Container Search Range / [container_search_range_by_piece_fermenter]
+Specifies the maximum distance Fermenter will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Fermenter / [piece_fermenter_material_count_of_suppress_processing]
-Suppresses automatic processing of Fermenter to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Fermenter: Number Of Materials To Stop Supplying / [piece_fermenter_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Fermenter will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Fermenter / [piece_fermenter_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Fermenter to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Fermenter: Number Of Product Stacks To Stop Craft / [piece_fermenter_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Fermenter will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Fermenter Only When Materials Run Out / [piece_fermenter_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Fermenter run out.
+==== Fermenter: Supply Only If Materials Run Out / [piece_fermenter_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Fermenter run out.
 
 - Default value: false
 
-==== Allow Processing By Hanging brazier / [allow_processing_by_piece_brazierceiling01]
-Specify the automatic processing to be allowed for Hanging brazier
+==== Fermenter: Store Only If Product Exists In Container / [piece_fermenter_store_only_if_product_exists]
+Store only if the product item for Fermenter is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Hanging brazier: Allow Process / [allow_processing_by_piece_brazierceiling01]
+Specify the automatic processes to allow for Hanging brazier. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Hanging brazier / [container_search_range_by_piece_brazierceiling01]
-Specify the maximum distance which Hanging brazier will search for containers. (Unit: meter)
+==== Hanging brazier: Container Search Range / [container_search_range_by_piece_brazierceiling01]
+Specifies the maximum distance Hanging brazier will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Hanging brazier / [piece_brazierceiling01_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Hanging brazier to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Hanging brazier: Number Of Fuels To Stop Refuel / [piece_brazierceiling01_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Hanging brazier will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Hanging brazier Only When Out Of Fuel / [piece_brazierceiling01_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Hanging brazier is out of fuel.
+==== Hanging brazier: Refuel Only If Fuels Run Out / [piece_brazierceiling01_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Hanging brazier runs out.
 
 - Default value: false
 
-==== Allow Processing By Hearth / [allow_processing_by_piece_hearth]
-Specify the automatic processing to be allowed for Hearth
+==== Hearth: Allow Process / [allow_processing_by_piece_hearth]
+Specify the automatic processes to allow for Hearth. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Hearth / [container_search_range_by_piece_hearth]
-Specify the maximum distance which Hearth will search for containers. (Unit: meter)
+==== Hearth: Container Search Range / [container_search_range_by_piece_hearth]
+Specifies the maximum distance Hearth will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Hearth / [piece_hearth_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Hearth to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Hearth: Number Of Fuels To Stop Refuel / [piece_hearth_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Hearth will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Hearth Only When Out Of Fuel / [piece_hearth_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Hearth is out of fuel.
+==== Hearth: Refuel Only If Fuels Run Out / [piece_hearth_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Hearth runs out.
 
 - Default value: false
 
-==== Allow Processing By Iron cooking station / [allow_processing_by_piece_cookingstation_iron]
-Specify the automatic processing to be allowed for Iron cooking station
+==== Iron cooking station: Allow Process / [allow_processing_by_piece_cookingstation_iron]
+Specify the automatic processes to allow for Iron cooking station. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Container Search Range By Iron cooking station / [container_search_range_by_piece_cookingstation_iron]
-Specify the maximum distance which Iron cooking station will search for containers. (Unit: meter)
+==== Iron cooking station: Container Search Range / [container_search_range_by_piece_cookingstation_iron]
+Specifies the maximum distance Iron cooking station will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Iron cooking station / [piece_cookingstation_iron_material_count_of_suppress_processing]
-Suppresses automatic processing of Iron cooking station to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Iron cooking station: Number Of Materials To Stop Supplying / [piece_cookingstation_iron_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Iron cooking station will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Iron cooking station / [piece_cookingstation_iron_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Iron cooking station to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Iron cooking station: Number Of Product Stacks To Stop Craft / [piece_cookingstation_iron_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Iron cooking station will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Iron cooking station Only When Materials Run Out / [piece_cookingstation_iron_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Iron cooking station run out.
+==== Iron cooking station: Supply Only If Materials Run Out / [piece_cookingstation_iron_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Iron cooking station run out.
 
 - Default value: false
 
-==== Allow Processing By Jack-o-turnip / [allow_processing_by_piece_jackoturnip]
-Specify the automatic processing to be allowed for Jack-o-turnip
+==== Iron cooking station: Store Only If Product Exists In Container / [piece_cookingstation_iron_store_only_if_product_exists]
+Store only if the product item for Iron cooking station is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Jack-o-turnip: Allow Process / [allow_processing_by_piece_jackoturnip]
+Specify the automatic processes to allow for Jack-o-turnip. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Jack-o-turnip / [container_search_range_by_piece_jackoturnip]
-Specify the maximum distance which Jack-o-turnip will search for containers. (Unit: meter)
+==== Jack-o-turnip: Container Search Range / [container_search_range_by_piece_jackoturnip]
+Specifies the maximum distance Jack-o-turnip will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Jack-o-turnip / [piece_jackoturnip_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Jack-o-turnip to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Jack-o-turnip: Number Of Fuels To Stop Refuel / [piece_jackoturnip_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Jack-o-turnip will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Jack-o-turnip Only When Out Of Fuel / [piece_jackoturnip_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Jack-o-turnip is out of fuel.
+==== Jack-o-turnip: Refuel Only If Fuels Run Out / [piece_jackoturnip_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Jack-o-turnip runs out.
 
 - Default value: false
 
-==== Allow Processing By Sconce / [allow_processing_by_piece_sconce]
-Specify the automatic processing to be allowed for Sconce
+==== Sconce: Allow Process / [allow_processing_by_piece_sconce]
+Specify the automatic processes to allow for Sconce. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Sconce / [container_search_range_by_piece_sconce]
-Specify the maximum distance which Sconce will search for containers. (Unit: meter)
+==== Sconce: Container Search Range / [container_search_range_by_piece_sconce]
+Specifies the maximum distance Sconce will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Sconce / [piece_sconce_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Sconce to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Sconce: Number Of Fuels To Stop Refuel / [piece_sconce_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Sconce will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Sconce Only When Out Of Fuel / [piece_sconce_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Sconce is out of fuel.
+==== Sconce: Refuel Only If Fuels Run Out / [piece_sconce_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Sconce runs out.
 
 - Default value: false
 
-==== Allow Processing By Smelter / [allow_processing_by_piece_smelter]
-Specify the automatic processing to be allowed for Smelter
+==== Smelter: Allow Process / [allow_processing_by_piece_smelter]
+Specify the automatic processes to allow for Smelter. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
-- Default value: All
-- Acceptable values: None, Craft, Refuel, Store, All
+- Default value: Craft, Refuel, Store
+- Acceptable values: None, Craft, Refuel, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
-==== Container Search Range By Smelter / [container_search_range_by_piece_smelter]
-Specify the maximum distance which Smelter will search for containers. (Unit: meter)
+==== Smelter: Container Search Range / [container_search_range_by_piece_smelter]
+Specifies the maximum distance Smelter will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Smelter / [piece_smelter_material_count_of_suppress_processing]
-Suppresses automatic processing of Smelter to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Smelter: Number Of Materials To Stop Supplying / [piece_smelter_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Smelter will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Smelter / [piece_smelter_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Smelter to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Smelter: Number Of Product Stacks To Stop Craft / [piece_smelter_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Smelter will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Smelter Only When Materials Run Out / [piece_smelter_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Smelter run out.
+==== Smelter: Supply Only If Materials Run Out / [piece_smelter_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Smelter run out.
 
 - Default value: false
 
-==== Fuel Count Of Suppress Processing For Smelter / [piece_smelter_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Smelter to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Smelter: Number Of Fuels To Stop Refuel / [piece_smelter_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Smelter will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Smelter Only When Out Of Fuel / [piece_smelter_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Smelter is out of fuel.
+==== Smelter: Refuel Only If Fuels Run Out / [piece_smelter_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Smelter runs out.
 
 - Default value: false
 
-==== Refuel Smelter Only When Materials Supplied / [piece_smelter_refuel_only_when_materials_supplied]
-Performs automatic refuel only when materials are supplied to Smelter.
+==== Smelter: Refuel Only When Materials Supplied / [piece_smelter_refuel_only_when_materials_supplied]
+Refuel only when material items are supplied to Smelter.
 
 - Default value: false
 
-==== Allow Processing By Spinning wheel / [allow_processing_by_piece_spinningwheel]
-Specify the automatic processing to be allowed for Spinning wheel
+==== Smelter: Store Only If Product Exists In Container / [piece_smelter_store_only_if_product_exists]
+Store only if the product item for Smelter is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Spinning wheel: Allow Process / [allow_processing_by_piece_spinningwheel]
+Specify the automatic processes to allow for Spinning wheel. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Container Search Range By Spinning wheel / [container_search_range_by_piece_spinningwheel]
-Specify the maximum distance which Spinning wheel will search for containers. (Unit: meter)
+==== Spinning wheel: Container Search Range / [container_search_range_by_piece_spinningwheel]
+Specifies the maximum distance Spinning wheel will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Spinning wheel / [piece_spinningwheel_material_count_of_suppress_processing]
-Suppresses automatic processing of Spinning wheel to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Spinning wheel: Number Of Materials To Stop Supplying / [piece_spinningwheel_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Spinning wheel will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Spinning wheel / [piece_spinningwheel_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Spinning wheel to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Spinning wheel: Number Of Product Stacks To Stop Craft / [piece_spinningwheel_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Spinning wheel will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Spinning wheel Only When Materials Run Out / [piece_spinningwheel_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Spinning wheel run out.
+==== Spinning wheel: Supply Only If Materials Run Out / [piece_spinningwheel_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Spinning wheel run out.
 
 - Default value: false
 
-==== Allow Processing By Standing blue-burning iron torch / [allow_processing_by_piece_groundtorchblue]
-Specify the automatic processing to be allowed for Standing blue-burning iron torch
+==== Spinning wheel: Store Only If Product Exists In Container / [piece_spinningwheel_store_only_if_product_exists]
+Store only if the product item for Spinning wheel is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Standing blue-burning iron torch: Allow Process / [allow_processing_by_piece_groundtorchblue]
+Specify the automatic processes to allow for Standing blue-burning iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Standing blue-burning iron torch / [container_search_range_by_piece_groundtorchblue]
-Specify the maximum distance which Standing blue-burning iron torch will search for containers. (Unit: meter)
+==== Standing blue-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchblue]
+Specifies the maximum distance Standing blue-burning iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Standing blue-burning iron torch / [piece_groundtorchblue_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Standing blue-burning iron torch to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Standing blue-burning iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorchblue_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing blue-burning iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Standing blue-burning iron torch Only When Out Of Fuel / [piece_groundtorchblue_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Standing blue-burning iron torch is out of fuel.
+==== Standing blue-burning iron torch: Refuel Only If Fuels Run Out / [piece_groundtorchblue_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Standing blue-burning iron torch runs out.
 
 - Default value: false
 
-==== Allow Processing By Standing brazier / [allow_processing_by_piece_brazierfloor01]
-Specify the automatic processing to be allowed for Standing brazier
+==== Standing brazier: Allow Process / [allow_processing_by_piece_brazierfloor01]
+Specify the automatic processes to allow for Standing brazier. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Standing brazier / [container_search_range_by_piece_brazierfloor01]
-Specify the maximum distance which Standing brazier will search for containers. (Unit: meter)
+==== Standing brazier: Container Search Range / [container_search_range_by_piece_brazierfloor01]
+Specifies the maximum distance Standing brazier will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Standing brazier / [piece_brazierfloor01_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Standing brazier to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Standing brazier: Number Of Fuels To Stop Refuel / [piece_brazierfloor01_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing brazier will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Standing brazier Only When Out Of Fuel / [piece_brazierfloor01_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Standing brazier is out of fuel.
+==== Standing brazier: Refuel Only If Fuels Run Out / [piece_brazierfloor01_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Standing brazier runs out.
 
 - Default value: false
 
-==== Allow Processing By Standing green-burning iron torch / [allow_processing_by_piece_groundtorchgreen]
-Specify the automatic processing to be allowed for Standing green-burning iron torch
+==== Standing green-burning iron torch: Allow Process / [allow_processing_by_piece_groundtorchgreen]
+Specify the automatic processes to allow for Standing green-burning iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Standing green-burning iron torch / [container_search_range_by_piece_groundtorchgreen]
-Specify the maximum distance which Standing green-burning iron torch will search for containers. (Unit: meter)
+==== Standing green-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchgreen]
+Specifies the maximum distance Standing green-burning iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Standing green-burning iron torch / [piece_groundtorchgreen_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Standing green-burning iron torch to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Standing green-burning iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorchgreen_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing green-burning iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Standing green-burning iron torch Only When Out Of Fuel / [piece_groundtorchgreen_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Standing green-burning iron torch is out of fuel.
+==== Standing green-burning iron torch: Refuel Only If Fuels Run Out / [piece_groundtorchgreen_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Standing green-burning iron torch runs out.
 
 - Default value: false
 
-==== Allow Processing By Standing iron torch / [allow_processing_by_piece_groundtorch]
-Specify the automatic processing to be allowed for Standing iron torch
+==== Standing iron torch: Allow Process / [allow_processing_by_piece_groundtorch]
+Specify the automatic processes to allow for Standing iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Standing iron torch / [container_search_range_by_piece_groundtorch]
-Specify the maximum distance which Standing iron torch will search for containers. (Unit: meter)
+==== Standing iron torch: Container Search Range / [container_search_range_by_piece_groundtorch]
+Specifies the maximum distance Standing iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Standing iron torch / [piece_groundtorch_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Standing iron torch to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Standing iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorch_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Standing iron torch Only When Out Of Fuel / [piece_groundtorch_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Standing iron torch is out of fuel.
+==== Standing iron torch: Refuel Only If Fuels Run Out / [piece_groundtorch_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Standing iron torch runs out.
 
 - Default value: false
 
-==== Allow Processing By Standing wood torch / [allow_processing_by_piece_groundtorchwood]
-Specify the automatic processing to be allowed for Standing wood torch
+==== Standing wood torch: Allow Process / [allow_processing_by_piece_groundtorchwood]
+Specify the automatic processes to allow for Standing wood torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Container Search Range By Standing wood torch / [container_search_range_by_piece_groundtorchwood]
-Specify the maximum distance which Standing wood torch will search for containers. (Unit: meter)
+==== Standing wood torch: Container Search Range / [container_search_range_by_piece_groundtorchwood]
+Specifies the maximum distance Standing wood torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fuel Count Of Suppress Processing For Standing wood torch / [piece_groundtorchwood_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Standing wood torch to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Standing wood torch: Number Of Fuels To Stop Refuel / [piece_groundtorchwood_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing wood torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Standing wood torch Only When Out Of Fuel / [piece_groundtorchwood_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Standing wood torch is out of fuel.
+==== Standing wood torch: Refuel Only If Fuels Run Out / [piece_groundtorchwood_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Standing wood torch runs out.
 
 - Default value: false
 
-==== Allow Processing By Stone oven / [allow_processing_by_piece_oven]
-Specify the automatic processing to be allowed for Stone oven
+==== Stone oven: Allow Process / [allow_processing_by_piece_oven]
+Specify the automatic processes to allow for Stone oven. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
-- Default value: All
-- Acceptable values: None, Craft, Refuel, Store, All
+- Default value: Craft, Refuel, Store
+- Acceptable values: None, Craft, Refuel, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
-==== Container Search Range By Stone oven / [container_search_range_by_piece_oven]
-Specify the maximum distance which Stone oven will search for containers. (Unit: meter)
+==== Stone oven: Container Search Range / [container_search_range_by_piece_oven]
+Specifies the maximum distance Stone oven will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Stone oven / [piece_oven_material_count_of_suppress_processing]
-Suppresses automatic processing of Stone oven to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Stone oven: Number Of Materials To Stop Supplying / [piece_oven_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Stone oven will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Stone oven / [piece_oven_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Stone oven to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Stone oven: Number Of Product Stacks To Stop Craft / [piece_oven_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Stone oven will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Stone oven Only When Materials Run Out / [piece_oven_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Stone oven run out.
+==== Stone oven: Supply Only If Materials Run Out / [piece_oven_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Stone oven run out.
 
 - Default value: false
 
-==== Fuel Count Of Suppress Processing For Stone oven / [piece_oven_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Stone oven to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Stone oven: Number Of Fuels To Stop Refuel / [piece_oven_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Stone oven will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Stone oven Only When Out Of Fuel / [piece_oven_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Stone oven is out of fuel.
+==== Stone oven: Refuel Only If Fuels Run Out / [piece_oven_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Stone oven runs out.
 
 - Default value: false
 
-==== Refuel Stone oven Only When Materials Supplied / [piece_oven_refuel_only_when_materials_supplied]
-Performs automatic refuel only when materials are supplied to Stone oven.
+==== Stone oven: Refuel Only When Materials Supplied / [piece_oven_refuel_only_when_materials_supplied]
+Refuel only when material items are supplied to Stone oven.
 
 - Default value: false
 
-==== Allow Processing By Windmill / [allow_processing_by_piece_windmill]
-Specify the automatic processing to be allowed for Windmill
+==== Stone oven: Store Only If Product Exists In Container / [piece_oven_store_only_if_product_exists]
+Store only if the product item for Stone oven is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Windmill: Allow Process / [allow_processing_by_piece_windmill]
+Specify the automatic processes to allow for Windmill. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Container Search Range By Windmill / [container_search_range_by_piece_windmill]
-Specify the maximum distance which Windmill will search for containers. (Unit: meter)
+==== Windmill: Container Search Range / [container_search_range_by_piece_windmill]
+Specifies the maximum distance Windmill will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Windmill / [piece_windmill_material_count_of_suppress_processing]
-Suppresses automatic processing of Windmill to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Windmill: Number Of Materials To Stop Supplying / [piece_windmill_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Windmill will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Windmill / [piece_windmill_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Windmill to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Windmill: Number Of Product Stacks To Stop Craft / [piece_windmill_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Windmill will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Windmill Only When Materials Run Out / [piece_windmill_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Windmill run out.
+==== Windmill: Supply Only If Materials Run Out / [piece_windmill_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Windmill run out.
 
 - Default value: false
 
-==== Allow Processing By Wisp fountain / [allow_processing_by_piece_wisplure]
-Specify the automatic processing to be allowed for Wisp fountain
+==== Windmill: Store Only If Product Exists In Container / [piece_windmill_store_only_if_product_exists]
+Store only if the product item for Windmill is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Wisp fountain: Allow Process / [allow_processing_by_piece_wisplure]
+Specify the automatic processes to allow for Wisp fountain. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Store
 
-==== Container Search Range By Wisp fountain / [container_search_range_by_piece_wisplure]
-Specify the maximum distance which Wisp fountain will search for containers. (Unit: meter)
+==== Wisp fountain: Container Search Range / [container_search_range_by_piece_wisplure]
+Specifies the maximum distance Wisp fountain will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Allow Processing By Sap extractor  / [allow_processing_by_piece_sapcollector]
-Specify the automatic processing to be allowed for Sap extractor
+==== Wisp fountain: Store Only If Product Exists In Container / [piece_wisplure_store_only_if_product_exists]
+Store only if the product item for Wisp fountain is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Sap extractor : Allow Process / [allow_processing_by_piece_sapcollector]
+Specify the automatic processes to allow for Sap extractor . "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Store
 
-==== Container Search Range By Sap extractor  / [container_search_range_by_piece_sapcollector]
-Specify the maximum distance which Sap extractor  will search for containers. (Unit: meter)
+==== Sap extractor : Container Search Range / [container_search_range_by_piece_sapcollector]
+Specifies the maximum distance Sap extractor  will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Allow Processing By Eitr refinery / [allow_processing_by_piece_eitrrefinery]
-Specify the automatic processing to be allowed for Eitr refinery
+==== Sap extractor : Store Only If Product Exists In Container / [piece_sapcollector_store_only_if_product_exists]
+Store only if the product item for Sap extractor  is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Eitr refinery: Allow Process / [allow_processing_by_piece_eitrrefinery]
+Specify the automatic processes to allow for Eitr refinery. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
-- Acceptable values: None, Craft, Refuel, Store, All
+- Acceptable values: None, Craft, Refuel, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
-==== Container Search Range By Eitr refinery / [container_search_range_by_piece_eitrrefinery]
-Specify the maximum distance which Eitr refinery will search for containers. (Unit: meter)
+==== Eitr refinery: Container Search Range / [container_search_range_by_piece_eitrrefinery]
+Specifies the maximum distance Eitr refinery will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Material Count Of Suppress Processing For Eitr refinery / [piece_eitrrefinery_material_count_of_suppress_processing]
-Suppresses automatic processing of Eitr refinery to prevent the count of materials stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of materials.
+==== Eitr refinery: Number Of Materials To Stop Supplying / [piece_eitrrefinery_material_count_of_suppress_processing]
+When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Eitr refinery will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Product Stacks Of Suppress Processing For Eitr refinery / [piece_eitrrefinery_product_stacks_of_suppress_processing]
-Suppresses automatic processing of Eitr refinery to prevent the item stacks of products stored in a container from exceeding a specified quantity. Set to 0 to disable automatic processing suppression based on the count of products.
+==== Eitr refinery: Number Of Product Stacks To Stop Craft / [piece_eitrrefinery_product_stacks_of_suppress_processing]
+When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Eitr refinery will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Material Supply To Eitr refinery Only When Materials Run Out / [piece_eitrrefinery_supply_only_when_materials_run_out]
-Performs automatic craft only when materials of Eitr refinery run out.
+==== Eitr refinery: Supply Only If Materials Run Out / [piece_eitrrefinery_supply_only_when_materials_run_out]
+Supply one material item only when the materials supplied to Eitr refinery run out.
 
 - Default value: false
 
-==== Fuel Count Of Suppress Processing For Eitr refinery / [piece_eitrrefinery_fuel_count_of_suppress_processing]
-Suppresses automatic processing of Eitr refinery to prevent the count of fuels stored in a container from falling below a specified quantity. Set to 0 to disable automatic processing suppression based on the count of fuels.
+==== Eitr refinery: Number Of Fuels To Stop Refuel / [piece_eitrrefinery_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Eitr refinery will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Refuel Eitr refinery Only When Out Of Fuel / [piece_eitrrefinery_refuel_only_when_out_of_fuel]
-Performs automatic refuel only when Eitr refinery is out of fuel.
+==== Eitr refinery: Refuel Only If Fuels Run Out / [piece_eitrrefinery_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Eitr refinery runs out.
 
 - Default value: false
 
-==== Refuel Eitr refinery Only When Materials Supplied / [piece_eitrrefinery_refuel_only_when_materials_supplied]
-Performs automatic refuel only when materials are supplied to Eitr refinery.
+==== Eitr refinery: Refuel Only When Materials Supplied / [piece_eitrrefinery_refuel_only_when_materials_supplied]
+Refuel only when material items are supplied to Eitr refinery.
 
 - Default value: false
+
+==== Eitr refinery: Store Only If Product Exists In Container / [piece_eitrrefinery_store_only_if_product_exists]
+Store only if the product item for Eitr refinery is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
+
+- Default value: false
+
+==== Ballista: Allow Process / [allow_processing_by_piece_turret]
+Specify the automatic processes to allow for Ballista. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
+
+- Default value: Charge
+- Acceptable values: None, Charge
+
+==== Ballista: Container Search Range / [container_search_range_by_piece_turret]
+Specifies the maximum distance Ballista will search for containers. (Unit: meters)
+
+- Default value: 8
+- Acceptable value range: From 1 to 64
+
+==== Ballista: Number Of Items To Stop Charge / [piece_turret_number_of_items_to_stop_charge]
+When the number of items stored in the container is about to become less than the specified quantity, charge to Ballista will be stopped. If set to 0, stopping charge based on the number of items will be disabled.
+
+- Default value: 1
+- Acceptable value range: From 0 to 999
 
 === [ #6 Automatic Feeding ] / [automatic_feeding]
 ==== [Deprecated] Disable Module / [module_disable]

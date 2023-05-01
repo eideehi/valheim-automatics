@@ -1,3 +1,11 @@
+#### v1.4.5 [2023-05-01]
+- Fixed a bug where pins for static objects were sometimes duplicated when the player moved using portals.
+- Fixed a bug where an exception could occur when trying to delete a pin by right-clicking it.
+- Automatic Pickup no longer pickup items if it would cause the player to become overweight.
+- Added an option to the Automatic Processing to store only if products exist in the container.
+- Added a Ballista to Automatic Processing targets.
+- Changed the display name and description of the Automatic Processing config.
+
 #### v1.4.4 [2023-03-23]
 - Fixed a bug where the automatic door stops functioning when the player moves a certain distance away from it.
 - Fixed a bug where pins would be duplicated and added when the vehicle moves, if the vehicle's automatic mapping is enabled.

@@ -203,6 +203,14 @@ namespace Automatics
                 MigrationFor140(lines);
             }
 
+            migrateVersion = new Version(1, 4, 5);
+            if (version < migrateVersion)
+            {
+                Automatics.Logger.Message($"Migrating config from {version} to {migrateVersion}");
+                dirty = true;
+                MigrationFor145(lines);
+            }
+
             if (dirty)
             {
                 File.WriteAllText(path, string.Join(Environment.NewLine, lines), Encoding.UTF8);
@@ -286,6 +294,17 @@ namespace Automatics
                 { "[automatic_processing]", new List<Operation>
                 {
                     RemoveConfig(@"r/^([\w_]+)_product_count_of_suppress_processing"),
+                }},
+            });
+        }
+
+        private static void MigrationFor145(List<string> lines)
+        {
+            Migration(lines, new Dictionary<string, List<Operation>>
+            {
+                { "[automatic_processing]", new List<Operation>
+                {
+                    ReplaceValue("r/^allow_processing_by", "All", "Craft, Refuel, Store"),
                 }},
             });
         }
