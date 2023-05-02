@@ -1,3 +1,6 @@
+#### v1.4.6 [2023-05-02]
+- Fixed a bug where static pins were immediately deleted when the "Save Static Object Pins" option was not enabled.
+
 #### v1.4.5 [2023-05-01]
 - Fixed a bug where pins for static objects were sometimes duplicated when the player moved using portals.
 - Fixed a bug where an exception could occur when trying to delete a pin by right-clicking it.
