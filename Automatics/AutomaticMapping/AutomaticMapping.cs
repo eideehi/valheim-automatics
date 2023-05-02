@@ -558,11 +558,13 @@ namespace Automatics.AutomaticMapping
 
         public static void Mapping(float delta, bool takeInput)
         {
-            if (!CanMapping(delta, takeInput) || Config.StaticObjectMappingRange <= 0)
+            if (Config.StaticObjectMappingRange <= 0)
             {
                 RemoveCachedPins();
                 return;
             }
+
+            if (!CanMapping(delta, takeInput)) return;
 
             var origin = Player.m_localPlayer.transform.position;
 
