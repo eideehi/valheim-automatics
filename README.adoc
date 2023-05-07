@@ -1,4 +1,5 @@
 = Automatics - Valheim Mod
+:version: 1.4.6
 :box: https://app.box.com/shared/static
 :repositry: https://github.com/eideehi/valheim-automatics
 :uri-base: {repositry}/blob/{version}/
