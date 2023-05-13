@@ -247,6 +247,14 @@
     "@command_printobjects_message_result": "\"$1\" ($2)\n  Pos: $3 [Distance: $4]\n  Recommend identifier: $5\n  Pattern: $6",
     "@command_printobjects_message_result_defined": "\"$1\" ($2) [Already defined as an $3]\n  Pos: $4 [Distance: $5]\n  Identifier: $6",
     "@command_printobjects_message_result_more": "In addition to this, found $1 types of objects that can be treated as $2.",
-    "@command_printobjects_message_result_empty": "No $1 matching the criteria were found."
+    "@command_printobjects_message_result_empty": "No $1 matching the criteria were found.",
+    "@command_removemappins_usage": "Usage: removemappins (OPTIONS...)",
+    "@command_removemappins_description": "Remove map pins that match the specified conditions. If no options are specified, all duplicate pins will be deleted. [Note] Please disable the \"Automatic Mapping\" feature before using this command. It may cause malfunctions.",
+    "@command_removemappins_option_radius_description": "Specify the maximum distance from the player's position to the pin to be removed. If set to 0, all pins will be targeted. [Default: 0] (Unit: meters)",
+    "@command_removemappins_option_include_description": "Pins that contain the specified string in their name will be targeted for deletion.",
+    "@command_removemappins_option_exclude_description": "Pins that contain the specified string in their name will be excluded from the deletion target.",
+    "@command_removemappins_option_allow_non_duplicate_pins_description": "Include non-duplicate pins in the deletion targets. [Note] Improper use of this option may result in the deletion of all pins, including those added by the player.",
+    "@command_removemappins_message_remove_pins": "Remove the $1 pin(s)",
+    "@command_removemappins_message_pin_data": "Name: $1, Pos: $2 [Distance: $3]"
   }
 }

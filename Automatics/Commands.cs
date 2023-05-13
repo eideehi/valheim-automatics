@@ -9,6 +9,7 @@ namespace Automatics
             new ShowCommands().Register();
             new PrintNames().Register();
             new PrintObjects().Register();
+            new RemoveMapPins().Register();
         }
     }
 }

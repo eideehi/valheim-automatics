@@ -247,6 +247,14 @@
     "@command_printobjects_message_result": "\"$1\" ($2)\n  位置: $3 [距離: $4]\n  推奨される識別子: $5\n  パターン: $6",
     "@command_printobjects_message_result_defined": "\"$1\" ($2) [$3として定義済み]\n  位置: $4 [距離: $5]\n  識別子: $6",
     "@command_printobjects_message_result_more": "他に $1 種類の $2 として扱うことのできるオブジェクトを発見しました。",
-    "@command_printobjects_message_result_empty": "条件に一致する $1 が見つかりませんでした。"
+    "@command_printobjects_message_result_empty": "条件に一致する $1 が見つかりませんでした。",
+    "@command_removemappins_usage": "使用方法: removemappins (OPTIONS...)",
+    "@command_removemappins_description": "指定した条件に一致するマップのピンを削除します。オプションをなにも指定しない場合はすべての重複したピンが削除されます。[注意] このコマンドを使用するときは「自動マッピング」の機能を無効化しておいてください。誤作動の原因となります。",
+    "@command_removemappins_option_radius_description": "プレイヤーの位置から削除するピンまでの最大距離を指定します。0に設定するとすべてのピンが対象となります。[初期値: 0] (単位: メートル)",
+    "@command_removemappins_option_include_description":"指定された文字列を名前に含むピンを削除の対象とします。",
+    "@command_removemappins_option_exclude_description": "指定された文字列を名前に含むピンを削除の対象から除外します。",
+    "@command_removemappins_option_allow_non_duplicate_pins_description": "重複したピン以外も削除の対象とします。[注意] このオプションは使い方を誤ると、プレイヤーの追加したものを含むすべてのピンが削除される可能性があります。",
+    "@command_removemappins_message_remove_pins": "$1 のピンを削除します",
+    "@command_removemappins_message_pin_data": "名前: $1, 位置: $2 [距離: $3]"
   }
 }
