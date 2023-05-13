@@ -67,40 +67,73 @@ interacted item and pick up them all.
 Automatics add a few commands to help the user.
 
 ## automatics
+
 *Usage: automatics (OPTIONS…​)*
 
 Displays the usage of commands added by Automatics.
 
-OPTIONS:
-| Option              | Description                                                               |
-|---------------------|---------------------------------------------------------------------------|
-| -i, --include=VALUE | Show only commands whose names include the word specified in this option. |
-| -e, --exclude=VALUE | Exclude commands whose names contain the word specified with this option. |
-| -v, --verbose       | Displays detailed usage of the command.                                   |
-| -h, --help          | Displays a help message and exits the command.                            |
+### OPTIONS
+
+<table>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-i,
+--include=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Show only commands whose names include
+the word specified in this option.</p></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><p><strong>-e,
+--exclude=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Exclude commands whose names contain
+the word specified with this option.</p></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-v, --verbose</strong></p></td>
+<td style="text-align: left;"><p>Displays detailed usage of the
+command.</p></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><p><strong>-h, --help</strong></p></td>
+<td style="text-align: left;"><p>Displays a help message and exits the
+command.</p></td>
+</tr>
+</tbody>
+</table>
 
 ## printnames
-*Usage: printnames (OPTIONS…​) (WORD\|REGEXP)…​*
+
+*Usage: printnames (OPTIONS…​) (WORD|REGEXP)…​*
 
 Outputs internal or display names that contain the specified string or
 match the specified regular expression. If multiple arguments are
 specified, only those matching all of them will be output.
 
-WORD
+### WORD
+
 A text contained in the internal or display name. (e.g. `$enemy_`,
-`$item_`, `$piece_`, `Boar`, `Mushroom`, `Wood door`); All partially matching
-internal and display names are output.
+`$item_`, `$piece_`, `Boar`, `Mushroom`, `Wood door`); All partially
+matching internal and display names are output.
 
-REGEXP
+### REGEXP
+
 A regular expression of the internal or display name to be output. Must
-be prefixed with r/ (e.g. `r/^[$]item\_`, `r/^boar$`)
+be prefixed with r/ (e.g. `r/^[$]item_`, `r/^boar$`)
 
-OPTIONS:
-| Option     | Description                                    |
-|------------|------------------------------------------------|
-| -h, --help | Displays a help message and exits the command. |
+### OPTIONS
 
-Examples:
+<table>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-h, --help</strong></p></td>
+<td style="text-align: left;"><p>Displays a help message and exits the
+command.</p></td>
+</tr>
+</tbody>
+</table>
+
+### Examples
+
 -   `printnames ling r/^[$]enemy_`
 
 -   `printnames r/^[$@]location_.+(?<!_(enter|exit))$`
@@ -108,30 +141,109 @@ Examples:
 -   `printnames mushroom r/^[$]item_.+(?<!_description)$`
 
 ## printobjects
+
 *Usage: printobjects \[TYPE\] (OPTIONS…​)*
 
 Display objects that can be handled by Automatics in the nearby.
 
-TYPE
-Type of object to be displayed. Specify one of the following: animal,
-monster, flora, mineral, spawner, vehicle, dungeon, spot, other.
-
-OPTIONS:
-| Option              | Description                                                                                                                                                                           |
-|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| -r, --radius=VALUE  | Specify the range within which the object is to be searched. \[Default: 32\] (Unit: Meters)                                                                                           |
-| -n, --number=VALUE  | Specify how many objects matching the condition are to be displayed. \[Default: 4\]                                                                                                   |
-| -i, --include=VALUE | Show only objects whose internal or display names match the word specified in this option. It works as a regular expression by concatenating r/ at the beginning of the string.       |
-| -e, --exclude=VALUE | Exclude objects whose internal names or display names match the word specified with this option. It works as a regular expression by concatenating r/ at the beginning of the string. |
-| -h, --help          | Displays a help message and exits the command.                                                                                                                                        |
-
-<div class="note">
-
-The result of this command may show objects that you feel are not of the
+**NOTE: The result of this command may show objects that you feel are not of the
 target type. For example, a Flint appear in the Flora search. This is
-not a bug but means that Automatics can treat Flint as Flora.
+not a bug but means that Automatics can treat Flint as Flora.**
 
-</div>
+### TYPE
+
+Type of object to be displayed. Specify one of the following: animal,
+container, door, dungeon, flora, mineral, monster, spawner, spot,
+vehicle, other.
+
+### OPTIONS
+
+<table>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-r,
+--radius=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Specify the range within which the
+object is to be searched. [Default: 32] (Unit: Meters)</p></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><p><strong>-n,
+--number=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Specify how many objects matching the
+condition are to be displayed. [Default: 4]</p></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-i,
+--include=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Show only objects whose internal or
+display names match the word specified in this option. It works as a
+regular expression by concatenating r/ at the beginning of the
+string.</p></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><p><strong>-e,
+--exclude=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Exclude objects whose internal names or
+display names match the word specified with this option. It works as a
+regular expression by concatenating r/ at the beginning of the
+string.</p></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-h, --help</strong></p></td>
+<td style="text-align: left;"><p>Displays a help message and exits the
+command.</p></td>
+</tr>
+</tbody>
+</table>
+
+## removemappins
+
+*Usage: removemappins (OPTIONS…​)*
+
+Remove map pins that match the specified conditions. If no options are
+specified, all duplicate pins will be deleted.
+
+**NOTE: Please disable the "Automatic Mapping" feature before using this
+command. It may cause malfunctions.**
+
+### OPTIONS
+
+<table>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-r,
+--radius=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Specify the maximum distance from the
+player’s position to the pin to be removed. If set to 0, all pins will
+be targeted. [Default: 0] (Unit: meters)</p></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><p><strong>-i,
+--include=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Pins that contain the specified string
+in their name will be targeted for deletion.</p></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-e,
+--exclude=VALUE</strong></p></td>
+<td style="text-align: left;"><p>Pins that contain the specified string
+in their name will be excluded from the deletion target.</p></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><p><strong>-a,
+--allow_non_duplicate_pins</strong></p></td>
+<td style="text-align: left;"><p>non-duplicate pins in the deletion
+targets. <strong>[Note] Improper use of this option may result in the
+deletion of all pins, including those added by the
+player.</strong></p></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><p><strong>-h, --help</strong></p></td>
+<td style="text-align: left;"><p>Displays a help message and exits the
+command.</p></td>
+</tr>
+</tbody>
+</table>
 
 # Configurations
 
