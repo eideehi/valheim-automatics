@@ -1,3 +1,6 @@
+#### v1.4.7 [2023-05-13]
+- Added a console command to remove map pins.
+
 #### v1.4.6 [2023-05-02]
 - Fixed a bug where static pins were immediately deleted when the "Save Static Object Pins" option was not enabled.
 

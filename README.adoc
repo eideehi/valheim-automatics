@@ -1,5 +1,5 @@
 = Automatics - Valheim Mod
-:version: 1.4.6
+:version: 1.4.7
 :box: https://app.box.com/shared/static
 :repositry: https://github.com/eideehi/valheim-automatics
 :uri-base: {repositry}/blob/{version}/
@@ -113,6 +113,30 @@ OPTIONS: :::
 
 [NOTE]
 The result of this command may show objects that you feel are not of the target type. For example, a Flint appear in the Flora search. This is not a bug but means that Automatics can treat Flint as Flora.
+
+removemappins::
+_Usage: removemappins (OPTIONS...)_
++
+Remove map pins that match the specified conditions. If no options are specified, all duplicate pins will be deleted.
++
+NOTE: Please disable the "Automatic Mapping" feature before using this command. It may cause malfunctions.
+
+OPTIONS: :::
++
+-r, --radius=VALUE::::        Specify the maximum distance from the player's position to the pin to be removed. If set to 0, all pins will be targeted. [Default: 0] (Unit: meters)
+-i, --include=VALUE::::        Pins that contain the specified string in their name will be targeted for deletion.
+-e, --exclude=VALUE::::        Pins that contain the specified string in their name will be excluded from the deletion target.
+-a, --allow_non_duplicate_pins Include non-duplicate pins in the deletion targets. **[Note] Improper use of this option may result in the deletion of all pins, including those added by the player.**
+-h, --help::::                 Displays a help message and exits the command.
+
+### give
+Usage: give (OPTIONS...) [ITEM]
+Add the item to the player's inventory.
+
+OPTIONS:
+-q, --quality=VALUE        Quality of item
+-n, --stack-size=VALUE     Size of item stack
+-h, --help                 Displays a help message and exits the command.
 
 == Configurations
 I recommend using {configuration-manager}.

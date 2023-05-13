@@ -30,6 +30,7 @@ body:
       description: |
         **NOTE: With a few exceptions, bug fixes are always made against the most recent version. Bug reports against older versions are not prohibited as a means of sharing information with other users, but please note that submitted bug reports will be closed with the label "older version" and no fixes will be made for the bug.**
       options:
+        - 1.4.7
         - 1.4.6
         - 1.4.5
         - 1.4.4

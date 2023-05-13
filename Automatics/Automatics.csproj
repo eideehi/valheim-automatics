@@ -11,7 +11,7 @@
         <AssemblyName>Automatics</AssemblyName>
         <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
         <FileAlignment>512</FileAlignment>
-        <Version>1.4.6</Version>
+        <Version>1.4.7</Version>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
         <PlatformTarget>AnyCPU</PlatformTarget>
@@ -244,8 +244,7 @@
         <ItemGroup>
             <ModFiles Include="$(TargetPath)" />
             <ModFiles Include="$(TargetDir)**\*.json" />
-            <ThunderstoreFiles Include="$(ThunderstoreAssetsDir)icon.png;$(ThunderstoreAssetsDir)manifest.json" />
-            <ThunderstoreReadmeText Include="$(ThunderstoreAssetsDir)README.md;$(SolutionDir)CHANGELOG.md" />
+            <ThunderstoreFiles Include="$(ThunderstoreAssetsDir)README.md;$(SolutionDir)CHANGELOG.md;$(ThunderstoreAssetsDir)icon.png;$(ThunderstoreAssetsDir)manifest.json" />
         </ItemGroup>
         <Move SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(NexusPackageDir)\%(RecursiveDir)%(Filename)%(Extension)')" />
         <RemoveDir Directories="$(TargetDir)" />
@@ -253,11 +252,9 @@
         <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).7z&quot; &quot;$(PackageTempDir)/*&quot;" />
         <ItemGroup>
             <NexusPackageFiles Include="$(NexusPackageDir)**\*" />
-            <ReadmeText Include="$([System.IO.File]::ReadAllText(%(ThunderstoreReadmeText.Identity)))" />
         </ItemGroup>
         <Move SourceFiles="@(NexusPackageFiles)" DestinationFiles="@(NexusPackageFiles->'$(ThunderstorePackageDir)%(RecursiveDir)%(Filename)%(Extension)')" />
         <Copy SourceFiles="@(ThunderstoreFiles)" DestinationFiles="@(ThunderstoreFiles->'$(PackageTempDir)%(RecursiveDir)%(Filename)%(Extension)')" />
-        <WriteLinesToFile File="$(PackageTempDir)README.md" Lines="@(ReadmeText)" Overwrite="true" />
         <Exec Command="&quot;$(SEVENZIP_PATH)&quot; a &quot;$(TargetDir)$(TargetName) - $(Version).zip&quot; &quot;$(PackageTempDir)/*&quot; -xr!$(TargetName)/" />
         <RemoveDir Directories="$(PackageTempDir)" />
     </Target>
