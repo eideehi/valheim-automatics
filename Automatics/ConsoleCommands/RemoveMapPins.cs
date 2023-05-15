@@ -12,7 +12,8 @@ namespace Automatics.ConsoleCommands
         private int _radius;
         private string _include;
         private string _exclude;
-        private bool _allowNonDuplicatePins;
+        private bool _dryRun;
+        private bool _dangerousMode;
 
         public RemoveMapPins() : base("removemappins")
         {
@@ -38,10 +39,15 @@ namespace Automatics.ConsoleCommands
                     x => _exclude = x
                 },
                 {
-                    "a|allow_non_duplicate_pins",
+                    "n|dry-run",
+                    Automatics.L10N.Translate("@command_removemappins_option_dry_run_description"),
+                    x => _dryRun = x != null
+                },
+                {
+                    "d|dangerous-mode",
                     Automatics.L10N.Translate(
-                        "@command_removemappins_option_allow_non_duplicate_pins_description"),
-                    x => _allowNonDuplicatePins = x != null
+                        "@command_removemappins_option_dangerous_mode_description"),
+                    x => _dangerousMode = x != null
                 }
             };
         }
@@ -52,7 +58,8 @@ namespace Automatics.ConsoleCommands
             _radius = 0;
             _include = "";
             _exclude = "";
-            _allowNonDuplicatePins = false;
+            _dryRun = false;
+            _dangerousMode = false;
         }
 
         protected override void CommandAction(Terminal.ConsoleEventArgs args)
@@ -76,7 +83,7 @@ namespace Automatics.ConsoleCommands
                 pins.Add(pin);
             }
 
-            if (!_allowNonDuplicatePins)
+            if (!_dangerousMode)
             {
                 var positions = new HashSet<Vector3>();
                 pins = pins.Where(pin => !positions.Add(pin.m_pos)).ToList();
@@ -92,8 +99,16 @@ namespace Automatics.ConsoleCommands
                     pin.m_name, pin.m_pos, Utils.DistanceXZ(origin, pin.m_pos));
                 args.Context.AddString(msg);
                 Automatics.Logger.Message(msg);
+
+                if (_dryRun) return;
                 Minimap.instance.RemovePin(pin);
             });
+
+            if (!_dangerousMode)
+            {
+                args.Context.AddString(
+                    Automatics.L10N.Translate("@command_removemappins_message_safe_mode"));
+            }
         }
     }
 }

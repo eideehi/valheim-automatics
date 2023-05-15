@@ -249,12 +249,14 @@
     "@command_printobjects_message_result_more": "他に $1 種類の $2 として扱うことのできるオブジェクトを発見しました。",
     "@command_printobjects_message_result_empty": "条件に一致する $1 が見つかりませんでした。",
     "@command_removemappins_usage": "使用方法: removemappins (OPTIONS...)",
-    "@command_removemappins_description": "指定した条件に一致するマップのピンを削除します。オプションをなにも指定しない場合はすべての重複したピンが削除されます。[注意] このコマンドを使用するときは「自動マッピング」の機能を無効化しておいてください。誤作動の原因となります。",
+    "@command_removemappins_description": "指定した条件に一致するマップのピンを削除します。デフォルトではセーフモードで実行され、重複しているピンのみ削除の対象となります。[注意] 誤作動の原因となるので、このコマンドを使用するときは「自動マッピング」の機能を一時的に無効化しておいてください。",
     "@command_removemappins_option_radius_description": "プレイヤーの位置から削除するピンまでの最大距離を指定します。0に設定するとすべてのピンが対象となります。[初期値: 0] (単位: メートル)",
-    "@command_removemappins_option_include_description":"指定された文字列を名前に含むピンを削除の対象とします。",
+    "@command_removemappins_option_include_description": "指定された文字列を名前に含むピンを削除の対象とします。",
     "@command_removemappins_option_exclude_description": "指定された文字列を名前に含むピンを削除の対象から除外します。",
-    "@command_removemappins_option_allow_non_duplicate_pins_description": "重複したピン以外も削除の対象とします。[注意] このオプションは使い方を誤ると、プレイヤーの追加したものを含むすべてのピンが削除される可能性があります。",
+    "@command_removemappins_option_dry_run_description": "ドライランモードを有効にします。このオプションを指定すると、ピンの削除がスキップされ、コンソールへの文字出力のみ行われるようになります。",
+    "@command_removemappins_option_dangerous_mode_description": "このオプションを指定すると、重複していないピンも削除の対象に含めるようになります。使い方を誤るとマップ上のすべてのピンが削除されてしまうこともあるので注意して使用してください。",
     "@command_removemappins_message_remove_pins": "$1 のピンを削除します",
-    "@command_removemappins_message_pin_data": "名前: $1, 位置: $2 [距離: $3]"
+    "@command_removemappins_message_pin_data": "名前: $1, 位置: $2 [距離: $3]",
+    "@command_removemappins_message_safe_mode": "現在、removemappins コマンドはセーフモードで実行されています。ピンを完全にマップ上から取り除くためには\"dangerous-mode\"オプションを有効にする必要があります。詳細は\"removemappins -h\"を実行してヘルプを参照してください。"
   }
 }

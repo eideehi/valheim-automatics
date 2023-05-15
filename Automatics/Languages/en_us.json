@@ -249,12 +249,14 @@
     "@command_printobjects_message_result_more": "In addition to this, found $1 types of objects that can be treated as $2.",
     "@command_printobjects_message_result_empty": "No $1 matching the criteria were found.",
     "@command_removemappins_usage": "Usage: removemappins (OPTIONS...)",
-    "@command_removemappins_description": "Remove map pins that match the specified conditions. If no options are specified, all duplicate pins will be deleted. [Note] Please disable the \"Automatic Mapping\" feature before using this command. It may cause malfunctions.",
+    "@command_removemappins_description": "Remove the map pins that match the specified conditions. By default, it runs in safe mode and only removes duplicate pins. [Caution] To prevent accidental actions, please temporarily disable the 'Automatic Mapping' when using this command.",
     "@command_removemappins_option_radius_description": "Specify the maximum distance from the player's position to the pin to be removed. If set to 0, all pins will be targeted. [Default: 0] (Unit: meters)",
     "@command_removemappins_option_include_description": "Pins that contain the specified string in their name will be targeted for deletion.",
     "@command_removemappins_option_exclude_description": "Pins that contain the specified string in their name will be excluded from the deletion target.",
-    "@command_removemappins_option_allow_non_duplicate_pins_description": "Include non-duplicate pins in the deletion targets. [Note] Improper use of this option may result in the deletion of all pins, including those added by the player.",
+    "@command_removemappins_option_dry_run_description": "Enables the dry run mode. When this option is specified, pin deletion will be skipped, and only text output to the console will be performed.",
+    "@command_removemappins_option_dangerous_mode_description": "When this option is specified, non-duplicate pins will also be included in the deletion target. Please use this option with caution, as incorrect usage can result in the deletion of all pins on the map.",
     "@command_removemappins_message_remove_pins": "Remove the $1 pin(s)",
-    "@command_removemappins_message_pin_data": "Name: $1, Pos: $2 [Distance: $3]"
+    "@command_removemappins_message_pin_data": "Name: $1, Pos: $2 [Distance: $3]",
+    "@command_removemappins_message_safe_mode": "The removemappins command is currently being executed in safe mode. To completely remove pins from the map, you need to enable the \"dangerous-mode\" option. For more details, please run \"removemappins -h\" to refer to the help."
   }
 }
