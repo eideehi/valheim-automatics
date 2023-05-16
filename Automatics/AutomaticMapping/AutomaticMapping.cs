@@ -240,7 +240,7 @@ namespace Automatics.AutomaticMapping
                 }
                 else
                 {
-                    pin = Map.AddPin(pos, name, true, CreateTarget(name));
+                    pin = Map.AddPin(pos, name, true, CreateTarget(vehicle.gameObject, name));
                     VehiclePinCache.Add(uniqueId, pin);
                 }
             }
@@ -264,7 +264,8 @@ namespace Automatics.AutomaticMapping
 
             var pos = character.transform.position;
             if (!PinDataCache.TryGetValue(uniqueId, out var pinData))
-                AddPin(uniqueId, pos, pinName, CreateTarget(character.m_name, level));
+                AddPin(uniqueId, pos, pinName,
+                    CreateTarget(character.gameObject, character.m_name, level));
             else
                 UpdatePin(pinData, pinName, pos, delta);
         }
@@ -287,7 +288,7 @@ namespace Automatics.AutomaticMapping
             }
 
             if (!PinDataCache.TryGetValue(uniqueId, out var pinData))
-                AddPin(uniqueId, pos, pinName, CreateTarget(pinName));
+                AddPin(uniqueId, pos, pinName, CreateTarget(component.gameObject, pinName));
             else
                 UpdatePin(pinData, pinData.m_name, pos, delta);
         }
@@ -318,11 +319,15 @@ namespace Automatics.AutomaticMapping
                 pinData.m_pos = Vector3.MoveTowards(pinData.m_pos, pos, 200f * delta);
         }
 
-        private static Target CreateTarget(string name, int level = 0)
+        private static Target CreateTarget(GameObject prefab, string name, int level = 0)
         {
             return level <= 0
-                ? new Target { name = name }
-                : new Target { name = name, metadata = new MetaData { level = level } };
+                ? new Target { name = name, prefabName = Objects.GetPrefabName(prefab) }
+                : new Target
+                {
+                    name = name, prefabName = Objects.GetPrefabName(prefab),
+                    metadata = new MetaData { level = level }
+                };
         }
     }
 
@@ -689,7 +694,7 @@ namespace Automatics.AutomaticMapping
                     name, size)
                 : name;
 
-            AddPin(uniqueId, pos, pinName, save, CreateTarget(name));
+            AddPin(uniqueId, pos, pinName, save, CreateTarget(component.gameObject, name));
             return true;
         }
 
@@ -764,7 +769,7 @@ namespace Automatics.AutomaticMapping
                         return true;
                 }
 
-            AddPin(uniqueId, pos, name, CreateTarget(name));
+            AddPin(uniqueId, pos, name, CreateTarget(component.gameObject, name));
             return true;
         }
 
@@ -780,7 +785,7 @@ namespace Automatics.AutomaticMapping
 
             var position = component.transform.position;
             if (!Map.HavePinInRange(position, 1f))
-                AddPin(uniqueId, position, name, CreateTarget(name));
+                AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name));
 
             return true;
         }
@@ -797,7 +802,7 @@ namespace Automatics.AutomaticMapping
 
             var position = component.transform.position;
             if (!Map.HavePinInRange(position, 1f))
-                AddPin(uniqueId, position, name, CreateTarget(name));
+                AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name));
 
             return true;
         }
@@ -820,7 +825,7 @@ namespace Automatics.AutomaticMapping
             var pos = component.transform.position;
             var pinData = Map.GetClosestPin(pos);
             if (pinData == null)
-                AddPin(uniqueId, pos, pinName, true, CreateTarget(name));
+                AddPin(uniqueId, pos, pinName, true, CreateTarget(component.gameObject, name));
             else
                 pinData.m_name = pinName;
 
@@ -851,7 +856,7 @@ namespace Automatics.AutomaticMapping
                 if (!KnownObjects.Add(new MapPinIdentify(entrance))) return true;
 
                 if (!Map.HavePinInRange(entrance, 1f))
-                    AddPin(ZDOID.None, entrance, name, CreateTarget(name));
+                    AddPin(ZDOID.None, entrance, name, CreateTarget(prefabName, name));
 
                 return true;
             }
@@ -860,7 +865,7 @@ namespace Automatics.AutomaticMapping
 
             if (!Map.HavePinInRange(pos, radius, x => x.m_name == name))
             {
-                AddPin(ZDOID.None, pos, name, CreateTarget(name));
+                AddPin(ZDOID.None, pos, name, CreateTarget(prefabName, name));
                 Automatics.Logger.Warning(() => $"Dungeon {name} has no entrance.");
             }
 
@@ -880,7 +885,7 @@ namespace Automatics.AutomaticMapping
                 name = $"@location_{prefabName.ToLower()}";
 
             if (!Map.HavePinInRange(pos, 1f))
-                AddPin(ZDOID.None, pos, name, CreateTarget(name));
+                AddPin(ZDOID.None, pos, name, CreateTarget(prefabName, name));
 
             return true;
         }
@@ -910,9 +915,14 @@ namespace Automatics.AutomaticMapping
             AddPin(uniqueId, pos, pinName, Config.SaveStaticObjectPins, target);
         }
 
-        private static Target CreateTarget(string name)
+        private static Target CreateTarget(string prefabName, string name)
         {
-            return new Target { name = name };
+            return new Target { name = name, prefabName = prefabName };
+        }
+
+        private static Target CreateTarget(GameObject prefab, string name)
+        {
+            return CreateTarget(Objects.GetPrefabName(prefab), name);
         }
 
         public struct MapPinIdentify : IEquatable<MapPinIdentify>

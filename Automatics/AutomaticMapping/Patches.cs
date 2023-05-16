@@ -39,7 +39,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Minimap), "Start")]
         private static void Minimap_Start_Postfix()
         {
-            Map.Initialize();
+            IconPack.Initialize();
         }
 
         [HarmonyPostfix]
@@ -158,7 +158,7 @@ namespace Automatics.AutomaticMapping
                         new CodeInstruction(OpCodes.Ldloc_S, 4),
                         new CodeInstruction(OpCodes.Ldloc_S, numIndex),
                         new CodeInstruction(OpCodes.Call,
-                            AccessTools.Method(typeof(Map), "ResizeIcon")),
+                            AccessTools.Method(typeof(IconPack), "ResizeIcon")),
                         new CodeInstruction(OpCodes.Stloc_S, numIndex));
                 })
                 .InstructionEnumeration();
@@ -190,7 +190,7 @@ namespace Automatics.AutomaticMapping
                 .Insert(
                     new CodeInstruction(OpCodes.Ldloc_0),
                     new CodeInstruction(OpCodes.Call,
-                        AccessTools.Method(typeof(Map), "IsNameTagHidden")),
+                        AccessTools.Method(typeof(IconPack), "IsNameTagHidden")),
                     new CodeInstruction(OpCodes.Brtrue_S, skipLabel))
                 .InstructionEnumeration();
         }
