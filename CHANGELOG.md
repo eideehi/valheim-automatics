@@ -1,3 +1,8 @@
+#### v1.4.8 [2023-07-09]
+- Update for Valheim 0.216.9
+- Removed the "allow_non_duplicate_pins" option from the "removemappins" command. Instead, added the "dry-run" and "dangerous-mode" options.
+- Enabled specifying prefab names as targets for custom icons. For more details, please refer to [custom-icon-pack.adoc](https://github.com/eideehi/valheim-automatics/blob/1.4.8/docs/custom-icon-pack.adoc#format-of-custom-map-iconjson).
+
 #### v1.4.7 [2023-05-13]
 - Added a console command to remove map pins.
 

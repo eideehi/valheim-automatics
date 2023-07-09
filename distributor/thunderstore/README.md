@@ -27,10 +27,10 @@ and the detection range of the object can be changed from the config.
 
 **Custom icon pack:**
 You can also define your own icons in png and json files. See
-[docs/custom-icon-pack.adoc](https://github.com/eideehi/valheim-automatics/blob/1.4.7/docs/custom-icon-pack.adoc)
+[docs/custom-icon-pack.adoc](https://github.com/eideehi/valheim-automatics/blob/1.4.8/docs/custom-icon-pack.adoc)
 for custom icon pack specifications.
 
-[![Document - Custom Icon Pack](https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png)](https://github.com/eideehi/valheim-automatics/blob/1.4.7/docs/custom-icon-pack.adoc)
+[![Document - Custom Icon Pack](https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png)](https://github.com/eideehi/valheim-automatics/blob/1.4.8/docs/custom-icon-pack.adoc)
 
 </div>
 
@@ -230,14 +230,21 @@ in their name will be targeted for deletion.</p></td>
 in their name will be excluded from the deletion target.</p></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;"><p><strong>-a,
---allow_non_duplicate_pins</strong></p></td>
-<td style="text-align: left;"><p>non-duplicate pins in the deletion
-targets. <strong>[Note] Improper use of this option may result in the
-deletion of all pins, including those added by the
-player.</strong></p></td>
+<td style="text-align: left;"><p><strong>-n,
+--dry-run</strong></p></td>
+<td style="text-align: left;"><p>Enables the dry run mode. When this
+option is specified, pin deletion will be skipped, and only text output
+to the console will be performed.</strong></p></td>
 </tr>
 <tr class="odd">
+<td style="text-align: left;"><p><strong>-d,
+--dangerous-mode</strong></p></td>
+<td style="text-align: left;"><p>When this option is specified,
+non-duplicate pins will also be included in the deletion target. Please
+use this option with caution, as incorrect usage can result in the
+deletion of all pins on the map.</strong></p></td>
+</tr>
+<tr class="even">
 <td style="text-align: left;"><p><strong>-h, --help</strong></p></td>
 <td style="text-align: left;"><p>Displays a help message and exits the
 command.</p></td>
@@ -256,7 +263,7 @@ Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 configuration, so we split it into separate file.**
 
 Open
-[CONFIG.adoc](https://github.com/eideehi/valheim-automatics/blob/1.4.7/CONFIG.adoc)
+[CONFIG.adoc](https://github.com/eideehi/valheim-automatics/blob/1.4.8/CONFIG.adoc)
 to see the configuration details.
 
 ## Adding object definitions to Automatics
@@ -268,7 +275,7 @@ define objects that you want Automatics to work with.
 ![User-defined objects in GUI](https://app.box.com/shared/static/5f6dvpg1elczu9froqkepxamv03ci9cd.png)
 
 Open
-[docs/add-user-defined-object.adoc](https://github.com/eideehi/valheim-automatics/blob/1.4.7/docs/add-user-defined-object.adoc)
+[docs/add-user-defined-object.adoc](https://github.com/eideehi/valheim-automatics/blob/1.4.8/docs/add-user-defined-object.adoc)
 to learn more about adding user-defined objects.
 
 ## About deprecated options
@@ -351,5 +358,5 @@ Matching result
 
 Automatics is developed and released under the MIT license. For the full
 text of the license, please see the
-[LICENSE](https://github.com/eideehi/valheim-automatics/blob/1.4.7/LICENSE)
+[LICENSE](https://github.com/eideehi/valheim-automatics/blob/1.4.8/LICENSE)
 file.

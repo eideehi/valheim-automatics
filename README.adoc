@@ -1,5 +1,5 @@
 = Automatics - Valheim Mod
-:version: 1.4.7
+:version: 1.4.8
 :box: https://app.box.com/shared/static
 :repositry: https://github.com/eideehi/valheim-automatics
 :uri-base: {repositry}/blob/{version}/
@@ -122,7 +122,8 @@ NOTE: Please disable the "Automatic Mapping" feature before using this command. 
 | -r, --radius=VALUE             | Specify the maximum distance from the player's position to the pin to be removed. If set to 0, all pins will be targeted. [Default: 0] (Unit: meters)
 | -i, --include=VALUE            | Pins that contain the specified string in their name will be targeted for deletion.
 | -e, --exclude=VALUE            | Pins that contain the specified string in their name will be excluded from the deletion target.
-| -a, --allow_non_duplicate_pins |  non-duplicate pins in the deletion targets. **[Note] Improper use of this option may result in the deletion of all pins, including those added by the player.**
+| -n, --dry-run                  | Enables the dry run mode. When this option is specified, pin deletion will be skipped, and only text output to the console will be performed.
+| -d, --dangerous-mode           | When this option is specified, non-duplicate pins will also be included in the deletion target. Please use this option with caution, as incorrect usage can result in the deletion of all pins on the map.
 | -h, --help                     | Displays a help message and exits the command.
 |===
 

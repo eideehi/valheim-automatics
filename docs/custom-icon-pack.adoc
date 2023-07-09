@@ -1,5 +1,5 @@
 = Custom icon pack
-:version: 1.4.0
+:version: 1.4.8
 :box: https://app.box.com/shared/static
 :repositry: https://github.com/eideehi/valheim-automatics
 :uri-base: {repositry}/blob/{version}/
@@ -65,7 +65,7 @@ See *custom-map-icon.json* below. The first item applies the boar.png icon only 
   },
   {
     "target": {
-      "name": "$enemy_deer"
+      "prefabName": "Deer"
     },
     "sprite": {
       "file": "deer.png",
@@ -84,6 +84,9 @@ target::
 
   name:::
     Specify a display name such as `Boar` or an internal name such as `$enemy_boar`; See the {uri-name-matching}[Matching by "Display name" and "Internal name"] section for the difference between matching by display name and internal name.
+
+  prefabName:::
+    Specify Unity prefab names such as `Greydwarf_Elite` or `Greydwarf_Shaman`. It can be specified together with the "name" field.
 
   metadata:::
     Describe if you want to further narrow down the target by information other than a name. If omitted, the icon will be applied to all targets matching the name.
