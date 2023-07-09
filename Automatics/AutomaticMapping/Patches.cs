@@ -113,7 +113,7 @@ namespace Automatics.AutomaticMapping
                 .Advance(-1)
                 .Insert(
                     new CodeInstruction(OpCodes.Brtrue_S, ifPinNotNull),
-                    new CodeInstruction(OpCodes.Ldloc_S, 10),
+                    new CodeInstruction(OpCodes.Ldloc_S, 8),
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldfld,
                         AccessTools.Field(typeof(Minimap), "m_removeRadius")),

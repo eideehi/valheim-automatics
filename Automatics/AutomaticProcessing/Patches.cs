@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Reflection.Emit;
 using HarmonyLib;
 
@@ -139,11 +140,11 @@ namespace Automatics.AutomaticProcessing
             return new CodeMatcher(instructions, generator)
                 .End()
                 .MatchEndBackwards(
-                    new CodeMatch(OpCodes.Ldstr, "fuel"),
+                    new CodeMatch(OpCodes.Ldsfld, AccessTools.Field(typeof(ZDOVars), "s_fuel")),
                     new CodeMatch(OpCodes.Ldloc_0),
                     new CodeMatch(OpCodes.Callvirt,
                         AccessTools.Method(typeof(ZDO), "Set",
-                            new[] { typeof(string), typeof(float) })))
+                            new[] { typeof(int), typeof(float) })))
                 .Advance(1)
                 .Insert(
                     new CodeInstruction(OpCodes.Ldarg_0),

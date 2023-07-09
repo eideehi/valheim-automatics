@@ -115,7 +115,7 @@ namespace Automatics.AutomaticMining
         {
             if (colliders == null || colliders.Length == 0) return;
 
-            var equipments = player.GetInventory().GetEquipedtems();
+            var equipments = player.GetInventory().GetEquippedItems();
             var parts = (from collider in colliders
                 let result = GetHitPosition(player.m_eye.position, collider, range)
                 where result.Position != Vector3.zero &&
@@ -199,10 +199,10 @@ namespace Automatics.AutomaticMining
 
             var hitData = new HitData
             {
-                m_toolTier = shared.m_toolTier,
-                m_statusEffect = shared.m_attackStatusEffect != null
-                    ? shared.m_attackStatusEffect.name
-                    : "",
+                m_toolTier = (short)shared.m_toolTier,
+                m_statusEffectHash = shared.m_attackStatusEffect != null
+                    ? shared.m_attackStatusEffect.NameHash()
+                    : 0,
                 m_skill = shared.m_skillType,
                 m_damage = pickaxe.GetDamage(),
                 m_point = hit,

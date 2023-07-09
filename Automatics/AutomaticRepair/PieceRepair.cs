@@ -40,7 +40,7 @@ namespace Automatics.AutomaticRepair
             if (Config.PieceSearchRange <= 0) return;
             if (!player.InPlaceMode()) return;
 
-            var tool = player.GetRightItem();
+            var tool = player.GetCurrentWeapon();
             var toolData = tool.m_shared;
 
             var origin = player.transform.position;

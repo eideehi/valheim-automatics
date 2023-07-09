@@ -764,7 +764,7 @@ namespace Automatics.AutomaticMapping
             if (Config.NeedToEquipWishboneForUndergroundMinerals)
                 if (maxHeight < ZoneSystem.instance.GetGroundHeight(pos))
                 {
-                    var items = Player.m_localPlayer.GetInventory().GetEquipedtems();
+                    var items = Player.m_localPlayer.GetInventory().GetEquippedItems();
                     if (items.Select(x => x.m_shared.m_name).All(x => x != "$item_wishbone"))
                         return true;
                 }
@@ -948,7 +948,7 @@ namespace Automatics.AutomaticMapping
 
             public bool IsUniqueId()
             {
-                return UniqueId.userID != 0 && UniqueId.id != 0;
+                return UniqueId.UserID != 0 && UniqueId.ID != 0;
             }
 
             public bool IsPos()
