@@ -25,7 +25,7 @@ namespace Automatics.AutomaticMapping
                     wearNTear.m_onDestroyed += () => DynamicObjectMapping.OnObjectDestroy(ship);
             };
 
-            Hooks.OnGameStart += (startup, isHost) => { AutomaticMapping.Cleanup(); };
+            FejdStartup.startGameEvent += (startup, args) => { AutomaticMapping.Cleanup(); };
 
             Harmony.CreateAndPatchAll(typeof(Patches),
                 Automatics.GetHarmonyId("automatic-mapping"));

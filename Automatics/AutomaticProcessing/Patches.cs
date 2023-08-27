@@ -56,16 +56,16 @@ namespace Automatics.AutomaticProcessing
             /*
              *   ItemConversion itemConversion = this.GetItemConversion(itemName);
              *   ...
-             * + CookingStationProcess.Store(this, this.m_nview, slot, itemConversion);
+             * + if (!CookingStationProcess.Store(this, this.m_nview, slot, itemConversion))
              *   this.SetSlot(slot, "", 0.0f, CookingStation.Status.NotDone);
              *   ...
-             * + CookingStationProcess.Store(this, this.m_nview, slot, itemConversion);
+             * + if (!CookingStationProcess.Store(this, this.m_nview, slot, itemConversion))
              *   this.SetSlot(slot, this.m_overCookedItem.name, cookedTime, CookingStation.Status.Burnt);
              *   ...
-             * + CookingStationProcess.Store(this, this.m_nview, slot, itemConversion);
+             * + if (!CookingStationProcess.Store(this, this.m_nview, slot, itemConversion))
              *   this.SetSlot(slot, itemConversion.m_to.name, cookedTime, CookingStation.Status.Done);
              *   ...
-             * + CookingStationProcess.Store(this, this.m_nview, slot, itemConversion);
+             * + if (!CookingStationProcess.Store(this, this.m_nview, slot, itemConversion))
              *   this.SetSlot(slot, itemName, cookedTime, status);
              */
             void InsertCodes(CodeMatcher codeMatcher, object label)
@@ -130,7 +130,7 @@ namespace Automatics.AutomaticProcessing
             IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
             /*
-             *     if (this.IsBurning()) {
+             *     if (this.IsBurning() && !this.m_infiniteFuel) {
              *       ...
              *     }
              * +   FireplaceProcess.Refuel(this, this.m_piece, this.m_nview);
@@ -157,11 +157,18 @@ namespace Automatics.AutomaticProcessing
                     new CodeInstruction(OpCodes.Call,
                         AccessTools.Method(typeof(FireplaceProcess), "Refuel")))
                 .CreateLabel(out var injectedCodes)
-                .MatchEndBackwards(
+                .Start()
+                .MatchEndForward(
                     new CodeMatch(OpCodes.Ldarg_0),
                     new CodeMatch(OpCodes.Call,
                         AccessTools.Method(typeof(Fireplace), "IsBurning")),
                     new CodeMatch(OpCodes.Brfalse))
+                .SetOperandAndAdvance(injectedCodes)
+                .MatchEndForward(
+                    new CodeMatch(OpCodes.Ldarg_0),
+                    new CodeMatch(OpCodes.Ldfld,
+                        AccessTools.Field(typeof(Fireplace), "m_infiniteFuel")),
+                    new CodeMatch(OpCodes.Brtrue))
                 .SetOperandAndAdvance(injectedCodes)
                 .InstructionEnumeration();
         }

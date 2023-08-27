@@ -10,7 +10,7 @@ namespace Automatics.AutomaticProcessing
             Config.Initialize();
             if (Config.IsModuleDisabled || Config.ModuleDisabled) return;
 
-            Hooks.OnGameStart += (startup, isHost) =>
+            FejdStartup.startGameEvent += (startup, args) =>
             {
                 Logics.Cleanup();
                 SmelterProcess.Cleanup();

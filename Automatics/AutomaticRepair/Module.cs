@@ -26,7 +26,7 @@ namespace Automatics.AutomaticRepair
             Config.Initialize();
             if (Config.IsModuleDisabled || Config.ModuleDisabled) return;
 
-            Hooks.OnGameStart += (startup, isHost) => { Cleanup(); };
+            FejdStartup.startGameEvent += (startup, args) => { Cleanup(); };
             Hooks.OnPlayerFixedUpdate += OnPlayerFixedUpdate;
             Harmony.CreateAndPatchAll(typeof(Patches), Automatics.GetHarmonyId("automatic-repair"));
         }

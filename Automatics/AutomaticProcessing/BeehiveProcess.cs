@@ -18,6 +18,7 @@ namespace Automatics.AutomaticProcessing
             var honeyItem = beehive.m_honeyItem;
             var honeyData = honeyItem.m_itemData.m_shared;
             var honeyName = honeyData.m_name;
+            var worldLevel = honeyItem.m_itemData.m_worldLevel;
 
             var maxProductStacks = Config.ProductStacksOfSuppressProcessing(beehiveName);
             var origin = beehive.transform.position;
@@ -35,7 +36,7 @@ namespace Automatics.AutomaticProcessing
                 if (maxProductStacks > 0)
                 {
                     if (stacks >= maxProductStacks) continue;
-                    var freeStackSpace = inventory.FindFreeStackSpace(honeyName);
+                    var freeStackSpace = inventory.FindFreeStackSpace(honeyName, worldLevel);
                     if (freeStackSpace == 0) continue;
                     amount = Mathf.Min(amount, freeStackSpace);
                 }

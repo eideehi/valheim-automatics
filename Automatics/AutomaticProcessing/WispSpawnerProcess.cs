@@ -22,6 +22,7 @@ namespace Automatics.AutomaticProcessing
 
             var wispData = wispItem.m_itemData.m_shared;
             var wispName = wispData.m_name;
+            var worldLevel = wispItem.m_itemData.m_worldLevel;
 
             var maxProductStacks = Config.ProductStacksOfSuppressProcessing(wispSpawnerName);
             var origin = wispSpawner.transform.position;
@@ -35,7 +36,7 @@ namespace Automatics.AutomaticProcessing
                 if (maxProductStacks > 0)
                 {
                     if (stacks >= maxProductStacks) continue;
-                    var freeStackSpace = inventory.FindFreeStackSpace(wispName);
+                    var freeStackSpace = inventory.FindFreeStackSpace(wispName, worldLevel);
                     if (freeStackSpace == 0) continue;
                 }
 

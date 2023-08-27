@@ -18,6 +18,7 @@ namespace Automatics.AutomaticProcessing
             var sapItem = sapCollector.m_spawnItem;
             var sapData = sapItem.m_itemData.m_shared;
             var sapName = sapData.m_name;
+            var worldLevel = sapItem.m_itemData.m_worldLevel;
 
             var maxProductStacks = Config.ProductStacksOfSuppressProcessing(sapCollectorName);
             var origin = sapCollector.transform.position;
@@ -35,7 +36,7 @@ namespace Automatics.AutomaticProcessing
                 if (maxProductStacks > 0)
                 {
                     if (stacks >= maxProductStacks) continue;
-                    var freeStackSpace = inventory.FindFreeStackSpace(sapName);
+                    var freeStackSpace = inventory.FindFreeStackSpace(sapName, worldLevel);
                     if (freeStackSpace == 0) continue;
                     amount = Mathf.Min(amount, freeStackSpace);
                 }

@@ -11,6 +11,7 @@ namespace Automatics.AutomaticProcessing
         {
             if (!Config.EnableAutomaticProcessing) return;
             if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
+            if (fire.m_infiniteFuel) return;
 
             var fireplaceName = piece.m_name;
             if (!Logics.IsAllowProcessing(fireplaceName, Process.Refuel)) return;
