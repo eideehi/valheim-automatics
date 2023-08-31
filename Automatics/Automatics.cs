@@ -82,15 +82,6 @@ namespace Automatics
                 }
         }
 
-        [Obsolete]
-        public static string GetInjectedResourcePath(string resourceName)
-        {
-            var directory = Config.ResourcesDirectory;
-            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
-                return Path.Combine(directory, resourceName);
-            return "";
-        }
-
         public static IEnumerable<string> GetAllResourcePath(string pathname)
         {
             return GetAllResourcesDirectory().Select(x => Path.Combine(x, pathname));
@@ -120,8 +111,6 @@ namespace Automatics
                 translationsLoader.LoadJson(directory);
 
             Config.Initialize(Plugin.Config);
-
-            translationsLoader.LoadJson(GetInjectedResourcePath("Languages"));
 
             Hooks.OnInitTerminal += Commands.Register;
 

@@ -125,7 +125,6 @@ namespace Automatics.AutomaticMapping
             foreach (var directory in Automatics.GetAllResourcePath("Textures"))
                 LoadIcons(directory, sprites);
 
-            LoadIcons(Automatics.GetInjectedResourcePath("Textures"), sprites);
             RegisterIcons(sprites);
         }
 

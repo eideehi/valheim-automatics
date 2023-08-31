@@ -11,12 +11,8 @@ namespace Automatics
     {
         private const int NexusID = 1700;
 
-        private static ConfigEntry<string> _resourcesDirectory;
-
         private static ConfigEntry<bool> _logEnabled;
         private static ConfigEntry<LogLevel> _allowedLogLevel;
-
-        public static string ResourcesDirectory => _resourcesDirectory.Value;
 
         public static bool LogEnabled => _logEnabled.Value;
         public static LogLevel AllowedLogLevel => _allowedLogLevel.Value;
@@ -80,7 +76,6 @@ namespace Automatics
             _logEnabled = Instance.Bind("enable_logging", false);
             _allowedLogLevel = Instance.Bind("log_level_to_allow_logging",
                 LogLevel.All ^ (LogLevel.Debug | LogLevel.Info));
-            _resourcesDirectory = Instance.Bind("resources_directory", "");
 
             Instance.ChangeSection("general");
             Instance.BindCustomValheimObject("custom_animal", ValheimObject.Animal);
