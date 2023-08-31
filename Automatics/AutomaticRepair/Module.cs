@@ -24,7 +24,7 @@ namespace Automatics.AutomaticRepair
         private static void Initialize()
         {
             Config.Initialize();
-            if (Config.IsModuleDisabled || Config.ModuleDisabled) return;
+            if (Config.ModuleDisabled) return;
 
             FejdStartup.startGameEvent += (startup, args) => { Cleanup(); };
             Hooks.OnPlayerFixedUpdate += OnPlayerFixedUpdate;

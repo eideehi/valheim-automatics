@@ -7,7 +7,6 @@ namespace Automatics.AutomaticFeeding
         private const string Section = "automatic_feeding";
 
         private static ConfigEntry<AutomaticsModule> _module;
-        private static ConfigEntry<bool> _moduleDisable;
         private static ConfigEntry<bool> _enableAutomaticFeeding;
         private static ConfigEntry<int> _feedSearchRange;
         private static ConfigEntry<bool> _needGetCloseToEatTheFeed;
@@ -15,7 +14,6 @@ namespace Automatics.AutomaticFeeding
         private static ConfigEntry<AnimalType> _allowToFeedFromPlayer;
 
         public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
-        public static bool IsModuleDisabled => _moduleDisable.Value;
         public static bool EnableAutomaticFeeding => _enableAutomaticFeeding.Value;
         public static float FeedSearchRange => _feedSearchRange.Value;
         public static bool NeedGetCloseToEatTheFeed => _needGetCloseToEatTheFeed.Value;
@@ -27,23 +25,13 @@ namespace Automatics.AutomaticFeeding
             var config = global::Automatics.Config.Instance;
 
             config.ChangeSection(Section);
-            _moduleDisable = config.Bind("module_disable", false, initializer: x =>
-            {
-                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_old_name");
-                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
-                x.Browsable = false;
-            });
             _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
             {
                 x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
                 x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
             });
-            if (_moduleDisable.Value) _module.Value = AutomaticsModule.Disabled;
-            _module.SettingChanged += (_, __) =>
-            {
-                _moduleDisable.Value = _module.Value == AutomaticsModule.Disabled;
-            };
-            if (_moduleDisable.Value || _module.Value == AutomaticsModule.Disabled) return;
+
+            if (_module.Value == AutomaticsModule.Disabled) return;
 
             _enableAutomaticFeeding = config.Bind("enable_automatic_feeding", true);
             _feedSearchRange = config.Bind("feed_search_range", 0, (0, 64));
