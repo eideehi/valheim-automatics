@@ -11,11 +11,6 @@ Specify the log level that allows logging.
 - Acceptable values: None, Fatal, Error, Warning, Message, Info, Debug, All
 - Multiple values can be set at the same time by separating them with , (e.g. Fatal, Error)
 
-==== [Deprecated] Resources Directory / [resources_directory]
-[This option will be discontinued in the near future. Check the README for details]
-
-- Default value:
-
 === [ #2 General ] / [general]
 ==== User-defined Animal / [custom_animal]
 Any animal can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the animal. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the animal. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
@@ -73,11 +68,6 @@ Any container can be added. Identifier: a unique string that does not overlap wi
 - Default value:
 
 === [ #3 Automatic Door ] / [automatic_door]
-==== [Deprecated] Disable Module / [disable_module]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
-
-- Default value: false
-
 ==== Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
@@ -130,11 +120,6 @@ Specify a shortcut key to enable/disable the automatic door.
 - Default value:
 
 === [ #4 Automatic Mapping ] / [automatic_mapping]
-==== [Deprecated] Disable Module / [module_disable]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
-
-- Default value: false
-
 ==== Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
@@ -258,11 +243,6 @@ Specify shortcut keys for mapping static objects. Setting this item disables the
 - Default value:
 
 === [ #5 Automatic Processing ] / [automatic_processing]
-==== [Deprecated] Disable Module / [module_disable]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
-
-- Default value: false
-
 ==== Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
@@ -1016,11 +996,6 @@ When the number of items stored in the container is about to become less than th
 - Acceptable value range: From 0 to 999
 
 === [ #6 Automatic Feeding ] / [automatic_feeding]
-==== [Deprecated] Disable Module / [module_disable]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
-
-- Default value: false
-
 ==== Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
@@ -1058,11 +1033,6 @@ Specify the types of animals allowed to feed from the player inventory.
 - Multiple values can be set at the same time by separating them with , (e.g. Wild, Tamed)
 
 === [ #7 Automatic Repair ] / [automatic_repair]
-==== [Deprecated] Disable Module / [module_disable]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
-
-- Default value: false
-
 ==== Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
@@ -1104,11 +1074,6 @@ Specify where the message is displayed when a piece is repaired.
 - Acceptable values: None, Center, TopLeft
 
 === [ #8 Automatic Mining ] / [automatic_mining]
-==== [Deprecated] Disable Module / [module_disable]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
-
-- Default value: false
-
 ==== Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
@@ -1158,11 +1123,6 @@ Specify a shortcut key to attempt mining. If a valid shortcut key is assigned to
 - Default value:
 
 === [ #9 Automatic Pickup ] / [automatic_pickup]
-==== [Deprecated] Disable Module / [module_disable]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
-
-- Default value: false
-
 ==== Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 

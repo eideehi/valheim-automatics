@@ -1,3 +1,7 @@
+#### v1.5.0 [2023-10-08]
+- Update for Valheim 0.217.24
+- The removal of the previously deprecated "module_disable" option and the "resources_directory"
+
 #### v1.4.8 [2023-07-09]
 - Update for Valheim 0.216.9
 - Removed the "allow_non_duplicate_pins" option from the "removemappins" command. Instead, added the "dry-run" and "dangerous-mode" options.

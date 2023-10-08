@@ -1,5 +1,5 @@
 = Automatics - Valheim Mod
-:version: 1.4.8
+:version: 1.5.0
 :box: https://app.box.com/shared/static
 :repositry: https://github.com/eideehi/valheim-automatics
 :uri-base: {repositry}/blob/{version}/
@@ -20,6 +20,8 @@
 :doc-config: {uri-base}CONFIG.adoc[CONFIG.adoc]
 
 Automatics is a mod that automates the tedious tasks of life in Valheim. Most of its features exist in existing mods, but it has been re-designed to make it easier for me to use.
+
+IMPORTANT: This mod has been developed by an individual and is not associated with the game's developer in any way. Please refrain from asking the developer any questions regarding this mod.
 
 == Features
 [TIP]
@@ -143,21 +145,17 @@ image:{uri-add-user-defined-object-image}[link={uri-add-user-defined-object-doc}
 
 Open {uri-add-user-defined-object-doc}[docs/add-user-defined-object.adoc] to learn more about adding user-defined objects.
 
-=== About deprecated options
-Resources Directory / [resources_directory]::
-Provided to load custom icon packs, this option will be discontinued in the near future as Automatics can now load custom icon packs from the BepInEx plugin folder.
-
 == Supplementary explanation
 === Matching by "Display name" and "Internal name"
 In some features of Automatics, there is an option that allows the user to add targets as needed. The "Display name" and "Internal name" are used to identify these targets. The display name and internal name are matched according to different rules.
 
-Display name::
+==== Display name
 Display names are the names that appear in the game, such as Boar, Deer, Dandelion, etc. The matching rule for "Display name" is a partial match, meaning that if the target display name contains the specified string, it matches. It is case-insensitive.
 
-Internal name::
+==== Internal name
 Internal names are the names used inside the game program, such as `$enemy_boar`, `$enemy_deer`, `$item_dandelion`, etc. The matching rule for "Internal name" is an exact match, meaning that if the target internal name is identical to the specified string, it matches. It is case-insensitive. Note that internal names for translations added by Automatics are prefixed with `@`, not `$`, as in `@internal_name`
 
-==== Matching Samples
+===== Matching Samples
 .Target data
 [%header]
 |===
