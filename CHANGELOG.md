@@ -1,3 +1,6 @@
+#### v1.5.1 [2023-10-15]
+- Fixed an issue that could potentially cause exceptions when attempting to place containers added by specific mods. **([#61])**
+
 #### v1.5.0 [2023-10-08]
 - Update for Valheim 0.217.24
 - The removal of the previously deprecated "module_disable" option and the "resources_directory"
@@ -180,3 +183,6 @@
 
 #### v1.0.0 [2022-01-23]
 - Initial release
+
+<!-- Issue / PR links -->
+[#61]: https://github.com/eideehi/valheim-automatics/issues/61

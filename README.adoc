@@ -1,5 +1,5 @@
 = Automatics - Valheim Mod
-:version: 1.5.0
+:version: 1.5.1
 :box: https://app.box.com/shared/static
 :repositry: https://github.com/eideehi/valheim-automatics
 :uri-base: {repositry}/blob/{version}/
@@ -21,7 +21,11 @@
 
 Automatics is a mod that automates the tedious tasks of life in Valheim. Most of its features exist in existing mods, but it has been re-designed to make it easier for me to use.
 
-IMPORTANT: This mod has been developed by an individual and is not associated with the game's developer in any way. Please refrain from asking the developer any questions regarding this mod.
+[IMPORTANT]
+====
+- This mod has been developed by an individual and is not associated with the game's developer in any way. Please refrain from asking the developer any questions regarding this mod.
+- This mod has been developed with the sole intention of single-player usage. Please be aware that it is not supported for server operation, and we kindly request your understanding in this matter.
+====
 
 == Features
 [TIP]
