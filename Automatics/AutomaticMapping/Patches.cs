@@ -14,7 +14,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Fish), "Start")]
         private static void Fish_Start_Postfix(Fish __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<FishCache>();
         }
 
@@ -23,7 +23,7 @@ namespace Automatics.AutomaticMapping
         private static void RandomFlyingBird_Start_Postfix(RandomFlyingBird __instance,
             ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<BirdCache>();
         }
 
@@ -31,7 +31,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Ship), "Awake")]
         private static void Ship_Awake_Postfix(Ship __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<ShipCache>();
         }
 
@@ -266,7 +266,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Destructible), "Awake")]
         private static void Destructible_Awake_Postfix(Destructible __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.m_onDestroyed += () =>
                     StaticObjectMapping.OnObjectDestroy(__instance, ___m_nview);
         }
@@ -276,7 +276,7 @@ namespace Automatics.AutomaticMapping
         private static void TeleportWorld_Awake_Postfix(TeleportWorld __instance,
             ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() == null) return;
+            if (___m_nview == null || ___m_nview.GetZDO() == null) return;
 
             var portal = __instance.GetComponent<WearNTear>();
             if (portal)
@@ -292,7 +292,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Vagon), "Awake")]
         private static void Vagon_Awake_Postfix(Vagon __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() == null) return;
+            if (___m_nview == null || ___m_nview.GetZDO() == null) return;
 
             var wearNTear = __instance.GetComponent<WearNTear>();
             if (wearNTear)

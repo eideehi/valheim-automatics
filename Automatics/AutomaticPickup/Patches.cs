@@ -20,7 +20,7 @@ namespace Automatics.AutomaticPickup
         [HarmonyPatch(typeof(Pickable), "Awake")]
         private static void Pickable_Awake_Postfix(Pickable __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<ItemPicker>();
         }
 
@@ -43,11 +43,10 @@ namespace Automatics.AutomaticPickup
         [HarmonyPatch(typeof(PickableItem), "Awake")]
         private static void PickableItem_Awake_Postfix(PickableItem __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
-            {
-                __instance.gameObject.AddComponent<PickableItemCache>();
-                __instance.gameObject.AddComponent<ItemPicker>();
-            }
+            if (___m_nview == null || ___m_nview.GetZDO() == null) return;
+
+            __instance.gameObject.AddComponent<PickableItemCache>();
+            __instance.gameObject.AddComponent<ItemPicker>();
         }
 
         [HarmonyPostfix]

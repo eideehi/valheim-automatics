@@ -11,7 +11,7 @@ namespace Automatics.AutomaticFeeding
         [HarmonyPatch(typeof(Tameable), "Awake")]
         private static void Tameable_Awake_Postfix(Tameable __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<AutomaticFeeding>();
         }
 

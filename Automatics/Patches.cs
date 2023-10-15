@@ -111,7 +111,7 @@ namespace Automatics
         [HarmonyPatch(typeof(Pickable), "Awake")]
         private static void Pickable_Awake_Postfix(Pickable __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<PickableCache>();
         }
     }
