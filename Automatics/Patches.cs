@@ -103,7 +103,7 @@ namespace Automatics
         [HarmonyPatch(typeof(Container), "Awake")]
         private static void Container_Awake_Postfix(Container __instance, ZNetView ___m_nview)
         {
-            if (___m_nview.GetZDO() != null)
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<ContainerCache>();
         }
 
