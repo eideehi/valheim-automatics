@@ -421,7 +421,7 @@ namespace Automatics.Valheim
 
         public bool GetIdentify(string name, out string identifier)
         {
-            var element = _allElements.FirstOrDefault(x => x.matches.All(y => y.Matches(name)));
+            var element = _allElements.FirstOrDefault(x => x.matches.Any(y => y.Matches(name)));
             if (element is null || !element.IsValid())
             {
                 identifier = "";
