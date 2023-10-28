@@ -108,7 +108,7 @@ namespace Automatics
             L10N = new L10N(L10NPrefix);
             var translationsLoader = new TranslationsLoader(L10N);
             foreach (var directory in GetAllResourcePath("Languages"))
-                translationsLoader.LoadJson(directory);
+                translationsLoader.LoadTranslations(directory);
 
             Config.Initialize(Plugin.Config);
 
