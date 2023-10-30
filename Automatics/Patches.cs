@@ -12,6 +12,14 @@ namespace Automatics
     internal static class Patches
     {
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(Localization), nameof(Localization.SetupLanguage))]
+        private static void Localization_SetupLanguage_Postfix(string language)
+        {
+            foreach (var directory in Automatics.GetAllResourcePath("Languages"))
+                new TranslationsLoader(Automatics.L10N).LoadTranslations(directory, language);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(Player), "Awake")]
         private static void Player_Awake_Postfix(Player __instance)
         {
