@@ -216,7 +216,6 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
         <None Include="packages.config" />
-        <None Include="ILRepack.targets" />
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
     <Import Project="..\packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets" Condition="Exists('..\packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets')" />
@@ -226,12 +225,34 @@
         </PropertyGroup>
         <Error Condition="!Exists('..\packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets'))" />
     </Target>
-    <Target Condition="Exists('$(BepInExDirectory)') And '$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Name="DeployModFiles" AfterTargets="ILRepacker">
+    <Target Condition="Exists('$(PDB2MDB_PATH)') And '$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Name="ExecPDB2MDB" AfterTargets="Build">
+        <Delete Condition="Exists('$(TargetPath).mdb')" Files="$(TargetPath).mdb" />
+        <Exec Command="&quot;$(PDB2MDB_PATH)&quot; &quot;$(TargetPath)&quot;" />
+    </Target>
+    <Target Condition="Exists('$(BepInExDirectory)') And '$(Configuration)|$(Platform)' == 'Debug|AnyCPU'" Name="DeployModFiles" AfterTargets="ExecPDB2MDB">
         <ItemGroup>
             <ModFiles Include="$(TargetPath)" />
+            <ModFiles Include="$(TargetPath).mdb" />
             <ModFiles Include="$(TargetDir)**\*.json" />
+            <ModFiles Include="$(OutputPath)LitJSON.dll"/>
+            <ModFiles Include="$(OutputPath)NDesk.Options.dll"/>
         </ItemGroup>
         <Copy SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(BepInExDirectory)\plugins\$(ProjectName)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    </Target>
+    <Target Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'" Name="ILRepacker" AfterTargets="Build">
+        <ItemGroup>
+            <InputAssemblies Include="$(TargetPath)" />
+            <InputAssemblies Include="$(OutputPath)LitJSON.dll" />
+            <InputAssemblies Include="$(OutputPath)NDesk.Options.dll" />
+        </ItemGroup>
+        <ILRepack
+                Parallel="true"
+                Internalize="true"
+                InputAssemblies="@(InputAssemblies)"
+                TargetKind="SameAsPrimaryAssembly"
+                OutputFile="$(TargetPath)"
+                LibraryPath="$(OutputPath)"
+        />
     </Target>
     <Target Condition="Exists('$(SEVENZIP_PATH)') And '$(Configuration)|$(Platform)' == 'Release|AnyCPU'" Name="PackageModFiles" AfterTargets="ILRepacker">
         <PropertyGroup>
