@@ -1,8 +1,10 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
+using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
@@ -18,13 +20,27 @@ namespace Automatics.AutomaticMapping
                 __instance.gameObject.AddComponent<FishCache>();
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(RandomFlyingBird), "Start")]
-        private static void RandomFlyingBird_Start_Postfix(RandomFlyingBird __instance,
-            ZNetView ___m_nview)
+        private static void AddBirdCache(RandomFlyingBird bird, ZNetView zNetView)
         {
-            if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<BirdCache>();
+            if (zNetView && zNetView.GetZDO() != null && bird.GetComponent<BirdCache>() == null)
+                bird.gameObject.AddComponent<BirdCache>();
+        }
+
+        [HarmonyPatch]
+        internal static class RandomFlyingBird_Initialize_Patch
+        {
+            [HarmonyTargetMethod]
+            private static MethodBase TargetMethod()
+            {
+                return AccessTools.DeclaredMethod(typeof(RandomFlyingBird), "Awake") ??
+                       AccessTools.DeclaredMethod(typeof(RandomFlyingBird), "Start");
+            }
+
+            [HarmonyPostfix]
+            private static void Postfix(RandomFlyingBird __instance, ZNetView ___m_nview)
+            {
+                AddBirdCache(__instance, ___m_nview);
+            }
         }
 
         [HarmonyPostfix]
@@ -47,6 +63,15 @@ namespace Automatics.AutomaticMapping
         private static void Minimap_UpdateMap_Postfix(Player player, float dt, bool takeInput)
         {
             AutomaticMapping.Mapping(player, dt, takeInput);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.OnMapLeftClick))]
+        private static bool Minimap_OnMapLeftClick_Prefix(Minimap __instance)
+        {
+            // Keep this aligned with the transpiler below: navigation selection should short-circuit
+            // before the existing save-flag handling in OnMapLeftClick runs.
+            return !Navigation.TryHandleMapClick(__instance);
         }
 
         [HarmonyTranspiler]
@@ -162,6 +187,13 @@ namespace Automatics.AutomaticMapping
                         new CodeInstruction(OpCodes.Stloc_S, numIndex));
                 })
                 .InstructionEnumeration();
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Minimap), "UpdatePins")]
+        private static void Minimap_UpdatePins_Prefix()
+        {
+            AutomaticMapping.AnimatePins(Time.deltaTime);
         }
 
         [HarmonyTranspiler]

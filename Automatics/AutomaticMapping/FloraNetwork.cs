@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using ModUtils;
 using UnityEngine;
@@ -8,36 +9,55 @@ namespace Automatics.AutomaticMapping
     [DisallowMultipleComponent]
     internal class FloraNode : ObjectNode<FloraNode, FloraNetwork>
     {
+        private static readonly Dictionary<ZDOID, FloraNode> NodeIndex =
+            new Dictionary<ZDOID, FloraNode>();
+
         private Pickable _pickable;
         private ZNetView _zNetView;
+        private ZDOID _uniqueId;
 
-        private string Name => Objects.GetName(_pickable);
+        private string Name => _pickable ? Objects.GetName(_pickable) : string.Empty;
 
-        public Vector3 Position => _pickable.transform.position;
-        public ZDOID UniqueId => _zNetView.GetZDO().m_uid;
+        public Vector3 Position => _pickable ? _pickable.transform.position : Vector3.zero;
+        public ZDOID UniqueId => _uniqueId;
 
         protected override void Awake()
         {
             _pickable = GetComponent<Pickable>();
             _zNetView = GetComponent<ZNetView>();
+            _uniqueId = _zNetView != null && _zNetView.GetZDO() != null
+                ? _zNetView.GetZDO().m_uid
+                : ZDOID.None;
 
             var destructible = _pickable.GetComponent<Destructible>();
             if (destructible != null) destructible.m_onDestroyed += OnDestroyed;
 
+            if (_uniqueId != ZDOID.None)
+                NodeIndex[_uniqueId] = this;
             base.Awake();
         }
 
         protected override void OnDestroy()
         {
+            if (_uniqueId != ZDOID.None &&
+                NodeIndex.TryGetValue(_uniqueId, out var node) &&
+                ReferenceEquals(node, this))
+                NodeIndex.Remove(_uniqueId);
+
             base.OnDestroy();
 
             _pickable = null;
             _zNetView = null;
+            _uniqueId = ZDOID.None;
         }
 
-        public static FloraNode Find(Predicate<Pickable> predicate)
+        public static FloraNode Find(ZDOID uniqueId)
         {
-            return ObjectNodes.Where(x => x.IsValid()).FirstOrDefault(x => predicate(x._pickable));
+            return uniqueId != ZDOID.None &&
+                   NodeIndex.TryGetValue(uniqueId, out var node) &&
+                   node.IsValid()
+                ? node
+                : null;
         }
 
         private void OnDestroyed()
@@ -79,10 +99,20 @@ namespace Automatics.AutomaticMapping
                     count++;
                 }
 
-                Center = center / count;
+                Center = count > 0 ? center / count : Vector3.zero;
             };
         }
 
         public Vector3 Center { get; private set; }
+
+        public void FillValidNodes(List<FloraNode> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+            foreach (var node in EnumerateNodes())
+                if (node != null && node.IsValid())
+                    buffer.Add(node);
+        }
     }
 }

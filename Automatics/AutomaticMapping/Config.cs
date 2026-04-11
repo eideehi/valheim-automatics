@@ -2,6 +2,7 @@
 using Automatics.Valheim;
 using BepInEx.Configuration;
 using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
@@ -32,6 +33,7 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<int> _floraPinMergeRange;
         private static ConfigEntry<bool> _needToEquipWishboneForUndergroundMinerals;
         private static ConfigEntry<KeyboardShortcut> _staticObjectMappingKey;
+        private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
 
         public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool EnableAutomaticMapping => _enableAutomaticMapping.Value;
@@ -59,6 +61,7 @@ namespace Automatics.AutomaticMapping
             _needToEquipWishboneForUndergroundMinerals.Value;
 
         public static KeyboardShortcut StaticObjectMappingKey => _staticObjectMappingKey.Value;
+        public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
 
         public static void Initialize()
         {
@@ -101,6 +104,8 @@ namespace Automatics.AutomaticMapping
             _floraPinMergeRange = config.Bind("flora_pins_merge_range", 8, (0, 16));
             _needToEquipWishboneForUndergroundMinerals = config.Bind("need_to_equip_wishbone_for_underground_minerals", true);
             _staticObjectMappingKey = config.Bind("static_object_mapping_key", new KeyboardShortcut());
+            _navigationStartKey = config.Bind("navigation_start_key",
+                new KeyboardShortcut(KeyCode.LeftShift));
 
             config.ChangeSection("general", 128);
             config.BindCustomValheimObject("custom_vehicle", MappingObject.Vehicle);

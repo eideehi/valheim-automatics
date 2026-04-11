@@ -11,32 +11,63 @@ namespace Automatics.AutomaticMapping
 {
     internal static class AutomaticMapping
     {
+        private static void RemoveCachedPins()
+        {
+            DynamicObjectMapping.RemoveCachedPins();
+            StaticObjectMapping.RemoveCachedPins();
+            Map.RefreshPins();
+        }
+
+        private static bool CanRun(Player player)
+        {
+            return !Game.IsPaused() &&
+                   player == Player.m_localPlayer &&
+                   player.IsOwner() &&
+                   ZNetScene.instance.IsAreaReady(player.transform.position);
+        }
+
         public static void Cleanup()
         {
+            Navigation.Cleanup();
             DynamicObjectMapping.Cleanup();
             StaticObjectMapping.Cleanup();
         }
 
-        public static void Mapping(Player player, float delta, bool takeInput)
+        public static void DynamicMapping(Player player, float delta)
         {
-            if (Game.IsPaused()) return;
-            if (player != Player.m_localPlayer || !player.IsOwner()) return;
-            if (!ZNetScene.instance.IsAreaReady(player.transform.position)) return;
+            if (!CanRun(player)) return;
             if (!Config.EnableAutomaticMapping)
             {
-                DynamicObjectMapping.RemoveCachedPins();
-                StaticObjectMapping.RemoveCachedPins();
+                RemoveCachedPins();
                 return;
             }
 
             DynamicObjectMapping.Mapping(delta);
+            Map.RefreshPins();
+        }
+
+        public static void Mapping(Player player, float delta, bool takeInput)
+        {
+            if (!CanRun(player)) return;
+            if (!Config.EnableAutomaticMapping)
+            {
+                RemoveCachedPins();
+                return;
+            }
+
             StaticObjectMapping.Mapping(delta, takeInput);
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
         {
+            Navigation.OnRemovePin(pinData);
             DynamicObjectMapping.OnRemovePin(pinData);
             StaticObjectMapping.OnRemovePin(pinData);
+        }
+
+        public static void AnimatePins(float delta)
+        {
+            DynamicObjectMapping.AnimatePins(delta);
         }
 
         [UsedImplicitly]
@@ -52,17 +83,38 @@ namespace Automatics.AutomaticMapping
 
     internal static class DynamicObjectMapping
     {
+        private const float PinSmoothingTime = 0.2f;
+        private const float PinSnapDistance = 96f;
+
         private static readonly Dictionary<ZDOID, Minimap.PinData> PinDataCache;
+        private static readonly Dictionary<Minimap.PinData, ZDOID> PinKeyCache;
+        private static readonly Dictionary<ZDOID, Vector3> PinTargetCache;
+        private static readonly Dictionary<ZDOID, Vector3> PinVelocityCache;
         private static readonly IDictionary<ZDOID, Minimap.PinData> VehiclePinCache;
+        private static readonly Dictionary<ZDOID, Vector3> VehiclePinTargetCache;
+        private static readonly Dictionary<ZDOID, Vector3> VehiclePinVelocityCache;
         private static readonly HashSet<ZDOID> KnownObjects;
         private static readonly ISet<ZDOID> EmptyCacheKeys;
+        private static readonly List<Fish> FishBuffer;
+        private static readonly List<RandomFlyingBird> BirdBuffer;
+        private static readonly List<Piece> ShipBuffer;
+        private static readonly List<Component> VehicleBuffer;
 
         static DynamicObjectMapping()
         {
             PinDataCache = new Dictionary<ZDOID, Minimap.PinData>();
+            PinKeyCache = new Dictionary<Minimap.PinData, ZDOID>();
+            PinTargetCache = new Dictionary<ZDOID, Vector3>();
+            PinVelocityCache = new Dictionary<ZDOID, Vector3>();
             VehiclePinCache = new Dictionary<ZDOID, Minimap.PinData>();
+            VehiclePinTargetCache = new Dictionary<ZDOID, Vector3>();
+            VehiclePinVelocityCache = new Dictionary<ZDOID, Vector3>();
             KnownObjects = new HashSet<ZDOID>();
             EmptyCacheKeys = new HashSet<ZDOID>(0);
+            FishBuffer = new List<Fish>();
+            BirdBuffer = new List<RandomFlyingBird>();
+            ShipBuffer = new List<Piece>();
+            VehicleBuffer = new List<Component>();
         }
 
         private static bool GetAnimal(string name, out (string Identifier, bool IsAllowed) data)
@@ -104,7 +156,12 @@ namespace Automatics.AutomaticMapping
         public static void Cleanup()
         {
             PinDataCache.Clear();
+            PinKeyCache.Clear();
+            PinTargetCache.Clear();
+            PinVelocityCache.Clear();
             VehiclePinCache.Clear();
+            VehiclePinTargetCache.Clear();
+            VehiclePinVelocityCache.Clear();
             KnownObjects.Clear();
         }
 
@@ -115,6 +172,8 @@ namespace Automatics.AutomaticMapping
             {
                 if (!Objects.GetZdoid(component, out var uniqueId)) return;
                 if (!VehiclePinCache.TryGetValue(uniqueId, out var pin)) return;
+                VehiclePinTargetCache.Remove(uniqueId);
+                VehiclePinVelocityCache.Remove(uniqueId);
                 Map.RemovePin(pin);
             }
         }
@@ -126,37 +185,57 @@ namespace Automatics.AutomaticMapping
             if (excludes is null)
                 excludes = EmptyCacheKeys;
 
-            foreach (var pair in PinDataCache.Where(x => !excludes.Contains(x.Key)).ToList())
+            foreach (var key in PinDataCache.Keys.Where(x => !excludes.Contains(x)).ToList())
             {
-                PinDataCache.Remove(pair.Key);
-                if (!pair.Value.m_save)
-                    Map.RemovePin(pair.Value);
+                var pinData = PinDataCache[key];
+                PinDataCache.Remove(key);
+                PinKeyCache.Remove(pinData);
+                PinTargetCache.Remove(key);
+                PinVelocityCache.Remove(key);
+                if (!pinData.m_save)
+                    Map.RemovePin(pinData);
             }
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
         {
-            foreach (var pair in PinDataCache.Where(x => ReferenceEquals(x.Value, pinData))
-                         .ToList())
-            {
-                PinDataCache.Remove(pair.Key);
-            }
+            RemovePinFromCache(pinData);
         }
 
         public static bool SetSaveFlag(Minimap.PinData pinData)
         {
-            foreach (var pair in PinDataCache
-                         .Where(pair => ReferenceEquals(pair.Value, pinData)).ToList())
+            if (!RemovePinFromCache(pinData)) return false;
+
+            pinData.m_save = true;
+            Player.m_localPlayer?.Message(MessageHud.MessageType.Center,
+                Automatics.L10N.Localize("@message_automatic_mapping_pin_saved",
+                    pinData.m_name.Replace("\n", "")));
+            return true;
+        }
+
+        public static void AnimatePins(float delta)
+        {
+            if (delta <= 0f) return;
+
+            foreach (var pair in PinDataCache)
             {
-                pair.Value.m_save = true;
-                PinDataCache.Remove(pair.Key);
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center,
-                    Automatics.L10N.Localize("@message_automatic_mapping_pin_saved",
-                        pinData.m_name.Replace("\n", "")));
-                return true;
+                if (!PinTargetCache.TryGetValue(pair.Key, out var target)) continue;
+
+                var pinData = pair.Value;
+                if (pinData != null && pinData.m_pos != target)
+                    pinData.m_pos = InterpolatePinPosition(PinVelocityCache, pair.Key, pinData.m_pos,
+                        target, delta);
             }
 
-            return false;
+            foreach (var pair in VehiclePinCache)
+            {
+                if (!VehiclePinTargetCache.TryGetValue(pair.Key, out var target)) continue;
+
+                var pinData = pair.Value;
+                if (pinData != null && pinData.m_pos != target)
+                    pinData.m_pos = InterpolatePinPosition(VehiclePinVelocityCache, pair.Key,
+                        pinData.m_pos, target, delta);
+            }
         }
 
         public static void Mapping(float delta)
@@ -193,20 +272,26 @@ namespace Automatics.AutomaticMapping
             }
 
             if (Config.AllowPinningAnimal.Contains("Fish"))
-                foreach (var fish in FishCache.GetAllInstance())
+            {
+                FishCache.Fill(FishBuffer);
+                foreach (var fish in FishBuffer)
                 {
                     var distance = Vector3.Distance(origin, fish.transform.position);
                     if (distance > Config.DynamicObjectMappingRange) continue;
                     AddOrUpdatePin(fish, delta);
                 }
+            }
 
             if (Config.AllowPinningAnimal.Contains("Bird"))
-                foreach (var bird in BirdCache.GetAllInstance())
+            {
+                BirdCache.Fill(BirdBuffer);
+                foreach (var bird in BirdBuffer)
                 {
                     var distance = Vector3.Distance(origin, bird.transform.position);
                     if (distance > Config.DynamicObjectMappingRange) continue;
                     AddOrUpdatePin(bird, delta);
                 }
+            }
 
             VehicleMapping(delta);
 
@@ -217,14 +302,18 @@ namespace Automatics.AutomaticMapping
         {
             if (!Config.AllowPinningVehicle.Any()) return;
 
-            var vehicles = new List<Component>();
+            VehicleBuffer.Clear();
+            ShipCache.Fill(ShipBuffer);
+            foreach (var ship in ShipBuffer)
+                VehicleBuffer.Add(ship);
 
-            vehicles.AddRange(ShipCache.GetAllInstance());
-            vehicles.AddRange(Reflections.GetStaticField<Vagon, List<Vagon>>("m_instances") ??
-                              new List<Vagon>(0));
+            var wagons = Reflections.GetStaticField<Vagon, List<Vagon>>("m_instances");
+            if (wagons != null)
+                foreach (var wagon in wagons)
+                    VehicleBuffer.Add(wagon);
 
             var origin = Player.m_localPlayer.transform.position;
-            foreach (var vehicle in vehicles)
+            foreach (var vehicle in VehicleBuffer)
             {
                 if (!Objects.GetZdoid(vehicle, out var uniqueId)) continue;
 
@@ -236,12 +325,14 @@ namespace Automatics.AutomaticMapping
 
                 if (VehiclePinCache.TryGetValue(uniqueId, out var pin))
                 {
-                    pin.m_pos = Vector3.MoveTowards(pin.m_pos, pos, 200f * delta);
+                    VehiclePinTargetCache[uniqueId] = pos;
                 }
                 else
                 {
                     pin = Map.AddPin(pos, name, true, CreateTarget(vehicle.gameObject, name));
                     VehiclePinCache.Add(uniqueId, pin);
+                    VehiclePinTargetCache[uniqueId] = pos;
+                    VehiclePinVelocityCache[uniqueId] = Vector3.zero;
                 }
             }
         }
@@ -267,7 +358,7 @@ namespace Automatics.AutomaticMapping
                 AddPin(uniqueId, pos, pinName,
                     CreateTarget(character.gameObject, character.m_name, level));
             else
-                UpdatePin(pinData, pinName, pos, delta);
+                UpdatePin(uniqueId, pinData, pinName, pos, delta);
         }
 
         private static void AddOrUpdatePin(Component component, float delta)
@@ -290,33 +381,65 @@ namespace Automatics.AutomaticMapping
             if (!PinDataCache.TryGetValue(uniqueId, out var pinData))
                 AddPin(uniqueId, pos, pinName, CreateTarget(component.gameObject, pinName));
             else
-                UpdatePin(pinData, pinData.m_name, pos, delta);
+                UpdatePin(uniqueId, pinData, pinData.m_name, pos, delta);
         }
 
         private static void AddPin(ZDOID uniqueId, Vector3 pos, string pinName, Target target)
         {
             var pinData = Map.AddPin(pos, pinName, false, target);
-            try
+            if (PinDataCache.TryGetValue(uniqueId, out var data) && !ReferenceEquals(data, pinData))
             {
-                PinDataCache.Add(uniqueId, pinData);
-            }
-            catch (ArgumentException)
-            {
-                var data = PinDataCache[uniqueId];
-                PinDataCache[uniqueId] = pinData;
+                PinKeyCache.Remove(data);
                 Automatics.Logger.Warning(() =>
                     $"PinData is already exists: [Existing: {data.m_name}{data.m_pos}, New: {pinName}{pos}]");
             }
+
+            PinDataCache[uniqueId] = pinData;
+            PinKeyCache[pinData] = uniqueId;
+            PinTargetCache[uniqueId] = pos;
+            PinVelocityCache[uniqueId] = Vector3.zero;
         }
 
-        private static void UpdatePin(Minimap.PinData pinData, string pinName, Vector3 pos,
+        private static bool RemovePinFromCache(Minimap.PinData pinData)
+        {
+            if (!PinKeyCache.TryGetValue(pinData, out var uniqueId)) return false;
+
+            PinKeyCache.Remove(pinData);
+            PinDataCache.Remove(uniqueId);
+            PinTargetCache.Remove(uniqueId);
+            PinVelocityCache.Remove(uniqueId);
+            return true;
+        }
+
+        private static void UpdatePin(ZDOID uniqueId, Minimap.PinData pinData, string pinName, Vector3 pos,
             float delta)
         {
             if (!string.IsNullOrEmpty(pinData.m_name))
                 pinData.m_name = pinName;
 
-            if (pinData.m_pos != pos)
-                pinData.m_pos = Vector3.MoveTowards(pinData.m_pos, pos, 200f * delta);
+            PinTargetCache[uniqueId] = pos;
+        }
+
+        private static Vector3 InterpolatePinPosition(
+            IDictionary<ZDOID, Vector3> velocityCache, ZDOID uniqueId, Vector3 current,
+            Vector3 target, float delta)
+        {
+            if (delta <= 0f)
+                return target;
+
+            if (Vector3.Distance(current, target) >= PinSnapDistance)
+            {
+                velocityCache[uniqueId] = Vector3.zero;
+                return target;
+            }
+
+            if (!velocityCache.TryGetValue(uniqueId, out var velocity))
+                velocity = Vector3.zero;
+
+            var next = Vector3.SmoothDamp(current, target, ref velocity, PinSmoothingTime,
+                Mathf.Infinity, delta);
+            velocityCache[uniqueId] = velocity;
+            return next;
         }
 
         private static Target CreateTarget(GameObject prefab, string name, int level = 0)
@@ -338,8 +461,10 @@ namespace Automatics.AutomaticMapping
         private static readonly Lazy<int> DungeonMaskLazy;
         private static readonly Dictionary<Collider, Component> StaticObjectCache;
         private static readonly Dictionary<MapPinIdentify, Minimap.PinData> PinDataCache;
+        private static readonly Dictionary<Minimap.PinData, HashSet<MapPinIdentify>> PinKeyCache;
         private static readonly HashSet<MapPinIdentify> KnownObjects;
         private static readonly ISet<MapPinIdentify> EmptyCacheKeys;
+        private static readonly List<FloraNode> FloraNodesBuffer;
 
         private static float _lastCacheUpdateTime;
         private static float _mappingTimer;
@@ -356,8 +481,10 @@ namespace Automatics.AutomaticMapping
             DungeonMaskLazy = new Lazy<int>(() => LayerMask.GetMask("character_trigger"));
             StaticObjectCache = new Dictionary<Collider, Component>();
             PinDataCache = new Dictionary<MapPinIdentify, Minimap.PinData>();
+            PinKeyCache = new Dictionary<Minimap.PinData, HashSet<MapPinIdentify>>();
             KnownObjects = new HashSet<MapPinIdentify>();
             EmptyCacheKeys = new HashSet<MapPinIdentify>(0);
+            FloraNodesBuffer = new List<FloraNode>();
         }
 
         private static bool CanMapping(float delta, bool takeInput)
@@ -448,9 +575,7 @@ namespace Automatics.AutomaticMapping
 
         private static void RemoveCache(Minimap.PinData pinData)
         {
-            foreach (var pair in PinDataCache.Where(x => ReferenceEquals(x.Value, pinData))
-                         .ToList())
-                PinDataCache.Remove(pair.Key);
+            RemovePinFromCache(pinData);
         }
 
         [UsedImplicitly]
@@ -518,6 +643,7 @@ namespace Automatics.AutomaticMapping
         {
             StaticObjectCache.Clear();
             PinDataCache.Clear();
+            PinKeyCache.Clear();
             KnownObjects.Clear();
         }
 
@@ -528,37 +654,32 @@ namespace Automatics.AutomaticMapping
             if (excludes is null)
                 excludes = EmptyCacheKeys;
 
-            foreach (var pair in PinDataCache.Where(x => !excludes.Contains(x.Key)).ToList())
+            var pinsToRemove = new HashSet<Minimap.PinData>();
+            foreach (var pair in PinDataCache.Where(x => !excludes.Contains(x.Key)))
+                pinsToRemove.Add(pair.Value);
+
+            foreach (var pinData in pinsToRemove)
             {
-                PinDataCache.Remove(pair.Key);
-                if (!pair.Value.m_save)
-                    Map.RemovePin(pair.Value);
+                RemovePinFromCache(pinData);
+                if (!pinData.m_save)
+                    Map.RemovePin(pinData);
             }
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
         {
-            foreach (var pair in PinDataCache.Where(x => ReferenceEquals(x.Value, pinData))
-                         .ToList())
-            {
-                PinDataCache.Remove(pair.Key);
-            }
+            RemovePinFromCache(pinData);
         }
 
         public static bool SetSaveFlag(Minimap.PinData pinData)
         {
-            foreach (var pair in PinDataCache
-                         .Where(x => ReferenceEquals(x.Value, pinData)).ToList())
-            {
-                pair.Value.m_save = true;
-                PinDataCache.Remove(pair.Key);
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center,
-                    Automatics.L10N.Localize("@message_automatic_mapping_pin_saved",
-                        pinData.m_name.Replace("\n", "")));
-                return true;
-            }
+            if (!RemovePinFromCache(pinData)) return false;
 
-            return false;
+            pinData.m_save = true;
+            Player.m_localPlayer?.Message(MessageHud.MessageType.Center,
+                Automatics.L10N.Localize("@message_automatic_mapping_pin_saved",
+                    pinData.m_name.Replace("\n", "")));
+            return true;
         }
 
         public static void Mapping(float delta, bool takeInput)
@@ -658,12 +779,13 @@ namespace Automatics.AutomaticMapping
             if (!GetFlora(name, out var data)) return false;
             if (!data.IsAllowed) return true;
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
-            if (!KnownObjects.Add(new MapPinIdentify(uniqueId))) return true;
+            var identify = new MapPinIdentify(uniqueId);
+            if (!KnownObjects.Add(identify)) return true;
 
             if (ValheimObject.Flora.GetName(data.Identifier, out var label))
                 name = label;
 
-            var flora = FloraNode.Find(x => x.transform.position == component.transform.position);
+            var flora = FloraNode.Find(uniqueId);
             if (!flora || !flora.IsValid()) return true;
 
             var network = flora.Network;
@@ -682,11 +804,18 @@ namespace Automatics.AutomaticMapping
                 network.Update();
             }
 
-            foreach (var member in network.GetAllNodes().Where(x => x.IsValid()))
+            network.FillValidNodes(FloraNodesBuffer);
+            foreach (var member in FloraNodesBuffer)
                 KnownObjects.Add(new MapPinIdentify(member.UniqueId));
 
+            if (TryGetCachedPin(FloraNodesBuffer, out var cachedPin))
+            {
+                CachePin(FloraNodesBuffer, cachedPin);
+                return true;
+            }
+
             var pos = network.Center;
-            if (Map.HavePinInRange(pos, 1f)) return true;
+            if (Map.GetClosestPin(pos) != null) return true;
 
             var size = network.NodeCount;
             var pinName = size > 1
@@ -694,7 +823,8 @@ namespace Automatics.AutomaticMapping
                     name, size)
                 : name;
 
-            AddPin(uniqueId, pos, pinName, save, CreateTarget(component.gameObject, name));
+            var pinData = AddPin(uniqueId, pos, pinName, save, CreateTarget(component.gameObject, name));
+            CachePin(FloraNodesBuffer, pinData);
             return true;
         }
 
@@ -738,7 +868,9 @@ namespace Automatics.AutomaticMapping
             if (!GetMineral(name, out var data)) return false;
             if (!data.IsAllowed) return true;
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
-            if (!KnownObjects.Add(new MapPinIdentify(uniqueId))) return true;
+            var identify = new MapPinIdentify(uniqueId);
+            if (!KnownObjects.Add(identify)) return true;
+            if (TryGetCachedPin(identify, out _)) return true;
 
             if (ValheimObject.Mineral.GetName(data.Identifier, out var label))
                 name = label;
@@ -759,7 +891,7 @@ namespace Automatics.AutomaticMapping
 
             pos /= count;
 
-            if (Map.HavePinInRange(pos, 1f)) return true;
+            if (Map.GetClosestPin(pos) != null) return true;
 
             if (Config.NeedToEquipWishboneForUndergroundMinerals)
                 if (maxHeight < ZoneSystem.instance.GetGroundHeight(pos))
@@ -778,13 +910,15 @@ namespace Automatics.AutomaticMapping
             if (!GetSpawner(name, out var data)) return false;
             if (!data.IsAllowed) return true;
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
-            if (!KnownObjects.Add(new MapPinIdentify(uniqueId))) return true;
+            var identify = new MapPinIdentify(uniqueId);
+            if (!KnownObjects.Add(identify)) return true;
+            if (TryGetCachedPin(identify, out _)) return true;
 
             if (ValheimObject.Spawner.GetName(data.Identifier, out var label))
                 name = label;
 
             var position = component.transform.position;
-            if (!Map.HavePinInRange(position, 1f))
+            if (Map.GetClosestPin(position) == null)
                 AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name));
 
             return true;
@@ -795,13 +929,15 @@ namespace Automatics.AutomaticMapping
             if (!GetOther(name, out var data)) return false;
             if (!data.IsAllowed) return true;
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
-            if (!KnownObjects.Add(new MapPinIdentify(uniqueId))) return true;
+            var identify = new MapPinIdentify(uniqueId);
+            if (!KnownObjects.Add(identify)) return true;
+            if (TryGetCachedPin(identify, out _)) return true;
 
             if (MappingObject.Other.GetName(data.Identifier, out var label))
                 name = label;
 
             var position = component.transform.position;
-            if (!Map.HavePinInRange(position, 1f))
+            if (Map.GetClosestPin(position) == null)
                 AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name));
 
             return true;
@@ -815,15 +951,22 @@ namespace Automatics.AutomaticMapping
             if (!portal) return false;
 
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
-            if (!KnownObjects.Add(new MapPinIdentify(uniqueId))) return true;
+            var identify = new MapPinIdentify(uniqueId);
+            if (!KnownObjects.Add(identify)) return true;
 
             var tag = portal.GetText();
             var pinName = string.IsNullOrEmpty(tag)
                 ? Automatics.L10N.Translate("@text_automatic_mapping_empty_portal_tag")
                 : tag;
 
+            if (TryGetCachedPin(identify, out var pinData))
+            {
+                pinData.m_name = pinName;
+                return true;
+            }
+
             var pos = component.transform.position;
-            var pinData = Map.GetClosestPin(pos);
+            pinData = Map.GetClosestPin(pos);
             if (pinData == null)
                 AddPin(uniqueId, pos, pinName, true, CreateTarget(component.gameObject, name));
             else
@@ -853,17 +996,21 @@ namespace Automatics.AutomaticMapping
                          .OrderBy(x => x.distance))
             {
                 var entrance = collider.bounds.center;
-                if (!KnownObjects.Add(new MapPinIdentify(entrance))) return true;
+                var identify = new MapPinIdentify(entrance);
+                if (!KnownObjects.Add(identify)) return true;
+                if (TryGetCachedPin(identify, out _)) return true;
 
-                if (!Map.HavePinInRange(entrance, 1f))
+                if (Map.GetClosestPin(entrance) == null)
                     AddPin(ZDOID.None, entrance, name, CreateTarget(prefabName, name));
 
                 return true;
             }
 
-            if (!KnownObjects.Add(new MapPinIdentify(pos))) return true;
+            var locationIdentify = new MapPinIdentify(pos);
+            if (!KnownObjects.Add(locationIdentify)) return true;
+            if (TryGetCachedPin(locationIdentify, out _)) return true;
 
-            if (!Map.HavePinInRange(pos, radius, x => x.m_name == name))
+            if (Map.GetClosestPin(pos, radius, x => x.m_name == name) == null)
             {
                 AddPin(ZDOID.None, pos, name, CreateTarget(prefabName, name));
                 Automatics.Logger.Warning(() => $"Dungeon {name} has no entrance.");
@@ -879,40 +1026,99 @@ namespace Automatics.AutomaticMapping
             if (!data.IsAllowed) return true;
 
             var pos = instance.m_position;
-            if (!KnownObjects.Add(new MapPinIdentify(pos))) return true;
+            var identify = new MapPinIdentify(pos);
+            if (!KnownObjects.Add(identify)) return true;
+            if (TryGetCachedPin(identify, out _)) return true;
 
             if (!ValheimObject.Spot.GetName(data.Identifier, out var name))
                 name = $"@location_{prefabName.ToLower()}";
 
-            if (!Map.HavePinInRange(pos, 1f))
+            if (Map.GetClosestPin(pos) == null)
                 AddPin(ZDOID.None, pos, name, CreateTarget(prefabName, name));
 
             return true;
         }
 
-        private static void AddPin(ZDOID uniqueId, Vector3 pos, string pinName, bool save,
+        private static Minimap.PinData AddPin(ZDOID uniqueId, Vector3 pos, string pinName, bool save,
             Target target)
         {
             var pinData = Map.AddPin(pos, pinName, save, target);
             var identify = uniqueId.IsNone()
                 ? new MapPinIdentify(pos)
                 : new MapPinIdentify(uniqueId);
-            try
+            if (PinDataCache.TryGetValue(identify, out var data) && !ReferenceEquals(data, pinData))
             {
-                PinDataCache.Add(identify, pinData);
-            }
-            catch (ArgumentException)
-            {
-                var data = PinDataCache[identify];
-                PinDataCache[identify] = pinData;
                 Automatics.Logger.Warning(() =>
                     $"PinData is already exists: [Existing: {data.m_name}{data.m_pos}, New: {pinName}{pos}]");
             }
+
+            CachePin(identify, pinData);
+            return pinData;
         }
 
         private static void AddPin(ZDOID uniqueId, Vector3 pos, string pinName, Target target)
         {
             AddPin(uniqueId, pos, pinName, Config.SaveStaticObjectPins, target);
+        }
+
+        private static bool TryGetCachedPin(MapPinIdentify identify, out Minimap.PinData pinData)
+        {
+            return PinDataCache.TryGetValue(identify, out pinData) && pinData != null;
+        }
+
+        private static bool TryGetCachedPin(IEnumerable<FloraNode> nodes, out Minimap.PinData pinData)
+        {
+            foreach (var node in nodes)
+                if (TryGetCachedPin(new MapPinIdentify(node.UniqueId), out pinData))
+                    return true;
+
+            pinData = null;
+            return false;
+        }
+
+        private static void CachePin(IEnumerable<FloraNode> nodes, Minimap.PinData pinData)
+        {
+            foreach (var node in nodes)
+                CachePin(new MapPinIdentify(node.UniqueId), pinData);
+        }
+
+        private static void CachePin(MapPinIdentify identify, Minimap.PinData pinData)
+        {
+            if (PinDataCache.TryGetValue(identify, out var existing))
+            {
+                if (ReferenceEquals(existing, pinData)) return;
+                RemovePinKey(existing, identify);
+            }
+
+            PinDataCache[identify] = pinData;
+            if (!PinKeyCache.TryGetValue(pinData, out var keys))
+            {
+                keys = new HashSet<MapPinIdentify>();
+                PinKeyCache.Add(pinData, keys);
+            }
+
+            keys.Add(identify);
+        }
+
+        private static bool RemovePinFromCache(Minimap.PinData pinData)
+        {
+            if (!PinKeyCache.TryGetValue(pinData, out var keys)) return false;
+
+            var values = keys.ToList();
+            PinKeyCache.Remove(pinData);
+            foreach (var key in values)
+                PinDataCache.Remove(key);
+
+            return true;
+        }
+
+        private static void RemovePinKey(Minimap.PinData pinData, MapPinIdentify identify)
+        {
+            if (!PinKeyCache.TryGetValue(pinData, out var keys)) return;
+
+            keys.Remove(identify);
+            if (keys.Count == 0)
+                PinKeyCache.Remove(pinData);
         }
 
         private static Target CreateTarget(string prefabName, string name)
@@ -929,13 +1135,11 @@ namespace Automatics.AutomaticMapping
         {
             public readonly ZDOID UniqueId;
             public readonly Vector3 Pos;
-            private int _hash;
 
             private MapPinIdentify(ZDOID uniqueId, Vector3 pos)
             {
                 UniqueId = uniqueId;
                 Pos = pos;
-                _hash = 0;
             }
 
             public MapPinIdentify(ZDOID uniqueId) : this(uniqueId, Vector3.zero)
@@ -958,9 +1162,10 @@ namespace Automatics.AutomaticMapping
 
             public override int GetHashCode()
             {
-                if (_hash == 0)
-                    _hash = UniqueId.GetHashCode() ^ Pos.GetHashCode();
-                return _hash;
+                unchecked
+                {
+                    return (UniqueId.GetHashCode() * 397) ^ Pos.GetHashCode();
+                }
             }
 
             public bool UniqueIdEquals(ZDOID id)

@@ -68,6 +68,18 @@ namespace Automatics.AutomaticMapping
             return AddPin(pos, IconPack.GetPinType(target), name, save);
         }
 
+        public static bool ContainsPin(Minimap.PinData pinData)
+        {
+            return pinData != null && GetAllPins().Contains(pinData);
+        }
+
+        public static void RefreshPins()
+        {
+            if (!ValheimMap) return;
+
+            Reflections.InvokeMethod(ValheimMap, "UpdatePins");
+        }
+
         private static string EscapePinName(string name)
         {
             return name.Replace("\n", "");
@@ -85,6 +97,7 @@ namespace Automatics.AutomaticMapping
 
         public static Minimap.PinData RemovePin(Minimap.PinData pinData)
         {
+            if (pinData == null) return null;
             if (pinData.m_uiElement)
                 DestroyPinMarker(pinData);
 
@@ -92,6 +105,7 @@ namespace Automatics.AutomaticMapping
 
             Automatics.Logger.Debug(() =>
                 $"Remove pin: [name: {EscapePinName(pinData.m_name)}, pos: {pinData.m_pos}, icon: {(int)pinData.m_type}]");
+            AutomaticMapping.OnRemovePin(pinData);
             return pinData;
         }
 

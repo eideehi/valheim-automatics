@@ -25,10 +25,17 @@ namespace Automatics.AutomaticMapping
                     wearNTear.m_onDestroyed += () => DynamicObjectMapping.OnObjectDestroy(ship);
             };
 
-            FejdStartup.startGameEvent += (startup, args) => { AutomaticMapping.Cleanup(); };
+            Hooks.OnPlayerAwake += (player, zNetView) =>
+            {
+                if (Player.m_localPlayer == player)
+                    AutomaticMapping.Cleanup();
+            };
+            Hooks.OnPlayerUpdate += (player, takeInput) => { Navigation.Update(player); };
+            Hooks.OnPlayerFixedUpdate += AutomaticMapping.DynamicMapping;
 
-            Harmony.CreateAndPatchAll(typeof(Patches),
-                Automatics.GetHarmonyId("automatic-mapping"));
+            var harmonyId = Automatics.GetHarmonyId("automatic-mapping");
+            Harmony.CreateAndPatchAll(typeof(Patches), harmonyId);
+            Harmony.CreateAndPatchAll(typeof(Patches.RandomFlyingBird_Initialize_Patch), harmonyId);
         }
     }
 }
