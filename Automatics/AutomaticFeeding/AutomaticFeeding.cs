@@ -58,8 +58,14 @@ namespace Automatics.AutomaticFeeding
                 x._monsterAI == monsterAI && x.Feeding(humanoid, delta));
         }
 
+        private bool HasNetworkOwnership()
+        {
+            return Objects.HasValidOwnership(_character);
+        }
+
         private bool CancelAttackOnFeedBox(StaticTarget target)
         {
+            if (!HasNetworkOwnership()) return false;
             if (!_character.IsTamed() && !Logics.IsAllowToFeedFromContainer(AnimalType.Wild))
                 return false;
 
@@ -72,6 +78,7 @@ namespace Automatics.AutomaticFeeding
 
         private bool Feeding(Humanoid humanoid, float delta)
         {
+            if (!HasNetworkOwnership()) return false;
             if (_monsterAI.m_consumeItems == null || !_monsterAI.m_consumeItems.Any())
                 return false;
 

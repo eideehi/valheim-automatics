@@ -178,12 +178,12 @@ namespace Automatics
         {
             var path = config.ConfigFilePath;
             if (!File.Exists(path))
-            {
-                Automatics.Logger.Error($"Config file not found: {path}");
                 return;
-            }
 
             var lines = File.ReadAllLines(path).ToList();
+            if (!lines.Any())
+                return;
+
             var dirty = false;
             var version = ParseVersion(lines[0]);
 

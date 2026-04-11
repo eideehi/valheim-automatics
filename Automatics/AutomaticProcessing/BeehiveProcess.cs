@@ -8,6 +8,7 @@ namespace Automatics.AutomaticProcessing
         public static bool Store(Beehive beehive, ZNetView zNetView, int increaseCount)
         {
             if (!Config.EnableAutomaticProcessing) return false;
+            if (!Objects.HasValidOwnership(zNetView)) return false;
 
             var beehiveName = beehive.m_name;
             if (!Logics.IsAllowProcessing(beehiveName, Process.Store)) return false;
@@ -42,7 +43,7 @@ namespace Automatics.AutomaticProcessing
                 }
 
                 if (Config.StoreOnlyIfProductExists(beehiveName) &&
-                    !Inventories.HaveItem(inventory, honeyName, 1)) continue;
+                    !Inventories.HaveItem(inventory, honeyName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
                 if (!inventory.AddItem(honeyItem.gameObject, amount)) continue;
 
                 var storedHoneyCount = inventory.CountItems(honeyName) - honeyCountInContainer;

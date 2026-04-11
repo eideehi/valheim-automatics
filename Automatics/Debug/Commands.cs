@@ -267,7 +267,7 @@ namespace Automatics.Debug
 
                         switch (component.m_category)
                         {
-                            case Piece.PieceCategory.Building:
+                            case Piece.PieceCategory.BuildingWorkbench:
                             case Piece.PieceCategory.Crafting:
                             case Piece.PieceCategory.Furniture:
                                 break;

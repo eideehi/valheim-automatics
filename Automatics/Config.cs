@@ -55,7 +55,7 @@ namespace Automatics
                     () => obj.GetAllElements().Select(y => y.identifier),
                     identifier => obj.GetName(identifier, out var name)
                         ? Automatics.L10N.TranslateInternalName(name)
-                        : "INTERNAL ERROR");
+                        : identifier);
             });
         }
 

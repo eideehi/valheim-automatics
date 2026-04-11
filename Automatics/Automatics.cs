@@ -9,6 +9,7 @@ using BepInEx.Logging;
 using HarmonyLib;
 using JetBrains.Annotations;
 using ModUtils;
+using UnityEngine;
 using Logger = ModUtils.Logger;
 
 namespace Automatics
@@ -24,6 +25,14 @@ namespace Automatics
         {
             Automatics.Initialize(this, Logger);
         }
+
+        private void FixedUpdate()
+        {
+            if (Player.m_localPlayer != null) return;
+            if (!ZNet.instance || !ZNet.instance.IsServer()) return;
+
+            Hooks.OnDedicatedServerFixedUpdate?.Invoke(Time.fixedDeltaTime);
+        }
     }
 
     internal static class Automatics
@@ -33,6 +42,7 @@ namespace Automatics
         private static string _modLocation;
         private static string _guid;
         private static List<string> _allResourcesDirectory;
+        private static bool _runtimeInitialized;
 
         public static BaseUnityPlugin Plugin { get; private set; }
         public static Logger Logger { get; private set; }
@@ -105,19 +115,40 @@ namespace Automatics
 
             ValheimObject.Initialize(GetAllResourcePath("Data"));
 
-            L10N = new L10N(L10NPrefix);
-            var translationsLoader = new TranslationsLoader(L10N);
-            foreach (var directory in GetAllResourcePath("Languages"))
-                translationsLoader.LoadTranslations(directory);
+            var harmony = new Harmony(_guid);
 
-            Config.Initialize(Plugin.Config);
+            L10N = new L10N(L10NPrefix);
+            foreach (var directory in GetAllResourcePath("Languages"))
+                L10N.AddTranslationDirectory(directory);
+
+            ModUtils.L10N.LanguageChanged += InitializeRuntime;
+
+            var currentLanguage = ModUtils.L10N.SyncCurrentLanguage();
+            InitializeRuntime(currentLanguage ?? "English");
 
             Hooks.OnInitTerminal += Commands.Register;
 
-            Harmony.CreateAndPatchAll(typeof(Patches), _guid);
+            harmony.PatchAll(typeof(Patches));
+        }
+
+        public static void InitializeRuntime(string language)
+        {
+            if (_runtimeInitialized)
+            {
+                ConfigurationManagerBridge.Refresh();
+                return;
+            }
+
+            Config.Initialize(Plugin.Config);
+            Plugin.Config.Save();
+
             InitializeModules(Assembly.GetExecutingAssembly());
 
+            Plugin.Config.Save();
             ValheimObject.PostInitialize();
+
+            _runtimeInitialized = true;
+            ConfigurationManagerBridge.Refresh();
         }
     }
 

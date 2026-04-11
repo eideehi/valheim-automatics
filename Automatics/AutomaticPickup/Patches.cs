@@ -12,7 +12,13 @@ namespace Automatics.AutomaticPickup
         [HarmonyPatch(typeof(Player), "Interact")]
         private static bool Player_Interact_Prefix(GameObject go)
         {
-            if (!go.GetComponentInParent<ItemPicker>()) return true;
+            if (!go) return true;
+
+            if (!go.GetComponentInParent<Pickable>() &&
+                !go.GetComponentInParent<PickableItem>() &&
+                !go.GetComponentInParent<ItemDrop>())
+                return true;
+
             return !Config.PickupAllNearbyKey.IsPressed();
         }
 
@@ -68,7 +74,7 @@ namespace Automatics.AutomaticPickup
         [HarmonyPatch(typeof(ItemDrop), "Awake")]
         private static void ItemDrop_Awake_Postfix(ItemDrop __instance, ZNetView ___m_nview)
         {
-            if (___m_nview && ___m_nview.IsValid())
+            if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<ItemPicker>();
         }
 

@@ -124,53 +124,12 @@ namespace Automatics.AutomaticProcessing
             FermenterProcess.Craft(__instance, ___m_nview);
         }
 
-        [HarmonyTranspiler]
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(Fireplace), "UpdateFireplace")]
-        public static IEnumerable<CodeInstruction> Fireplace_UpdateFireplace_Transpiler(
-            IEnumerable<CodeInstruction> instructions, ILGenerator generator)
+        private static void Fireplace_UpdateFireplace_Postfix(Fireplace __instance,
+            Piece ___m_piece, ZNetView ___m_nview)
         {
-            /*
-             *     if (this.IsBurning() && !this.m_infiniteFuel) {
-             *       ...
-             *     }
-             * +   FireplaceProcess.Refuel(this, this.m_piece, this.m_nview);
-             *   }
-             *   this.UpdateState();
-             */
-            return new CodeMatcher(instructions, generator)
-                .End()
-                .MatchEndBackwards(
-                    new CodeMatch(OpCodes.Ldsfld, AccessTools.Field(typeof(ZDOVars), "s_fuel")),
-                    new CodeMatch(OpCodes.Ldloc_0),
-                    new CodeMatch(OpCodes.Callvirt,
-                        AccessTools.Method(typeof(ZDO), "Set",
-                            new[] { typeof(int), typeof(float) })))
-                .Advance(1)
-                .Insert(
-                    new CodeInstruction(OpCodes.Ldarg_0),
-                    new CodeInstruction(OpCodes.Ldarg_0),
-                    new CodeInstruction(OpCodes.Ldfld,
-                        AccessTools.Field(typeof(Fireplace), "m_piece")),
-                    new CodeInstruction(OpCodes.Ldarg_0),
-                    new CodeInstruction(OpCodes.Ldfld,
-                        AccessTools.Field(typeof(Fireplace), "m_nview")),
-                    new CodeInstruction(OpCodes.Call,
-                        AccessTools.Method(typeof(FireplaceProcess), "Refuel")))
-                .CreateLabel(out var injectedCodes)
-                .Start()
-                .MatchEndForward(
-                    new CodeMatch(OpCodes.Ldarg_0),
-                    new CodeMatch(OpCodes.Call,
-                        AccessTools.Method(typeof(Fireplace), "IsBurning")),
-                    new CodeMatch(OpCodes.Brfalse))
-                .SetOperandAndAdvance(injectedCodes)
-                .MatchEndForward(
-                    new CodeMatch(OpCodes.Ldarg_0),
-                    new CodeMatch(OpCodes.Ldfld,
-                        AccessTools.Field(typeof(Fireplace), "m_infiniteFuel")),
-                    new CodeMatch(OpCodes.Brtrue))
-                .SetOperandAndAdvance(injectedCodes)
-                .InstructionEnumeration();
+            FireplaceProcess.Refuel(__instance, ___m_piece, ___m_nview);
         }
 
         [HarmonyTranspiler]

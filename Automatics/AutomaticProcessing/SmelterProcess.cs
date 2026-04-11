@@ -44,6 +44,7 @@ namespace Automatics.AutomaticProcessing
             if (loopCount < 1f) return ore;
             if (!string.IsNullOrEmpty(ore)) return ore;
             if (!Config.EnableAutomaticProcessing) return ore;
+            if (!Objects.HasValidOwnership(zNetView)) return ore;
 
             if (Time.time - _lastQuickCraftReset > 1f)
             {
@@ -83,7 +84,7 @@ namespace Automatics.AutomaticProcessing
 
                     if (materialContainer == null)
                         if (Inventories.HaveItem(inventory, materialData.m_name,
-                                minMaterialCount + 1))
+                                0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
                             materialContainer = container;
 
                     if (maxProductStacks > 0 && !productContainerFound)
@@ -127,7 +128,7 @@ namespace Automatics.AutomaticProcessing
         public static void Craft(Smelter smelter, ZNetView zNetView)
         {
             if (!Config.EnableAutomaticProcessing) return;
-            if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
 
             var smelterName = smelter.m_name;
             if (!Logics.IsAllowProcessing(smelterName, Process.Craft)) return;
@@ -178,7 +179,7 @@ namespace Automatics.AutomaticProcessing
 
                     if (materialContainer == null)
                         if (Inventories.HaveItem(inventory, materialData.m_name,
-                                minMaterialCount + 1))
+                                0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
                             materialContainer = container;
 
                     if (maxProductStacks > 0 && !productContainerFound)
@@ -197,7 +198,7 @@ namespace Automatics.AutomaticProcessing
                 {
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
-                    zNetView.InvokeRPC("AddOre", item.m_dropPrefab.name);
+                    zNetView.InvokeRPC("RPC_AddOre", item.m_dropPrefab.name);
 
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position, smelterName,
@@ -214,6 +215,7 @@ namespace Automatics.AutomaticProcessing
             if (loopCount < 1f) return fuel;
             if (fuel > 0f) return fuel;
             if (!Config.EnableAutomaticProcessing) return fuel;
+            if (!Objects.HasValidOwnership(zNetView)) return fuel;
 
             if (Time.time - _lastQuickRefuelReset > 1f)
             {
@@ -241,10 +243,10 @@ namespace Automatics.AutomaticProcessing
             foreach (var (container, _) in Logics.GetNearbyContainers(smelterName, origin))
             {
                 var inventory = container.GetInventory();
-                if (!Inventories.HaveItem(inventory, fuelName, minFuelCount + 1)) continue;
+                if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
 
                 container.GetInventory().RemoveItem(fuelName, 1);
-                zNetView.InvokeRPC("AddFuel");
+                zNetView.InvokeRPC("RPC_AddFuel");
 
                 Logics.RefuelLog(fuelName, 1, smelterName, origin, container.m_name,
                     container.transform.position);
@@ -272,7 +274,7 @@ namespace Automatics.AutomaticProcessing
         public static void Refuel(Smelter smelter, ZNetView zNetView)
         {
             if (!Config.EnableAutomaticProcessing) return;
-            if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
 
             var smelterName = smelter.m_name;
             if (!Logics.IsAllowProcessing(smelterName, Process.Refuel)) return;
@@ -292,10 +294,10 @@ namespace Automatics.AutomaticProcessing
             foreach (var (container, _) in Logics.GetNearbyContainers(smelterName, origin))
             {
                 var inventory = container.GetInventory();
-                if (!Inventories.HaveItem(inventory, fuelName, minFuelCount + 1)) continue;
+                if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
 
                 container.GetInventory().RemoveItem(fuelName, 1);
-                zNetView.InvokeRPC("AddFuel");
+                zNetView.InvokeRPC("RPC_AddFuel");
 
                 Logics.RefuelLog(fuelName, 1, smelterName, origin, container.m_name,
                     container.transform.position);
@@ -306,6 +308,7 @@ namespace Automatics.AutomaticProcessing
         public static bool Store(Smelter smelter, string ore, int stack)
         {
             if (!Config.EnableAutomaticProcessing) return false;
+            if (!Objects.HasValidOwnership(smelter, out var zNetView)) return false;
 
             var smelterName = smelter.m_name;
             if (!Logics.IsAllowProcessing(smelterName, Process.Store)) return false;
@@ -326,7 +329,7 @@ namespace Automatics.AutomaticProcessing
                 var inventory = container.GetInventory();
                 var itemCountBefore = inventory.CountItems(itemName);
                 if (Config.StoreOnlyIfProductExists(smelterName) &&
-                    !Inventories.HaveItem(inventory, itemName, 1)) continue;
+                    !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
                 if (!inventory.AddItem(item.gameObject, stack)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;

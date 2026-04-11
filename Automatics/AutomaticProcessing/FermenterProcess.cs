@@ -23,7 +23,7 @@ namespace Automatics.AutomaticProcessing
         public static void Craft(Fermenter fermenter, ZNetView zNetView)
         {
             if (!Config.EnableAutomaticProcessing) return;
-            if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
 
             var fermenterName = fermenter.m_name;
             if (!Logics.IsAllowProcessing(fermenterName, Process.Craft)) return;
@@ -54,7 +54,7 @@ namespace Automatics.AutomaticProcessing
 
                     if (materialContainer == null)
                         if (Inventories.HaveItem(inventory, materialData.m_name,
-                                minMaterialCount + 1))
+                                0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
                             materialContainer = container;
 
                     if (maxProductStacks > 0 && !productContainerFound)
@@ -71,7 +71,7 @@ namespace Automatics.AutomaticProcessing
                 {
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
-                    zNetView.InvokeRPC("AddItem", item.m_dropPrefab.name);
+                    zNetView.InvokeRPC("RPC_AddItem", item.m_dropPrefab.name);
 
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position,
@@ -84,7 +84,7 @@ namespace Automatics.AutomaticProcessing
         public static void Store(Fermenter fermenter, ZNetView zNetView)
         {
             if (!Config.EnableAutomaticProcessing) return;
-            if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
 
             var fermenterName = fermenter.m_name;
             if (!Logics.IsAllowProcessing(fermenterName, Process.Store)) return;
@@ -109,7 +109,7 @@ namespace Automatics.AutomaticProcessing
                 var inventory = container.GetInventory();
                 var itemCountBefore = inventory.CountItems(itemName);
                 if (Config.StoreOnlyIfProductExists(fermenterName) &&
-                    !Inventories.HaveItem(inventory, itemName, 1)) continue;
+                    !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
                 if (!inventory.AddItem(item.gameObject, productRemaining)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;

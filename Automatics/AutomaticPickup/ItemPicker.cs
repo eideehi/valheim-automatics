@@ -95,7 +95,7 @@ namespace Automatics.AutomaticPickup
                 BaseAI.AggravateAllInArea(pickable.transform.position, pickable.m_aggravateRange,
                     BaseAI.AggravatedReason.Theif);
 
-            _zNetView.InvokeRPC(ZNetView.Everybody, "SetPicked", true);
+            _zNetView.InvokeRPC(ZNetView.Everybody, "RPC_SetPicked", true);
         }
 
         private void AutoPickup(long playerId, PickableItem pickableItem)

@@ -42,6 +42,8 @@ namespace Automatics.AutomaticPickup
                     PickupAllNearby(_player, (Pickable x) => true);
                     yield return null;
                     PickupAllNearby(_player, (PickableItem x) => true);
+                    yield return null;
+                    PickupAllNearby(_player, (ItemDrop x) => x.m_autoPickup);
                 }
                 else
                 {
@@ -184,17 +186,20 @@ namespace Automatics.AutomaticPickup
             var range = Config.AutomaticPickupRange;
             foreach (var itemDrop in GetAllItemDrop())
             {
+                if (!itemDrop) continue;
+                if (itemDrop.IsPiece()) continue;
                 if (Vector3.Distance(origin, itemDrop.transform.position) > range) continue;
                 if (!predicate.Invoke(itemDrop)) continue;
                 if (itemDrop.InTar()) continue;
-                if (Objects.GetZNetView(itemDrop, out var zNetView) && zNetView.IsValid())
+                if (Objects.GetZNetView(itemDrop, out var zNetView) && zNetView.GetZDO() != null)
                     zNetView.InvokeRPC("AutoPickup", playerId);
             }
         }
 
         private static IEnumerable<ItemDrop> GetAllItemDrop()
         {
-            return Reflections.GetStaticField<ItemDrop, List<ItemDrop>>("m_instances") ??
+            return Reflections.GetStaticField<ItemDrop, List<ItemDrop>>("s_instances") ??
+                   Reflections.GetStaticField<ItemDrop, List<ItemDrop>>("m_instances") ??
                    Enumerable.Empty<ItemDrop>();
         }
     }

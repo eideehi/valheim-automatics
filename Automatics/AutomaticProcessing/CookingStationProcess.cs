@@ -22,7 +22,7 @@ namespace Automatics.AutomaticProcessing
         public static void Craft(CookingStation cookingStation, ZNetView zNetView)
         {
             if (!Config.EnableAutomaticProcessing) return;
-            if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
 
             var stationName = cookingStation.m_name;
             if (!Logics.IsAllowProcessing(stationName, Process.Craft)) return;
@@ -79,7 +79,7 @@ namespace Automatics.AutomaticProcessing
 
                     if (materialContainer == null)
                         if (Inventories.HaveItem(inventory, materialData.m_name,
-                                minMaterialCount + 1))
+                                0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
                             materialContainer = container;
 
                     if (maxProductStacks > 0 && !productContainerFound)
@@ -98,7 +98,7 @@ namespace Automatics.AutomaticProcessing
                 {
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
-                    zNetView.InvokeRPC("AddItem", item.m_dropPrefab.name);
+                    zNetView.InvokeRPC("RPC_AddItem", item.m_dropPrefab.name);
 
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position, stationName,
@@ -112,6 +112,7 @@ namespace Automatics.AutomaticProcessing
         public static float Refuel(CookingStation cookingStation, ZNetView zNetView, float fuel)
         {
             if (!Config.EnableAutomaticProcessing) return fuel;
+            if (!Objects.HasValidOwnership(zNetView)) return fuel;
             if (fuel > cookingStation.m_maxFuel - 1f) return fuel;
 
             var stationName = cookingStation.m_name;
@@ -129,7 +130,7 @@ namespace Automatics.AutomaticProcessing
             foreach (var (container, _) in Logics.GetNearbyContainers(stationName, origin))
             {
                 var inventory = container.GetInventory();
-                if (!Inventories.HaveItem(inventory, fuelName, minFuelCount + 1)) continue;
+                if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
 
                 inventory.RemoveItem(fuelName, 1);
                 fuel += 1f;
@@ -148,6 +149,7 @@ namespace Automatics.AutomaticProcessing
             CookingStation.ItemConversion conversion)
         {
             if (!Config.EnableAutomaticProcessing) return false;
+            if (!Objects.HasValidOwnership(zNetView)) return false;
 
             var stationName = cookingStation.m_name;
             if (!Logics.IsAllowProcessing(stationName, Process.Store)) return false;
@@ -160,13 +162,13 @@ namespace Automatics.AutomaticProcessing
             {
                 var inventory = container.GetInventory();
                 if (Config.StoreOnlyIfProductExists(stationName) &&
-                    !Inventories.HaveItem(inventory, itemName, 1)) continue;
+                    !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
                 if (!inventory.AddItem(item.gameObject, 1)) continue;
 
                 zNetView.GetZDO().Set("slot" + slot, "");
                 zNetView.GetZDO().Set("slot" + slot, 0f);
                 zNetView.GetZDO().Set("slotstatus" + slot, 0);
-                zNetView.InvokeRPC(ZNetView.Everybody, "SetSlotVisual", slot, "");
+                zNetView.InvokeRPC(ZNetView.Everybody, "RPC_SetSlotVisual", slot, "");
 
                 Logics.StoreLog(itemName, 1, container.m_name,
                     container.transform.position, stationName, origin);

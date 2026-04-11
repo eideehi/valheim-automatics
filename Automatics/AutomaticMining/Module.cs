@@ -24,7 +24,7 @@ namespace Automatics.AutomaticMining
             Config.Initialize();
             if (Config.ModuleDisabled) return;
 
-            FejdStartup.startGameEvent += (startup, args) => { Cleanup(); };
+            Hooks.OnPlayerAwake += (player, zNetView) => { Cleanup(); };
             Hooks.OnPlayerUpdate += OnPlayerUpdate;
             Hooks.OnPlayerFixedUpdate += OnPlayerFixedUpdate;
             Harmony.CreateAndPatchAll(typeof(Patches), Automatics.GetHarmonyId("automatic-mining"));

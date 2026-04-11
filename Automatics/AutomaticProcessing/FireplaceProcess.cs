@@ -10,7 +10,7 @@ namespace Automatics.AutomaticProcessing
         public static void Refuel(Fireplace fire, Piece piece, ZNetView zNetView)
         {
             if (!Config.EnableAutomaticProcessing) return;
-            if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
             if (fire.m_infiniteFuel) return;
 
             var fireplaceName = piece.m_name;
@@ -27,10 +27,10 @@ namespace Automatics.AutomaticProcessing
             foreach (var (container, _) in Logics.GetNearbyContainers(fireplaceName, origin))
             {
                 var inventory = container.GetInventory();
-                if (!Inventories.HaveItem(inventory, fuelName, minFuelCount + 1)) continue;
+                if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
 
                 inventory.RemoveItem(fuelName, 1);
-                zNetView.InvokeRPC("AddFuel");
+                zNetView.InvokeRPC("RPC_AddFuel");
 
                 Logics.RefuelLog(fuelName, 1, fireplaceName, origin, container.m_name,
                     container.transform.position);

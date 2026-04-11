@@ -8,6 +8,7 @@ namespace Automatics.AutomaticProcessing
         public static bool Store(SapCollector sapCollector, ZNetView zNetView, int increaseCount)
         {
             if (!Config.EnableAutomaticProcessing) return false;
+            if (!Objects.HasValidOwnership(zNetView)) return false;
 
             var sapCollectorName = sapCollector.m_name;
             if (!Logics.IsAllowProcessing(sapCollectorName, Process.Store)) return false;
@@ -42,7 +43,7 @@ namespace Automatics.AutomaticProcessing
                 }
 
                 if (Config.StoreOnlyIfProductExists(sapCollectorName) &&
-                    !Inventories.HaveItem(inventory, sapName, 1)) continue;
+                    !Inventories.HaveItem(inventory, sapName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
                 if (!inventory.AddItem(sapItem.gameObject, amount)) continue;
 
                 var storedSapCount = inventory.CountItems(sapName) - sapCountInContainer;

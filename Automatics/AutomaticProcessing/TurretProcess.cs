@@ -43,6 +43,7 @@ namespace Automatics.AutomaticProcessing
         public static void Charge(Turret turret, ZNetView zNetView, float delta)
         {
             if (!Config.EnableAutomaticProcessing) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
 
             var turretName = turret.m_name;
             if (!Logics.IsAllowProcessing(turretName, Process.Charge)) return;
@@ -67,7 +68,7 @@ namespace Automatics.AutomaticProcessing
                 }
 
                 if (item == null) continue;
-                if (!Inventories.HaveItem(inventory, item.m_shared.m_name, minAmmoCount + 1))
+                if (!Inventories.HaveItem(inventory, item.m_shared.m_name, 0, WorldLevelMatchMode.Ignore, minAmmoCount + 1))
                     continue;
 
                 inventory.RemoveItem(item, 1);

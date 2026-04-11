@@ -9,6 +9,7 @@ namespace Automatics.AutomaticProcessing
         public static bool Store(WispSpawner wispSpawner, ZNetView zNetView)
         {
             if (!Config.EnableAutomaticProcessing) return false;
+            if (!Objects.HasValidOwnership(zNetView)) return false;
 
             var wispSpawnerName = wispSpawner.m_name;
             if (!Logics.IsAllowProcessing(wispSpawnerName, Process.Store)) return false;
@@ -41,7 +42,7 @@ namespace Automatics.AutomaticProcessing
                 }
 
                 if (Config.StoreOnlyIfProductExists(wispSpawnerName) &&
-                    !Inventories.HaveItem(inventory, wispName, 1)) continue;
+                    !Inventories.HaveItem(inventory, wispName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
                 if (!inventory.AddItem(wispItem.gameObject, 1)) continue;
 
                 zNetView.GetZDO().Set("LastSpawn", ZNet.instance.GetTime().Ticks);
