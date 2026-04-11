@@ -19,7 +19,7 @@ dotnet msbuild Automatics.sln /restore /t:Build /p:Configuration=Release /p:Plat
 
 Notes:
 
-- A native Windows `Debug` build auto-deploys the mod into `BepInEx\plugins\Automatics` if the game path is valid.
+- A `Debug` build auto-deploys the mod into `BepInEx/plugins/Automatics` if the game path is valid.
 - `Release` outputs are written to `Automatics/bin/Release`.
 
 ## WSL / Linux Build
@@ -46,23 +46,8 @@ dotnet msbuild Automatics.sln /t:Build \
 
 Notes:
 
-- WSL builds do not auto-deploy into the game directory.
-- Whenever you build `Automatics.dll`, deploy the freshly built DLL to `Valheim/BepInEx/plugins/Automatics` before finishing.
-- If you want to install the Debug build manually, copy:
-  - `Automatics.dll`
-  - `LitJSON.dll`
-  - `NDesk.Options.dll`
-  - `Data/`
-  - `Languages/`
-
-into `Valheim/BepInEx/plugins/Automatics`.
-
-- If you want to install the Release build manually, copy:
-  - `Automatics.dll`
-  - `Data/`
-  - `Languages/`
-
-into `Valheim/BepInEx/plugins/Automatics`. Release builds merge `NDesk.Options.dll` into `Automatics.dll` with ILRepack.
+- A `Debug` build auto-deploys the mod into `BepInEx/plugins/Automatics` if `VALHEIM_DIR` points to a valid game directory.
+- `Release` outputs are written to `Automatics/bin/Release`. Release builds merge `NDesk.Options.dll` into `Automatics.dll` with ILRepack.
 
 ## Output Paths
 

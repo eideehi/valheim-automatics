@@ -251,7 +251,7 @@
     <Exec Command="&quot;$(PDB2MDB_PATH)&quot; &quot;$(TargetPath)&quot;" />
   </Target>
 
-  <Target Name="DeployModFiles" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT' And Exists('$(BepInExDirectory)') And '$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
+  <Target Name="DeployModFiles" AfterTargets="Build" Condition="Exists('$(BepInExDirectory)') And '$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
     <ItemGroup>
       <ModFiles Include="$(TargetPath)" />
       <ModFiles Include="$(TargetPath).mdb" Condition="Exists('$(TargetPath).mdb')" />
