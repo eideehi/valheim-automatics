@@ -1,112 +1,190 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticDoor
 {
     [DisallowMultipleComponent]
-    internal class AutomaticDoor : MonoBehaviour
+    internal sealed class AutomaticDoor : MonoBehaviour
     {
+        private const float PredictionLookAheadSeconds = 0.35f;
+        private const float MaxPredictionDistance = 1.5f;
+        private const float MinPredictionSpeed = 1f;
+        private const float MinApproachDot = 0.35f;
+        private const float CloseGracePeriod = 0.35f;
+
         private static readonly Lazy<int> LazyPieceMask;
+        private static readonly IList<AutomaticDoor> AllInstance;
 
         private static int PieceMask => LazyPieceMask.Value;
+
+        private Door _door;
+        private Transform _transform;
+        private ZNetView _zNetView;
+        private bool _allowAutomaticDoor;
+        private bool _allowAutomaticDoorDirty;
+        private float _lastAutomaticOpenTime;
+
+        public static bool HasRegisteredDoor => AllInstance.Count > 0;
 
         static AutomaticDoor()
         {
             LazyPieceMask = new Lazy<int>(() =>
                 LayerMask.GetMask("Default", "static_solid", "Default_small", "piece",
                     "piece_nonsolid", "terrain", "vehicle"));
+            AllInstance = new List<AutomaticDoor>();
         }
-
-        private Door _door;
-        private ZNetView _zNetView;
-        private float _openTimer;
-        private float _closeTimer;
 
         private void Awake()
         {
             _door = GetComponent<Door>();
+            _transform = transform;
             Objects.GetZNetView(_door, out _zNetView);
 
-            StartCoroutine(nameof(UpdateAutomaticDoor));
+            _allowAutomaticDoorDirty = true;
+            AllInstance.Add(this);
         }
 
         private void OnDestroy()
         {
-            StopCoroutine(nameof(UpdateAutomaticDoor));
+            AllInstance.Remove(this);
 
-            _door = null;
             _zNetView = null;
+            _transform = null;
+            _door = null;
         }
 
-        [SuppressMessage("ReSharper", "IteratorNeverReturns")]
-        private IEnumerator UpdateAutomaticDoor()
+        public static void MarkAllowAutomaticDoorDirty()
         {
-            while (true)
+            foreach (var automaticDoor in AllInstance)
+                if (automaticDoor)
+                    automaticDoor._allowAutomaticDoorDirty = true;
+        }
+
+        public static void TryOpenNearby(Player player, Vector3 velocity)
+        {
+            if (!player) return;
+
+            var openRange = Config.DistanceForAutomaticOpening;
+            if (openRange <= 0f) return;
+
+            var searchRange = openRange + GetPredictionDistance(velocity);
+            var searchRangeSquared = searchRange * searchRange;
+
+            for (var index = AllInstance.Count - 1; index >= 0; index--)
             {
-                var active = false;
-                while (!active)
+                var automaticDoor = AllInstance[index];
+                if (!IsRegistered(automaticDoor))
                 {
-                    yield return new WaitForSeconds(0.1f);
-
-                    if (!Config.EnableAutomaticDoor) continue;
-                    if (!IsValid()) continue;
-                    if (!Logics.IsAllowAutomaticDoor(_door)) continue;
-                    active = true;
+                    AllInstance.RemoveAt(index);
+                    continue;
                 }
 
-                if (Time.time - _openTimer >= Config.IntervalToOpen)
-                {
-                    TryOpen();
-                    _openTimer = Time.time;
-                    yield return null;
-                }
-
-                if (Time.time - _closeTimer >= Config.IntervalToClose)
-                {
-                    TryClose();
-                    _closeTimer = Time.time;
-                    yield return null;
-                }
+                automaticDoor.TryOpen(player, velocity, searchRangeSquared, openRange);
             }
         }
 
-        private void TryOpen()
+        public static void TryCloseDoors()
         {
+            var closeRange = Config.DistanceForAutomaticClosing;
+            if (closeRange <= 0f) return;
+
+            var players = Player.GetAllPlayers();
+            for (var index = AllInstance.Count - 1; index >= 0; index--)
+            {
+                var automaticDoor = AllInstance[index];
+                if (!IsRegistered(automaticDoor))
+                {
+                    AllInstance.RemoveAt(index);
+                    continue;
+                }
+
+                automaticDoor.TryClose(players, closeRange);
+            }
+        }
+
+        private static bool IsRegistered(AutomaticDoor automaticDoor)
+        {
+            return automaticDoor && automaticDoor._door && automaticDoor._transform &&
+                   automaticDoor._zNetView != null;
+        }
+
+        private static float GetPredictionDistance(Vector3 velocity)
+        {
+            var speed = velocity.magnitude;
+            if (speed < MinPredictionSpeed) return 0f;
+
+            return Mathf.Min(speed * PredictionLookAheadSeconds, MaxPredictionDistance);
+        }
+
+        private void TryOpen(Player player, Vector3 velocity, float searchRangeSquared,
+            float openRange)
+        {
+            if (!IsValid()) return;
+            if (!IsAllowAutomaticDoor()) return;
             if (IsDoorOpen() || !CanInteract()) return;
+            if (!CanOpen(player)) return;
 
-            var player = GetClosestPlayers(Config.DistanceForAutomaticOpening)
-                .FirstOrDefault(x => CanOpen(x) && !IsExistsObstaclesBetweenTo(x));
-            if (!player) return;
+            var playerPosition = player.transform.position;
+            var doorPosition = _transform.position;
+            if ((doorPosition - playerPosition).sqrMagnitude > searchRangeSquared) return;
+            if (!ShouldOpen(playerPosition, velocity, openRange)) return;
+            if (IsExistsObstaclesBetweenTo(player)) return;
 
-            if (_door.m_keyItem)
+            if (_door.m_keyItem && Player.m_localPlayer == player)
                 player.Message(MessageHud.MessageType.Center,
                     Localization.instance.Localize("$msg_door_usingkey",
                         _door.m_keyItem.m_itemData.m_shared.m_name));
 
-            Reflections.InvokeMethod(_door, "Open",
-                (player.transform.position - _door.transform.position).normalized);
+            Reflections.InvokeMethod(_door, "Open", (playerPosition - doorPosition).normalized);
+            _lastAutomaticOpenTime = Time.time;
         }
 
-        private void TryClose()
+        private void TryClose(IEnumerable<Player> players, float closeRange)
         {
+            if (!IsValid()) return;
+            if (!IsAllowAutomaticDoor()) return;
             if (!IsDoorOpen() || !CanInteract()) return;
-            if (GetClosestPlayers(Config.DistanceForAutomaticClosing).Any()) return;
+            if (Time.time - _lastAutomaticOpenTime < CloseGracePeriod) return;
 
-            // If there are no players within the effective range of the door, the closest player to the door will be asked to close it.
-            var player = GetClosestPlayers().FirstOrDefault();
-            if (player)
-                Reflections.InvokeMethod(_door, "Open",
-                    (player.transform.position - _door.transform.position).normalized);
+            var closestPlayer = default(Player);
+            var closestDistanceSquared = float.MaxValue;
+            var closeRangeSquared = closeRange * closeRange;
+            var doorPosition = _transform.position;
+
+            foreach (var player in players)
+            {
+                if (!player) continue;
+
+                var distanceSquared = (player.transform.position - doorPosition).sqrMagnitude;
+                if (distanceSquared <= closeRangeSquared)
+                    return;
+
+                if (distanceSquared >= closestDistanceSquared) continue;
+
+                closestDistanceSquared = distanceSquared;
+                closestPlayer = player;
+            }
+
+            if (!closestPlayer) return;
+
+            Reflections.InvokeMethod(_door, "Open",
+                (closestPlayer.transform.position - doorPosition).normalized);
+        }
+
+        private bool IsAllowAutomaticDoor()
+        {
+            if (!_allowAutomaticDoorDirty) return _allowAutomaticDoor;
+
+            _allowAutomaticDoor = Logics.IsAllowAutomaticDoor(_door);
+            _allowAutomaticDoorDirty = false;
+            return _allowAutomaticDoor;
         }
 
         private bool IsValid()
         {
-            return _zNetView.GetZDO() != null && _zNetView.IsValid() && _zNetView.IsOwner();
+            return Objects.HasValidOwnership(_zNetView);
         }
 
         private bool IsDoorOpen()
@@ -116,7 +194,7 @@ namespace Automatics.AutomaticDoor
 
         private bool CanInteract()
         {
-            if (_door.m_checkGuardStone && !PrivateArea.CheckAccess(_door.transform.position))
+            if (_door.m_checkGuardStone && !PrivateArea.CheckAccess(_transform.position))
                 return false;
             return Reflections.InvokeMethod<bool>(_door, "CanInteract");
         }
@@ -126,23 +204,31 @@ namespace Automatics.AutomaticDoor
             return !_door.m_keyItem || Reflections.InvokeMethod<bool>(_door, "HaveKey", player);
         }
 
-        private IEnumerable<Player> GetClosestPlayers(float range = -1f)
+        private bool ShouldOpen(Vector3 playerPosition, Vector3 velocity, float openRange)
         {
-            var ignoreDistance = range <= 0;
-            var origin = _door.transform.position;
-            return (from x in Player.GetAllPlayers()
-                    let distance = Vector3.Distance(origin, x.transform.position)
-                    where ignoreDistance || distance <= range
-                    orderby distance
-                    select x)
-                .ToList();
+            var toDoor = _transform.position - playerPosition;
+            var openRangeSquared = openRange * openRange;
+            if (toDoor.sqrMagnitude <= openRangeSquared)
+                return true;
+
+            var predictionDistance = GetPredictionDistance(velocity);
+            if (predictionDistance <= 0f)
+                return false;
+
+            var speed = velocity.magnitude;
+            var moveDirection = velocity / speed;
+            if (Vector3.Dot(moveDirection, toDoor.normalized) < MinApproachDot)
+                return false;
+
+            var predictedPosition = playerPosition + moveDirection * predictionDistance;
+            return (_transform.position - predictedPosition).sqrMagnitude <= openRangeSquared;
         }
 
         private bool IsExistsObstaclesBetweenTo(Player player)
         {
             var from = Reflections.GetField<Collider>(player, "m_collider")?.bounds.center ??
                        player.m_eye.position;
-            var to = _door.transform.position;
+            var to = _transform.position;
 
             if (!Physics.Linecast(from, to, out var hitInfo, PieceMask)) return false;
 

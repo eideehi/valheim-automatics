@@ -52,6 +52,7 @@ namespace Automatics.AutomaticDoor
 
             _enableAutomaticDoor = config.Bind("enable_automatic_door", true);
             _allowAutomaticDoor = config.BindValheimObjectList("allow_automatic_door", Globals.Door, excludes: new[] { "WoodShutter" });
+            _allowAutomaticDoor.SettingChanged += (_, __) => AutomaticDoor.MarkAllowAutomaticDoorDirty();
             _intervalToOpen = config.Bind("interval_to_open", 0.1f, (0f, 8f));
             _intervalToClose = config.Bind("interval_to_close", 0.1f, (0f, 8f));
             _distanceForAutomaticOpening = config.Bind("distance_for_automatic_opening", 2.5f, (1f, 8f));
@@ -60,7 +61,8 @@ namespace Automatics.AutomaticDoor
             _automaticDoorEnableDisableToggle = config.Bind("automatic_door_enable_disable_toggle", new KeyboardShortcut());
 
             config.ChangeSection("general", 64);
-            config.BindCustomValheimObject("custom_door", Globals.Door);
+            config.BindCustomValheimObject("custom_door", Globals.Door)
+                .SettingChanged += (_, __) => AutomaticDoor.MarkAllowAutomaticDoorDirty();
         }
     }
 }
