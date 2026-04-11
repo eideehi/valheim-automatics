@@ -246,18 +246,12 @@
     </Content>
   </ItemGroup>
 
-  <Target Condition="Exists('$(PDB2MDB_PATH)') And '$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'" Name="ExecPDB2MDB" BeforeTargets="DeployModFiles">
-    <Delete Condition="Exists('$(TargetPath).mdb')" Files="$(TargetPath).mdb" />
-    <Exec Command="&quot;$(PDB2MDB_PATH)&quot; &quot;$(TargetPath)&quot;" />
-  </Target>
-
   <Target Name="DeployModFiles" AfterTargets="Build" Condition="Exists('$(BepInExDirectory)') And '$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
     <ItemGroup>
       <ModFiles Include="$(TargetPath)" />
-      <ModFiles Include="$(TargetPath).mdb" Condition="Exists('$(TargetPath).mdb')" />
-      <ModFiles Include="$(TargetDir)**\*.json" />
-      <ModFiles Include="$(TargetDir)LitJSON.dll" Condition="Exists('$(TargetDir)LitJSON.dll')" />
+      <ModFiles Include="$(PkgLitJson)\lib\net45\LitJSON.dll" />
       <ModFiles Include="$(TargetDir)NDesk.Options.dll" Condition="Exists('$(TargetDir)NDesk.Options.dll')" />
+      <ModFiles Include="$(TargetDir)**\*.json" />
     </ItemGroup>
     <Copy SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(BepInExDirectory)\plugins\$(ProjectName)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
