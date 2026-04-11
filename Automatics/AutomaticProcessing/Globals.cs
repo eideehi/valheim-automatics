@@ -15,12 +15,12 @@ namespace Automatics.AutomaticProcessing
 
     internal static class Logics
     {
-        private static readonly Dictionary<int, ContainerList> Containers;
+        private static readonly Dictionary<string, ContainerList> Containers;
         private static float _lastContainersReset;
 
         static Logics()
         {
-            Containers = new Dictionary<int, ContainerList>();
+            Containers = new Dictionary<string, ContainerList>();
         }
 
         public static void Cleanup()
@@ -89,19 +89,20 @@ namespace Automatics.AutomaticProcessing
                 Containers.Clear();
             }
 
-            var hash = origin.GetHashCode();
-            if (Containers.TryGetValue(hash, out var cache)) return cache.Where(x => x.container);
+            var range = Config.ContainerSearchRange(target);
+            var limit = Config.ContainerReferenceLimit(target);
+            var cacheKey = target + ":" + origin.GetHashCode() + ":" + range + ":" + limit;
+            if (Containers.TryGetValue(cacheKey, out var cache)) return cache.Where(x => x.container);
 
             var containers = new ContainerList();
-            Containers[hash] = containers;
+            Containers[cacheKey] = containers;
 
-            var range = Config.ContainerSearchRange(target);
             if (range > 0)
-                containers.AddRange(from x in ContainerCache.GetAllInstance()
+                containers.AddRange((from x in ContainerCache.GetAllInstance()
                     let distance = Vector3.Distance(origin, x.transform.position)
                     where distance <= range && IsAllowContainer(x)
                     orderby distance
-                    select (x, distance));
+                    select (x, distance)).Take(limit > 0 ? limit : int.MaxValue));
 
             return containers;
         }

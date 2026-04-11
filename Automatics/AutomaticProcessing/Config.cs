@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using BepInEx.Configuration;
 using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -14,9 +15,11 @@ namespace Automatics.AutomaticProcessing
 
         private static ConfigEntry<AutomaticsModule> _module;
         private static ConfigEntry<bool> _enableAutomaticProcessing;
+        private static ConfigEntry<string> _storageConnectionEffectColor;
         private static ConfigEntry<StringList> _allowContainer;
         private static Dictionary<string, ConfigEntry<Process>> _allowProcessing;
         private static Dictionary<string, ConfigEntry<int>> _containerSearchRange;
+        private static Dictionary<string, ConfigEntry<int>> _containerReferenceLimit;
         private static Dictionary<string, ConfigEntry<int>> _materialCountOfSuppressProcessing;
         private static Dictionary<string, ConfigEntry<bool>> _supplyOnlyWhenMaterialsRunOut;
         private static Dictionary<string, ConfigEntry<int>> _fuelCountOfSuppressProcessing;
@@ -28,6 +31,17 @@ namespace Automatics.AutomaticProcessing
 
         public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool EnableAutomaticProcessing => _enableAutomaticProcessing.Value;
+        public static Color StorageConnectionEffectColor
+        {
+            get
+            {
+                if (TryParseColor(_storageConnectionEffectColor.Value, out var color))
+                    return color;
+
+                return new Color32(79, 169, 255, 255);
+            }
+        }
+
         public static StringList AllowContainer => _allowContainer.Value;
 
         public static Process AllowProcessing(string processor)
@@ -40,6 +54,13 @@ namespace Automatics.AutomaticProcessing
         public static int ContainerSearchRange(string processor)
         {
             return _containerSearchRange.TryGetValue(processor, out var entry) ? entry.Value : 0;
+        }
+
+        public static int ContainerReferenceLimit(string processor)
+        {
+            return _containerReferenceLimit.TryGetValue(processor, out var entry)
+                ? entry.Value
+                : 0;
         }
 
         public static int MaterialCountOfSuppressProcessing(string processor)
@@ -105,10 +126,19 @@ namespace Automatics.AutomaticProcessing
             if (_module.Value == AutomaticsModule.Disabled) return;
 
             _enableAutomaticProcessing = config.Bind("enable_automatic_processing", true);
+            _storageConnectionEffectColor = config.Bind("storage_connection_effect_color",
+                "#4FA9FF", initializer: x =>
+                {
+                    x.DispName = Automatics.L10N.Translate(
+                        "@config_automatic_processing_storage_connection_effect_color_name");
+                    x.Description = Automatics.L10N.Translate(
+                        "@config_automatic_processing_storage_connection_effect_color_description");
+                });
 
             _allowContainer = config.BindValheimObjectList("allow_container", Globals.Container, excludes: new[] { "PieceChestPrivate" });
             _allowProcessing = new Dictionary<string, ConfigEntry<Process>>();
             _containerSearchRange = new Dictionary<string, ConfigEntry<int>>();
+            _containerReferenceLimit = new Dictionary<string, ConfigEntry<int>>();
             _materialCountOfSuppressProcessing = new Dictionary<string, ConfigEntry<int>>();
             _supplyOnlyWhenMaterialsRunOut = new Dictionary<string, ConfigEntry<bool>>();
             _fuelCountOfSuppressProcessing = new Dictionary<string, ConfigEntry<int>>();
@@ -135,6 +165,11 @@ namespace Automatics.AutomaticProcessing
                 _containerSearchRange[processorName] =
                     config.Bind(key, 8, (1, 64),
                         Initializer("container_search_range_by", displayName));
+
+                key = $"container_reference_limit_by_{rawName}";
+                _containerReferenceLimit[processorName] =
+                    config.Bind(key, 0, (0, 999),
+                        Initializer("container_reference_limit_by", displayName));
 
                 if (processes.Contains(Process.Craft))
                 {
@@ -208,6 +243,19 @@ namespace Automatics.AutomaticProcessing
                             displayName);
                 };
             }
+        }
+
+        private static bool TryParseColor(string value, out Color color)
+        {
+            color = default;
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var input = value.Trim();
+            if (!input.StartsWith("#", StringComparison.Ordinal))
+                input = "#" + input;
+
+            return ColorUtility.TryParseHtmlString(input, out color);
         }
     }
 }

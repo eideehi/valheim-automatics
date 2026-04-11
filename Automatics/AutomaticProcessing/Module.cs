@@ -10,14 +10,23 @@ namespace Automatics.AutomaticProcessing
             Config.Initialize();
             if (Config.ModuleDisabled) return;
 
-            FejdStartup.startGameEvent += (startup, args) =>
+            Hooks.OnPlayerAwake += (player, zNetView) =>
             {
                 Logics.Cleanup();
                 SmelterProcess.Cleanup();
+                ConnectionEffects.Cleanup();
             };
+            Hooks.OnPlayerUpdate += OnPlayerUpdate;
 
             Harmony.CreateAndPatchAll(typeof(Patches),
                 Automatics.GetHarmonyId("automatic-processing"));
+        }
+
+        private static void OnPlayerUpdate(Player player, bool takeInput)
+        {
+            if (Player.m_localPlayer != player || !player.IsOwner()) return;
+
+            ConnectionEffects.Update(player);
         }
     }
 }
