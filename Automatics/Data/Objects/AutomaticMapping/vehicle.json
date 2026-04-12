@@ -37,6 +37,15 @@
           "value": "$ship_longship"
         }
       ]
+    },
+    {
+      "identifier": "Drakkar",
+      "label": "$ship_longship_ashlands",
+      "matches": [
+        {
+          "value": "$ship_longship_ashlands"
+        }
+      ]
     }
   ]
 }

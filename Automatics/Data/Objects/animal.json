@@ -113,6 +113,24 @@
           "value": "^\\$animal_fish\\d{1,}$"
         }
       ]
+    },
+    {
+      "identifier": "Asksvin",
+      "label": "$enemy_asksvin",
+      "matches": [
+        {
+          "value": "$enemy_asksvin"
+        }
+      ]
+    },
+    {
+      "identifier": "AsksvinHatchling",
+      "label": "$enemy_asksvin_hatchling",
+      "matches": [
+        {
+          "value": "$enemy_asksvin_hatchling"
+        }
+      ]
     }
   ]
 }

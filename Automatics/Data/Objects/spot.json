@@ -101,6 +101,35 @@
           "value": "^Mistlands_Giant\\d{1,}$"
         }
       ]
+    },
+    {
+      "identifier": "CharredFortress",
+      "label": "@location_charredfortress",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^CharredFortress\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "LeviathanLava",
+      "label": "@location_leviathanlava",
+      "matches": [
+        {
+          "value": "LeviathanLava"
+        }
+      ]
+    },
+    {
+      "identifier": "BogWitchCamp",
+      "label": "@location_bogwitchcamp",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^BogWitch_Camp\\d{0,}$"
+        }
+      ]
     }
   ]
 }

@@ -154,6 +154,42 @@
           "value": "$item_magecap"
         }
       ]
+    },
+    {
+      "identifier": "Fiddlehead",
+      "label": "$item_fiddleheadfern",
+      "matches": [
+        {
+          "value": "$item_fiddleheadfern"
+        }
+      ]
+    },
+    {
+      "identifier": "SmokePuff",
+      "label": "$item_smokepuff",
+      "matches": [
+        {
+          "value": "$item_smokepuff"
+        }
+      ]
+    },
+    {
+      "identifier": "Vineberry",
+      "label": "$item_vineberry",
+      "matches": [
+        {
+          "value": "$item_vineberry"
+        }
+      ]
+    },
+    {
+      "identifier": "VineberrySeeds",
+      "label": "$item_vineberryseeds",
+      "matches": [
+        {
+          "value": "$item_vineberryseeds"
+        }
+      ]
     }
   ]
 }

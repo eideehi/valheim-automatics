@@ -55,6 +55,33 @@
           "value": "$piece_hexagonalgate"
         }
       ]
+    },
+    {
+      "identifier": "AshwoodDoor",
+      "label": "$piece_ashwood_door",
+      "matches": [
+        {
+          "value": "$piece_ashwood_door"
+        }
+      ]
+    },
+    {
+      "identifier": "FlametalGate",
+      "label": "$piece_flametalgate",
+      "matches": [
+        {
+          "value": "$piece_flametalgate"
+        }
+      ]
+    },
+    {
+      "identifier": "DvergrDoor",
+      "label": "$piece_dvergr_door",
+      "matches": [
+        {
+          "value": "$piece_dvergr_door"
+        }
+      ]
     }
   ]
 }

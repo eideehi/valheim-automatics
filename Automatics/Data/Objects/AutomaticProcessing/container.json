@@ -37,6 +37,15 @@
           "value": "$piece_chestprivate"
         }
       ]
+    },
+    {
+      "identifier": "PieceChestCharred",
+      "label": "$piece_charredchest",
+      "matches": [
+        {
+          "value": "$piece_charredchest"
+        }
+      ]
     }
   ]
 }

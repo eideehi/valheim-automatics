@@ -64,6 +64,15 @@
           "value": "$piece_giant_brain"
         }
       ]
+    },
+    {
+      "identifier": "FlametalDeposit",
+      "label": "$item_flametalore",
+      "matches": [
+        {
+          "value": "$item_flametalore"
+        }
+      ]
     }
   ]
 }

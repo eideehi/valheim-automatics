@@ -51,6 +51,16 @@
           "value": "^Mistlands_DvergrTownEntrance\\d{0,}$"
         }
       ]
+    },
+    {
+      "identifier": "MorgenHole",
+      "label": "$location_morgenhole",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^MorgenHole\\d{0,}$"
+        }
+      ]
     }
   ]
 }

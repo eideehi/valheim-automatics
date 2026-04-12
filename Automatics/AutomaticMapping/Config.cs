@@ -87,11 +87,12 @@ namespace Automatics.AutomaticMapping
                 includes: new[]
                 {
                     "Raspberries", "Mushroom", "Blueberries", "CarrotSeeds", "Thistle",
-                    "TurnipSeeds", "Cloudberries", "JotunPuffs", "Magecap"
+                    "TurnipSeeds", "Cloudberries", "JotunPuffs", "Magecap",
+                    "Fiddlehead", "SmokePuff", "Vineberry", "VineberrySeeds"
                 });
             _allowPinningMineral = config.BindValheimObjectList("allow_pinning_mineral", ValheimObject.Mineral, excludes: new[] { "ObsidianDeposit" });
             _allowPinningSpawner = config.BindValheimObjectList("allow_pinning_spawner", ValheimObject.Spawner, Array.Empty<string>());
-            _allowPinningVehicle = config.BindValheimObjectList("allow_pinning_vehicle", MappingObject.Vehicle, includes: new[] { "Karve", "Longship" });
+            _allowPinningVehicle = config.BindValheimObjectList("allow_pinning_vehicle", MappingObject.Vehicle, includes: new[] { "Karve", "Longship", "Drakkar" });
             _allowPinningOther = config.BindValheimObjectList("allow_pinning_other", MappingObject.Other, includes: new[] { "WildBeehive" });
             _allowPinningDungeon = config.BindValheimObjectList("allow_pinning_dungeon", ValheimObject.Dungeon);
             _allowPinningSpot = config.BindValheimObjectList("allow_pinning_spot", ValheimObject.Spot);

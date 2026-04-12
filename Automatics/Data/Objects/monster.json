@@ -325,6 +325,141 @@
           "value": "$enemy_seekerbrute"
         }
       ]
+    },
+    {
+      "identifier": "CharredMelee",
+      "label": "$enemy_charred_melee",
+      "matches": [
+        {
+          "value": "$enemy_charred_melee"
+        }
+      ]
+    },
+    {
+      "identifier": "CharredArcher",
+      "label": "$enemy_charred_archer",
+      "matches": [
+        {
+          "value": "$enemy_charred_archer"
+        }
+      ]
+    },
+    {
+      "identifier": "CharredMage",
+      "label": "$enemy_charred_mage",
+      "matches": [
+        {
+          "value": "$enemy_charred_mage"
+        }
+      ]
+    },
+    {
+      "identifier": "CharredTwitcher",
+      "label": "$enemy_charred_twitcher",
+      "matches": [
+        {
+          "value": "$enemy_charred_twitcher"
+        }
+      ]
+    },
+    {
+      "identifier": "CharredGrunt",
+      "label": "$enemy_charred_grunt",
+      "matches": [
+        {
+          "value": "$enemy_charred_grunt"
+        }
+      ]
+    },
+    {
+      "identifier": "Morgen",
+      "label": "$enemy_morgen",
+      "matches": [
+        {
+          "value": "$enemy_morgen"
+        }
+      ]
+    },
+    {
+      "identifier": "Volture",
+      "label": "$enemy_volture",
+      "matches": [
+        {
+          "value": "$enemy_volture"
+        }
+      ]
+    },
+    {
+      "identifier": "BonemawSerpent",
+      "label": "$enemy_bonemawserpent",
+      "matches": [
+        {
+          "value": "$enemy_bonemawserpent"
+        }
+      ]
+    },
+    {
+      "identifier": "FallenValkyrie",
+      "label": "$enemy_fallenvalkyrie",
+      "matches": [
+        {
+          "value": "$enemy_fallenvalkyrie"
+        }
+      ]
+    },
+    {
+      "identifier": "Fader",
+      "label": "$enemy_fader",
+      "matches": [
+        {
+          "value": "$enemy_fader"
+        }
+      ]
+    },
+    {
+      "identifier": "SkeletonFire",
+      "label": "$enemy_skeletonfire",
+      "matches": [
+        {
+          "value": "$enemy_skeletonfire"
+        }
+      ]
+    },
+    {
+      "identifier": "FrostBlob",
+      "label": "$enemy_blobfrost",
+      "matches": [
+        {
+          "value": "$enemy_blobfrost"
+        }
+      ]
+    },
+    {
+      "identifier": "Bear",
+      "label": "$enemy_bjorn",
+      "matches": [
+        {
+          "value": "$enemy_bjorn"
+        }
+      ]
+    },
+    {
+      "identifier": "Vile",
+      "label": "$enemy_unbjorn",
+      "matches": [
+        {
+          "value": "$enemy_unbjorn"
+        }
+      ]
+    },
+    {
+      "identifier": "LavaBlob",
+      "label": "$enemy_bloblava",
+      "matches": [
+        {
+          "value": "$enemy_bloblava"
+        }
+      ]
     }
   ]
 }

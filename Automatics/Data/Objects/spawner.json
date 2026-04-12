@@ -28,6 +28,24 @@
           "value": "$enemy_draugrspawner"
         }
       ]
+    },
+    {
+      "identifier": "EffigyOfMalice",
+      "label": "$enemy_charredspawnercross",
+      "matches": [
+        {
+          "value": "$enemy_charredspawnercross"
+        }
+      ]
+    },
+    {
+      "identifier": "MonumentOfTorment",
+      "label": "$enemy_charredtwitcherspawner",
+      "matches": [
+        {
+          "value": "$enemy_charredtwitcherspawner"
+        }
+      ]
     }
   ]
 }

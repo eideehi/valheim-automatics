@@ -27,6 +27,7 @@
     <ManagedDataDirectory Condition="Exists('$(ValheimDirectory)\valheim_Data\Managed')">$(ValheimDirectory)\valheim_Data\Managed</ManagedDataDirectory>
     <UnityManagedDirectory Condition="Exists('$(ValheimDirectory)\unstripped_corlib')">$(ValheimDirectory)\unstripped_corlib</UnityManagedDirectory>
     <UnityManagedDirectory Condition="'$(UnityManagedDirectory)' == '' And Exists('$(ManagedDataDirectory)')">$(ManagedDataDirectory)</UnityManagedDirectory>
+    <FrameworkPathOverride Condition="'$(OS)' != 'Windows_NT' And '$(ManagedDataDirectory)' != ''">$(ManagedDataDirectory)</FrameworkPathOverride>
     <ILRepackTargetsFile>$(MSBuildProjectDirectory)/ILRepack.targets</ILRepackTargetsFile>
   </PropertyGroup>
 
@@ -52,7 +53,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" Condition="'$(OS)' == 'Windows_NT'" />
     <PackageReference Include="LitJson" Version="0.18.0" GeneratePathProperty="true" ExcludeAssets="compile" />
     <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.44.1">
       <PrivateAssets>all</PrivateAssets>
