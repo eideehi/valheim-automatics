@@ -17,7 +17,7 @@ Automatically opens and closes the door near the player. The interval and distan
 
 Automatic pinning animals, monsters, floras, veins, dungeons, etc. that exist around the player to the map. The pinning allows for each object and the detection range of the object can be changed from the config.
 
-- **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.adoc](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/custom-icon-pack.adoc) for custom icon pack specifications.
+- **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.adoc](https://github.com/eideehi/valheim-automatics/blob/1.6.0/docs/custom-icon-pack.adoc) for custom icon pack specifications.
 
 ![Custom Icon Pack Image](https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png)
 
@@ -135,7 +135,7 @@ I recommend using [Configuration Manager](https://github.com/BepInEx/BepInEx.Con
 
 *The README would be too large if we described all the details of the configuration, so we split it into separate file.*
 
-Open [CONFIG.adoc](https://github.com/eideehi/valheim-automatics/blob/1.5.1/CONFIG.adoc) to see the configuration details.
+Open [CONFIG.adoc](https://github.com/eideehi/valheim-automatics/blob/1.6.0/CONFIG.adoc) to see the configuration details.
 
 ### Adding object definitions to Automatics
 
@@ -143,7 +143,7 @@ You can use the [Configuration Manager](https://github.com/BepInEx/BepInEx.Confi
 
 ![User-defined objects in GUI](https://app.box.com/shared/static/5f6dvpg1elczu9froqkepxamv03ci9cd.png)
 
-Open [docs/add-user-defined-object.adoc](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/add-user-defined-object.adoc) to learn more about adding user-defined objects.
+Open [docs/add-user-defined-object.adoc](https://github.com/eideehi/valheim-automatics/blob/1.6.0/docs/add-user-defined-object.adoc) to learn more about adding user-defined objects.
 
 ## Supplementary explanation
 
@@ -201,4 +201,4 @@ Internal names are the names used inside the game program, such as `$enemy_boar`
 
 ## License
 
-Automatics is developed and released under the MIT license. For the full text of the license, please see the [LICENSE](https://github.com/eideehi/valheim-automatics/blob/1.5.1/LICENSE) file.
+Automatics is developed and released under the MIT license. For the full text of the license, please see the [LICENSE](https://github.com/eideehi/valheim-automatics/blob/1.6.0/LICENSE) file.

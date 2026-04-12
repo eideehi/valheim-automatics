@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using BepInEx.Configuration;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics
@@ -98,6 +99,50 @@ namespace Automatics
 
                     Automatics.Logger.Message($"Replace value: {category} {key} {original} => {newValue}");
                 }
+                return true;
+            };
+        }
+
+        private static Operation AppendValues(string key, string[] valuesToAppend)
+        {
+            return (category, lines, begin, end) =>
+            {
+                var configs = FindConfig(category, key, lines, begin, end).ToList();
+                if (!configs.Any()) return false;
+
+                foreach (var config in configs)
+                {
+                    var original = config.Value ?? "";
+
+                    var existing = string.IsNullOrWhiteSpace(original)
+                        ? new List<string>()
+                        : Csv.ParseLine(original)
+                            .Where(x => !string.IsNullOrEmpty(x))
+                            .ToList();
+
+                    var existingSet = new HashSet<string>(existing, StringComparer.Ordinal);
+                    var added = new List<string>();
+
+                    foreach (var candidate in valuesToAppend)
+                    {
+                        if (string.IsNullOrWhiteSpace(candidate)) continue;
+                        var trimmed = candidate.Trim();
+                        if (existingSet.Add(trimmed))
+                        {
+                            existing.Add(trimmed);
+                            added.Add(trimmed);
+                        }
+                    }
+
+                    if (added.Count == 0) continue;
+
+                    config.Value = string.Join(", ", existing.Select(Csv.Escape));
+                    UpdateConfig(config, lines);
+
+                    Automatics.Logger.Message(
+                        $"Append values: {category} {key} += [{string.Join(", ", added)}]");
+                }
+
                 return true;
             };
         }
@@ -211,6 +256,14 @@ namespace Automatics
                 MigrationFor145(lines);
             }
 
+            migrateVersion = new Version(1, 6, 0);
+            if (version < migrateVersion)
+            {
+                Automatics.Logger.Message($"Migrating config from {version} to {migrateVersion}");
+                dirty = true;
+                MigrationFor160(lines);
+            }
+
             if (dirty)
             {
                 File.WriteAllText(path, string.Join(Environment.NewLine, lines), Encoding.UTF8);
@@ -305,6 +358,68 @@ namespace Automatics
                 { "[automatic_processing]", new List<Operation>
                 {
                     ReplaceValue("r/^allow_processing_by", "All", "Craft, Refuel, Store"),
+                }},
+            });
+        }
+
+        private static void MigrationFor160(List<string> lines)
+        {
+            Migration(lines, new Dictionary<string, List<Operation>>
+            {
+                { "[automatic_mapping]", new List<Operation>
+                {
+                    AppendValues("allow_pinning_monster", new[]
+                    {
+                        "CharredMelee", "CharredArcher", "CharredMage", "CharredTwitcher",
+                        "CharredGrunt", "Morgen", "Volture", "BonemawSerpent",
+                        "FallenValkyrie", "Fader", "SkeletonFire", "FrostBlob",
+                        "Bear", "Vile", "LavaBlob"
+                    }),
+                    AppendValues("allow_pinning_animal", new[]
+                    {
+                        "Asksvin", "AsksvinHatchling"
+                    }),
+                    AppendValues("allow_pinning_flora", new[]
+                    {
+                        "Fiddlehead", "SmokePuff", "Vineberry", "VineberrySeeds"
+                    }),
+                    AppendValues("allow_pinning_mineral", new[]
+                    {
+                        "FlametalDeposit"
+                    }),
+                    AppendValues("allow_pinning_vehicle", new[]
+                    {
+                        "Drakkar"
+                    }),
+                    AppendValues("allow_pinning_spot", new[]
+                    {
+                        "CharredFortress", "LeviathanLava", "BogWitchCamp"
+                    }),
+                    AppendValues("allow_pinning_dungeon", new[]
+                    {
+                        "MorgenHole"
+                    }),
+                }},
+                { "[automatic_mining]", new List<Operation>
+                {
+                    AppendValues("allow_mining_mineral", new[]
+                    {
+                        "FlametalDeposit"
+                    }),
+                }},
+                { "[automatic_door]", new List<Operation>
+                {
+                    AppendValues("allow_automatic_door", new[]
+                    {
+                        "AshwoodDoor", "FlametalGate", "DvergrDoor"
+                    }),
+                }},
+                { "[automatic_processing]", new List<Operation>
+                {
+                    AppendValues("allow_container", new[]
+                    {
+                        "PieceChestCharred"
+                    }),
                 }},
             });
         }
