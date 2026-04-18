@@ -30,23 +30,26 @@ namespace Automatics.AutomaticMapping
         public static Minimap.PinData GetClosestPin(Vector3 pos, float radius = 1f,
             Predicate<Minimap.PinData> predicate = null)
         {
-            if (predicate == null)
-                predicate = x => true;
-
-            Minimap.PinData result = null;
-            var minDistance = float.MaxValue;
-            foreach (var pinData in GetAllPins().Where(x =>
-                         x.m_uiElement && x.m_uiElement.gameObject.activeInHierarchy))
+            using (MappingProfiler.BeginScope(MappingProfiler.SlotGetClosestPin))
             {
-                var distance = Utils.DistanceXZ(pos, pinData.m_pos);
-                if (distance > radius || distance >= minDistance) continue;
-                if (!predicate.Invoke(pinData)) continue;
+                if (predicate == null)
+                    predicate = x => true;
 
-                result = pinData;
-                minDistance = distance;
+                Minimap.PinData result = null;
+                var minDistance = float.MaxValue;
+                foreach (var pinData in GetAllPins().Where(x =>
+                             x.m_uiElement && x.m_uiElement.gameObject.activeInHierarchy))
+                {
+                    var distance = Utils.DistanceXZ(pos, pinData.m_pos);
+                    if (distance > radius || distance >= minDistance) continue;
+                    if (!predicate.Invoke(pinData)) continue;
+
+                    result = pinData;
+                    minDistance = distance;
+                }
+
+                return result;
             }
-
-            return result;
         }
 
         public static bool HavePinInRange(Vector3 pos, float radius,
@@ -75,9 +78,12 @@ namespace Automatics.AutomaticMapping
 
         public static void RefreshPins()
         {
-            if (!ValheimMap) return;
+            using (MappingProfiler.BeginScope(MappingProfiler.SlotRefreshPins))
+            {
+                if (!ValheimMap) return;
 
-            Reflections.InvokeMethod(ValheimMap, "UpdatePins");
+                Reflections.InvokeMethod(ValheimMap, "UpdatePins");
+            }
         }
 
         private static string EscapePinName(string name)

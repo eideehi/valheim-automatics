@@ -34,6 +34,7 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<bool> _needToEquipWishboneForUndergroundMinerals;
         private static ConfigEntry<KeyboardShortcut> _staticObjectMappingKey;
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
+        private static ConfigEntry<bool> _mappingPerformanceLog;
 
         public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
         public static bool EnableAutomaticMapping => _enableAutomaticMapping.Value;
@@ -62,6 +63,7 @@ namespace Automatics.AutomaticMapping
 
         public static KeyboardShortcut StaticObjectMappingKey => _staticObjectMappingKey.Value;
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
+        public static bool MappingPerformanceLog => _mappingPerformanceLog.Value;
 
         public static void Initialize()
         {
@@ -107,6 +109,7 @@ namespace Automatics.AutomaticMapping
             _staticObjectMappingKey = config.Bind("static_object_mapping_key", new KeyboardShortcut());
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
+            _mappingPerformanceLog = config.Bind("mapping_performance_log", false);
 
             config.ChangeSection("general", 128);
             config.BindCustomValheimObject("custom_vehicle", MappingObject.Vehicle);

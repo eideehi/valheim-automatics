@@ -31,10 +31,13 @@ namespace Automatics.AutomaticMapping
             Navigation.Cleanup();
             DynamicObjectMapping.Cleanup();
             StaticObjectMapping.Cleanup();
+            MappingProfiler.Reset();
         }
 
         public static void DynamicMapping(Player player, float delta)
         {
+            MappingProfiler.FlushIfDue();
+
             if (!CanRun(player)) return;
             if (!Config.EnableAutomaticMapping)
             {
@@ -215,87 +218,93 @@ namespace Automatics.AutomaticMapping
 
         public static void AnimatePins(float delta)
         {
-            if (delta <= 0f) return;
-
-            foreach (var pair in PinDataCache)
+            using (MappingProfiler.BeginScope(MappingProfiler.SlotAnimatePins))
             {
-                if (!PinTargetCache.TryGetValue(pair.Key, out var target)) continue;
+                if (delta <= 0f) return;
 
-                var pinData = pair.Value;
-                if (pinData != null && pinData.m_pos != target)
-                    pinData.m_pos = InterpolatePinPosition(PinVelocityCache, pair.Key, pinData.m_pos,
-                        target, delta);
-            }
+                foreach (var pair in PinDataCache)
+                {
+                    if (!PinTargetCache.TryGetValue(pair.Key, out var target)) continue;
 
-            foreach (var pair in VehiclePinCache)
-            {
-                if (!VehiclePinTargetCache.TryGetValue(pair.Key, out var target)) continue;
+                    var pinData = pair.Value;
+                    if (pinData != null && pinData.m_pos != target)
+                        pinData.m_pos = InterpolatePinPosition(PinVelocityCache, pair.Key,
+                            pinData.m_pos, target, delta);
+                }
 
-                var pinData = pair.Value;
-                if (pinData != null && pinData.m_pos != target)
-                    pinData.m_pos = InterpolatePinPosition(VehiclePinVelocityCache, pair.Key,
-                        pinData.m_pos, target, delta);
+                foreach (var pair in VehiclePinCache)
+                {
+                    if (!VehiclePinTargetCache.TryGetValue(pair.Key, out var target)) continue;
+
+                    var pinData = pair.Value;
+                    if (pinData != null && pinData.m_pos != target)
+                        pinData.m_pos = InterpolatePinPosition(VehiclePinVelocityCache, pair.Key,
+                            pinData.m_pos, target, delta);
+                }
             }
         }
 
         public static void Mapping(float delta)
         {
-            if (Config.DynamicObjectMappingRange <= 0)
+            using (MappingProfiler.BeginScope(MappingProfiler.SlotDynamicMapping))
             {
-                RemoveCachedPins();
-                return;
-            }
-
-            var origin = Player.m_localPlayer.transform.position;
-
-            KnownObjects.Clear();
-
-            foreach (var character in Character.GetAllCharacters())
-            {
-                if (character.IsPlayer()) continue;
-
-                var distance = Vector3.Distance(origin, character.transform.position);
-                if (distance > Config.DynamicObjectMappingRange) continue;
-
-                var characterName = character.m_name;
-                if (GetAnimal(characterName, out var data))
+                if (Config.DynamicObjectMappingRange <= 0)
                 {
-                    if (!data.IsAllowed) continue;
-                    if (character.IsTamed() && Config.NotPinningTamedAnimals) continue;
-                    AddOrUpdatePin(character, delta);
+                    RemoveCachedPins();
+                    return;
                 }
-                else if (GetMonster(characterName, out data))
-                {
-                    if (!data.IsAllowed) continue;
-                    AddOrUpdatePin(character, delta);
-                }
-            }
 
-            if (Config.AllowPinningAnimal.Contains("Fish"))
-            {
-                FishCache.Fill(FishBuffer);
-                foreach (var fish in FishBuffer)
+                var origin = Player.m_localPlayer.transform.position;
+
+                KnownObjects.Clear();
+
+                foreach (var character in Character.GetAllCharacters())
                 {
-                    var distance = Vector3.Distance(origin, fish.transform.position);
+                    if (character.IsPlayer()) continue;
+
+                    var distance = Vector3.Distance(origin, character.transform.position);
                     if (distance > Config.DynamicObjectMappingRange) continue;
-                    AddOrUpdatePin(fish, delta);
-                }
-            }
 
-            if (Config.AllowPinningAnimal.Contains("Bird"))
-            {
-                BirdCache.Fill(BirdBuffer);
-                foreach (var bird in BirdBuffer)
+                    var characterName = character.m_name;
+                    if (GetAnimal(characterName, out var data))
+                    {
+                        if (!data.IsAllowed) continue;
+                        if (character.IsTamed() && Config.NotPinningTamedAnimals) continue;
+                        AddOrUpdatePin(character, delta);
+                    }
+                    else if (GetMonster(characterName, out data))
+                    {
+                        if (!data.IsAllowed) continue;
+                        AddOrUpdatePin(character, delta);
+                    }
+                }
+
+                if (Config.AllowPinningAnimal.Contains("Fish"))
                 {
-                    var distance = Vector3.Distance(origin, bird.transform.position);
-                    if (distance > Config.DynamicObjectMappingRange) continue;
-                    AddOrUpdatePin(bird, delta);
+                    FishCache.Fill(FishBuffer);
+                    foreach (var fish in FishBuffer)
+                    {
+                        var distance = Vector3.Distance(origin, fish.transform.position);
+                        if (distance > Config.DynamicObjectMappingRange) continue;
+                        AddOrUpdatePin(fish, delta);
+                    }
                 }
+
+                if (Config.AllowPinningAnimal.Contains("Bird"))
+                {
+                    BirdCache.Fill(BirdBuffer);
+                    foreach (var bird in BirdBuffer)
+                    {
+                        var distance = Vector3.Distance(origin, bird.transform.position);
+                        if (distance > Config.DynamicObjectMappingRange) continue;
+                        AddOrUpdatePin(bird, delta);
+                    }
+                }
+
+                VehicleMapping(delta);
+
+                RemoveCachedPins(KnownObjects);
             }
-
-            VehicleMapping(delta);
-
-            RemoveCachedPins(KnownObjects);
         }
 
         private static void VehicleMapping(float delta)
@@ -684,62 +693,68 @@ namespace Automatics.AutomaticMapping
 
         public static void Mapping(float delta, bool takeInput)
         {
-            if (Config.StaticObjectMappingRange <= 0)
+            using (MappingProfiler.BeginScope(MappingProfiler.SlotStaticMapping))
             {
-                RemoveCachedPins();
-                return;
+                if (Config.StaticObjectMappingRange <= 0)
+                {
+                    RemoveCachedPins();
+                    return;
+                }
+
+                if (!CanMapping(delta, takeInput)) return;
+
+                var origin = Player.m_localPlayer.transform.position;
+
+                CacheStaticObjects(origin);
+
+                KnownObjects.Clear();
+
+                foreach (var pair in StaticObjectCache)
+                {
+                    var collider = pair.Key;
+                    var component = pair.Value;
+                    if (!collider || !component) continue;
+
+                    var pos = component.transform.position;
+                    if (Vector3.Distance(origin, pos) > Config.StaticObjectMappingRange) continue;
+                    if (!ZNetScene.instance.IsAreaReady(pos)) continue;
+
+                    var name = Objects.GetName(component);
+                    if (FloraMapping(component, name)) continue;
+                    if (MineralMapping(component, name)) continue;
+                    if (SpawnerMapping(component, name)) continue;
+                    if (OtherMapping(component, name)) continue;
+                    if (PortalMapping(component, name)) continue;
+                }
+
+                foreach (var location in from x in ZoneSystem.instance.m_locationInstances.Values
+                         where Vector3.Distance(origin, x.m_position) <= Config.LocationMappingRange
+                         select x)
+                {
+                    if (DungeonMapping(location)) continue;
+                    if (SpotMapping(location)) continue;
+                }
+
+                RemoveCachedPins(KnownObjects);
             }
-
-            if (!CanMapping(delta, takeInput)) return;
-
-            var origin = Player.m_localPlayer.transform.position;
-
-            CacheStaticObjects(origin);
-
-            KnownObjects.Clear();
-
-            foreach (var pair in StaticObjectCache)
-            {
-                var collider = pair.Key;
-                var component = pair.Value;
-                if (!collider || !component) continue;
-
-                var pos = component.transform.position;
-                if (Vector3.Distance(origin, pos) > Config.StaticObjectMappingRange) continue;
-                if (!ZNetScene.instance.IsAreaReady(pos)) continue;
-
-                var name = Objects.GetName(component);
-                if (FloraMapping(component, name)) continue;
-                if (MineralMapping(component, name)) continue;
-                if (SpawnerMapping(component, name)) continue;
-                if (OtherMapping(component, name)) continue;
-                if (PortalMapping(component, name)) continue;
-            }
-
-            foreach (var location in from x in ZoneSystem.instance.m_locationInstances.Values
-                     where Vector3.Distance(origin, x.m_position) <= Config.LocationMappingRange
-                     select x)
-            {
-                if (DungeonMapping(location)) continue;
-                if (SpotMapping(location)) continue;
-            }
-
-            RemoveCachedPins(KnownObjects);
         }
 
         private static void CacheStaticObjects(Vector3 origin)
         {
-            if (Time.time - _lastCacheUpdateTime < Config.StaticObjectCachingInterval) return;
-            _lastCacheUpdateTime = Time.time;
+            using (MappingProfiler.BeginScope(MappingProfiler.SlotCacheStaticObjects))
+            {
+                if (Time.time - _lastCacheUpdateTime < Config.StaticObjectCachingInterval) return;
+                _lastCacheUpdateTime = Time.time;
 
-            var range = Config.StaticObjectMappingRange;
-            if (range <= 0) return;
+                var range = Config.StaticObjectMappingRange;
+                if (range <= 0) return;
 
-            StaticObjectCache.Clear();
-            foreach (var (collider, component, _) in Objects.GetInsideSphere(origin, range * 1.5f,
-                         GetStaticObject, ColliderBuffer, ObjectMask))
-                if (!StaticObjectCache.ContainsKey(collider))
-                    StaticObjectCache.Add(collider, component);
+                StaticObjectCache.Clear();
+                foreach (var (collider, component, _) in Objects.GetInsideSphere(origin,
+                             range * 1.5f, GetStaticObject, ColliderBuffer, ObjectMask))
+                    if (!StaticObjectCache.ContainsKey(collider))
+                        StaticObjectCache.Add(collider, component);
+            }
         }
 
         private static Component GetStaticObject(Collider collider)
