@@ -477,11 +477,12 @@ namespace Automatics.AutomaticMapping
         private static Dictionary<Collider, ClassifiedStaticObject> StaticObjectCache;
         private static readonly Lazy<int> ObjectMaskLazy;
         private static readonly Lazy<int> DungeonMaskLazy;
-        private static readonly Dictionary<MapPinIdentify, Minimap.PinData> PinDataCache;
+        private static readonly Dictionary<MapPinIdentify, PinCacheEntry> PinDataCache;
         private static readonly Dictionary<Minimap.PinData, HashSet<MapPinIdentify>> PinKeyCache;
-        private static readonly HashSet<MapPinIdentify> KnownObjects;
-        private static readonly ISet<MapPinIdentify> EmptyCacheKeys;
         private static readonly List<FloraNode> FloraNodesBuffer;
+        private static readonly HashSet<FloraNetwork> SeenNetworksThisPass;
+        private static readonly HashSet<Minimap.PinData> OwnedFloraPinsScratch;
+        private static readonly HashSet<Minimap.PinData> StaleRemovalScratch;
 
         private static float _lastCacheUpdateTime;
         private static float _mappingTimer;
@@ -493,6 +494,33 @@ namespace Automatics.AutomaticMapping
         private static Dictionary<Collider, ClassifiedStaticObject> _pendingStaticObjectCache;
         private static bool _cacheIncomplete;
         private static float _failedScanAnchor;
+        private static PendingScanSnapshot? _pendingScanSnapshot;
+
+        // Targeted-invalidation bookkeeping. _staticClassifierVersion ticks
+        // whenever a registry relevant to the static mapping path (Flora /
+        // Mineral / Spawner / Other / Dungeon / Spot) mutates.
+        // _committedStaticClassifierVersion records the version in effect when
+        // StaticObjectCache was last successfully rebuilt. Mapping() compares
+        // the two before iterating and runs a targeted reconciliation pass
+        // when they diverge. The allowlist set records which registries saw a
+        // Config.AllowPinning* change since the last reconciliation so the
+        // per-registry stale-removal pass only touches entries in the affected
+        // kinds.
+        private static int _staticClassifierVersion;
+        private static int _committedStaticClassifierVersion;
+        private static readonly HashSet<ValheimObject> PendingAllowlistInvalidations
+            = new HashSet<ValheimObject>();
+        private static bool _registrySubscriptionsBound;
+
+        // Sweep generation. LastSeenSweep on each PinCacheEntry is tagged with
+        // _currentSweepId whenever the entry is observed during a pass. At
+        // pass end, entries whose max LastSeenSweep across all keys trails the
+        // current generation are retired via the existing saved-pin policy.
+        // _currentPassId is an independent counter used by the Flora per-pass
+        // network guard. While _cacheIncomplete is true the sweep generation
+        // is frozen so partial scans cannot prune live pins.
+        private static int _currentSweepId;
+        private static int _currentPassId;
 
         private static int ObjectMask => ObjectMaskLazy.Value;
         private static int DungeonMask => DungeonMaskLazy.Value;
@@ -506,11 +534,12 @@ namespace Automatics.AutomaticMapping
             DungeonMaskLazy = new Lazy<int>(() => LayerMask.GetMask("character_trigger"));
             StaticObjectCache = new Dictionary<Collider, ClassifiedStaticObject>();
             _pendingStaticObjectCache = new Dictionary<Collider, ClassifiedStaticObject>();
-            PinDataCache = new Dictionary<MapPinIdentify, Minimap.PinData>();
+            PinDataCache = new Dictionary<MapPinIdentify, PinCacheEntry>();
             PinKeyCache = new Dictionary<Minimap.PinData, HashSet<MapPinIdentify>>();
-            KnownObjects = new HashSet<MapPinIdentify>();
-            EmptyCacheKeys = new HashSet<MapPinIdentify>(0);
             FloraNodesBuffer = new List<FloraNode>();
+            SeenNetworksThisPass = new HashSet<FloraNetwork>();
+            OwnedFloraPinsScratch = new HashSet<Minimap.PinData>();
+            StaleRemovalScratch = new HashSet<Minimap.PinData>();
         }
 
         private static bool CanMapping(float delta, bool takeInput)
@@ -668,28 +697,39 @@ namespace Automatics.AutomaticMapping
         public static void Cleanup()
         {
             StaticObjectCache.Clear();
+            _pendingStaticObjectCache.Clear();
             PinDataCache.Clear();
             PinKeyCache.Clear();
-            KnownObjects.Clear();
+            SeenNetworksThisPass.Clear();
+            OwnedFloraPinsScratch.Clear();
+            StaleRemovalScratch.Clear();
+            _pendingScanSnapshot = null;
+            _cacheIncomplete = false;
+            _failedScanAnchor = 0f;
+            _lastCacheUpdateTime = 0f;
+            _mappingTimer = 0f;
+            _committedStaticClassifierVersion = _staticClassifierVersion;
+            PendingAllowlistInvalidations.Clear();
+            _currentSweepId = 0;
+            _currentPassId = 0;
         }
 
-        public static void RemoveCachedPins(ISet<MapPinIdentify> excludes = null)
+        public static void RemoveCachedPins()
         {
-            if (!PinDataCache.Any()) return;
+            if (PinDataCache.Count == 0) return;
 
-            if (excludes is null)
-                excludes = EmptyCacheKeys;
+            StaleRemovalScratch.Clear();
+            foreach (var pair in PinDataCache)
+                StaleRemovalScratch.Add(pair.Value.PinData);
 
-            var pinsToRemove = new HashSet<Minimap.PinData>();
-            foreach (var pair in PinDataCache.Where(x => !excludes.Contains(x.Key)))
-                pinsToRemove.Add(pair.Value);
-
-            foreach (var pinData in pinsToRemove)
+            foreach (var pinData in StaleRemovalScratch)
             {
                 RemovePinFromCache(pinData);
                 if (!pinData.m_save)
                     Map.RemovePin(pinData);
             }
+
+            StaleRemovalScratch.Clear();
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
@@ -712,6 +752,8 @@ namespace Automatics.AutomaticMapping
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotStaticMapping))
             {
+                EnsureRegistrySubscriptions();
+
                 if (Config.StaticObjectMappingRange <= 0)
                 {
                     RemoveCachedPins();
@@ -722,9 +764,15 @@ namespace Automatics.AutomaticMapping
 
                 var origin = Player.m_localPlayer.transform.position;
 
+                // Order matters: prune pins whose classification / allowlist
+                // just moved so CacheStaticObjects' forced rescan rebuilds
+                // from the live registry, and the iteration below sees a cache
+                // that is consistent with the surviving PinDataCache entries.
+                ApplyTargetedInvalidations();
+
                 CacheStaticObjects(origin);
 
-                KnownObjects.Clear();
+                BeginPass();
 
                 foreach (var pair in StaticObjectCache)
                 {
@@ -778,8 +826,80 @@ namespace Automatics.AutomaticMapping
                     if (SpotMapping(location)) continue;
                 }
 
-                RemoveCachedPins(KnownObjects);
+                EndPassAndPruneStale();
             }
+        }
+
+        /// <summary>
+        /// Advances the Flora per-pass network guard and stamps the sweep
+        /// generation that entries observed during this pass will be tagged
+        /// with. While <see cref="_cacheIncomplete"/> is true the sweep
+        /// generation is *not* advanced — the iteration still runs on whatever
+        /// portion of the cache survived saturation, but stale-removal at
+        /// pass end sees every entry as "current" and leaves previously-added
+        /// pins alone. Stale removal waits until a pass sees the whole
+        /// neighborhood, not a partial slice of it.
+        /// </summary>
+        private static void BeginPass()
+        {
+            _currentPassId++;
+            SeenNetworksThisPass.Clear();
+            if (!_cacheIncomplete)
+                _currentSweepId++;
+        }
+
+        /// <summary>
+        /// Retires PinCacheEntries whose <see cref="PinCacheEntry.LastSeenSweep"/>
+        /// trailed the current sweep generation — i.e. they were not touched by
+        /// any mapping call during this pass. Flora clusters register the same
+        /// PinData under many keys, so the "seen" judgement is computed per
+        /// PinData (max LastSeenSweep across all keys) rather than per key.
+        ///
+        /// Skipped entirely while <c>_cacheIncomplete</c> is true so saturated
+        /// scans cannot prune live pins (<see cref="BeginPass"/> already
+        /// prevents the generation from advancing, but we also do not want to
+        /// interpret "0-delta" as stale during the first post-saturation pass).
+        /// </summary>
+        private static void EndPassAndPruneStale()
+        {
+            if (_cacheIncomplete) return;
+            if (PinDataCache.Count == 0) return;
+
+            StaleRemovalScratch.Clear();
+            foreach (var keys in PinKeyCache)
+            {
+                var pinData = keys.Key;
+                var maxSeen = int.MinValue;
+                foreach (var key in keys.Value)
+                {
+                    if (!PinDataCache.TryGetValue(key, out var entry)) continue;
+                    if (entry.LastSeenSweep > maxSeen) maxSeen = entry.LastSeenSweep;
+                }
+
+                if (maxSeen < _currentSweepId)
+                    StaleRemovalScratch.Add(pinData);
+            }
+
+            foreach (var pinData in StaleRemovalScratch)
+            {
+                RemovePinFromCache(pinData);
+                if (!pinData.m_save)
+                    Map.RemovePin(pinData);
+            }
+
+            StaleRemovalScratch.Clear();
+        }
+
+        private static void MarkSeen(MapPinIdentify identify)
+        {
+            if (PinDataCache.TryGetValue(identify, out var entry))
+                entry.LastSeenSweep = _currentSweepId;
+        }
+
+        private static void MarkSeen(IEnumerable<FloraNode> nodes)
+        {
+            foreach (var node in nodes)
+                MarkSeen(new MapPinIdentify(node.UniqueId));
         }
 
         /// <summary>
@@ -790,8 +910,21 @@ namespace Automatics.AutomaticMapping
         /// and the scan retries after a cooldown instead of corrupting the
         /// live cache with truncated results.
         ///
+        /// <para>
+        /// The pending-fill path is additionally guarded by a
+        /// <see cref="PendingScanSnapshot"/>: the snapshot records the origin,
+        /// range, layer mask, and static classifier version that produced the
+        /// current pending cache. Before each retry/swap we compare the live
+        /// parameters against the snapshot through a shared
+        /// <c>originTolerance</c>. A mismatch throws away the incomplete work
+        /// and starts the scan over so we do not commit a cache whose
+        /// parameters drifted while it was being built.
+        /// </para>
+        ///
+        /// <para>
         /// Recursive tile-split fallback for cases where the buffer ceiling is
         /// still not enough is wired in a follow-up commit (A-12 fallback).
+        /// </para>
         /// </summary>
         private static void CacheStaticObjects(Vector3 origin)
         {
@@ -813,9 +946,29 @@ namespace Automatics.AutomaticMapping
                 var range = Config.StaticObjectMappingRange;
                 if (range <= 0) return;
 
+                var mask = ObjectMask;
+                var classifierVersion = _staticClassifierVersion;
+                var originTolerance = ComputeOriginTolerance(range);
+
+                // If a previous scan was left incomplete and the live scan
+                // parameters drifted beyond the tolerance, discard the stale
+                // pending state rather than committing a cache with mismatched
+                // origin / range / mask / classifier version.
+                if (_pendingScanSnapshot.HasValue)
+                {
+                    var snapshot = _pendingScanSnapshot.Value;
+                    if (snapshot.Mask != mask ||
+                        !Mathf.Approximately(snapshot.Range, range) ||
+                        snapshot.StaticClassifierVersion != classifierVersion ||
+                        Vector3.Distance(origin, snapshot.Origin) > originTolerance)
+                    {
+                        _pendingStaticObjectCache.Clear();
+                        _pendingScanSnapshot = null;
+                    }
+                }
+
                 var buffer = ColliderBuffer;
-                var size = Physics.OverlapSphereNonAlloc(origin, range * 1.5f, buffer,
-                    ObjectMask);
+                var size = Physics.OverlapSphereNonAlloc(origin, range * 1.5f, buffer, mask);
 
                 if (size >= buffer.Length)
                 {
@@ -841,6 +994,14 @@ namespace Automatics.AutomaticMapping
 
                     _cacheIncomplete = true;
                     _failedScanAnchor = now;
+                    _pendingStaticObjectCache.Clear();
+                    _pendingScanSnapshot = new PendingScanSnapshot
+                    {
+                        Origin = origin,
+                        Range = range,
+                        Mask = mask,
+                        StaticClassifierVersion = classifierVersion
+                    };
                     return;
                 }
 
@@ -859,6 +1020,26 @@ namespace Automatics.AutomaticMapping
                     pending[collider] = classified.Value;
                 }
 
+                // Re-check snapshot parameters before swapping so that a
+                // parameter drift between scan entry and commit (origin move,
+                // classifier bump, etc.) invalidates the pending cache
+                // instead of being committed with mixed parameters.
+                if (_pendingScanSnapshot.HasValue)
+                {
+                    var snapshot = _pendingScanSnapshot.Value;
+                    if (snapshot.Mask != mask ||
+                        !Mathf.Approximately(snapshot.Range, range) ||
+                        snapshot.StaticClassifierVersion != classifierVersion ||
+                        Vector3.Distance(origin, snapshot.Origin) > originTolerance)
+                    {
+                        _pendingStaticObjectCache.Clear();
+                        _pendingScanSnapshot = null;
+                        _cacheIncomplete = true;
+                        _failedScanAnchor = now;
+                        return;
+                    }
+                }
+
                 var previous = StaticObjectCache;
                 StaticObjectCache = pending;
                 previous.Clear();
@@ -866,7 +1047,24 @@ namespace Automatics.AutomaticMapping
 
                 _lastCacheUpdateTime = now;
                 _cacheIncomplete = false;
+                _pendingScanSnapshot = null;
+                _committedStaticClassifierVersion = classifierVersion;
             }
+        }
+
+        /// <summary>
+        /// Derives the origin tolerance used for snapshot carryover / discard
+        /// decisions. The piecewise formula keeps short-range scans strict
+        /// (no drift allowed at <c>range &lt;= 4</c>, 0.1 m budget for
+        /// 4 &lt; range &lt; 6) and linearly relaxes for longer ranges
+        /// (<c>0.5 * range - 2</c> once range reaches 6 m).
+        /// </summary>
+        private static float ComputeOriginTolerance(float mappingRange)
+        {
+            const float safetyMargin = 2f;
+            if (mappingRange <= 4f) return 0f;
+            var tolerance = 0.5f * mappingRange - safetyMargin;
+            return tolerance < 1f ? 0.1f : tolerance;
         }
 
         /// <summary>
@@ -923,15 +1121,42 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        /// Lower-level helper that determines which <see cref="PinKind"/> a
-        /// component belongs to by scanning the ValheimObject registries in
-        /// the same priority order as the legacy iteration
-        /// (Flora → Mineral → Spawner → Other → Portal). Targeted invalidation
-        /// will later share the source-token-only suffix of this logic via a
-        /// variant that skips the portal branch, but for now both paths live
-        /// here since only the fill path needs it.
+        /// Fill-path classifier: given a concrete component and its pre-fetched
+        /// source token, walks the static-mapping registries in priority order
+        /// (Flora → Mineral → Spawner → Other → Portal) to resolve
+        /// <see cref="PinKind"/> + identifier. The Portal branch is component-
+        /// aware (it needs a <c>TeleportWorld</c> component lookup), which is
+        /// why targeted invalidation cannot re-use this helper verbatim and
+        /// falls back to <see cref="ClassifyStaticComponentSourceToken"/>.
+        /// Dungeon and Spot are deliberately excluded — they only originate
+        /// from ZoneSystem location scans, not component scans.
         /// </summary>
         private static bool ClassifyStaticComponent(Component component, string sourceToken,
+            out PinKind kind, out string identifier)
+        {
+            if (ClassifyStaticComponentSourceToken(sourceToken, out kind, out identifier))
+                return true;
+
+            if (component.GetComponent<TeleportWorld>())
+            {
+                kind = PinKind.Portal;
+                identifier = string.Empty;
+                return true;
+            }
+
+            kind = default;
+            identifier = string.Empty;
+            return false;
+        }
+
+        /// <summary>
+        /// Source-token-only variant of <see cref="ClassifyStaticComponent"/>
+        /// used by targeted invalidation on <c>PinSourceDomain.Component</c>
+        /// entries. Cannot resolve the Portal branch (which needs a component
+        /// lookup) and intentionally excludes Dungeon/Spot (Location domain
+        /// only).
+        /// </summary>
+        private static bool ClassifyStaticComponentSourceToken(string sourceToken,
             out PinKind kind, out string identifier)
         {
             if (GetFlora(sourceToken, out var data))
@@ -958,10 +1183,30 @@ namespace Automatics.AutomaticMapping
                 identifier = data.Identifier;
                 return true;
             }
-            if (component.GetComponent<TeleportWorld>())
+
+            kind = default;
+            identifier = string.Empty;
+            return false;
+        }
+
+        /// <summary>
+        /// Classifies a ZoneSystem location prefab name as Dungeon or Spot.
+        /// Used by both the location-scan fill path and targeted invalidation
+        /// of <c>PinSourceDomain.Location</c> entries.
+        /// </summary>
+        private static bool ClassifyStaticLocation(string prefabName, out PinKind kind,
+            out string identifier)
+        {
+            if (GetDungeon(prefabName, out var data))
             {
-                kind = PinKind.Portal;
-                identifier = string.Empty;
+                kind = PinKind.Dungeon;
+                identifier = data.Identifier;
+                return true;
+            }
+            if (GetSpot(prefabName, out data))
+            {
+                kind = PinKind.Spot;
+                identifier = data.Identifier;
                 return true;
             }
 
@@ -970,16 +1215,212 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
+        /// <summary>
+        /// Wires up the registry / allowlist change subscribers on the first
+        /// <see cref="Mapping"/> call. Bound once for the lifetime of the
+        /// AppDomain — <see cref="Cleanup"/> intentionally does not flip the
+        /// flag because re-binding without unbinding would register duplicate
+        /// delegates and double-increment the classifier version.
+        /// </summary>
+        private static void EnsureRegistrySubscriptions()
+        {
+            if (_registrySubscriptionsBound) return;
+            _registrySubscriptionsBound = true;
+            ValheimObject.RegistryChanged += OnValheimObjectRegistryChanged;
+            Config.StaticAllowlistChanged += OnStaticAllowlistChanged;
+        }
+
+        private static void OnValheimObjectRegistryChanged(ValheimObject obj)
+        {
+            // Filter to the registries that the static mapping path actually
+            // consumes. Vehicle / Animal / Monster live in the dynamic domain
+            // and must not perturb the static classifier version.
+            if (ReferenceEquals(obj, ValheimObject.Flora) ||
+                ReferenceEquals(obj, ValheimObject.Mineral) ||
+                ReferenceEquals(obj, ValheimObject.Spawner) ||
+                ReferenceEquals(obj, ValheimObject.Dungeon) ||
+                ReferenceEquals(obj, ValheimObject.Spot) ||
+                ReferenceEquals(obj, MappingObject.Other))
+            {
+                _staticClassifierVersion++;
+            }
+        }
+
+        private static void OnStaticAllowlistChanged(ValheimObject registry)
+        {
+            // Allowlist toggles do not invalidate classifier output — they only
+            // change whether the iteration acts on a given kind. Queue a
+            // targeted invalidation for the specific registry so the next
+            // Mapping call only revisits entries in the affected domain.
+            PendingAllowlistInvalidations.Add(registry);
+        }
+
+        /// <summary>
+        /// Maps a <see cref="PinKind"/> to the <see cref="ValheimObject"/>
+        /// registry that owns its allowlist. Used to restrict
+        /// allowlist-triggered invalidation to the affected kinds.
+        /// </summary>
+        private static ValheimObject RegistryForKind(PinKind kind)
+        {
+            switch (kind)
+            {
+                case PinKind.Flora: return ValheimObject.Flora;
+                case PinKind.Mineral: return ValheimObject.Mineral;
+                case PinKind.Spawner: return ValheimObject.Spawner;
+                case PinKind.Other: return MappingObject.Other;
+                case PinKind.Dungeon: return ValheimObject.Dungeon;
+                case PinKind.Spot: return ValheimObject.Spot;
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// Reconciles PinDataCache with the current registry / allowlist
+        /// state. Runs on every <see cref="Mapping"/> tick — cheap no-op when
+        /// nothing has changed since the last run. Two triggers:
+        ///
+        /// <list type="bullet">
+        ///   <item><description>Static registry mutation: <c>_staticClassifierVersion</c>
+        ///     diverges from <c>_committedStaticClassifierVersion</c>. Re-runs
+        ///     the component / location classifier on every cached entry and
+        ///     retires the ones whose classification changed or is no longer
+        ///     allow-listed, then forces a fresh scan by clearing the
+        ///     caching-interval gate.</description></item>
+        ///   <item><description>Allowlist mutation via BepInEx SettingChanged:
+        ///     only the entries in the affected registry are rescanned for
+        ///     allowlist-drop removal; classification is not re-checked since
+        ///     the registry itself did not move.</description></item>
+        /// </list>
+        ///
+        /// Stale removal uses the existing saved-pin policy
+        /// (<c>!pinData.m_save</c> ⇒ remove from minimap; always clear cache).
+        /// Portal <see cref="PinSourceDomain.Component"/> entries are skipped
+        /// because they are always created with <c>save=true</c> and removing
+        /// them from the minimap would contradict the saved-pin contract.
+        /// </summary>
+        private static void ApplyTargetedInvalidations()
+        {
+            var registryChanged = _committedStaticClassifierVersion != _staticClassifierVersion;
+            var allowlistChanged = PendingAllowlistInvalidations.Count > 0;
+            if (!registryChanged && !allowlistChanged) return;
+
+            if (PinDataCache.Count == 0)
+            {
+                if (registryChanged)
+                {
+                    _committedStaticClassifierVersion = _staticClassifierVersion;
+                    _lastCacheUpdateTime = 0f;
+                }
+                PendingAllowlistInvalidations.Clear();
+                return;
+            }
+
+            StaleRemovalScratch.Clear();
+            foreach (var pair in PinDataCache)
+            {
+                var entry = pair.Value;
+                if (entry?.PinData == null) continue;
+
+                if (ShouldRetireEntry(entry, registryChanged))
+                    StaleRemovalScratch.Add(entry.PinData);
+            }
+
+            foreach (var pinData in StaleRemovalScratch)
+            {
+                RemovePinFromCache(pinData);
+                if (!pinData.m_save)
+                    Map.RemovePin(pinData);
+            }
+
+            StaleRemovalScratch.Clear();
+
+            if (registryChanged)
+            {
+                // Force a fresh OverlapSphere scan on the next pass so the
+                // StaticObjectCache itself reflects the new classifier without
+                // having to wait for StaticObjectCachingInterval.
+                _committedStaticClassifierVersion = _staticClassifierVersion;
+                _lastCacheUpdateTime = 0f;
+            }
+
+            PendingAllowlistInvalidations.Clear();
+        }
+
+        private static bool ShouldRetireEntry(PinCacheEntry entry, bool registryChanged)
+        {
+            // Portal Component-domain entries are opt-out only: invalidation
+            // would remove a save=true pin that user-semantics treats as
+            // "auto-add disabled from now on", which would surprise the user.
+            if (entry.Domain == PinSourceDomain.Component && entry.Kind == PinKind.Portal)
+                return false;
+
+            // Allowlist-only mutations scope to the affected registry so we
+            // don't re-run IsAllowedForKind on every unrelated pin. Registry
+            // mutations force a full sweep because the classifier itself moved.
+            var allowlistScope = !registryChanged;
+            if (allowlistScope)
+            {
+                var registry = RegistryForKind(entry.Kind);
+                if (registry == null || !PendingAllowlistInvalidations.Contains(registry))
+                    return false;
+            }
+
+            switch (entry.Domain)
+            {
+                case PinSourceDomain.Component:
+                    if (registryChanged)
+                    {
+                        if (!ClassifyStaticComponentSourceToken(entry.SourceToken, out var kind,
+                                out var identifier))
+                            return true;
+                        if (kind != entry.Kind || identifier != entry.Identifier)
+                            return true;
+                    }
+
+                    return !IsAllowedForKind(entry.Kind, entry.Identifier);
+
+                case PinSourceDomain.Location:
+                    if (registryChanged)
+                    {
+                        if (!ClassifyStaticLocation(entry.SourceToken, out var kind,
+                                out var identifier))
+                            return true;
+                        if (kind != entry.Kind || identifier != entry.Identifier)
+                            return true;
+                    }
+
+                    return !IsAllowedForKind(entry.Kind, entry.Identifier);
+
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsAllowedForKind(PinKind kind, string identifier)
+        {
+            switch (kind)
+            {
+                case PinKind.Flora: return Config.AllowPinningFlora.Contains(identifier);
+                case PinKind.Mineral: return Config.AllowPinningMineral.Contains(identifier);
+                case PinKind.Spawner: return Config.AllowPinningSpawner.Contains(identifier);
+                case PinKind.Other: return Config.AllowPinningOther.Contains(identifier);
+                case PinKind.Portal: return Config.AllowPinningPortal;
+                case PinKind.Dungeon: return Config.AllowPinningDungeon.Contains(identifier);
+                case PinKind.Spot: return Config.AllowPinningSpot.Contains(identifier);
+                default: return false;
+            }
+        }
+
         private static bool FloraMapping(Component component, string name)
         {
-            if (!GetFlora(name, out var data)) return false;
+            var sourceToken = name;
+            if (!GetFlora(sourceToken, out var data)) return false;
             if (!data.IsAllowed) return true;
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
-            var identify = new MapPinIdentify(uniqueId);
-            if (!KnownObjects.Add(identify)) return true;
 
-            if (ValheimObject.Flora.GetName(data.Identifier, out var label))
-                name = label;
+            var displayName = ValheimObject.Flora.GetName(data.Identifier, out var label)
+                ? label
+                : name;
 
             var flora = FloraNode.Find(uniqueId);
             if (!flora || !flora.IsValid()) return true;
@@ -987,41 +1428,113 @@ namespace Automatics.AutomaticMapping
             var network = flora.Network;
             if (network == null) return true;
 
-            var save = Config.SaveStaticObjectPins;
+            // Dirty path bypasses the per-pass guard so a merge can fully
+            // reconcile cluster pins even if an earlier collider in this pass
+            // already touched the same network in its clean state.
             if (network.IsDirty)
             {
-                var removed = Map.RemovePin(network.Center, predicate: x => true);
-                if (removed != null)
-                {
-                    save = removed.m_save;
-                    RemoveCache(removed);
-                }
-
-                network.Update();
+                HandleDirtyFloraCluster(component, network, data.Identifier, sourceToken,
+                    displayName);
+                SeenNetworksThisPass.Add(network);
+                return true;
             }
 
+            // Clean path: at most one collider per network per pass does work.
+            if (!SeenNetworksThisPass.Add(network)) return true;
+
             network.FillValidNodes(FloraNodesBuffer);
-            foreach (var member in FloraNodesBuffer)
-                KnownObjects.Add(new MapPinIdentify(member.UniqueId));
 
             if (TryGetCachedPin(FloraNodesBuffer, out var cachedPin))
             {
-                CachePin(FloraNodesBuffer, cachedPin);
+                CachePin(FloraNodesBuffer, cachedPin, PinKind.Flora, data.Identifier, sourceToken,
+                    PinSourceDomain.Component);
                 return true;
             }
 
             var pos = network.Center;
             if (Map.GetClosestPin(pos) != null) return true;
 
-            var size = network.NodeCount;
-            var pinName = size > 1
-                ? Automatics.L10N.LocalizeTextOnly("@text_automatic_mapping_flora_cluster_pin_name",
-                    name, size)
-                : name;
-
-            var pinData = AddPin(uniqueId, pos, pinName, save, CreateTarget(component.gameObject, name));
-            CachePin(FloraNodesBuffer, pinData);
+            var pinName = ComputeFloraPinName(displayName, network.NodeCount);
+            var pinData = AddPin(uniqueId, pos, pinName, Config.SaveStaticObjectPins,
+                CreateTarget(component.gameObject, displayName), PinKind.Flora, data.Identifier,
+                sourceToken, PinSourceDomain.Component);
+            CachePin(FloraNodesBuffer, pinData, PinKind.Flora, data.Identifier, sourceToken,
+                PinSourceDomain.Component);
             return true;
+        }
+
+        private static void HandleDirtyFloraCluster(Component component, FloraNetwork network,
+            string identifier, string sourceToken, string displayName)
+        {
+            network.FillValidNodes(FloraNodesBuffer);
+
+            // CollectDistinctOwnedPins: owned = present in PinDataCache via one
+            // of the cluster's node keys. User-saved / detached pins at the old
+            // center are intentionally excluded — they live only on the minimap
+            // and the mutate-in-place path has no ownership claim on them.
+            OwnedFloraPinsScratch.Clear();
+            foreach (var node in FloraNodesBuffer)
+            {
+                if (PinDataCache.TryGetValue(new MapPinIdentify(node.UniqueId), out var entry) &&
+                    entry.PinData != null)
+                    OwnedFloraPinsScratch.Add(entry.PinData);
+            }
+
+            network.Update();
+
+            Minimap.PinData canonical = null;
+            foreach (var pin in OwnedFloraPinsScratch)
+            {
+                if (canonical == null)
+                {
+                    canonical = pin;
+                    continue;
+                }
+
+                // Merge collapsed multiple owned clusters into one network. The
+                // surplus pins are Automatics-owned (present in PinDataCache), so
+                // saved-pin policy does not apply — remove them unconditionally.
+                RemovePinFromCache(pin);
+                Map.RemovePin(pin);
+            }
+
+            var center = network.Center;
+            var pinName = ComputeFloraPinName(displayName, network.NodeCount);
+
+            if (canonical != null)
+            {
+                Map.MovePin(canonical, center);
+                canonical.m_name = pinName;
+                // Drop the canonical pin's previously cached keys before
+                // re-registering the current valid node set. Without this,
+                // keys for nodes that have since been destroyed or merged
+                // away from this network stay in PinKeyCache[canonical] and
+                // keep max(LastSeenSweep) pinned to the current generation,
+                // which blocks EndPassAndPruneStale from ever retiring the
+                // pin and inflates both dictionaries on long-lived worlds.
+                // The minimap PinData itself stays in place because we do
+                // not call Map.RemovePin here.
+                RemovePinFromCache(canonical);
+                CachePin(FloraNodesBuffer, canonical, PinKind.Flora, identifier, sourceToken,
+                    PinSourceDomain.Component);
+            }
+            else if (Map.GetClosestPin(center) == null)
+            {
+                var newPin = Map.AddPin(center, pinName, Config.SaveStaticObjectPins,
+                    CreateTarget(component.gameObject, displayName));
+                CachePin(FloraNodesBuffer, newPin, PinKind.Flora, identifier, sourceToken,
+                    PinSourceDomain.Component);
+            }
+
+            OwnedFloraPinsScratch.Clear();
+        }
+
+        private static string ComputeFloraPinName(string displayName, int nodeCount)
+        {
+            return nodeCount > 1
+                ? Automatics.L10N.LocalizeTextOnly(
+                    "@text_automatic_mapping_flora_cluster_pin_name", displayName, nodeCount)
+                : displayName;
         }
 
         private static bool MineralMapping(Component component, string name)
@@ -1061,12 +1574,16 @@ namespace Automatics.AutomaticMapping
                 }
             }
 
-            if (!GetMineral(name, out var data)) return false;
+            var sourceToken = name;
+            if (!GetMineral(sourceToken, out var data)) return false;
             if (!data.IsAllowed) return true;
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
             var identify = new MapPinIdentify(uniqueId);
-            if (!KnownObjects.Add(identify)) return true;
-            if (TryGetCachedPin(identify, out _)) return true;
+            if (TryGetCachedPin(identify, out _))
+            {
+                MarkSeen(identify);
+                return true;
+            }
 
             if (ValheimObject.Mineral.GetName(data.Identifier, out var label))
                 name = label;
@@ -1097,44 +1614,55 @@ namespace Automatics.AutomaticMapping
                         return true;
                 }
 
-            AddPin(uniqueId, pos, name, CreateTarget(component.gameObject, name));
+            AddPin(uniqueId, pos, name, CreateTarget(component.gameObject, name), PinKind.Mineral,
+                data.Identifier, sourceToken, PinSourceDomain.Component);
             return true;
         }
 
         private static bool SpawnerMapping(Component component, string name)
         {
-            if (!GetSpawner(name, out var data)) return false;
+            var sourceToken = name;
+            if (!GetSpawner(sourceToken, out var data)) return false;
             if (!data.IsAllowed) return true;
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
             var identify = new MapPinIdentify(uniqueId);
-            if (!KnownObjects.Add(identify)) return true;
-            if (TryGetCachedPin(identify, out _)) return true;
+            if (TryGetCachedPin(identify, out _))
+            {
+                MarkSeen(identify);
+                return true;
+            }
 
             if (ValheimObject.Spawner.GetName(data.Identifier, out var label))
                 name = label;
 
             var position = component.transform.position;
             if (Map.GetClosestPin(position) == null)
-                AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name));
+                AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name),
+                    PinKind.Spawner, data.Identifier, sourceToken, PinSourceDomain.Component);
 
             return true;
         }
 
         private static bool OtherMapping(Component component, string name)
         {
-            if (!GetOther(name, out var data)) return false;
+            var sourceToken = name;
+            if (!GetOther(sourceToken, out var data)) return false;
             if (!data.IsAllowed) return true;
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
             var identify = new MapPinIdentify(uniqueId);
-            if (!KnownObjects.Add(identify)) return true;
-            if (TryGetCachedPin(identify, out _)) return true;
+            if (TryGetCachedPin(identify, out _))
+            {
+                MarkSeen(identify);
+                return true;
+            }
 
             if (MappingObject.Other.GetName(data.Identifier, out var label))
                 name = label;
 
             var position = component.transform.position;
             if (Map.GetClosestPin(position) == null)
-                AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name));
+                AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name),
+                    PinKind.Other, data.Identifier, sourceToken, PinSourceDomain.Component);
 
             return true;
         }
@@ -1148,7 +1676,6 @@ namespace Automatics.AutomaticMapping
 
             if (!Objects.GetZdoid(component, out var uniqueId)) return true;
             var identify = new MapPinIdentify(uniqueId);
-            if (!KnownObjects.Add(identify)) return true;
 
             var tag = portal.GetText();
             var pinName = string.IsNullOrEmpty(tag)
@@ -1158,13 +1685,15 @@ namespace Automatics.AutomaticMapping
             if (TryGetCachedPin(identify, out var pinData))
             {
                 pinData.m_name = pinName;
+                MarkSeen(identify);
                 return true;
             }
 
             var pos = component.transform.position;
             pinData = Map.GetClosestPin(pos);
             if (pinData == null)
-                AddPin(uniqueId, pos, pinName, true, CreateTarget(component.gameObject, name));
+                AddPin(uniqueId, pos, pinName, true, CreateTarget(component.gameObject, name),
+                    PinKind.Portal, string.Empty, name, PinSourceDomain.Component);
             else
                 pinData.m_name = pinName;
 
@@ -1193,22 +1722,30 @@ namespace Automatics.AutomaticMapping
             {
                 var entrance = collider.bounds.center;
                 var identify = new MapPinIdentify(entrance);
-                if (!KnownObjects.Add(identify)) return true;
-                if (TryGetCachedPin(identify, out _)) return true;
+                if (TryGetCachedPin(identify, out _))
+                {
+                    MarkSeen(identify);
+                    return true;
+                }
 
                 if (Map.GetClosestPin(entrance) == null)
-                    AddPin(ZDOID.None, entrance, name, CreateTarget(prefabName, name));
+                    AddPin(ZDOID.None, entrance, name, CreateTarget(prefabName, name),
+                        PinKind.Dungeon, data.Identifier, prefabName, PinSourceDomain.Location);
 
                 return true;
             }
 
             var locationIdentify = new MapPinIdentify(pos);
-            if (!KnownObjects.Add(locationIdentify)) return true;
-            if (TryGetCachedPin(locationIdentify, out _)) return true;
+            if (TryGetCachedPin(locationIdentify, out _))
+            {
+                MarkSeen(locationIdentify);
+                return true;
+            }
 
             if (Map.GetClosestPin(pos, radius, x => x.m_name == name) == null)
             {
-                AddPin(ZDOID.None, pos, name, CreateTarget(prefabName, name));
+                AddPin(ZDOID.None, pos, name, CreateTarget(prefabName, name), PinKind.Dungeon,
+                    data.Identifier, prefabName, PinSourceDomain.Location);
                 Automatics.Logger.Warning(() => $"Dungeon {name} has no entrance.");
             }
 
@@ -1223,46 +1760,62 @@ namespace Automatics.AutomaticMapping
 
             var pos = instance.m_position;
             var identify = new MapPinIdentify(pos);
-            if (!KnownObjects.Add(identify)) return true;
-            if (TryGetCachedPin(identify, out _)) return true;
+            if (TryGetCachedPin(identify, out _))
+            {
+                MarkSeen(identify);
+                return true;
+            }
 
             if (!ValheimObject.Spot.GetName(data.Identifier, out var name))
                 name = $"@location_{prefabName.ToLower()}";
 
             if (Map.GetClosestPin(pos) == null)
-                AddPin(ZDOID.None, pos, name, CreateTarget(prefabName, name));
+                AddPin(ZDOID.None, pos, name, CreateTarget(prefabName, name), PinKind.Spot,
+                    data.Identifier, prefabName, PinSourceDomain.Location);
 
             return true;
         }
 
         private static Minimap.PinData AddPin(ZDOID uniqueId, Vector3 pos, string pinName, bool save,
-            Target target)
+            Target target, PinKind kind, string identifier, string sourceToken,
+            PinSourceDomain domain)
         {
             var pinData = Map.AddPin(pos, pinName, save, target);
             var identify = uniqueId.IsNone()
                 ? new MapPinIdentify(pos)
                 : new MapPinIdentify(uniqueId);
-            if (PinDataCache.TryGetValue(identify, out var data) && !ReferenceEquals(data, pinData))
+            if (PinDataCache.TryGetValue(identify, out var existing) &&
+                !ReferenceEquals(existing.PinData, pinData))
             {
                 Automatics.Logger.Warning(() =>
-                    $"PinData is already exists: [Existing: {data.m_name}{data.m_pos}, New: {pinName}{pos}]");
+                    $"PinData is already exists: [Existing: {existing.PinData.m_name}{existing.PinData.m_pos}, New: {pinName}{pos}]");
             }
 
-            CachePin(identify, pinData);
+            CachePin(identify, pinData, kind, identifier, sourceToken, domain);
             return pinData;
         }
 
-        private static void AddPin(ZDOID uniqueId, Vector3 pos, string pinName, Target target)
+        private static void AddPin(ZDOID uniqueId, Vector3 pos, string pinName, Target target,
+            PinKind kind, string identifier, string sourceToken, PinSourceDomain domain)
         {
-            AddPin(uniqueId, pos, pinName, Config.SaveStaticObjectPins, target);
+            AddPin(uniqueId, pos, pinName, Config.SaveStaticObjectPins, target, kind, identifier,
+                sourceToken, domain);
         }
 
         private static bool TryGetCachedPin(MapPinIdentify identify, out Minimap.PinData pinData)
         {
-            return PinDataCache.TryGetValue(identify, out pinData) && pinData != null;
+            if (PinDataCache.TryGetValue(identify, out var entry) && entry?.PinData != null)
+            {
+                pinData = entry.PinData;
+                return true;
+            }
+
+            pinData = null;
+            return false;
         }
 
-        private static bool TryGetCachedPin(IEnumerable<FloraNode> nodes, out Minimap.PinData pinData)
+        private static bool TryGetCachedPin(IEnumerable<FloraNode> nodes,
+            out Minimap.PinData pinData)
         {
             foreach (var node in nodes)
                 if (TryGetCachedPin(new MapPinIdentify(node.UniqueId), out pinData))
@@ -1272,21 +1825,42 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
-        private static void CachePin(IEnumerable<FloraNode> nodes, Minimap.PinData pinData)
+        private static void CachePin(IEnumerable<FloraNode> nodes, Minimap.PinData pinData,
+            PinKind kind, string identifier, string sourceToken, PinSourceDomain domain)
         {
             foreach (var node in nodes)
-                CachePin(new MapPinIdentify(node.UniqueId), pinData);
+                CachePin(new MapPinIdentify(node.UniqueId), pinData, kind, identifier, sourceToken,
+                    domain);
         }
 
-        private static void CachePin(MapPinIdentify identify, Minimap.PinData pinData)
+        private static void CachePin(MapPinIdentify identify, Minimap.PinData pinData,
+            PinKind kind, string identifier, string sourceToken, PinSourceDomain domain)
         {
             if (PinDataCache.TryGetValue(identify, out var existing))
             {
-                if (ReferenceEquals(existing, pinData)) return;
-                RemovePinKey(existing, identify);
+                if (ReferenceEquals(existing.PinData, pinData))
+                {
+                    existing.Kind = kind;
+                    existing.Identifier = identifier;
+                    existing.SourceToken = sourceToken;
+                    existing.Domain = domain;
+                    existing.LastSeenSweep = _currentSweepId;
+                    return;
+                }
+
+                RemovePinKey(existing.PinData, identify);
             }
 
-            PinDataCache[identify] = pinData;
+            PinDataCache[identify] = new PinCacheEntry
+            {
+                PinData = pinData,
+                Kind = kind,
+                Identifier = identifier,
+                SourceToken = sourceToken,
+                Domain = domain,
+                LastSeenSweep = _currentSweepId
+            };
+
             if (!PinKeyCache.TryGetValue(pinData, out var keys))
             {
                 keys = new HashSet<MapPinIdentify>();
@@ -1300,9 +1874,8 @@ namespace Automatics.AutomaticMapping
         {
             if (!PinKeyCache.TryGetValue(pinData, out var keys)) return false;
 
-            var values = keys.ToList();
             PinKeyCache.Remove(pinData);
-            foreach (var key in values)
+            foreach (var key in keys)
                 PinDataCache.Remove(key);
 
             return true;

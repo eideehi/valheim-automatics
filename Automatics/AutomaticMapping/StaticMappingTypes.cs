@@ -47,4 +47,37 @@ namespace Automatics.AutomaticMapping
         public Vector3 Position;
         public string SourceToken;
     }
+
+    /// <summary>
+    /// Static-mapping PinDataCache entry. Carries the classification metadata
+    /// needed for targeted invalidation (Kind/Identifier/SourceToken/Domain)
+    /// and the sweep generation used for stale deletion. Flora clusters
+    /// register the same <see cref="PinData"/> under multiple
+    /// <c>MapPinIdentify</c> keys (one per FloraNode) — in that case each
+    /// per-key entry tracks its own <see cref="LastSeenSweep"/> and stale
+    /// judgement uses the max across all keys pointing at a given pin.
+    /// </summary>
+    internal sealed class PinCacheEntry
+    {
+        public Minimap.PinData PinData;
+        public PinKind Kind;
+        public string Identifier;
+        public string SourceToken;
+        public PinSourceDomain Domain;
+        public int LastSeenSweep;
+    }
+
+    /// <summary>
+    /// Records the scan parameters that produced the in-progress pending
+    /// StaticObjectCache. Retry ticks compare the current scan parameters
+    /// against the snapshot using a shared origin tolerance; any mismatch
+    /// invalidates the carry-over and the scan restarts from scratch.
+    /// </summary>
+    internal struct PendingScanSnapshot
+    {
+        public Vector3 Origin;
+        public float Range;
+        public int Mask;
+        public int StaticClassifierVersion;
+    }
 }
