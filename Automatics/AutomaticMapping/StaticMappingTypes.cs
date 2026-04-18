@@ -80,4 +80,20 @@ namespace Automatics.AutomaticMapping
         public int Mask;
         public int StaticClassifierVersion;
     }
+
+    /// <summary>
+    /// One rectangular sub-region scheduled for the OverlapBox tile-split
+    /// fallback when the single-sphere OverlapSphereNonAlloc saturates at
+    /// the buffer ceiling. <see cref="Center"/> stores the full 3D center
+    /// (y equals the snapshot origin y); <see cref="HalfXZ"/> is the XZ
+    /// half-side before margin, kept so that saturated tiles can recurse
+    /// into four equal sub-tiles. Y extent is shared across all tiles and
+    /// derives from the snapshot range.
+    /// </summary>
+    internal struct PendingTile
+    {
+        public Vector3 Center;
+        public float HalfXZ;
+        public int Depth;
+    }
 }

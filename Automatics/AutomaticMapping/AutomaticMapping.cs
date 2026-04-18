@@ -468,6 +468,9 @@ namespace Automatics.AutomaticMapping
         private const int ColliderBufferInitialLength = 4096;
         private const int ColliderBufferMaxLength = 16384;
         private const float FailedScanCooldownSeconds = 1f;
+        private const float TileMarginMeters = 2f;
+        private const int RetryTileBudgetPerFrame = 4;
+        private const int MaxTileDepth = 4;
 
         // A-12: ColliderBuffer and StaticObjectCache are intentionally mutable
         // (no `readonly`) so that the primary scan path can grow the buffer on
@@ -495,6 +498,23 @@ namespace Automatics.AutomaticMapping
         private static bool _cacheIncomplete;
         private static float _failedScanAnchor;
         private static PendingScanSnapshot? _pendingScanSnapshot;
+
+        // Tile-split fallback queue. Populated when the single-sphere scan
+        // saturates at the buffer ceiling; each tick processes up to
+        // RetryTileBudgetPerFrame tiles via OverlapBoxNonAlloc. Saturated
+        // tiles split into four quadrants until MaxTileDepth. While the
+        // queue is non-empty the primary single-sphere path is skipped; any
+        // snapshot-parameter drift clears the queue and restarts the scan.
+        private static readonly Queue<PendingTile> PendingTiles = new Queue<PendingTile>();
+
+        // Sticky flag set when ProcessTileBudget hits a max-depth tile that
+        // still saturates. Because the buffer contents are truncated, that
+        // sub-region's scan is known-incomplete. Carried across per-tick
+        // budget calls so the completion path can commit in degraded mode
+        // (keep _cacheIncomplete=true, suppressing stale-pin pruning) rather
+        // than signaling a clean rebuild that would let EndPassAndPruneStale
+        // drop auto pins whose colliders were truncated out.
+        private static bool _tileFallbackSawTruncation;
 
         // Targeted-invalidation bookkeeping. _staticClassifierVersion ticks
         // whenever a registry relevant to the static mapping path (Flora /
@@ -703,6 +723,8 @@ namespace Automatics.AutomaticMapping
             SeenNetworksThisPass.Clear();
             OwnedFloraPinsScratch.Clear();
             StaleRemovalScratch.Clear();
+            PendingTiles.Clear();
+            _tileFallbackSawTruncation = false;
             _pendingScanSnapshot = null;
             _cacheIncomplete = false;
             _failedScanAnchor = 0f;
@@ -922,8 +944,14 @@ namespace Automatics.AutomaticMapping
         /// </para>
         ///
         /// <para>
-        /// Recursive tile-split fallback for cases where the buffer ceiling is
-        /// still not enough is wired in a follow-up commit (A-12 fallback).
+        /// When even the ceiling buffer saturates, the scan switches to a
+        /// recursive <c>OverlapBoxNonAlloc</c> tile fallback: the sphere's
+        /// bounding cube is split 2×2 in XZ (Y stays full to preserve
+        /// vertical coverage). Each tick processes up to
+        /// <see cref="RetryTileBudgetPerFrame"/> tiles; saturated tiles
+        /// recurse into four sub-tiles until <see cref="MaxTileDepth"/>.
+        /// Overlapping box margins are absorbed by idempotent indexer
+        /// insertion into the pending cache.
         /// </para>
         /// </summary>
         private static void CacheStaticObjects(Vector3 origin)
@@ -932,13 +960,17 @@ namespace Automatics.AutomaticMapping
             {
                 var now = Time.time;
 
-                // Interval gate during steady state; retry-backoff gate while a
-                // previous pass was left incomplete by saturation.
-                if (_cacheIncomplete)
+                // Interval gate during steady state; cooldown gate only while
+                // a primary retry is waiting (no queued tiles). Tile-mode
+                // ticks bypass the cooldown because per-frame progress is
+                // already throttled by RetryTileBudgetPerFrame and the
+                // enclosing Mapping cadence.
+                if (_cacheIncomplete && PendingTiles.Count == 0)
                 {
                     if (now - _failedScanAnchor < FailedScanCooldownSeconds) return;
                 }
-                else if (now - _lastCacheUpdateTime < Config.StaticObjectCachingInterval)
+                else if (!_cacheIncomplete &&
+                         now - _lastCacheUpdateTime < Config.StaticObjectCachingInterval)
                 {
                     return;
                 }
@@ -952,8 +984,9 @@ namespace Automatics.AutomaticMapping
 
                 // If a previous scan was left incomplete and the live scan
                 // parameters drifted beyond the tolerance, discard the stale
-                // pending state rather than committing a cache with mismatched
-                // origin / range / mask / classifier version.
+                // pending state (including the tile queue) rather than
+                // committing a cache with mismatched origin / range / mask /
+                // classifier version.
                 if (_pendingScanSnapshot.HasValue)
                 {
                     var snapshot = _pendingScanSnapshot.Value;
@@ -963,8 +996,20 @@ namespace Automatics.AutomaticMapping
                         Vector3.Distance(origin, snapshot.Origin) > originTolerance)
                     {
                         _pendingStaticObjectCache.Clear();
+                        PendingTiles.Clear();
+                        _tileFallbackSawTruncation = false;
                         _pendingScanSnapshot = null;
                     }
+                }
+
+                // Fallback path: work down the tile queue before attempting a
+                // new primary scan. ProcessTileBudget commits the swap when
+                // every tile has been drained non-saturated.
+                if (PendingTiles.Count > 0 && _pendingScanSnapshot.HasValue)
+                {
+                    ProcessTileBudget(_pendingScanSnapshot.Value, origin, originTolerance, now,
+                        classifierVersion);
+                    return;
                 }
 
                 var buffer = ColliderBuffer;
@@ -973,8 +1018,11 @@ namespace Automatics.AutomaticMapping
                 if (size >= buffer.Length)
                 {
                     // Saturation: Unity silently truncates results, so we must
-                    // NOT swap into StaticObjectCache. Grow the buffer for the
-                    // next retry and preserve the previous cache meanwhile.
+                    // NOT swap into StaticObjectCache. First try to grow the
+                    // buffer up to the ceiling; once the ceiling saturates,
+                    // seed the tile-split fallback so subsequent ticks scan
+                    // smaller OverlapBox sub-regions instead of the
+                    // truncation-prone single sphere.
                     var newLength = Mathf.Min(buffer.Length * 2, ColliderBufferMaxLength);
                     if (newLength > buffer.Length)
                     {
@@ -987,9 +1035,8 @@ namespace Automatics.AutomaticMapping
                     {
                         Automatics.Logger.Warning(() =>
                             $"[AutomaticMapping] Physics scan saturated at buffer ceiling " +
-                            $"({buffer.Length}); some static pins near the origin may be " +
-                            "stale until the player moves or static_object_mapping_range is " +
-                            "reduced. Tile-split fallback will address this in a follow-up.");
+                            $"({buffer.Length}); switching to OverlapBox tile fallback.");
+                        SeedInitialTiles(origin, range);
                     }
 
                     _cacheIncomplete = true;
@@ -1006,9 +1053,9 @@ namespace Automatics.AutomaticMapping
                 }
 
                 // Non-saturated: build into pending, then swap wholesale.
-                // Indexer assignment makes insertion idempotent for future
-                // tile-split fallbacks that can legitimately return the same
-                // collider from multiple overlapping sub-boxes.
+                // Indexer assignment keeps insertion idempotent in case the
+                // same collider is classified more than once (e.g. via a
+                // tile-fallback retry that overlaps a prior pending-fill).
                 var pending = _pendingStaticObjectCache;
                 pending.Clear();
                 for (var i = 0; i < size; i++)
@@ -1033,6 +1080,8 @@ namespace Automatics.AutomaticMapping
                         Vector3.Distance(origin, snapshot.Origin) > originTolerance)
                     {
                         _pendingStaticObjectCache.Clear();
+                        PendingTiles.Clear();
+                        _tileFallbackSawTruncation = false;
                         _pendingScanSnapshot = null;
                         _cacheIncomplete = true;
                         _failedScanAnchor = now;
@@ -1040,15 +1089,166 @@ namespace Automatics.AutomaticMapping
                     }
                 }
 
-                var previous = StaticObjectCache;
-                StaticObjectCache = pending;
-                previous.Clear();
-                _pendingStaticObjectCache = previous;
+                CommitPendingSwap(now, classifierVersion);
+            }
+        }
 
-                _lastCacheUpdateTime = now;
-                _cacheIncomplete = false;
+        /// <summary>
+        /// Runs up to <see cref="RetryTileBudgetPerFrame"/> tiles from
+        /// <see cref="PendingTiles"/> through <c>OverlapBoxNonAlloc</c>.
+        /// Saturated tiles split into four quadrants until
+        /// <see cref="MaxTileDepth"/>; at max depth the truncated result is
+        /// classified best-effort, logged, and flips
+        /// <see cref="_tileFallbackSawTruncation"/>. Completion (queue empty)
+        /// discards the pending cache if origin has drifted past
+        /// <paramref name="originTolerance"/>; otherwise commits via
+        /// <see cref="CommitPendingSwap"/> for a clean rebuild, or
+        /// <see cref="CommitPendingSwapDegraded"/> when the truncation flag
+        /// is set.
+        /// </summary>
+        private static void ProcessTileBudget(PendingScanSnapshot snapshot, Vector3 origin,
+            float originTolerance, float now, int classifierVersion)
+        {
+            var halfY = snapshot.Range * 1.5f;
+            var buffer = ColliderBuffer;
+            var mask = snapshot.Mask;
+            var pending = _pendingStaticObjectCache;
+            var budget = RetryTileBudgetPerFrame;
+
+            while (budget > 0 && PendingTiles.Count > 0)
+            {
+                var tile = PendingTiles.Dequeue();
+                budget--;
+
+                var halfExtents = new Vector3(tile.HalfXZ + TileMarginMeters, halfY,
+                    tile.HalfXZ + TileMarginMeters);
+                var n = Physics.OverlapBoxNonAlloc(tile.Center, halfExtents, buffer,
+                    Quaternion.identity, mask);
+
+                if (n >= buffer.Length)
+                {
+                    if (tile.Depth < MaxTileDepth)
+                    {
+                        SplitTile(tile);
+                        continue;
+                    }
+
+                    _tileFallbackSawTruncation = true;
+                    Automatics.Logger.Warning(() =>
+                        $"[AutomaticMapping] OverlapBox tile at depth {MaxTileDepth} " +
+                        $"saturated {buffer.Length}; classifying truncated results. Pins " +
+                        "in this sub-region may be incomplete until the player moves.");
+                }
+
+                for (var i = 0; i < n; i++)
+                {
+                    var collider = buffer[i];
+                    if (collider == null) continue;
+                    var classified = ClassifyStaticObject(collider);
+                    if (!classified.HasValue) continue;
+                    pending[collider] = classified.Value;
+                }
+            }
+
+            if (PendingTiles.Count > 0) return;
+
+            // All tiles processed: re-check origin drift before committing.
+            if (Vector3.Distance(origin, snapshot.Origin) > originTolerance)
+            {
+                _pendingStaticObjectCache.Clear();
+                _tileFallbackSawTruncation = false;
                 _pendingScanSnapshot = null;
-                _committedStaticClassifierVersion = classifierVersion;
+                _failedScanAnchor = now;
+                return;
+            }
+
+            if (_tileFallbackSawTruncation)
+            {
+                // At least one tile exhausted MaxTileDepth and still
+                // saturated: its sub-region is known-incomplete. Swap the
+                // fresh results so new colliders still reach the mapping
+                // loop, but keep _cacheIncomplete=true so
+                // EndPassAndPruneStale does not treat the truncated region
+                // as authoritative and retire pins whose colliders fell
+                // outside the buffer. Cooldown gates the next primary
+                // retry; the player moving out of the dense cluster gives
+                // the scan a chance to complete cleanly.
+                CommitPendingSwapDegraded(now);
+                return;
+            }
+
+            CommitPendingSwap(now, classifierVersion);
+        }
+
+        private static void CommitPendingSwap(float now, int classifierVersion)
+        {
+            var previous = StaticObjectCache;
+            StaticObjectCache = _pendingStaticObjectCache;
+            previous.Clear();
+            _pendingStaticObjectCache = previous;
+
+            _lastCacheUpdateTime = now;
+            _cacheIncomplete = false;
+            _pendingScanSnapshot = null;
+            _tileFallbackSawTruncation = false;
+            PendingTiles.Clear();
+            _committedStaticClassifierVersion = classifierVersion;
+        }
+
+        /// <summary>
+        /// Degraded-mode swap used when tile fallback completed with at
+        /// least one known-truncated max-depth tile. Swaps pending into
+        /// live so newly-scanned colliders are available, but leaves
+        /// <see cref="_cacheIncomplete"/> set and arms the cooldown so
+        /// stale-pin pruning stays suppressed and a fresh primary scan is
+        /// attempted later.
+        /// </summary>
+        private static void CommitPendingSwapDegraded(float now)
+        {
+            var previous = StaticObjectCache;
+            StaticObjectCache = _pendingStaticObjectCache;
+            previous.Clear();
+            _pendingStaticObjectCache = previous;
+
+            PendingTiles.Clear();
+            _pendingScanSnapshot = null;
+            _tileFallbackSawTruncation = false;
+            _failedScanAnchor = now;
+            // _cacheIncomplete intentionally stays true.
+            // _lastCacheUpdateTime / _committedStaticClassifierVersion are
+            // not advanced — this swap is not a clean rebuild.
+        }
+
+        private static void SeedInitialTiles(Vector3 origin, float range)
+        {
+            // The sphere's bounding cube is 2 * range * 1.5f per side. Split
+            // in XZ into 4 equal quadrants, each with an unmargined XZ
+            // half-side of 0.75 * range. Y extent stays full. Clear first so
+            // the helper establishes a fresh queue regardless of caller state.
+            PendingTiles.Clear();
+            EnqueueQuadrants(origin, range * 0.75f, depth: 1);
+        }
+
+        private static void SplitTile(PendingTile parent)
+        {
+            EnqueueQuadrants(parent.Center, parent.HalfXZ * 0.5f, parent.Depth + 1);
+        }
+
+        private static void EnqueueQuadrants(Vector3 center, float childHalf, int depth)
+        {
+            for (var dx = 0; dx < 2; dx++)
+            {
+                for (var dz = 0; dz < 2; dz++)
+                {
+                    var offsetX = dx == 0 ? -childHalf : childHalf;
+                    var offsetZ = dz == 0 ? -childHalf : childHalf;
+                    PendingTiles.Enqueue(new PendingTile
+                    {
+                        Center = new Vector3(center.x + offsetX, center.y, center.z + offsetZ),
+                        HalfXZ = childHalf,
+                        Depth = depth
+                    });
+                }
             }
         }
 
