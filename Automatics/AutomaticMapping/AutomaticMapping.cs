@@ -468,7 +468,7 @@ namespace Automatics.AutomaticMapping
         private static readonly Collider[] ColliderBuffer;
         private static readonly Lazy<int> ObjectMaskLazy;
         private static readonly Lazy<int> DungeonMaskLazy;
-        private static readonly Dictionary<Collider, Component> StaticObjectCache;
+        private static readonly Dictionary<Collider, ClassifiedStaticObject> StaticObjectCache;
         private static readonly Dictionary<MapPinIdentify, Minimap.PinData> PinDataCache;
         private static readonly Dictionary<Minimap.PinData, HashSet<MapPinIdentify>> PinKeyCache;
         private static readonly HashSet<MapPinIdentify> KnownObjects;
@@ -488,7 +488,7 @@ namespace Automatics.AutomaticMapping
                 "piece_nonsolid", "Default", "static_solid", "Default_small", "character",
                 "character_net", /*TODO: "terrain",*/ "vehicle"));
             DungeonMaskLazy = new Lazy<int>(() => LayerMask.GetMask("character_trigger"));
-            StaticObjectCache = new Dictionary<Collider, Component>();
+            StaticObjectCache = new Dictionary<Collider, ClassifiedStaticObject>();
             PinDataCache = new Dictionary<MapPinIdentify, Minimap.PinData>();
             PinKeyCache = new Dictionary<Minimap.PinData, HashSet<MapPinIdentify>>();
             KnownObjects = new HashSet<MapPinIdentify>();
@@ -712,19 +712,39 @@ namespace Automatics.AutomaticMapping
                 foreach (var pair in StaticObjectCache)
                 {
                     var collider = pair.Key;
-                    var component = pair.Value;
+                    var classification = pair.Value;
+                    var component = classification.Component;
                     if (!collider || !component) continue;
 
-                    var pos = component.transform.position;
+                    var pos = classification.Position;
                     if (Vector3.Distance(origin, pos) > Config.StaticObjectMappingRange) continue;
                     if (!ZNetScene.instance.IsAreaReady(pos)) continue;
 
-                    var name = Objects.GetName(component);
-                    if (FloraMapping(component, name)) continue;
-                    if (MineralMapping(component, name)) continue;
-                    if (SpawnerMapping(component, name)) continue;
-                    if (OtherMapping(component, name)) continue;
-                    if (PortalMapping(component, name)) continue;
+                    // Classification already knows which kind this collider is,
+                    // so the remaining work is just dispatching to the right
+                    // mapping function. The functions still re-run GetFlora /
+                    // GetMineral / … today for allowlist + identifier handling;
+                    // a future refactor can take the cached Kind + Identifier
+                    // directly without touching the call sites.
+                    var name = classification.SourceToken;
+                    switch (classification.Kind)
+                    {
+                        case PinKind.Flora:
+                            FloraMapping(component, name);
+                            break;
+                        case PinKind.Mineral:
+                            MineralMapping(component, name);
+                            break;
+                        case PinKind.Spawner:
+                            SpawnerMapping(component, name);
+                            break;
+                        case PinKind.Other:
+                            OtherMapping(component, name);
+                            break;
+                        case PinKind.Portal:
+                            PortalMapping(component, name);
+                            break;
+                    }
                 }
 
                 foreach (var location in from x in ZoneSystem.instance.m_locationInstances.Values
@@ -750,23 +770,25 @@ namespace Automatics.AutomaticMapping
                 if (range <= 0) return;
 
                 StaticObjectCache.Clear();
-                foreach (var (collider, component, _) in Objects.GetInsideSphere(origin,
-                             range * 1.5f, GetStaticObject, ColliderBuffer, ObjectMask))
-                    if (!StaticObjectCache.ContainsKey(collider))
-                        StaticObjectCache.Add(collider, component);
+                foreach (var (collider, classification, _) in Objects.GetInsideSphere(origin,
+                             range * 1.5f, ClassifyStaticObject, ColliderBuffer, ObjectMask))
+                    if (classification.HasValue && !StaticObjectCache.ContainsKey(collider))
+                        StaticObjectCache.Add(collider, classification.Value);
             }
         }
 
-        private static Component GetStaticObject(Collider collider)
-        {
-            if (StaticObjectCache.TryGetValue(collider, out var component)) return component;
-
-            component = AsStaticObject(collider);
-            StaticObjectCache.Add(collider, component);
-            return component;
-        }
-
-        private static Component AsStaticObject(Collider collider)
+        /// <summary>
+        /// Pure classifier: given a collider, identify whether it maps to a
+        /// static pin category (Flora/Mineral/Spawner/Other/Portal) and return
+        /// a self-contained <see cref="ClassifiedStaticObject"/> snapshot.
+        /// Allowlist filtering is deliberately *not* performed here; the
+        /// iteration in <see cref="Mapping"/> still consults the per-category
+        /// mapping functions which re-check <c>Config.AllowPinning*</c> so that
+        /// runtime allowlist toggles take effect without a cache rebuild.
+        /// Memoization is the caller's responsibility (see the pending-fill
+        /// indexer assignment in <see cref="CacheStaticObjects"/>).
+        /// </summary>
+        private static ClassifiedStaticObject? ClassifyStaticObject(Collider collider)
         {
             var component = collider.GetComponentInParent<IDestructible>() as Component;
             if (!component)
@@ -775,18 +797,68 @@ namespace Automatics.AutomaticMapping
                 component = collider.GetComponentInParent<Hoverable>() as Component;
             if (!component) return null;
 
-            var name = Objects.GetName(component);
-            if (string.IsNullOrEmpty(name)) return null;
+            var sourceToken = Objects.GetName(component);
+            if (string.IsNullOrEmpty(sourceToken)) return null;
 
-            if (GetFlora(name, out var data)) return data.IsAllowed ? component : null;
-            if (GetMineral(name, out data)) return data.IsAllowed ? component : null;
-            if (GetSpawner(name, out data)) return data.IsAllowed ? component : null;
-            if (GetOther(name, out data)) return data.IsAllowed ? component : null;
+            if (!ClassifyStaticComponent(component, sourceToken, out var kind, out var identifier))
+                return null;
 
-            var component2 = component.GetComponent<TeleportWorld>() as Component;
-            if (component2) return Config.AllowPinningPortal ? component2 : null;
+            return new ClassifiedStaticObject
+            {
+                Component = component,
+                Kind = kind,
+                Identifier = identifier,
+                Position = component.transform.position,
+                SourceToken = sourceToken
+            };
+        }
 
-            return null;
+        /// <summary>
+        /// Lower-level helper that determines which <see cref="PinKind"/> a
+        /// component belongs to by scanning the ValheimObject registries in
+        /// the same priority order as the legacy iteration
+        /// (Flora → Mineral → Spawner → Other → Portal). Targeted invalidation
+        /// will later share the source-token-only suffix of this logic via a
+        /// variant that skips the portal branch, but for now both paths live
+        /// here since only the fill path needs it.
+        /// </summary>
+        private static bool ClassifyStaticComponent(Component component, string sourceToken,
+            out PinKind kind, out string identifier)
+        {
+            if (GetFlora(sourceToken, out var data))
+            {
+                kind = PinKind.Flora;
+                identifier = data.Identifier;
+                return true;
+            }
+            if (GetMineral(sourceToken, out data))
+            {
+                kind = PinKind.Mineral;
+                identifier = data.Identifier;
+                return true;
+            }
+            if (GetSpawner(sourceToken, out data))
+            {
+                kind = PinKind.Spawner;
+                identifier = data.Identifier;
+                return true;
+            }
+            if (GetOther(sourceToken, out data))
+            {
+                kind = PinKind.Other;
+                identifier = data.Identifier;
+                return true;
+            }
+            if (component.GetComponent<TeleportWorld>())
+            {
+                kind = PinKind.Portal;
+                identifier = string.Empty;
+                return true;
+            }
+
+            kind = default;
+            identifier = string.Empty;
+            return false;
         }
 
         private static bool FloraMapping(Component component, string name)
