@@ -895,6 +895,23 @@ namespace Automatics.AutomaticMapping
             if (!ClassifyStaticComponent(component, sourceToken, out var kind, out var identifier))
                 return null;
 
+            // Portal parity with the legacy Dictionary<Collider,Component> cache:
+            // AsStaticObject used to store the TeleportWorld component for
+            // portals, so downstream Objects.GetName and the Target.name passed
+            // to CreateTarget resolved from TeleportWorld — not from the
+            // IDestructible/Interactable/Hoverable parent. Swap the cached
+            // component here and re-derive SourceToken from it so custom portal
+            // icon matching by Target.name keeps its old contract.
+            if (kind == PinKind.Portal)
+            {
+                var teleportWorld = component.GetComponent<TeleportWorld>() as Component;
+                if (teleportWorld)
+                {
+                    component = teleportWorld;
+                    sourceToken = Objects.GetName(component);
+                }
+            }
+
             return new ClassifiedStaticObject
             {
                 Component = component,
