@@ -733,7 +733,13 @@ namespace Automatics.AutomaticMapping
                     var component = classification.Component;
                     if (!collider || !component) continue;
 
-                    var pos = classification.Position;
+                    // Use the live transform position at the range gate.
+                    // classification.Position is a snapshot from cache-fill time
+                    // and can drift when a classified component rides a moving
+                    // parent (e.g. a portal on a ship), which is why the old
+                    // Dictionary<Collider, Component> cache read the live
+                    // transform every pass. Honor that contract here.
+                    var pos = component.transform.position;
                     if (Vector3.Distance(origin, pos) > Config.StaticObjectMappingRange) continue;
                     if (!ZNetScene.instance.IsAreaReady(pos)) continue;
 
