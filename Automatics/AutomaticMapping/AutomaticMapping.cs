@@ -465,10 +465,18 @@ namespace Automatics.AutomaticMapping
 
     internal static class StaticObjectMapping
     {
-        private static readonly Collider[] ColliderBuffer;
+        private const int ColliderBufferInitialLength = 4096;
+        private const int ColliderBufferMaxLength = 16384;
+        private const float FailedScanCooldownSeconds = 1f;
+
+        // A-12: ColliderBuffer and StaticObjectCache are intentionally mutable
+        // (no `readonly`) so that the primary scan path can grow the buffer on
+        // saturation and swap the pending cache wholesale after a successful
+        // non-saturated pass.
+        private static Collider[] ColliderBuffer;
+        private static Dictionary<Collider, ClassifiedStaticObject> StaticObjectCache;
         private static readonly Lazy<int> ObjectMaskLazy;
         private static readonly Lazy<int> DungeonMaskLazy;
-        private static readonly Dictionary<Collider, ClassifiedStaticObject> StaticObjectCache;
         private static readonly Dictionary<MapPinIdentify, Minimap.PinData> PinDataCache;
         private static readonly Dictionary<Minimap.PinData, HashSet<MapPinIdentify>> PinKeyCache;
         private static readonly HashSet<MapPinIdentify> KnownObjects;
@@ -478,17 +486,26 @@ namespace Automatics.AutomaticMapping
         private static float _lastCacheUpdateTime;
         private static float _mappingTimer;
 
+        // A-12 two-phase fill state. The pending cache accumulates the current
+        // scan's output; it only swaps into StaticObjectCache after a fully
+        // non-saturated scan. While _cacheIncomplete is true we keep serving
+        // the previous (known-good) StaticObjectCache to prevent pin flicker.
+        private static Dictionary<Collider, ClassifiedStaticObject> _pendingStaticObjectCache;
+        private static bool _cacheIncomplete;
+        private static float _failedScanAnchor;
+
         private static int ObjectMask => ObjectMaskLazy.Value;
         private static int DungeonMask => DungeonMaskLazy.Value;
 
         static StaticObjectMapping()
         {
-            ColliderBuffer = new Collider[4096];
+            ColliderBuffer = new Collider[ColliderBufferInitialLength];
             ObjectMaskLazy = new Lazy<int>(() => LayerMask.GetMask("item", "piece",
                 "piece_nonsolid", "Default", "static_solid", "Default_small", "character",
                 "character_net", /*TODO: "terrain",*/ "vehicle"));
             DungeonMaskLazy = new Lazy<int>(() => LayerMask.GetMask("character_trigger"));
             StaticObjectCache = new Dictionary<Collider, ClassifiedStaticObject>();
+            _pendingStaticObjectCache = new Dictionary<Collider, ClassifiedStaticObject>();
             PinDataCache = new Dictionary<MapPinIdentify, Minimap.PinData>();
             PinKeyCache = new Dictionary<Minimap.PinData, HashSet<MapPinIdentify>>();
             KnownObjects = new HashSet<MapPinIdentify>();
@@ -759,21 +776,90 @@ namespace Automatics.AutomaticMapping
             }
         }
 
+        /// <summary>
+        /// A-12 primary path. Runs a single OverlapSphere scan, builds the
+        /// result in a pending cache, and only swaps it into StaticObjectCache
+        /// after confirming the scan did not saturate the buffer. On
+        /// saturation the buffer grows (up to <see cref="ColliderBufferMaxLength"/>)
+        /// and the scan retries after a cooldown instead of corrupting the
+        /// live cache with truncated results.
+        ///
+        /// Recursive tile-split fallback for cases where the buffer ceiling is
+        /// still not enough is wired in a follow-up commit (A-12 fallback).
+        /// </summary>
         private static void CacheStaticObjects(Vector3 origin)
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotCacheStaticObjects))
             {
-                if (Time.time - _lastCacheUpdateTime < Config.StaticObjectCachingInterval) return;
-                _lastCacheUpdateTime = Time.time;
+                var now = Time.time;
+
+                // Interval gate during steady state; retry-backoff gate while a
+                // previous pass was left incomplete by saturation.
+                if (_cacheIncomplete)
+                {
+                    if (now - _failedScanAnchor < FailedScanCooldownSeconds) return;
+                }
+                else if (now - _lastCacheUpdateTime < Config.StaticObjectCachingInterval)
+                {
+                    return;
+                }
 
                 var range = Config.StaticObjectMappingRange;
                 if (range <= 0) return;
 
-                StaticObjectCache.Clear();
-                foreach (var (collider, classification, _) in Objects.GetInsideSphere(origin,
-                             range * 1.5f, ClassifyStaticObject, ColliderBuffer, ObjectMask))
-                    if (classification.HasValue && !StaticObjectCache.ContainsKey(collider))
-                        StaticObjectCache.Add(collider, classification.Value);
+                var buffer = ColliderBuffer;
+                var size = Physics.OverlapSphereNonAlloc(origin, range * 1.5f, buffer,
+                    ObjectMask);
+
+                if (size >= buffer.Length)
+                {
+                    // Saturation: Unity silently truncates results, so we must
+                    // NOT swap into StaticObjectCache. Grow the buffer for the
+                    // next retry and preserve the previous cache meanwhile.
+                    var newLength = Mathf.Min(buffer.Length * 2, ColliderBufferMaxLength);
+                    if (newLength > buffer.Length)
+                    {
+                        ColliderBuffer = new Collider[newLength];
+                        Automatics.Logger.Warning(() =>
+                            $"[AutomaticMapping] Physics scan saturated at {buffer.Length}; " +
+                            $"grew ColliderBuffer to {newLength}, retrying after cooldown.");
+                    }
+                    else
+                    {
+                        Automatics.Logger.Warning(() =>
+                            $"[AutomaticMapping] Physics scan saturated at buffer ceiling " +
+                            $"({buffer.Length}); some static pins near the origin may be " +
+                            "stale until the player moves or static_object_mapping_range is " +
+                            "reduced. Tile-split fallback will address this in a follow-up.");
+                    }
+
+                    _cacheIncomplete = true;
+                    _failedScanAnchor = now;
+                    return;
+                }
+
+                // Non-saturated: build into pending, then swap wholesale.
+                // Indexer assignment makes insertion idempotent for future
+                // tile-split fallbacks that can legitimately return the same
+                // collider from multiple overlapping sub-boxes.
+                var pending = _pendingStaticObjectCache;
+                pending.Clear();
+                for (var i = 0; i < size; i++)
+                {
+                    var collider = buffer[i];
+                    if (collider == null) continue;
+                    var classified = ClassifyStaticObject(collider);
+                    if (!classified.HasValue) continue;
+                    pending[collider] = classified.Value;
+                }
+
+                var previous = StaticObjectCache;
+                StaticObjectCache = pending;
+                previous.Clear();
+                _pendingStaticObjectCache = previous;
+
+                _lastCacheUpdateTime = now;
+                _cacheIncomplete = false;
             }
         }
 
