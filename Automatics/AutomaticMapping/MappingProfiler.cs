@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Text;
 using System.Threading;
+using BepInEx.Logging;
 
 namespace Automatics.AutomaticMapping
 {
@@ -76,8 +77,12 @@ namespace Automatics.AutomaticMapping
                     .Append("us)");
             }
 
+            // Write to the BepInEx log source directly so mapping_performance_log
+            // always produces output, bypassing the mod-level enable_logging /
+            // log_level_to_allow_logging gate. BepInEx's own LogLevels filter
+            // still applies, but Info is in its default set.
             if (anyEntries)
-                Automatics.Logger.Info(sb.ToString());
+                Automatics.LogSource.Log(LogLevel.Info, sb.ToString());
         }
 
         public static void Reset()

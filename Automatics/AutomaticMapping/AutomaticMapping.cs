@@ -228,8 +228,8 @@ namespace Automatics.AutomaticMapping
 
                     var pinData = pair.Value;
                     if (pinData != null && pinData.m_pos != target)
-                        pinData.m_pos = InterpolatePinPosition(PinVelocityCache, pair.Key,
-                            pinData.m_pos, target, delta);
+                        Map.MovePin(pinData, InterpolatePinPosition(PinVelocityCache, pair.Key,
+                            pinData.m_pos, target, delta));
                 }
 
                 foreach (var pair in VehiclePinCache)
@@ -238,8 +238,8 @@ namespace Automatics.AutomaticMapping
 
                     var pinData = pair.Value;
                     if (pinData != null && pinData.m_pos != target)
-                        pinData.m_pos = InterpolatePinPosition(VehiclePinVelocityCache, pair.Key,
-                            pinData.m_pos, target, delta);
+                        Map.MovePin(pinData, InterpolatePinPosition(VehiclePinVelocityCache,
+                            pair.Key, pinData.m_pos, target, delta));
                 }
             }
         }

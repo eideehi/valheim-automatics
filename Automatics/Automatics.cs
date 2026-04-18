@@ -46,6 +46,7 @@ namespace Automatics
 
         public static BaseUnityPlugin Plugin { get; private set; }
         public static Logger Logger { get; private set; }
+        public static ManualLogSource LogSource { get; private set; }
         public static L10N L10N { get; private set; }
 
         private static IEnumerable<string> GetAllResourcesDirectory()
@@ -105,6 +106,7 @@ namespace Automatics
         public static void Initialize(BaseUnityPlugin plugin, ManualLogSource logger)
         {
             Plugin = plugin;
+            LogSource = logger;
             Logger = new Logger(logger, Config.IsLogEnabled);
             _modLocation = Path.GetDirectoryName(Plugin.Info.Location) ?? "";
             _guid = Plugin.Info.Metadata.GUID;
