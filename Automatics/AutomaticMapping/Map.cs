@@ -76,6 +76,21 @@ namespace Automatics.AutomaticMapping
             return pinData != null && GetAllPins().Contains(pinData);
         }
 
+        /// <summary>
+        /// Updates a pin's position via a single funnelled entry point. The
+        /// current implementation is a trivial shim that simply assigns
+        /// <see cref="Minimap.PinData.m_pos"/>; C-1 will later replace the
+        /// body with spatial-index-aware cell migration. Callers that mutate
+        /// <c>m_pos</c> (AnimatePins / dirty Flora handling / any future pin
+        /// movement path) must route writes through this helper so that the
+        /// future index remains coherent without touching call sites again.
+        /// </summary>
+        public static void MovePin(Minimap.PinData pinData, Vector3 newPosition)
+        {
+            if (pinData == null) return;
+            pinData.m_pos = newPosition;
+        }
+
         public static void RefreshPins()
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotRefreshPins))

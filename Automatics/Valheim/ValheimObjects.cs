@@ -297,6 +297,15 @@ namespace Automatics.Valheim
         public static readonly ValheimObject Spawner;
         public static readonly ValheimObject Spot;
 
+        /// <summary>
+        /// Raised whenever a ValheimObject's custom element set changes at runtime
+        /// (e.g. via <see cref="RegisterCustom"/> triggered by a BepInEx config
+        /// SettingChanged). The argument identifies which registry was affected so
+        /// that subscribers can filter by domain (Animal/Monster for dynamic
+        /// mapping, Flora/Mineral/Spawner/Dungeon/Spot for static mapping).
+        /// </summary>
+        public static event Action<ValheimObject> RegistryChanged;
+
         static ValheimObject()
         {
             JsonCache = new List<ObjectDataJson>();
@@ -402,6 +411,7 @@ namespace Automatics.Valheim
                     matches = new List<ObjectMatcher>(element.matches)
                 };
             UpdateElements();
+            RegistryChanged?.Invoke(this);
         }
 
         public IEnumerable<ObjectElement> GetElements()

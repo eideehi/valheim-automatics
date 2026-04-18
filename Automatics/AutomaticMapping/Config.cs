@@ -65,6 +65,18 @@ namespace Automatics.AutomaticMapping
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
         public static bool MappingPerformanceLog => _mappingPerformanceLog.Value;
 
+        /// <summary>
+        /// Raised when one of the static-mapping allowlists
+        /// (<c>allow_pinning_flora / mineral / spawner / other / dungeon / spot</c>)
+        /// changes at runtime. Subscribers are expected to run a targeted
+        /// invalidation pass so that already-added pins in the affected
+        /// category are reconciled with the new allowlist even while C-6's
+        /// sweep generation is frozen in degraded mode. The event argument
+        /// identifies the affected registry (ValheimObject / MappingObject
+        /// instance) so subscribers can scope their work by domain.
+        /// </summary>
+        internal static event Action<ValheimObject> StaticAllowlistChanged;
+
         public static void Initialize()
         {
             var config = global::Automatics.Config.Instance;
@@ -110,6 +122,18 @@ namespace Automatics.AutomaticMapping
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
             _mappingPerformanceLog = config.Bind("mapping_performance_log", false);
+
+            // Bridge BepInEx SettingChanged events to StaticAllowlistChanged so that
+            // subscribers (e.g. targeted pin invalidation) do not need access to the
+            // private ConfigEntry fields. Note that Other is a MappingObject entry —
+            // not ValheimObject.Other — and must pass that exact instance through so
+            // subscribers doing ReferenceEquals checks see the correct registry.
+            _allowPinningFlora.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Flora);
+            _allowPinningMineral.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Mineral);
+            _allowPinningSpawner.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Spawner);
+            _allowPinningOther.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(MappingObject.Other);
+            _allowPinningDungeon.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Dungeon);
+            _allowPinningSpot.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Spot);
 
             config.ChangeSection("general", 128);
             config.BindCustomValheimObject("custom_vehicle", MappingObject.Vehicle);
