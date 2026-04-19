@@ -24,8 +24,8 @@ namespace Automatics.AutomaticMining
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(MineRock5), "Start")]
-        private static void MineRock5_Start_Postfix(MineRock5 __instance, ZNetView ___m_nview)
+        [HarmonyPatch(typeof(MineRock5), "Awake")]
+        private static void MineRock5_Awake_Postfix(MineRock5 __instance, ZNetView ___m_nview)
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<AutomaticMining>();
