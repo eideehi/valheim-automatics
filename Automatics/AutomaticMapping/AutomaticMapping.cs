@@ -96,6 +96,7 @@ namespace Automatics.AutomaticMapping
 
         public static void OnRemovePin(Minimap.PinData pinData)
         {
+            PinIndex.Untrack(pinData);
             Navigation.OnRemovePin(pinData);
             DynamicObjectMapping.OnRemovePin(pinData);
             StaticObjectMapping.OnRemovePin(pinData);

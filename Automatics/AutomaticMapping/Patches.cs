@@ -229,11 +229,84 @@ namespace Automatics.AutomaticMapping
         }
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.AddPin))]
+        private static void Minimap_AddPin_Postfix(Minimap.PinData __result)
+        {
+            PinIndex.Track(__result);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(Minimap), "RemovePin", new[] { typeof(Minimap.PinData) })]
         private static void Minimap_RemovePin_Postfix(Minimap.PinData pin)
         {
             if (pin != null)
                 AutomaticMapping.OnRemovePin(pin);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), "ClearPins")]
+        private static void Minimap_ClearPins_Postfix()
+        {
+            PinIndex.Clear();
+        }
+
+        // Clears PinIndex on world unload. Without this, the index keeps
+        // PinData refs from the destroyed minimap until the next
+        // Minimap.Start rebuild, and Map.ContainsPin (no UI-active filter)
+        // could answer queries during the load window from stale state.
+        //
+        // MonoBehaviour lifecycle methods are optional, so HarmonyPrepare
+        // skips the patch when Minimap.OnDestroy is absent rather than
+        // crashing at PatchAll.
+        [HarmonyPatch]
+        internal static class Minimap_OnDestroy_Patch
+        {
+            [HarmonyPrepare]
+            private static bool Prepare(MethodBase original)
+            {
+                return original != null ||
+                       AccessTools.DeclaredMethod(typeof(Minimap), "OnDestroy") != null;
+            }
+
+            [HarmonyTargetMethod]
+            private static MethodBase TargetMethod()
+            {
+                return AccessTools.DeclaredMethod(typeof(Minimap), "OnDestroy");
+            }
+
+            [HarmonyPostfix]
+            private static void Postfix()
+            {
+                PinIndex.Clear();
+            }
+        }
+
+        // Snapshot ownerID != 0 pins before vanilla removes them from
+        // m_pins, so the postfix can untrack the exact same set.
+        private static readonly List<Minimap.PinData> ResetSharedMapDataSnapshot =
+            new List<Minimap.PinData>();
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Minimap), "ResetSharedMapData")]
+        private static void Minimap_ResetSharedMapData_Prefix()
+        {
+            ResetSharedMapDataSnapshot.Clear();
+            var pins = Map.GetAllPins();
+            for (var i = 0; i < pins.Count; i++)
+            {
+                var pin = pins[i];
+                if (pin != null && pin.m_ownerID != 0L)
+                    ResetSharedMapDataSnapshot.Add(pin);
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), "ResetSharedMapData")]
+        private static void Minimap_ResetSharedMapData_Postfix()
+        {
+            for (var i = 0; i < ResetSharedMapDataSnapshot.Count; i++)
+                PinIndex.Untrack(ResetSharedMapDataSnapshot[i]);
+            ResetSharedMapDataSnapshot.Clear();
         }
 
         [HarmonyTranspiler]

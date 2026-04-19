@@ -36,6 +36,7 @@ namespace Automatics.AutomaticMapping
             var harmonyId = Automatics.GetHarmonyId("automatic-mapping");
             Harmony.CreateAndPatchAll(typeof(Patches), harmonyId);
             Harmony.CreateAndPatchAll(typeof(Patches.RandomFlyingBird_Initialize_Patch), harmonyId);
+            Harmony.CreateAndPatchAll(typeof(Patches.Minimap_OnDestroy_Patch), harmonyId);
         }
     }
 }

@@ -57,9 +57,18 @@ namespace Automatics.AutomaticMapping
                     _updatePinsInvoker = null;
                 }
             }
+
+            // Minimap.Start invokes LoadMapData before this postfix runs,
+            // so AddPin_Postfix coverage depends on module load order.
+            // Rebuilding from the live list also drops stale PinData
+            // references from a prior session.
+            PinIndex.Clear();
+            var pins = GetAllPins();
+            for (var i = 0; i < pins.Count; i++)
+                PinIndex.Track(pins[i]);
         }
 
-        private static List<Minimap.PinData> GetAllPins()
+        public static List<Minimap.PinData> GetAllPins()
         {
             var map = ValheimMap;
             if (!map) return EmptyPinList;
@@ -76,19 +85,9 @@ namespace Automatics.AutomaticMapping
             Reflections.InvokeMethod(ValheimMap, "DestroyPinMarker", pinData);
         }
 
-        public static Minimap.PinData GetPin(Predicate<Minimap.PinData> predicate)
+        private static bool IsActive(Minimap.PinData pinData)
         {
-            var pins = GetAllPins();
-            for (var i = 0; i < pins.Count; i++)
-            {
-                var pinData = pins[i];
-                if (!pinData.m_uiElement || !pinData.m_uiElement.gameObject.activeInHierarchy)
-                    continue;
-                if (predicate == null || predicate(pinData))
-                    return pinData;
-            }
-
-            return null;
+            return pinData.m_uiElement && pinData.m_uiElement.gameObject.activeInHierarchy;
         }
 
         public static Minimap.PinData GetClosestPin(Vector3 pos, float radius = 1f,
@@ -97,15 +96,39 @@ namespace Automatics.AutomaticMapping
             using (MappingProfiler.BeginScope(MappingProfiler.SlotGetClosestPin))
             {
                 var radiusSq = radius * radius;
-                var pins = GetAllPins();
                 Minimap.PinData result = null;
                 var minDistanceSq = float.MaxValue;
 
-                for (var i = 0; i < pins.Count; i++)
+                var minCx = Mathf.FloorToInt((pos.x - radius) / PinIndex.CellSize);
+                var maxCx = Mathf.FloorToInt((pos.x + radius) / PinIndex.CellSize);
+                var minCz = Mathf.FloorToInt((pos.z - radius) / PinIndex.CellSize);
+                var maxCz = Mathf.FloorToInt((pos.z + radius) / PinIndex.CellSize);
+
+                for (var cx = minCx; cx <= maxCx; cx++)
+                for (var cz = minCz; cz <= maxCz; cz++)
                 {
-                    var pinData = pins[i];
-                    if (!pinData.m_uiElement || !pinData.m_uiElement.gameObject.activeInHierarchy)
-                        continue;
+                    if (!PinIndex.TryGetCell(new CellKey(cx, cz), out var cellPins)) continue;
+                    for (var i = 0; i < cellPins.Count; i++)
+                    {
+                        var pinData = cellPins[i];
+                        if (!IsActive(pinData)) continue;
+
+                        var dx = pos.x - pinData.m_pos.x;
+                        var dz = pos.z - pinData.m_pos.z;
+                        var distanceSq = dx * dx + dz * dz;
+                        if (distanceSq > radiusSq || distanceSq >= minDistanceSq) continue;
+                        if (predicate != null && !predicate(pinData)) continue;
+
+                        result = pinData;
+                        minDistanceSq = distanceSq;
+                    }
+                }
+
+                var transients = PinIndex.TransientPins;
+                for (var i = 0; i < transients.Count; i++)
+                {
+                    var pinData = transients[i];
+                    if (!IsActive(pinData)) continue;
 
                     var dx = pos.x - pinData.m_pos.x;
                     var dz = pos.z - pinData.m_pos.z;
@@ -125,12 +148,36 @@ namespace Automatics.AutomaticMapping
             Predicate<Minimap.PinData> predicate = null)
         {
             var radiusSq = radius * radius;
-            var pins = GetAllPins();
-            for (var i = 0; i < pins.Count; i++)
+
+            var minCx = Mathf.FloorToInt((pos.x - radius) / PinIndex.CellSize);
+            var maxCx = Mathf.FloorToInt((pos.x + radius) / PinIndex.CellSize);
+            var minCz = Mathf.FloorToInt((pos.z - radius) / PinIndex.CellSize);
+            var maxCz = Mathf.FloorToInt((pos.z + radius) / PinIndex.CellSize);
+
+            for (var cx = minCx; cx <= maxCx; cx++)
+            for (var cz = minCz; cz <= maxCz; cz++)
             {
-                var pinData = pins[i];
-                if (!pinData.m_uiElement || !pinData.m_uiElement.gameObject.activeInHierarchy)
-                    continue;
+                if (!PinIndex.TryGetCell(new CellKey(cx, cz), out var cellPins)) continue;
+                for (var i = 0; i < cellPins.Count; i++)
+                {
+                    var pinData = cellPins[i];
+                    if (!IsActive(pinData)) continue;
+
+                    var dx = pos.x - pinData.m_pos.x;
+                    var dz = pos.z - pinData.m_pos.z;
+                    var distanceSq = dx * dx + dz * dz;
+                    if (distanceSq > radiusSq) continue;
+                    if (predicate != null && !predicate(pinData)) continue;
+
+                    return true;
+                }
+            }
+
+            var transients = PinIndex.TransientPins;
+            for (var i = 0; i < transients.Count; i++)
+            {
+                var pinData = transients[i];
+                if (!IsActive(pinData)) continue;
 
                 var dx = pos.x - pinData.m_pos.x;
                 var dz = pos.z - pinData.m_pos.z;
@@ -149,28 +196,27 @@ namespace Automatics.AutomaticMapping
             return AddPin(pos, IconPack.GetPinType(target), name, save);
         }
 
+        /// <summary>
+        /// Raw membership check with no UI-active filter, so pins without
+        /// a live marker (just added or mid-rebuild) still return
+        /// <c>true</c>. Use <see cref="GetClosestPin"/> when UI visibility
+        /// matters.
+        /// </summary>
         public static bool ContainsPin(Minimap.PinData pinData)
         {
-            if (pinData == null) return false;
-            var pins = GetAllPins();
-            for (var i = 0; i < pins.Count; i++)
-                if (ReferenceEquals(pins[i], pinData))
-                    return true;
-            return false;
+            return PinIndex.Contains(pinData);
         }
 
         /// <summary>
-        /// Updates a pin's position via a single funnelled entry point. The
-        /// current implementation is a trivial shim that simply assigns
-        /// <see cref="Minimap.PinData.m_pos"/>; C-1 will later replace the
-        /// body with spatial-index-aware cell migration. Callers that mutate
-        /// <c>m_pos</c> (AnimatePins / dirty Flora handling / any future pin
-        /// movement path) must route writes through this helper so that the
-        /// future index remains coherent without touching call sites again.
+        /// Writes <paramref name="newPosition"/> and migrates the spatial
+        /// index cell when the move crosses a boundary. Transient and
+        /// untracked pins fall through on the index side so callers do
+        /// not need to know which collection owns the pin.
         /// </summary>
         public static void MovePin(Minimap.PinData pinData, Vector3 newPosition)
         {
             if (pinData == null) return;
+            PinIndex.Move(pinData, newPosition);
             pinData.m_pos = newPosition;
         }
 
