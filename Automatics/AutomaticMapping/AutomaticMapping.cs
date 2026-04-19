@@ -136,6 +136,15 @@ namespace Automatics.AutomaticMapping
         private const float PinSnapDistance = 96f;
         private const float PinSnapDistanceSq = PinSnapDistance * PinSnapDistance;
 
+        // A scanned position within ~0.1 m of the previous target is
+        // treated as noise: PinTargetCache is not rewritten and the pin
+        // stays out of the dirty set. The same radius, paired with a
+        // ~0.01 m/s velocity floor, is what lets AnimatePins declare a
+        // pin settled so idle creatures and docked ships never touch
+        // the foreach body.
+        private const float PinTargetEpsilonSq = 0.01f;
+        private const float PinVelocitySettledSq = 0.0001f;
+
         private enum CharacterKind
         {
             None,
@@ -183,6 +192,16 @@ namespace Automatics.AutomaticMapping
         // a new List every tick.
         private static readonly List<ZDOID> RemoveKeyBuffer;
 
+        // AnimatePins walks only pins whose target moved or whose
+        // SmoothDamp has not yet converged. Ids are added when a scan
+        // crosses the target-epsilon threshold and cleared once the
+        // pin snaps to target with near-zero velocity.
+        private static readonly HashSet<ZDOID> DirtyPins;
+        private static readonly HashSet<ZDOID> VehicleDirtyPins;
+        // Snapshot buffer so AnimatePins can drop settled ids mid-iteration
+        // without allocating or mutating the live set during enumeration.
+        private static readonly List<ZDOID> DirtyDrainBuffer;
+
         // Weak keys so destroyed Character instances fall out without manual
         // bookkeeping; nothing else scans these tables.
         private static readonly ConditionalWeakTable<Character, CachedIdentifier>
@@ -212,6 +231,9 @@ namespace Automatics.AutomaticMapping
             ShipBuffer = new List<Piece>();
             VehicleBuffer = new List<Component>();
             RemoveKeyBuffer = new List<ZDOID>();
+            DirtyPins = new HashSet<ZDOID>();
+            VehicleDirtyPins = new HashSet<ZDOID>();
+            DirtyDrainBuffer = new List<ZDOID>();
         }
 
         private static void EnsureRegistrySubscriptions()
@@ -320,6 +342,8 @@ namespace Automatics.AutomaticMapping
             VehiclePinTargetCache.Clear();
             VehiclePinVelocityCache.Clear();
             KnownObjects.Clear();
+            DirtyPins.Clear();
+            VehicleDirtyPins.Clear();
         }
 
         public static void OnObjectDestroy(Component component)
@@ -331,6 +355,7 @@ namespace Automatics.AutomaticMapping
                 if (!VehiclePinCache.TryGetValue(uniqueId, out var pin)) return;
                 VehiclePinTargetCache.Remove(uniqueId);
                 VehiclePinVelocityCache.Remove(uniqueId);
+                VehicleDirtyPins.Remove(uniqueId);
                 Map.RemovePin(pin);
             }
         }
@@ -357,6 +382,7 @@ namespace Automatics.AutomaticMapping
                 PinKeyCache.Remove(pinData);
                 PinTargetCache.Remove(key);
                 PinVelocityCache.Remove(key);
+                DirtyPins.Remove(key);
                 if (!pinData.m_save)
                     Map.RemovePin(pinData);
             }
@@ -386,26 +412,78 @@ namespace Automatics.AutomaticMapping
             {
                 if (delta <= 0f) return;
 
-                foreach (var pair in PinDataCache)
-                {
-                    if (!PinTargetCache.TryGetValue(pair.Key, out var target)) continue;
-
-                    var pinData = pair.Value;
-                    if (pinData != null && pinData.m_pos != target)
-                        Map.MovePin(pinData, InterpolatePinPosition(PinVelocityCache, pair.Key,
-                            pinData.m_pos, target, delta));
-                }
-
-                foreach (var pair in VehiclePinCache)
-                {
-                    if (!VehiclePinTargetCache.TryGetValue(pair.Key, out var target)) continue;
-
-                    var pinData = pair.Value;
-                    if (pinData != null && pinData.m_pos != target)
-                        Map.MovePin(pinData, InterpolatePinPosition(VehiclePinVelocityCache,
-                            pair.Key, pinData.m_pos, target, delta));
-                }
+                AnimateDirty(PinDataCache, PinTargetCache, PinVelocityCache, DirtyPins, delta);
+                AnimateDirty(VehiclePinCache, VehiclePinTargetCache, VehiclePinVelocityCache,
+                    VehicleDirtyPins, delta);
             }
+        }
+
+        private static void AnimateDirty(
+            IDictionary<ZDOID, Minimap.PinData> pinCache,
+            IDictionary<ZDOID, Vector3> targetCache,
+            IDictionary<ZDOID, Vector3> velocityCache,
+            HashSet<ZDOID> dirty,
+            float delta)
+        {
+            if (dirty.Count == 0) return;
+
+            // Snapshot to let the loop body mutate `dirty` (removing settled
+            // entries) without invalidating the enumerator.
+            DirtyDrainBuffer.Clear();
+            foreach (var id in dirty) DirtyDrainBuffer.Add(id);
+
+            for (var i = 0; i < DirtyDrainBuffer.Count; i++)
+            {
+                var id = DirtyDrainBuffer[i];
+                if (!pinCache.TryGetValue(id, out var pinData) || pinData == null ||
+                    !targetCache.TryGetValue(id, out var target))
+                {
+                    dirty.Remove(id);
+                    continue;
+                }
+
+                if (StepPinAnimation(velocityCache, id, pinData, target, delta))
+                    dirty.Remove(id);
+            }
+
+            DirtyDrainBuffer.Clear();
+        }
+
+        // Returns true once the pin has converged (within the target
+        // epsilon and below the velocity floor) so the caller can drop
+        // it from the dirty set. Assumes delta > 0 — AnimatePins guards
+        // that before calling.
+        private static bool StepPinAnimation(
+            IDictionary<ZDOID, Vector3> velocityCache, ZDOID uniqueId,
+            Minimap.PinData pinData, Vector3 target, float delta)
+        {
+            var current = pinData.m_pos;
+            if (!velocityCache.TryGetValue(uniqueId, out var velocity))
+                velocity = Vector3.zero;
+
+            Vector3 next;
+            if ((current - target).sqrMagnitude >= PinSnapDistanceSq)
+            {
+                next = target;
+                velocity = Vector3.zero;
+            }
+            else
+            {
+                next = Vector3.SmoothDamp(current, target, ref velocity, PinSmoothingTime,
+                    Mathf.Infinity, delta);
+            }
+
+            var settled = (next - target).sqrMagnitude < PinTargetEpsilonSq &&
+                          velocity.sqrMagnitude < PinVelocitySettledSq;
+            if (settled)
+            {
+                next = target;
+                velocity = Vector3.zero;
+            }
+
+            velocityCache[uniqueId] = velocity;
+            Map.MovePin(pinData, next);
+            return settled;
         }
 
         public static void Mapping(float delta)
@@ -515,7 +593,7 @@ namespace Automatics.AutomaticMapping
 
                 if (VehiclePinCache.TryGetValue(uniqueId, out _))
                 {
-                    VehiclePinTargetCache[uniqueId] = pos;
+                    TryMarkTargetDirty(VehiclePinTargetCache, VehicleDirtyPins, uniqueId, pos);
                 }
                 else
                 {
@@ -636,6 +714,7 @@ namespace Automatics.AutomaticMapping
             PinDataCache.Remove(uniqueId);
             PinTargetCache.Remove(uniqueId);
             PinVelocityCache.Remove(uniqueId);
+            DirtyPins.Remove(uniqueId);
             return true;
         }
 
@@ -650,29 +729,26 @@ namespace Automatics.AutomaticMapping
                 !ReferenceEquals(pinData.m_name, pinName))
                 pinData.m_name = pinName;
 
-            PinTargetCache[uniqueId] = pos;
+            TryMarkTargetDirty(PinTargetCache, DirtyPins, uniqueId, pos);
         }
 
-        private static Vector3 InterpolatePinPosition(
-            IDictionary<ZDOID, Vector3> velocityCache, ZDOID uniqueId, Vector3 current,
-            Vector3 target, float delta)
+        // Shared by dynamic and vehicle scan paths: rewrites the per-pin
+        // target only when the new position has drifted past the
+        // target-epsilon threshold, and re-enters the pin into the dirty
+        // set so AnimatePins picks it up on the next tick.
+        private static bool TryMarkTargetDirty(
+            IDictionary<ZDOID, Vector3> targetCache, HashSet<ZDOID> dirty,
+            ZDOID uniqueId, Vector3 pos)
         {
-            if (delta <= 0f)
-                return target;
-
-            if ((current - target).sqrMagnitude >= PinSnapDistanceSq)
+            if (targetCache.TryGetValue(uniqueId, out var oldTarget) &&
+                (oldTarget - pos).sqrMagnitude < PinTargetEpsilonSq)
             {
-                velocityCache[uniqueId] = Vector3.zero;
-                return target;
+                return false;
             }
 
-            if (!velocityCache.TryGetValue(uniqueId, out var velocity))
-                velocity = Vector3.zero;
-
-            var next = Vector3.SmoothDamp(current, target, ref velocity, PinSmoothingTime,
-                Mathf.Infinity, delta);
-            velocityCache[uniqueId] = velocity;
-            return next;
+            targetCache[uniqueId] = pos;
+            dirty.Add(uniqueId);
+            return true;
         }
 
         private static Target CreateTarget(GameObject prefab, string name, int level = 0)
