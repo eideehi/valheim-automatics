@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Automatics.Valheim;
 using JetBrains.Annotations;
@@ -135,6 +136,36 @@ namespace Automatics.AutomaticMapping
         private const float PinSnapDistance = 96f;
         private const float PinSnapDistanceSq = PinSnapDistance * PinSnapDistance;
 
+        private enum CharacterKind
+        {
+            None,
+            Animal,
+            Monster
+        }
+
+        // BaseName tracks the m_name the identifier was derived from: a tamed
+        // creature renamed via Tameable.SetName changes m_name without touching
+        // any registry, so the Version check alone would serve a stale
+        // classification. Entries mutate in place on refresh to avoid
+        // per-registry-bump allocations.
+        private sealed class CachedIdentifier
+        {
+            public int Version;
+            public string BaseName;
+            public CharacterKind Kind;
+            public string Identifier;
+        }
+
+        // BaseName exists for the same tamed-rename reason as in CachedIdentifier;
+        // without it a renamed creature would keep its old pin name until the
+        // level changed.
+        private sealed class LevelPinNameCache
+        {
+            public int Level;
+            public string BaseName;
+            public string PinName;
+        }
+
         private static readonly Dictionary<ZDOID, Minimap.PinData> PinDataCache;
         private static readonly Dictionary<Minimap.PinData, ZDOID> PinKeyCache;
         private static readonly Dictionary<ZDOID, Vector3> PinTargetCache;
@@ -151,6 +182,19 @@ namespace Automatics.AutomaticMapping
         // Reused by RemoveCachedPins so the stale-key drain does not allocate
         // a new List every tick.
         private static readonly List<ZDOID> RemoveKeyBuffer;
+
+        // Weak keys so destroyed Character instances fall out without manual
+        // bookkeeping; nothing else scans these tables.
+        private static readonly ConditionalWeakTable<Character, CachedIdentifier>
+            CharacterIdentifierCache = new ConditionalWeakTable<Character, CachedIdentifier>();
+        private static readonly ConditionalWeakTable<Character, LevelPinNameCache>
+            CharacterLevelNameCache = new ConditionalWeakTable<Character, LevelPinNameCache>();
+
+        // Bumped on Animal / Monster registry mutation only — deliberately
+        // independent of the static-mapping classifier version so custom_flora
+        // edits do not invalidate character caches and vice versa.
+        private static int _dynamicClassifierVersion;
+        private static bool _registrySubscriptionsBound;
 
         static DynamicObjectMapping()
         {
@@ -170,28 +214,88 @@ namespace Automatics.AutomaticMapping
             RemoveKeyBuffer = new List<ZDOID>();
         }
 
-        private static bool GetAnimal(string name, out (string Identifier, bool IsAllowed) data)
+        private static void EnsureRegistrySubscriptions()
         {
-            if (ValheimObject.Animal.GetIdentify(name, out var identifier))
-            {
-                data = (identifier, Config.AllowPinningAnimal.Contains(identifier));
-                return true;
-            }
-
-            data = ("", false);
-            return false;
+            if (_registrySubscriptionsBound) return;
+            _registrySubscriptionsBound = true;
+            ValheimObject.RegistryChanged += OnValheimObjectRegistryChanged;
         }
 
-        private static bool GetMonster(string name, out (string Identifier, bool IsAllowed) data)
+        private static void OnValheimObjectRegistryChanged(ValheimObject obj)
         {
-            if (ValheimObject.Monster.GetIdentify(name, out var identifier))
+            // Only the registries the dynamic scan reads from (Animal /
+            // Monster) should invalidate cached identifiers. Static-domain
+            // changes flow through StaticObjectMapping's own handler.
+            if (ReferenceEquals(obj, ValheimObject.Animal) ||
+                ReferenceEquals(obj, ValheimObject.Monster))
             {
-                data = (identifier, Config.AllowPinningMonster.Contains(identifier));
-                return true;
+                _dynamicClassifierVersion++;
+            }
+        }
+
+        /// <summary>
+        /// Resolves a <see cref="Character"/> to its Animal / Monster
+        /// identifier through a weak per-Character cache. Negative results
+        /// are cached as <see cref="CharacterKind.None"/> so unmappable
+        /// creatures stop paying dict-lookup cost every tick. The cache
+        /// self-revalidates on registry-version bump or when
+        /// <c>character.m_name</c> drifts (tamed rename via
+        /// <c>Tameable.SetName</c>), so a rename that moves a creature in or
+        /// out of allowlist membership is reflected on the next scan.
+        /// </summary>
+        private static bool TryResolveCharacterIdentifier(Character character,
+            out CharacterKind kind, out string identifier)
+        {
+            var version = _dynamicClassifierVersion;
+            var name = character.m_name;
+            if (CharacterIdentifierCache.TryGetValue(character, out var entry) &&
+                entry.Version == version &&
+                ReferenceEquals(entry.BaseName, name))
+            {
+                kind = entry.Kind;
+                identifier = entry.Identifier;
+                return kind != CharacterKind.None;
             }
 
-            data = ("", false);
-            return false;
+            CharacterKind resolvedKind;
+            string resolvedIdentifier;
+            if (ValheimObject.Animal.GetIdentify(name, out var animalIdent))
+            {
+                resolvedKind = CharacterKind.Animal;
+                resolvedIdentifier = animalIdent;
+            }
+            else if (ValheimObject.Monster.GetIdentify(name, out var monsterIdent))
+            {
+                resolvedKind = CharacterKind.Monster;
+                resolvedIdentifier = monsterIdent;
+            }
+            else
+            {
+                resolvedKind = CharacterKind.None;
+                resolvedIdentifier = null;
+            }
+
+            if (entry == null)
+            {
+                CharacterIdentifierCache.Add(character, new CachedIdentifier
+                {
+                    Version = version,
+                    BaseName = name,
+                    Kind = resolvedKind,
+                    Identifier = resolvedIdentifier
+                });
+            }
+            else
+            {
+                entry.Version = version;
+                entry.BaseName = name;
+                entry.Kind = resolvedKind;
+                entry.Identifier = resolvedIdentifier;
+            }
+
+            kind = resolvedKind;
+            identifier = resolvedIdentifier;
+            return kind != CharacterKind.None;
         }
 
         private static bool GetVehicle(string name, out (string Identifier, bool IsAllowed) data)
@@ -308,6 +412,8 @@ namespace Automatics.AutomaticMapping
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotDynamicMapping))
             {
+                EnsureRegistrySubscriptions();
+
                 var range = Config.DynamicObjectMappingRange;
                 if (range <= 0)
                 {
@@ -337,18 +443,20 @@ namespace Automatics.AutomaticMapping
                         var position = character.transform.position;
                         if ((origin - position).sqrMagnitude > rangeSq) continue;
 
-                        var characterName = character.m_name;
-                        if (GetAnimal(characterName, out var data))
+                        if (!TryResolveCharacterIdentifier(character, out var kind,
+                                out var identifier)) continue;
+
+                        if (kind == CharacterKind.Animal)
                         {
-                            if (!data.IsAllowed) continue;
+                            if (!animalAllowlist.Contains(identifier)) continue;
                             if (character.IsTamed() && notPinningTamed) continue;
-                            AddOrUpdatePin(character, delta);
                         }
-                        else if (GetMonster(characterName, out data))
+                        else
                         {
-                            if (!data.IsAllowed) continue;
-                            AddOrUpdatePin(character, delta);
+                            if (!monsterAllowlist.Contains(identifier)) continue;
                         }
+
+                        AddOrUpdatePin(character, delta);
                     }
                 }
 
@@ -424,23 +532,61 @@ namespace Automatics.AutomaticMapping
             var uniqueId = character.GetZDOID();
             if (!KnownObjects.Add(uniqueId)) return;
 
-            var pinName = character.m_name;
+            var baseName = character.m_name;
             var level = character.GetLevel();
-            if (level > 1)
-            {
-                var symbol =
-                    Automatics.L10N.Translate("@text_automatic_mapping_creature_level_symbol");
-                var sb = new StringBuilder(pinName).Append("\n");
-                for (var i = 1; i < level; i++) sb.Append(symbol);
-                pinName = sb.ToString();
-            }
+            var pinName = GetOrBuildPinName(character, baseName, level);
 
             var pos = character.transform.position;
             if (!PinDataCache.TryGetValue(uniqueId, out var pinData))
                 AddPin(uniqueId, pos, pinName,
-                    CreateTarget(character.gameObject, character.m_name, level));
+                    CreateTarget(character.gameObject, baseName, level));
             else
                 UpdatePin(uniqueId, pinData, pinName, pos, delta);
+        }
+
+        /// <summary>
+        /// Memoizes the level-symbol-appended pin name per Character so the
+        /// scan path stops allocating a StringBuilder every tick. Rebuilds
+        /// when the level or base name changes.
+        /// </summary>
+        private static string GetOrBuildPinName(Character character, string baseName, int level)
+        {
+            if (CharacterLevelNameCache.TryGetValue(character, out var entry) &&
+                entry.Level == level &&
+                ReferenceEquals(entry.BaseName, baseName))
+            {
+                return entry.PinName;
+            }
+
+            var pinName = BuildLevelPinName(baseName, level);
+            if (entry == null)
+            {
+                CharacterLevelNameCache.Add(character, new LevelPinNameCache
+                {
+                    Level = level,
+                    BaseName = baseName,
+                    PinName = pinName
+                });
+            }
+            else
+            {
+                entry.Level = level;
+                entry.BaseName = baseName;
+                entry.PinName = pinName;
+            }
+
+            return pinName;
+        }
+
+        private static string BuildLevelPinName(string baseName, int level)
+        {
+            if (level <= 1) return baseName;
+
+            var symbol =
+                Automatics.L10N.Translate("@text_automatic_mapping_creature_level_symbol");
+            var sb = new StringBuilder(baseName).Append("\n");
+            for (var i = 1; i < level; i++) sb.Append(symbol);
+            return sb.ToString();
         }
 
         private static void AddOrUpdatePin(Component component, float delta)
@@ -496,7 +642,12 @@ namespace Automatics.AutomaticMapping
         private static void UpdatePin(ZDOID uniqueId, Minimap.PinData pinData, string pinName, Vector3 pos,
             float delta)
         {
-            if (!string.IsNullOrEmpty(pinData.m_name))
+            // The empty-name guard preserves intentionally blank pins
+            // (CreaturePinTextHidden etc). The ref-equality check skips the
+            // write when the memoized pin name is the same instance the
+            // previous tick stored — ordinary case during steady state.
+            if (!string.IsNullOrEmpty(pinData.m_name) &&
+                !ReferenceEquals(pinData.m_name, pinName))
                 pinData.m_name = pinName;
 
             PinTargetCache[uniqueId] = pos;
