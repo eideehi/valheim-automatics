@@ -11,6 +11,23 @@ namespace Automatics.AutomaticMapping
 {
     internal static class AutomaticMapping
     {
+        // The dynamic scan loop (Character / Fish / Bird / Vehicle walk) and
+        // the downstream RefreshPins call are throttled to 10 Hz; AnimatePins
+        // still rides the vanilla UpdatePins prefix so visual smoothing stays
+        // responsive, and the scan-loop latency shows up as at most ~100 ms of
+        // pin-target lag which SmoothDamp absorbs.
+        //
+        // The epsilon tolerates the float round-off from summing a 50 Hz
+        // fixed step (0.02f stores as ~0.01999...): five ticks accumulate to
+        // ~0.09999994f, so a strict `< 0.1f` comparison would drop the fifth
+        // tick and the cadence would fall to 8.3 Hz. Subtracting the interval
+        // on pass (instead of zeroing) preserves the carry-over past the gate.
+        private const float DynamicScanInterval = 0.1f;
+        private const float DynamicScanEpsilon = 1e-4f;
+
+        private static float _dynamicScanAccumulator;
+        private static float _lastAnimateTime;
+
         private static void RemoveCachedPins()
         {
             DynamicObjectMapping.RemoveCachedPins();
@@ -32,6 +49,8 @@ namespace Automatics.AutomaticMapping
             DynamicObjectMapping.Cleanup();
             StaticObjectMapping.Cleanup();
             MappingProfiler.Reset();
+            _dynamicScanAccumulator = 0f;
+            _lastAnimateTime = 0f;
         }
 
         public static void DynamicMapping(Player player, float delta)
@@ -44,6 +63,19 @@ namespace Automatics.AutomaticMapping
                 RemoveCachedPins();
                 return;
             }
+
+            _dynamicScanAccumulator += delta;
+            if (_dynamicScanAccumulator + DynamicScanEpsilon < DynamicScanInterval) return;
+
+            // Subtract so residual time past the gate carries forward and the
+            // cadence self-corrects; clamp in case of a very long frame (load
+            // screen, tab away) so the accumulator cannot bank enough credit
+            // to fire multiple scans back-to-back once ticks resume.
+            _dynamicScanAccumulator -= DynamicScanInterval;
+            if (_dynamicScanAccumulator < 0f)
+                _dynamicScanAccumulator = 0f;
+            else if (_dynamicScanAccumulator > DynamicScanInterval)
+                _dynamicScanAccumulator = DynamicScanInterval;
 
             DynamicObjectMapping.Mapping(delta);
             Map.RefreshPins();
@@ -68,8 +100,21 @@ namespace Automatics.AutomaticMapping
             StaticObjectMapping.OnRemovePin(pinData);
         }
 
-        public static void AnimatePins(float delta)
+        // Derives a wall-clock delta so SmoothDamp progresses at a steady rate
+        // regardless of whether UpdatePins is firing on vanilla's dirty-flag
+        // cadence or our throttled scan cadence. The first call after Cleanup
+        // (when _lastAnimateTime == 0) falls back to Time.deltaTime so
+        // SmoothDamp does not see a multi-minute jump at login.
+        public static void AnimatePins()
         {
+            var now = Time.time;
+            float delta;
+            if (_lastAnimateTime <= 0f)
+                delta = Time.deltaTime;
+            else
+                delta = now - _lastAnimateTime;
+            _lastAnimateTime = now;
+
             DynamicObjectMapping.AnimatePins(delta);
         }
 
@@ -88,6 +133,7 @@ namespace Automatics.AutomaticMapping
     {
         private const float PinSmoothingTime = 0.2f;
         private const float PinSnapDistance = 96f;
+        private const float PinSnapDistanceSq = PinSnapDistance * PinSnapDistance;
 
         private static readonly Dictionary<ZDOID, Minimap.PinData> PinDataCache;
         private static readonly Dictionary<Minimap.PinData, ZDOID> PinKeyCache;
@@ -102,6 +148,9 @@ namespace Automatics.AutomaticMapping
         private static readonly List<RandomFlyingBird> BirdBuffer;
         private static readonly List<Piece> ShipBuffer;
         private static readonly List<Component> VehicleBuffer;
+        // Reused by RemoveCachedPins so the stale-key drain does not allocate
+        // a new List every tick.
+        private static readonly List<ZDOID> RemoveKeyBuffer;
 
         static DynamicObjectMapping()
         {
@@ -118,6 +167,7 @@ namespace Automatics.AutomaticMapping
             BirdBuffer = new List<RandomFlyingBird>();
             ShipBuffer = new List<Piece>();
             VehicleBuffer = new List<Component>();
+            RemoveKeyBuffer = new List<ZDOID>();
         }
 
         private static bool GetAnimal(string name, out (string Identifier, bool IsAllowed) data)
@@ -183,14 +233,22 @@ namespace Automatics.AutomaticMapping
 
         public static void RemoveCachedPins(ISet<ZDOID> excludes = null)
         {
-            if (!PinDataCache.Any()) return;
+            if (PinDataCache.Count == 0) return;
 
             if (excludes is null)
                 excludes = EmptyCacheKeys;
 
-            foreach (var key in PinDataCache.Keys.Where(x => !excludes.Contains(x)).ToList())
+            RemoveKeyBuffer.Clear();
+            foreach (var key in PinDataCache.Keys)
             {
-                var pinData = PinDataCache[key];
+                if (!excludes.Contains(key))
+                    RemoveKeyBuffer.Add(key);
+            }
+
+            for (var i = 0; i < RemoveKeyBuffer.Count; i++)
+            {
+                var key = RemoveKeyBuffer[i];
+                if (!PinDataCache.TryGetValue(key, out var pinData)) continue;
                 PinDataCache.Remove(key);
                 PinKeyCache.Remove(pinData);
                 PinTargetCache.Remove(key);
@@ -198,6 +256,8 @@ namespace Automatics.AutomaticMapping
                 if (!pinData.m_save)
                     Map.RemovePin(pinData);
             }
+
+            RemoveKeyBuffer.Clear();
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
@@ -248,97 +308,110 @@ namespace Automatics.AutomaticMapping
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotDynamicMapping))
             {
-                if (Config.DynamicObjectMappingRange <= 0)
+                var range = Config.DynamicObjectMappingRange;
+                if (range <= 0)
                 {
                     RemoveCachedPins();
                     return;
                 }
 
+                var rangeSq = (float)range * range;
                 var origin = Player.m_localPlayer.transform.position;
 
                 KnownObjects.Clear();
 
-                foreach (var character in Character.GetAllCharacters())
+                // Vehicle has its own allowlist check inside VehicleMapping;
+                // the sub-loops below benefit from a matching early-out when
+                // their category is empty.
+                var animalAllowlist = Config.AllowPinningAnimal;
+                var monsterAllowlist = Config.AllowPinningMonster;
+                var skipCharacters = animalAllowlist.Count == 0 && monsterAllowlist.Count == 0;
+                var notPinningTamed = Config.NotPinningTamedAnimals;
+
+                if (!skipCharacters)
                 {
-                    if (character.IsPlayer()) continue;
-
-                    var distance = Vector3.Distance(origin, character.transform.position);
-                    if (distance > Config.DynamicObjectMappingRange) continue;
-
-                    var characterName = character.m_name;
-                    if (GetAnimal(characterName, out var data))
+                    foreach (var character in Character.GetAllCharacters())
                     {
-                        if (!data.IsAllowed) continue;
-                        if (character.IsTamed() && Config.NotPinningTamedAnimals) continue;
-                        AddOrUpdatePin(character, delta);
-                    }
-                    else if (GetMonster(characterName, out data))
-                    {
-                        if (!data.IsAllowed) continue;
-                        AddOrUpdatePin(character, delta);
+                        if (character.IsPlayer()) continue;
+
+                        var position = character.transform.position;
+                        if ((origin - position).sqrMagnitude > rangeSq) continue;
+
+                        var characterName = character.m_name;
+                        if (GetAnimal(characterName, out var data))
+                        {
+                            if (!data.IsAllowed) continue;
+                            if (character.IsTamed() && notPinningTamed) continue;
+                            AddOrUpdatePin(character, delta);
+                        }
+                        else if (GetMonster(characterName, out data))
+                        {
+                            if (!data.IsAllowed) continue;
+                            AddOrUpdatePin(character, delta);
+                        }
                     }
                 }
 
-                if (Config.AllowPinningAnimal.Contains("Fish"))
+                if (Config.PinAnimalIncludesFish)
                 {
                     FishCache.Fill(FishBuffer);
-                    foreach (var fish in FishBuffer)
+                    for (var i = 0; i < FishBuffer.Count; i++)
                     {
-                        var distance = Vector3.Distance(origin, fish.transform.position);
-                        if (distance > Config.DynamicObjectMappingRange) continue;
+                        var fish = FishBuffer[i];
+                        if ((origin - fish.transform.position).sqrMagnitude > rangeSq) continue;
                         AddOrUpdatePin(fish, delta);
                     }
                 }
 
-                if (Config.AllowPinningAnimal.Contains("Bird"))
+                if (Config.PinAnimalIncludesBird)
                 {
                     BirdCache.Fill(BirdBuffer);
-                    foreach (var bird in BirdBuffer)
+                    for (var i = 0; i < BirdBuffer.Count; i++)
                     {
-                        var distance = Vector3.Distance(origin, bird.transform.position);
-                        if (distance > Config.DynamicObjectMappingRange) continue;
+                        var bird = BirdBuffer[i];
+                        if ((origin - bird.transform.position).sqrMagnitude > rangeSq) continue;
                         AddOrUpdatePin(bird, delta);
                     }
                 }
 
-                VehicleMapping(delta);
+                VehicleMapping(origin, rangeSq, delta);
 
                 RemoveCachedPins(KnownObjects);
             }
         }
 
-        private static void VehicleMapping(float delta)
+        private static void VehicleMapping(Vector3 origin, float rangeSq, float delta)
         {
-            if (!Config.AllowPinningVehicle.Any()) return;
+            if (Config.AllowPinningVehicle.Count == 0) return;
 
             VehicleBuffer.Clear();
             ShipCache.Fill(ShipBuffer);
-            foreach (var ship in ShipBuffer)
-                VehicleBuffer.Add(ship);
+            for (var i = 0; i < ShipBuffer.Count; i++)
+                VehicleBuffer.Add(ShipBuffer[i]);
 
             var wagons = Reflections.GetStaticField<Vagon, List<Vagon>>("m_instances");
             if (wagons != null)
-                foreach (var wagon in wagons)
-                    VehicleBuffer.Add(wagon);
+                for (var i = 0; i < wagons.Count; i++)
+                    VehicleBuffer.Add(wagons[i]);
 
-            var origin = Player.m_localPlayer.transform.position;
-            foreach (var vehicle in VehicleBuffer)
+            for (var i = 0; i < VehicleBuffer.Count; i++)
             {
+                var vehicle = VehicleBuffer[i];
                 if (!Objects.GetZdoid(vehicle, out var uniqueId)) continue;
 
                 var pos = vehicle.transform.position;
-                if (Vector3.Distance(origin, pos) > Config.DynamicObjectMappingRange) continue;
+                if ((origin - pos).sqrMagnitude > rangeSq) continue;
 
                 var name = Objects.GetName(vehicle);
                 if (!GetVehicle(name, out var vehicleData) || !vehicleData.IsAllowed) continue;
 
-                if (VehiclePinCache.TryGetValue(uniqueId, out var pin))
+                if (VehiclePinCache.TryGetValue(uniqueId, out _))
                 {
                     VehiclePinTargetCache[uniqueId] = pos;
                 }
                 else
                 {
-                    pin = Map.AddPin(pos, name, true, CreateTarget(vehicle.gameObject, name));
+                    var pin = Map.AddPin(pos, name, true, CreateTarget(vehicle.gameObject, name));
                     VehiclePinCache.Add(uniqueId, pin);
                     VehiclePinTargetCache[uniqueId] = pos;
                     VehiclePinVelocityCache[uniqueId] = Vector3.zero;
@@ -436,7 +509,7 @@ namespace Automatics.AutomaticMapping
             if (delta <= 0f)
                 return target;
 
-            if (Vector3.Distance(current, target) >= PinSnapDistance)
+            if ((current - target).sqrMagnitude >= PinSnapDistanceSq)
             {
                 velocityCache[uniqueId] = Vector3.zero;
                 return target;
@@ -796,6 +869,9 @@ namespace Automatics.AutomaticMapping
 
                 BeginPass();
 
+                var staticRange = Config.StaticObjectMappingRange;
+                var staticRangeSq = (float)staticRange * staticRange;
+
                 foreach (var pair in StaticObjectCache)
                 {
                     var collider = pair.Key;
@@ -810,7 +886,7 @@ namespace Automatics.AutomaticMapping
                     // Dictionary<Collider, Component> cache read the live
                     // transform every pass. Honor that contract here.
                     var pos = component.transform.position;
-                    if (Vector3.Distance(origin, pos) > Config.StaticObjectMappingRange) continue;
+                    if ((origin - pos).sqrMagnitude > staticRangeSq) continue;
                     if (!ZNetScene.instance.IsAreaReady(pos)) continue;
 
                     // Classification already knows which kind this collider is,
@@ -840,10 +916,12 @@ namespace Automatics.AutomaticMapping
                     }
                 }
 
-                foreach (var location in from x in ZoneSystem.instance.m_locationInstances.Values
-                         where Vector3.Distance(origin, x.m_position) <= Config.LocationMappingRange
-                         select x)
+                var locationRange = Config.LocationMappingRange;
+                var locationRangeSq = (float)locationRange * locationRange;
+                foreach (var pair in ZoneSystem.instance.m_locationInstances)
                 {
+                    var location = pair.Value;
+                    if ((origin - location.m_position).sqrMagnitude > locationRangeSq) continue;
                     if (DungeonMapping(location)) continue;
                     if (SpotMapping(location)) continue;
                 }
@@ -1916,11 +1994,24 @@ namespace Automatics.AutomaticMapping
 
             var pos = instance.m_position;
             var radius = instance.m_location.m_exteriorRadius;
-            foreach (var (collider, _, _) in Objects
-                         .GetInsideSphere(pos, radius, GetTeleport, ColliderBuffer, DungeonMask)
-                         .OrderBy(x => x.distance))
+            // Linear min-scan instead of OrderBy: only the nearest teleport
+            // collider is consumed, so sorting the whole candidate list would
+            // allocate a second list + IComparer<T> for nothing.
+            var candidates = Objects.GetInsideSphere(pos, radius, GetTeleport, ColliderBuffer,
+                DungeonMask);
+            Collider closest = null;
+            var closestDistance = float.MaxValue;
+            for (var i = 0; i < candidates.Count; i++)
             {
-                var entrance = collider.bounds.center;
+                var candidate = candidates[i];
+                if (candidate.distance >= closestDistance) continue;
+                closest = candidate.collider;
+                closestDistance = candidate.distance;
+            }
+
+            if (closest != null)
+            {
+                var entrance = closest.bounds.center;
                 var identify = new MapPinIdentify(entrance);
                 if (TryGetCachedPin(identify, out _))
                 {

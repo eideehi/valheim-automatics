@@ -65,6 +65,14 @@ namespace Automatics.AutomaticMapping
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
         public static bool MappingPerformanceLog => _mappingPerformanceLog.Value;
 
+        // Fish and Bird drive separate scan paths (FishCache / BirdCache) but
+        // live as magic-string entries inside the Animal allowlist. Caching
+        // these two flags here lets the hot scan loop skip the per-tick
+        // StringList.Contains walk; the SettingChanged bridge below refreshes
+        // them when the user edits the allowlist.
+        public static bool PinAnimalIncludesFish { get; private set; }
+        public static bool PinAnimalIncludesBird { get; private set; }
+
         /// <summary>
         /// Raised when one of the static-mapping allowlists
         /// (<c>allow_pinning_flora / mineral / spawner / other / dungeon / spot</c>)
@@ -128,6 +136,9 @@ namespace Automatics.AutomaticMapping
             // private ConfigEntry fields. Note that Other is a MappingObject entry —
             // not ValheimObject.Other — and must pass that exact instance through so
             // subscribers doing ReferenceEquals checks see the correct registry.
+            RefreshAnimalListFlags();
+            _allowPinningAnimal.SettingChanged += (_, __) => RefreshAnimalListFlags();
+
             _allowPinningFlora.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Flora);
             _allowPinningMineral.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Mineral);
             _allowPinningSpawner.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Spawner);
@@ -138,6 +149,13 @@ namespace Automatics.AutomaticMapping
             config.ChangeSection("general", 128);
             config.BindCustomValheimObject("custom_vehicle", MappingObject.Vehicle);
             config.BindCustomValheimObject("custom_other", MappingObject.Other);
+        }
+
+        private static void RefreshAnimalListFlags()
+        {
+            var list = _allowPinningAnimal?.Value;
+            PinAnimalIncludesFish = list != null && list.Contains("Fish");
+            PinAnimalIncludesBird = list != null && list.Contains("Bird");
         }
     }
 }

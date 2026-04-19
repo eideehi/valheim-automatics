@@ -1,6 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
+using HarmonyLib;
 using ModUtils;
 using UnityEngine;
 
@@ -8,11 +8,67 @@ namespace Automatics.AutomaticMapping
 {
     internal static class Map
     {
+        // Cached once in OnMinimapStart so Map query helpers skip the
+        // per-call Harmony reflection lookups. EmptyPinList is the safe
+        // return when Minimap.instance is not yet live.
+        private static AccessTools.FieldRef<Minimap, List<Minimap.PinData>> _pinsRef;
+        private static Action<Minimap> _updatePinsInvoker;
+        private static readonly List<Minimap.PinData> EmptyPinList = new List<Minimap.PinData>();
+
         private static Minimap ValheimMap => Minimap.instance;
+
+        public static void OnMinimapStart()
+        {
+            // Bind each accessor in its own try/catch so a future Valheim
+            // update that reshapes Minimap.m_pins or renames UpdatePins only
+            // disables the affected slot. The Reflections.* fallbacks in
+            // GetAllPins / RefreshPins go through Harmony's Traverse wrapper
+            // and tolerate a null cache entry.
+            if (_pinsRef == null)
+            {
+                try
+                {
+                    _pinsRef = AccessTools.FieldRefAccess<Minimap, List<Minimap.PinData>>("m_pins");
+                }
+                catch (Exception e)
+                {
+                    Automatics.Logger.Warning(() =>
+                        $"Failed to bind Minimap.m_pins field ref; falling back to reflection: {e.Message}");
+                    _pinsRef = null;
+                }
+            }
+
+            if (_updatePinsInvoker == null)
+            {
+                try
+                {
+                    var method = AccessTools.Method(typeof(Minimap), "UpdatePins");
+                    _updatePinsInvoker = method != null
+                        ? AccessTools.MethodDelegate<Action<Minimap>>(method)
+                        : null;
+                    if (_updatePinsInvoker == null)
+                        Automatics.Logger.Warning(() =>
+                            "Minimap.UpdatePins not found; falling back to reflection.");
+                }
+                catch (Exception e)
+                {
+                    Automatics.Logger.Warning(() =>
+                        $"Failed to bind Minimap.UpdatePins delegate; falling back to reflection: {e.Message}");
+                    _updatePinsInvoker = null;
+                }
+            }
+        }
 
         private static List<Minimap.PinData> GetAllPins()
         {
-            return Reflections.GetField<List<Minimap.PinData>>(ValheimMap, "m_pins");
+            var map = ValheimMap;
+            if (!map) return EmptyPinList;
+            return _pinsRef != null ? _pinsRef(map) : FallbackGetAllPins(map);
+        }
+
+        private static List<Minimap.PinData> FallbackGetAllPins(Minimap map)
+        {
+            return Reflections.GetField<List<Minimap.PinData>>(map, "m_pins") ?? EmptyPinList;
         }
 
         private static void DestroyPinMarker(Minimap.PinData pinData)
@@ -22,9 +78,17 @@ namespace Automatics.AutomaticMapping
 
         public static Minimap.PinData GetPin(Predicate<Minimap.PinData> predicate)
         {
-            return GetAllPins()
-                .Where(x => x.m_uiElement && x.m_uiElement.gameObject.activeInHierarchy)
-                .FirstOrDefault(predicate.Invoke);
+            var pins = GetAllPins();
+            for (var i = 0; i < pins.Count; i++)
+            {
+                var pinData = pins[i];
+                if (!pinData.m_uiElement || !pinData.m_uiElement.gameObject.activeInHierarchy)
+                    continue;
+                if (predicate == null || predicate(pinData))
+                    return pinData;
+            }
+
+            return null;
         }
 
         public static Minimap.PinData GetClosestPin(Vector3 pos, float radius = 1f,
@@ -32,20 +96,25 @@ namespace Automatics.AutomaticMapping
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotGetClosestPin))
             {
-                if (predicate == null)
-                    predicate = x => true;
-
+                var radiusSq = radius * radius;
+                var pins = GetAllPins();
                 Minimap.PinData result = null;
-                var minDistance = float.MaxValue;
-                foreach (var pinData in GetAllPins().Where(x =>
-                             x.m_uiElement && x.m_uiElement.gameObject.activeInHierarchy))
+                var minDistanceSq = float.MaxValue;
+
+                for (var i = 0; i < pins.Count; i++)
                 {
-                    var distance = Utils.DistanceXZ(pos, pinData.m_pos);
-                    if (distance > radius || distance >= minDistance) continue;
-                    if (!predicate.Invoke(pinData)) continue;
+                    var pinData = pins[i];
+                    if (!pinData.m_uiElement || !pinData.m_uiElement.gameObject.activeInHierarchy)
+                        continue;
+
+                    var dx = pos.x - pinData.m_pos.x;
+                    var dz = pos.z - pinData.m_pos.z;
+                    var distanceSq = dx * dx + dz * dz;
+                    if (distanceSq > radiusSq || distanceSq >= minDistanceSq) continue;
+                    if (predicate != null && !predicate(pinData)) continue;
 
                     result = pinData;
-                    minDistance = distance;
+                    minDistanceSq = distanceSq;
                 }
 
                 return result;
@@ -55,15 +124,24 @@ namespace Automatics.AutomaticMapping
         public static bool HavePinInRange(Vector3 pos, float radius,
             Predicate<Minimap.PinData> predicate = null)
         {
-            bool IsInRange(Minimap.PinData x) => Utils.DistanceXZ(x.m_pos, pos) <= radius;
+            var radiusSq = radius * radius;
+            var pins = GetAllPins();
+            for (var i = 0; i < pins.Count; i++)
+            {
+                var pinData = pins[i];
+                if (!pinData.m_uiElement || !pinData.m_uiElement.gameObject.activeInHierarchy)
+                    continue;
 
-            Predicate<Minimap.PinData> isValidPin;
-            if (predicate == null)
-                isValidPin = IsInRange;
-            else
-                isValidPin = x => IsInRange(x) && predicate(x);
+                var dx = pos.x - pinData.m_pos.x;
+                var dz = pos.z - pinData.m_pos.z;
+                var distanceSq = dx * dx + dz * dz;
+                if (distanceSq > radiusSq) continue;
+                if (predicate != null && !predicate(pinData)) continue;
 
-            return GetPin(isValidPin) != null;
+                return true;
+            }
+
+            return false;
         }
 
         public static Minimap.PinData AddPin(Vector3 pos, string name, bool save, Target target)
@@ -73,7 +151,12 @@ namespace Automatics.AutomaticMapping
 
         public static bool ContainsPin(Minimap.PinData pinData)
         {
-            return pinData != null && GetAllPins().Contains(pinData);
+            if (pinData == null) return false;
+            var pins = GetAllPins();
+            for (var i = 0; i < pins.Count; i++)
+                if (ReferenceEquals(pins[i], pinData))
+                    return true;
+            return false;
         }
 
         /// <summary>
@@ -95,9 +178,13 @@ namespace Automatics.AutomaticMapping
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotRefreshPins))
             {
-                if (!ValheimMap) return;
+                var map = ValheimMap;
+                if (!map) return;
 
-                Reflections.InvokeMethod(ValheimMap, "UpdatePins");
+                if (_updatePinsInvoker != null)
+                    _updatePinsInvoker(map);
+                else
+                    Reflections.InvokeMethod(map, "UpdatePins");
             }
         }
 

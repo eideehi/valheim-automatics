@@ -56,6 +56,7 @@ namespace Automatics.AutomaticMapping
         private static void Minimap_Start_Postfix()
         {
             IconPack.Initialize();
+            Map.OnMinimapStart();
         }
 
         [HarmonyPostfix]
@@ -193,7 +194,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Minimap), "UpdatePins")]
         private static void Minimap_UpdatePins_Prefix()
         {
-            AutomaticMapping.AnimatePins(Time.deltaTime);
+            AutomaticMapping.AnimatePins();
         }
 
         [HarmonyTranspiler]
