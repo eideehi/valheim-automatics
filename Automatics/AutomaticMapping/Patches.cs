@@ -52,6 +52,15 @@ namespace Automatics.AutomaticMapping
         }
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(MineRock5), "Awake")]
+        private static void MineRock5_Awake_Postfix(MineRock5 __instance)
+        {
+            var binding = __instance.gameObject.GetComponent<MineRock5CacheBinding>()
+                          ?? __instance.gameObject.AddComponent<MineRock5CacheBinding>();
+            binding.Initialize(__instance);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(Minimap), "Start")]
         private static void Minimap_Start_Postfix()
         {
@@ -278,6 +287,7 @@ namespace Automatics.AutomaticMapping
             private static void Postfix()
             {
                 PinIndex.Clear();
+                MineRock5Cache.Clear();
             }
         }
 

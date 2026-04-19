@@ -12,6 +12,8 @@ namespace Automatics.AutomaticMapping
             Config.Initialize();
             if (Config.ModuleDisabled) return;
 
+            MineRock5Cache.InitializeDelegate();
+
             PickableCache.OnCacheAdded += pickable =>
             {
                 if (ValheimObject.Flora.IsDefined(Objects.GetName(pickable)))

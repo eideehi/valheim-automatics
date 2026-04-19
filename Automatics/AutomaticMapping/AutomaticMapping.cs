@@ -957,62 +957,85 @@ namespace Automatics.AutomaticMapping
         [UsedImplicitly]
         public static void OnObjectDestroy(Component component, ZNetView zNetView)
         {
-            if (!Config.EnableAutomaticMapping) return;
-            if (!Config.RemovePinsOfDestroyedObject) return;
-            if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
-
-            Minimap.PinData pinData = null;
-            var name = Objects.GetName(component);
-            if (GetFlora(name, out var data))
+            // try/finally so a config-gated early return still drops the
+            // cached colliders. MineRock5_DamageArea_Transpiler only routes
+            // fully-destroyed rocks here, so the entry is never useful again
+            // and holding it would leak until the next world unload.
+            try
             {
-                if (!data.IsAllowed) return;
+                if (!Config.EnableAutomaticMapping) return;
+                if (!Config.RemovePinsOfDestroyedObject) return;
+                if (!zNetView.IsValid() || !zNetView.IsOwner()) return;
 
-                var node = component.GetComponent<FloraNode>();
-                if (!node)
-                    pinData = Map.RemovePin(component.transform.position);
-                else if (node.Network.NodeCount <= 1)
-                    pinData = Map.RemovePin(node.Network.Center);
-            }
-            else if (GetMineral(name, out data))
-            {
-                if (!data.IsAllowed) return;
-                pinData = Map.RemovePin(GetCollidersCenter(GetMineralColliders()));
-            }
-            else if (GetSpawner(name, out data) ||
-                     GetOther(name, out data))
-            {
-                if (!data.IsAllowed) return;
-                pinData = Map.RemovePin(component.transform.position);
-            }
-
-            if (pinData != null)
-                RemoveCache(pinData);
-
-            IReadOnlyCollection<Collider> GetMineralColliders()
-            {
-                var empty = Array.Empty<Collider>();
-                switch (component)
+                Minimap.PinData pinData = null;
+                var name = Objects.GetName(component);
+                if (GetFlora(name, out var data))
                 {
-                    case MineRock rock:
-                        return Reflections.GetField<Collider[]>(rock, "m_hitAreas") ?? empty;
-                    case MineRock5 rock5:
-                        return rock5.gameObject.GetComponentsInChildren<Collider>() ?? empty;
-                    case Destructible destructible:
-                    {
-                        var collider = destructible.GetComponentInChildren<Collider>();
-                        return collider ? new[] { collider } : empty;
-                    }
-                    default:
-                        return empty;
+                    if (!data.IsAllowed) return;
+
+                    var node = component.GetComponent<FloraNode>();
+                    if (!node)
+                        pinData = Map.RemovePin(component.transform.position);
+                    else if (node.Network.NodeCount <= 1)
+                        pinData = Map.RemovePin(node.Network.Center);
                 }
+                else if (GetMineral(name, out data))
+                {
+                    if (!data.IsAllowed) return;
+                    pinData = Map.RemovePin(GetMineralRemovalCenter(component));
+                }
+                else if (GetSpawner(name, out data) ||
+                         GetOther(name, out data))
+                {
+                    if (!data.IsAllowed) return;
+                    pinData = Map.RemovePin(component.transform.position);
+                }
+
+                if (pinData != null)
+                    RemoveCache(pinData);
+            }
+            finally
+            {
+                if (component is MineRock5 rock5)
+                    MineRock5Cache.Unregister(rock5);
+            }
+        }
+
+        // MineRock5 returns the Awake-time snapshot center so we do not
+        // average live bounds after DamageArea has deactivated the hit
+        // areas; for MineRock / Destructible the live-bounds path is
+        // unchanged because their colliders remain active until the
+        // ZNetView is destroyed.
+        private static Vector3 GetMineralRemovalCenter(Component component)
+        {
+            if (component is MineRock5 rock5 &&
+                MineRock5Cache.TryGetSnapshot(rock5, out var snapshot) &&
+                snapshot.ColliderCount > 0)
+                return snapshot.Center;
+
+            var empty = Array.Empty<Collider>();
+            IReadOnlyCollection<Collider> colliders;
+            switch (component)
+            {
+                case MineRock rock:
+                    colliders = Reflections.GetField<Collider[]>(rock, "m_hitAreas") ?? empty;
+                    break;
+                case Destructible destructible:
+                {
+                    var collider = destructible.GetComponentInChildren<Collider>();
+                    colliders = collider ? new[] { collider } : empty;
+                    break;
+                }
+                default:
+                    colliders = empty;
+                    break;
             }
 
-            Vector3 GetCollidersCenter(IReadOnlyCollection<Collider> colliders)
-            {
-                var pos = colliders.Aggregate(Vector3.zero,
-                    (current, collider) => current + collider.bounds.center);
-                return pos / colliders.Count;
-            }
+            if (colliders.Count == 0) return component.transform.position;
+
+            var sum = colliders.Aggregate(Vector3.zero,
+                (current, collider) => current + collider.bounds.center);
+            return sum / colliders.Count;
         }
 
         public static void Cleanup()
@@ -2045,41 +2068,6 @@ namespace Automatics.AutomaticMapping
 
         private static bool MineralMapping(Component component, string name)
         {
-            IEnumerable<Collider> GetColliders()
-            {
-                var empty = Array.Empty<Collider>();
-                switch (component)
-                {
-                    case MineRock rock:
-                    {
-                        var array = Reflections.GetField<Collider[]>(rock, "m_hitAreas");
-                        if (array == null) return empty;
-
-                        if (!Objects.GetZNetView(rock, out var zNetView)) return empty;
-
-                        for (var i = 0; i < array.Length; i++)
-                            if (zNetView.GetZDO().GetFloat("Health" + i, rock.m_health) <= 0f)
-                                return empty;
-
-                        return array;
-                    }
-                    case MineRock5 rock5:
-                    {
-                        if (!Reflections.InvokeMethod<bool>(rock5, "NonDestroyed")) return empty;
-                        return rock5.gameObject.GetComponentsInChildren<Collider>() ?? empty;
-                    }
-                    case Destructible destructible:
-                    {
-                        var collider = destructible.GetComponentInChildren<Collider>();
-                        return !collider ? empty : new[] { collider };
-                    }
-                    default:
-                    {
-                        return empty;
-                    }
-                }
-            }
-
             var sourceToken = name;
             if (!GetMineral(sourceToken, out var data)) return false;
             if (!data.IsAllowed) return true;
@@ -2094,21 +2082,9 @@ namespace Automatics.AutomaticMapping
             if (ValheimObject.Mineral.GetName(data.Identifier, out var label))
                 name = label;
 
-            var pos = Vector3.zero;
-            var count = 0;
-            var maxHeight = float.MinValue;
-
-            foreach (var collider in GetColliders())
-            {
-                ++count;
-                var bounds = collider.bounds;
-                pos += bounds.center;
-                maxHeight = Mathf.Max(maxHeight, bounds.max.y);
-            }
-
-            if (count == 0 || pos == Vector3.zero) return true;
-
-            pos /= count;
+            Vector3 pos;
+            float maxHeight;
+            if (!TryGetMineralPosition(component, out pos, out maxHeight)) return true;
 
             if (Map.GetClosestPin(pos) != null) return true;
 
@@ -2123,6 +2099,74 @@ namespace Automatics.AutomaticMapping
             AddPin(uniqueId, pos, name, CreateTarget(component.gameObject, name), PinKind.Mineral,
                 data.Identifier, sourceToken, PinSourceDomain.Component);
             return true;
+        }
+
+        // MineRock5 returns the Awake-time snapshot so scan-time bounds
+        // reads do not fall on child colliders that DamageArea has
+        // deactivated (inactive colliders report empty bounds centered
+        // at the origin, which would skew the average). Other mineral
+        // shapes keep live-bounds aggregation since their colliders
+        // stay active for the object's lifetime.
+        private static bool TryGetMineralPosition(Component component, out Vector3 position,
+            out float maxHeight)
+        {
+            position = Vector3.zero;
+            maxHeight = float.MinValue;
+
+            if (component is MineRock5 rock5)
+            {
+                if (!MineRock5Cache.TryGetOrBuildSnapshotAlive(rock5, out var snapshot)) return false;
+                if (snapshot.ColliderCount == 0) return false;
+                if (snapshot.Center == Vector3.zero) return false;
+
+                position = snapshot.Center;
+                maxHeight = snapshot.MaxHeight;
+                return true;
+            }
+
+            var colliders = GetMineralColliders(component);
+            var count = 0;
+            var sum = Vector3.zero;
+            for (var i = 0; i < colliders.Length; i++)
+            {
+                var bounds = colliders[i].bounds;
+                sum += bounds.center;
+                if (bounds.max.y > maxHeight) maxHeight = bounds.max.y;
+                ++count;
+            }
+
+            if (count == 0 || sum == Vector3.zero) return false;
+
+            position = sum / count;
+            return true;
+        }
+
+        private static Collider[] GetMineralColliders(Component component)
+        {
+            var empty = Array.Empty<Collider>();
+            switch (component)
+            {
+                case MineRock rock:
+                {
+                    var array = Reflections.GetField<Collider[]>(rock, "m_hitAreas");
+                    if (array == null) return empty;
+
+                    if (!Objects.GetZNetView(rock, out var zNetView)) return empty;
+
+                    for (var i = 0; i < array.Length; i++)
+                        if (zNetView.GetZDO().GetFloat("Health" + i, rock.m_health) <= 0f)
+                            return empty;
+
+                    return array;
+                }
+                case Destructible destructible:
+                {
+                    var collider = destructible.GetComponentInChildren<Collider>();
+                    return !collider ? empty : new[] { collider };
+                }
+                default:
+                    return empty;
+            }
         }
 
         private static bool SpawnerMapping(Component component, string name)
