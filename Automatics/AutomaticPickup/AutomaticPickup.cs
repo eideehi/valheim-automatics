@@ -136,7 +136,6 @@ namespace Automatics.AutomaticPickup
         private static void PickupAllNearby(Player player, Predicate<PickableItem> predicate)
         {
             var origin = player.transform.position;
-            var playerId = player.GetPlayerID();
 
             var range = Config.AutomaticPickupRange;
             foreach (var pickableItem in PickableItemCache.GetAllInstance())
@@ -144,14 +143,13 @@ namespace Automatics.AutomaticPickup
                 if (Vector3.Distance(origin, pickableItem.transform.position) > range) continue;
                 if (!predicate.Invoke(pickableItem)) continue;
                 if (Objects.GetZNetView(pickableItem, out var zNetView) && zNetView.IsValid())
-                    zNetView.InvokeRPC("AutoPickup", playerId);
+                    PickPickableItem(player, pickableItem, zNetView);
             }
         }
 
         private static void PickupAllNearby(Player player, Predicate<Pickable> predicate)
         {
             var origin = player.transform.position;
-            var playerId = player.GetPlayerID();
 
             var range = Config.AutomaticPickupRange;
             foreach (var pickable in PickableCache.GetAllInstance())
@@ -174,14 +172,13 @@ namespace Automatics.AutomaticPickup
                 }
 
                 if (Objects.GetZNetView(pickable, out var zNetView) && zNetView.IsValid())
-                    zNetView.InvokeRPC("AutoPickup", playerId);
+                    PickPickable(player, pickable, zNetView);
             }
         }
 
         private static void PickupAllNearby(Player player, Predicate<ItemDrop> predicate)
         {
             var origin = player.transform.position;
-            var playerId = player.GetPlayerID();
 
             var range = Config.AutomaticPickupRange;
             foreach (var itemDrop in GetAllItemDrop())
@@ -192,8 +189,79 @@ namespace Automatics.AutomaticPickup
                 if (!predicate.Invoke(itemDrop)) continue;
                 if (itemDrop.InTar()) continue;
                 if (Objects.GetZNetView(itemDrop, out var zNetView) && zNetView.GetZDO() != null)
-                    zNetView.InvokeRPC("AutoPickup", playerId);
+                    PickItemDrop(player, itemDrop);
             }
+        }
+
+        // Pickup helpers run on the picker's client. The picker mutates its own
+        // inventory locally and broadcasts the world-side state change to the
+        // pickable's owner (so the ZDO is written authoritatively).
+        private static void PickPickable(Player player, Pickable pickable, ZNetView zNetView)
+        {
+            if (Reflections.GetField<bool>(pickable, "m_picked")) return;
+            if (!CanAddItem(player, pickable.m_itemPrefab, pickable.m_amount)) return;
+
+            var inventory = player.GetInventory();
+            inventory.AddItem(pickable.m_itemPrefab, pickable.m_amount);
+
+            if (!pickable.m_extraDrops.IsEmpty())
+            {
+                var offset = 0;
+                foreach (var item in pickable.m_extraDrops.GetDropListItems())
+                {
+                    if (CanAddItem(player, item.m_dropPrefab, item.m_stack))
+                    {
+                        inventory.AddItem(item.m_dropPrefab, item.m_stack);
+                    }
+                    else
+                    {
+                        Reflections.InvokeMethod(pickable, "Drop", item.m_dropPrefab, offset++,
+                            item.m_stack);
+                    }
+                }
+            }
+
+            if (pickable.m_aggravateRange > 0f)
+                BaseAI.AggravateAllInArea(pickable.transform.position, pickable.m_aggravateRange,
+                    BaseAI.AggravatedReason.Theif);
+
+            zNetView.InvokeRPC(ZNetView.Everybody, "RPC_SetPicked", true);
+        }
+
+        private static void PickPickableItem(Player player, PickableItem pickableItem,
+            ZNetView zNetView)
+        {
+            if (Reflections.GetField<bool>(pickableItem, "m_picked")) return;
+
+            var stackSize = Reflections.InvokeMethod<int>(pickableItem, "GetStackSize");
+            if (stackSize <= 0) return;
+            if (!CanAddItem(player, pickableItem.m_itemPrefab.m_itemData, stackSize)) return;
+
+            pickableItem.m_pickEffector.Create(pickableItem.transform.position, Quaternion.identity);
+            player.GetInventory().AddItem(pickableItem.m_itemPrefab.gameObject, stackSize);
+
+            Reflections.SetField(pickableItem, "m_picked", true);
+            zNetView.ClaimOwnership();
+            zNetView.Destroy();
+        }
+
+        private static void PickItemDrop(Player player, ItemDrop itemDrop)
+        {
+            if (!CanAddItem(player, itemDrop.m_itemData)) return;
+            itemDrop.Pickup(player);
+        }
+
+        private static bool CanAddItem(Player player, ItemDrop.ItemData itemData, int stack = -1)
+        {
+            var inventory = player.GetInventory();
+            if (!inventory.CanAddItem(itemData, stack)) return false;
+            return inventory.GetTotalWeight() + itemData.GetWeight() < player.m_maxCarryWeight;
+        }
+
+        private static bool CanAddItem(Player player, GameObject prefab, int stack = -1)
+        {
+            var itemDrop = prefab.GetComponent<ItemDrop>();
+            return itemDrop != null && CanAddItem(player, itemDrop.m_itemData, stack);
         }
 
         private static IEnumerable<ItemDrop> GetAllItemDrop()

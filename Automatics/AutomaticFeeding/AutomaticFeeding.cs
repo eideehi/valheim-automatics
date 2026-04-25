@@ -115,17 +115,32 @@ namespace Automatics.AutomaticFeeding
                 }
             }
 
-            if (canEating && inventory.RemoveOneItem(_consumeTargetItem))
+            if (canEating)
             {
-                _monsterAI.m_onConsumedItem?.Invoke(
-                    _consumeTargetItem.m_dropPrefab.GetComponent<ItemDrop>());
-                humanoid.m_consumeItemEffects.Create(_baseAI.transform.position,
-                    Quaternion.identity);
-                Reflections.GetField<ZSyncAnimation>(_baseAI, "m_animator").SetTrigger("consume");
+                // The owner of the inventory must apply the mutation so the
+                // change is persisted into the ZDO and replicated. Containers
+                // can have ownership claimed before mutating; player feeders
+                // are pre-filtered to the local player in FindFeeder so the
+                // local inventory is always authoritative here.
+                if (feedBoxFound &&
+                    Objects.GetZNetView(_closestFeedBox, out var feedBoxZNetView) &&
+                    feedBoxZNetView.IsValid())
+                {
+                    feedBoxZNetView.ClaimOwnership();
+                }
 
-                _closestFeeder = null;
-                _closestFeedBox = null;
-                _consumeTargetItem = null;
+                if (inventory.RemoveOneItem(_consumeTargetItem))
+                {
+                    _monsterAI.m_onConsumedItem?.Invoke(
+                        _consumeTargetItem.m_dropPrefab.GetComponent<ItemDrop>());
+                    humanoid.m_consumeItemEffects.Create(_baseAI.transform.position,
+                        Quaternion.identity);
+                    Reflections.GetField<ZSyncAnimation>(_baseAI, "m_animator").SetTrigger("consume");
+
+                    _closestFeeder = null;
+                    _closestFeedBox = null;
+                    _consumeTargetItem = null;
+                }
             }
 
             return true;
@@ -174,25 +189,25 @@ namespace Automatics.AutomaticFeeding
 
         private void FindFeeder(float searchRange)
         {
+            // Only the local player's inventory can be mutated authoritatively
+            // on this client; mutating a remote player's inventory would not
+            // replicate to its owning peer.
+            var localPlayer = Player.m_localPlayer;
+            if (localPlayer == null) return;
+
             var needGetClose = Config.NeedGetCloseToEatTheFeed;
             var origin = _baseAI.transform.position;
-            var closest = float.MaxValue;
 
-            foreach (var player in Player.GetAllPlayers())
-            {
-                var position = player.transform.position;
-                var distance = Vector3.Distance(position, origin);
+            var position = localPlayer.transform.position;
+            var distance = Vector3.Distance(position, origin);
+            if (distance > searchRange) return;
+            if (needGetClose && !HavePath(position)) return;
 
-                if (distance > searchRange || distance >= closest) continue;
-                if (needGetClose && !HavePath(position)) continue;
+            var item = localPlayer.GetInventory().GetAllItems().FirstOrDefault(CanConsume);
+            if (item == null) return;
 
-                var item = player.GetInventory().GetAllItems().FirstOrDefault(CanConsume);
-                if (item == null) continue;
-
-                closest = distance;
-                _closestFeeder = player;
-                _consumeTargetItem = item;
-            }
+            _closestFeeder = localPlayer;
+            _consumeTargetItem = item;
         }
 
         private bool CanConsume(ItemDrop.ItemData item)

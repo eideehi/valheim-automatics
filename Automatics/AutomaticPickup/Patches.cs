@@ -23,14 +23,6 @@ namespace Automatics.AutomaticPickup
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(Pickable), "Awake")]
-        private static void Pickable_Awake_Postfix(Pickable __instance, ZNetView ___m_nview)
-        {
-            if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<ItemPicker>();
-        }
-
-        [HarmonyPostfix]
         [HarmonyPatch(typeof(Pickable), "GetHoverText")]
         private static void Pickable_GetHoverText_Postfix(Pickable __instance, ref string __result,
             bool ___m_picked)
@@ -52,7 +44,6 @@ namespace Automatics.AutomaticPickup
             if (___m_nview == null || ___m_nview.GetZDO() == null) return;
 
             __instance.gameObject.AddComponent<PickableItemCache>();
-            __instance.gameObject.AddComponent<ItemPicker>();
         }
 
         [HarmonyPostfix]
@@ -68,14 +59,6 @@ namespace Automatics.AutomaticPickup
             var message =
                 Automatics.L10N.Localize("@message_automatic_pickup_pickup_all_nearby", name);
             __result += $"\n[<color=yellow><b>{keyCode}</b></color>] {message}";
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(ItemDrop), "Awake")]
-        private static void ItemDrop_Awake_Postfix(ItemDrop __instance, ZNetView ___m_nview)
-        {
-            if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<ItemPicker>();
         }
 
         [HarmonyPostfix]
