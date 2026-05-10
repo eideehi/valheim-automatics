@@ -7,6 +7,11 @@ This repository targets .NET Framework 4.8. Use `dotnet msbuild` rather than `do
 - Install `dotnet-sdk-8.0` or newer.
 - Point `VALHEIM_DIR` at the Valheim game directory.
 
+## Repository Notes
+
+- `Automatics/Libraries/mod-utils` is a read-only library dependency. Do not edit files under this directory unless the task is explicitly to update the submodule.
+- When preparing a release, create the Git tag that matches the release/package version so versioned README and Thunderstore links resolve correctly.
+
 ## Windows Build
 
 Set `VALHEIM_DIR` to the game install path, then build with `dotnet msbuild`.

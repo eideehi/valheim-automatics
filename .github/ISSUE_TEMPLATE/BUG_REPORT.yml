@@ -1,109 +1,68 @@
-name: Bug Report
-description: File a bug report to help us improve
-title: "[ TITLE THAT SUCCINCTLY DESCRIBES THE BUG ]"
+name: Bug report
+description: Report a bug or broken behavior
+title: ""
 body:
   - type: markdown
     attributes:
       value: |
-        ## Please read this first
-        ### About this "Issues"
-        The Issues in this repository are purely used as a bug tracker. Please post questions, requests, and suggestions on the [Discord server](https://discord.gg/DDQqxkK7s6). Please note that posts other than bug reports posted on this Issues are often ignored and closed as is.
-        ### About Bug Reports
-        - Bug reports should be written in English. If, like me, English is not your first language and you are not confident in your English skills, we recommend using tools such as Google Translate, Deepl Translate, ChatGPT, etc. for translation.
-        - Unless it is a very simple bug (such as the game not starting when installed), please describe the bug in detail. In particular, attaching an error log is very effective. Even if you just say "This feature doesn't work" without an error log, there is not much I can do.
-        - Before reporting a bug, please make sure that the bug is really caused by this mod. Please enable only this mod (if additional content added by other mods is involved, enable that mod too) and confirm that the bug occurs. There are often cases where "Mod A" added causes "Mod B" to not work, but the cause was "Mod C".
-        ## Forms
-
-  - type: checkboxes
-    id: searched-existing-issue
-    attributes:
-      label: Is there an existing issue for this bug?
-      description: Please search for ["Issues"](/eideehi/valheim-automatics/issues?q=is:issue) and make sure that there is no existing issue with the same content.
-      options:
-        - label: I have searched the existing issue
-          required: true
+        Thank you for reporting a bug.
+        A helpful report usually includes:
+        what you expected, what you did, and what happened instead.
+        If you can reproduce the issue reliably, detailed steps can help us investigate and fix it faster.
+        Logs, screenshots, and videos are optional, but for crashes a log file is especially helpful and may avoid extra back-and-forth.
+        An AI-assisted reply may be posted initially, and maintainers may follow up if needed.
+        Reports without enough detail to investigate may be closed until more information is available.
 
   - type: dropdown
     id: version
     attributes:
       label: Mod version
-      description: |
-        **NOTE: With a few exceptions, bug fixes are always made against the most recent version. Bug reports against older versions are not prohibited as a means of sharing information with other users, but please note that submitted bug reports will be closed with the label "older version" and no fixes will be made for the bug.**
       options:
         - 1.6.0
-        - 1.5.1
-        - 1.5.0
-        - 1.4.8
-        - 1.4.7
-        - 1.4.6
-        - 1.4.5
-        - 1.4.4
-        - 1.4.3
-        - 1.4.2
-        - 1.4.1
-        - 1.4.0
-        - 1.3.2
-        - 1.3.1
-        - 1.3.0
-        - 1.2.1
-        - 1.2.0
-        - 1.1.2
-        - 1.1.1
-        - 1.1.0
-        - 1.0.6
-        - 1.0.5
-        - 1.0.4
-        - 1.0.3
-        - 1.0.2
-        - 1.0.1
-        - 1.0.0
+        - older version
+        - development build / unknown
     validations:
       required: true
 
   - type: textarea
     id: bug-detail
     attributes:
-      label: What happened?
-      description: Please tell me the details of the issue. What were you expecting, how did it not work, and please provide as much detail as possible.
+      label: What did you expect, what did you do, and what happened?
+      description: At minimum, tell us what you expected, what you did, and what happened instead.
       placeholder: |
-        I changed the interval for the feature to 10 seconds, but it still runs every 1 second.
+        Expected: I expected AAA to happen.
+        Did: I did BBB.
+        Happened: CCC happened instead.
     validations:
       required: true
 
   - type: textarea
-    id: mods-to-reproduce-bug
+    id: steps-for-reproduce-bug
     attributes:
-      label: List of Mods required to reproduce the bug
-      description: Please tell me the minimum required Mod list to reproduce the bug.
+      label: Detailed reproduction steps
+      description: Optional. If you can reproduce it reliably, detailed steps may help us fix it faster.
       placeholder: |
-        Awecome Config Manager v1.2.3
-        Awesome NPC Core v4.5.6
+        1. Do AAA
+        2. Open BBB
+        3. Click CCC
+        4. The issue happens
+
+  - type: textarea
+    id: mods-when-bug-occurred
+    attributes:
+      label: Other mods involved
+      description: Optional. If other mods may be involved, list their names. Compatibility issues may take longer to investigate and may not always be addressed.
+      placeholder: |
+        Awesome Weapon v1.2.3
         Awesome NPC v4.5.6
-    validations:
-      required: true
-
-  - type: textarea
-    id: steps-to-reproduce-bug
-    attributes:
-      label: Steps to reproduce the bug
-      description: |
-        Please provide detailed instructions on how to reproduce the bug, and make sure to confirm that the bug can be reproduced by following these steps alone.
-      placeholder: |
-        1. Open the mod's configuration in the main menu.
-        2. Change the interval to 10 in the configuration.
-        3. Load the saved data.
-        4. The mod is still operating every 1 second.
-    validations:
-      required: true
+        ...
 
   - type: textarea
     id: file-attachments
     attributes:
-      label: File attachments
-      description: |
-        You can optionally attach screenshots, demo videos, log files, config files, etc. Please see ["Attaching files - GitHub"](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files) for more information about file attachments.
+      label: Logs, screenshots, videos, etc.
+      description: Optional, but especially helpful for crashes. You can drag and drop files here if they help explain the issue.
 
   - type: markdown
     attributes:
-      value: |
-        ### Thank you for your cooperation on the bug report.
+      value: Thank you for the report.

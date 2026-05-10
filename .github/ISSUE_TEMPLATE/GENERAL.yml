@@ -1,0 +1,31 @@
+name: Question / Suggestion / Request
+description: Ask a question, share feedback, or make a request
+title: ""
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for opening an issue.
+        Questions, suggestions, requests, and rough reports are all welcome here.
+        If your report is incomplete, that is okay.
+        Please include as much detail as you can so we can understand and respond more easily.
+        An AI-assisted reply may be posted initially, and maintainers may follow up if needed.
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Tell us what you want to ask, suggest, or report.
+      placeholder: Describe your question, request, suggestion, or problem here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: file-attachments
+    attributes:
+      label: Logs, screenshots, videos, etc.
+      description: Optional. You can drag and drop files here if they help explain the issue.
+
+  - type: markdown
+    attributes:
+      value: Thank you for your feedback.

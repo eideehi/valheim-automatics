@@ -1,7 +1,9 @@
 # Automatics - Valheim Mod
+
 Automatics is a mod that automates the tedious tasks of life in Valheim. Most of its features exist in existing mods, but it has been re-designed to make it easier for me to use.
 
-> **IMPORTANT**:
+> **IMPORTANT**
+>
 > - This mod has been developed by an individual and is not associated with the game's developer in any way. Please refrain from asking the developer any questions regarding this mod.
 > - This mod has been developed with the sole intention of single-player usage. Please be aware that it is not supported for server operation, and we kindly request your understanding in this matter.
 
@@ -17,9 +19,9 @@ Automatically opens and closes allowed doors near the player. The open and close
 
 Automatically pins nearby dynamic objects, static objects, and locations to the map, including animals, monsters, flora, minerals, vehicles, portals, dungeons, spots, and other configured objects. You can configure search ranges, allowed targets, static pin saving, destroyed-object pin cleanup, and user-defined objects. The map navigation shortcut starts or clears navigation by holding the configured modifier key (Left Shift by default) and left-clicking a pin on the large map; while navigating, the HUD shows the target name and distance.
 
-- **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.md](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/custom-icon-pack.md) for custom icon pack specifications.
+**Custom icon pack:** You can also define your own icons in png and json files. See [docs/custom-icon-pack.md](docs/custom-icon-pack.md) for custom icon pack specifications.
 
-![Custom Icon Pack Image](https://raw.githubusercontent.com/eideehi/valheim-automatics/1.5.1/docs/images/readme/custom-icon-pack.png)
+[![Custom Icon Pack Image](docs/images/readme/custom-icon-pack.png)](docs/custom-icon-pack.md)
 
 ### Automatic processing
 
@@ -53,12 +55,12 @@ Displays the usage of commands added by Automatics.
 
 #### OPTIONS
 
-| Option           | Description |
-|------------------|-------------|
-| -i, --include=VALUE | Show only commands whose names include the word specified in this option. |
-| -e, --exclude=VALUE | Exclude commands whose names contain the word specified with this option. |
-| -v, --verbose       | Displays detailed usage of the command. |
-| -h, --help          | Displays a help message and exits the command. |
+| Option | Description |
+| --- | --- |
+| `-i, --include=VALUE` | Show only commands whose names include the word specified in this option. |
+| `-e, --exclude=VALUE` | Exclude commands whose names contain the word specified with this option. |
+| `-v, --verbose` | Displays detailed usage of the command. |
+| `-h, --help` | Displays a help message and exits the command. |
 
 ### printnames
 
@@ -76,9 +78,9 @@ A regular expression of the internal or display name to be output. Must be prefi
 
 #### OPTIONS
 
-| Option   | Description |
-|----------|-------------|
-| -h, --help | Displays a help message and exits the command. |
+| Option | Description |
+| --- | --- |
+| `-h, --help` | Displays a help message and exits the command. |
 
 #### Examples
 
@@ -100,13 +102,13 @@ Type of object to be displayed. Specify one of the following: animal, container,
 
 #### OPTIONS
 
-| Option           | Description |
-|------------------|-------------|
-| -r, --radius=VALUE  | Specify the range within which the object is to be searched. [Default: 32] (Unit: Meters) |
-| -n, --number=VALUE  | Specify how many objects matching the condition are to be displayed. [Default: 4] |
-| -i, --include=VALUE | Show only objects whose internal or display names match the word specified in this option. It works as a regular expression by concatenating r/ at the beginning of the string. |
-| -e, --exclude=VALUE | Exclude objects whose internal names or display names match the word specified with this option. It works as a regular expression by concatenating r/ at the beginning of the string. |
-| -h, --help          | Displays a help message and exits the command. |
+| Option | Description |
+| --- | --- |
+| `-r, --radius=VALUE` | Specify the range within which the object is to be searched. [Default: 32] (Unit: Meters) |
+| `-n, --number=VALUE` | Specify how many objects matching the condition are to be displayed. [Default: 4] |
+| `-i, --include=VALUE` | Show only objects whose internal or display names match the word specified in this option. It works as a regular expression by concatenating r/ at the beginning of the string. |
+| `-e, --exclude=VALUE` | Exclude objects whose internal names or display names match the word specified with this option. It works as a regular expression by concatenating r/ at the beginning of the string. |
+| `-h, --help` | Displays a help message and exits the command. |
 
 ### removemappins
 
@@ -118,32 +120,32 @@ Remove map pins that match the specified conditions. If no options are specified
 
 #### OPTIONS
 
-| Option                      | Description |
-|-----------------------------|-------------|
-| -r, --radius=VALUE          | Specify the maximum distance from the player's position to the pin to be removed. If set to 0, all pins will be targeted. [Default: 0] (Unit: meters) |
-| -i, --include=VALUE         | Pins that contain the specified string in their name will be targeted for deletion. |
-| -e, --exclude=VALUE         | Pins that contain the specified string in their name will be excluded from the deletion target. |
-| -n, --dry-run               | Enables the dry run mode. When this option is specified, pin deletion will be skipped, and only text output to the console will be performed. |
-| -d, --dangerous-mode        | When this option is specified, non-duplicate pins will also be included in the deletion target. Please use this option with caution, as incorrect usage can result in the deletion of all pins on the map. |
-| -h, --help                  | Displays a help message and exits the command. |
+| Option | Description |
+| --- | --- |
+| `-r, --radius=VALUE` | Specify the maximum distance from the player's position to the pin to be removed. If set to 0, all pins will be targeted. [Default: 0] (Unit: meters) |
+| `-i, --include=VALUE` | Pins that contain the specified string in their name will be targeted for deletion. |
+| `-e, --exclude=VALUE` | Pins that contain the specified string in their name will be excluded from the deletion target. |
+| `-n, --dry-run` | Enables the dry run mode. When this option is specified, pin deletion will be skipped, and only text output to the console will be performed. |
+| `-d, --dangerous-mode` | When this option is specified, non-duplicate pins will also be included in the deletion target. Please use this option with caution, as incorrect usage can result in the deletion of all pins on the map. |
+| `-h, --help` | Displays a help message and exits the command. |
 
 ## Configurations
 
 I recommend using [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
-![Configuration Menu](https://raw.githubusercontent.com/eideehi/valheim-automatics/1.6.0/docs/images/readme/config-menu-thumbnail.png)
+[![Configuration Menu](docs/images/readme/config-menu-thumbnail.png)](docs/images/readme/config-menu.jpg)
 
 *The README would be too large if we described all the details of the configuration, so we split it into separate file.*
 
-Open [CONFIG.md](https://github.com/eideehi/valheim-automatics/blob/1.6.0/CONFIG.md) to see the configuration details.
+Open [CONFIG.md](CONFIG.md) to see the configuration details.
 
 ### Adding object definitions to Automatics
 
 You can use the [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager) to define objects that you want Automatics to work with.
 
-![User-defined objects in GUI](https://raw.githubusercontent.com/eideehi/valheim-automatics/1.6.0/docs/images/readme/user-defined-objects.png)
+[![User-defined objects in GUI](docs/images/readme/user-defined-objects.png)](docs/add-user-defined-object.md)
 
-Open [docs/add-user-defined-object.md](https://github.com/eideehi/valheim-automatics/blob/1.6.0/docs/add-user-defined-object.md) to learn more about adding user-defined objects.
+Open [docs/add-user-defined-object.md](docs/add-user-defined-object.md) to learn more about adding user-defined objects.
 
 ## Supplementary explanation
 
@@ -161,28 +163,28 @@ Internal names are the names used inside the game program, such as `$enemy_boar`
 
 ##### Matching Samples
 
-- **Target data**
+**Target data**
 
-  | Display name | Internal name     |
-  |--------------|-------------------|
-  | Greyling     | $enemy_greyling   |
-  | Greydwarf    | $enemy_greydwarf  |
-  | Surtling     | $enemy_surtling   |
+| Display name | Internal name |
+| --- | --- |
+| Greyling | $enemy_greyling |
+| Greydwarf | $enemy_greydwarf |
+| Surtling | $enemy_surtling |
 
-- **Matching result**
+**Matching result**
 
-  |           | Grey | ling | $enemy_greyling | $enemy_greydwarf | $enemy_ |
-  |-----------|------|------|-----------------|------------------|---------|
-  | Greyling  | Match| Match| Match           | No match         | No match|
-  | Greydwarf | Match| No match | No match    | Match            | No match|
-  | Surtling  | No match | Match | No match   | No match         | No match|
+| | Grey | ling | $enemy_greyling | $enemy_greydwarf | $enemy_ |
+| --- | --- | --- | --- | --- | --- |
+| Greyling | Match | Match | Match | No match | No match |
+| Greydwarf | Match | No match | No match | Match | No match |
+| Surtling | No match | Match | No match | No match | No match |
 
 ## Languages
 
-| Language | Translators       | Status |
-|----------|-------------------|--------|
-| English  | Translation Tools | 100%   |
-| Japanese | EideeHi           | 100%   |
+| Language | Translators | Status |
+| --- | --- | --- |
+| English | Translation Tools | 100% |
+| Japanese | EideeHi | 100% |
 
 ## Contacts
 
@@ -197,4 +199,4 @@ Internal names are the names used inside the game program, such as `$enemy_boar`
 
 ## License
 
-Automatics is developed and released under the MIT license. For the full text of the license, please see the [LICENSE](https://github.com/eideehi/valheim-automatics/blob/1.6.0/LICENSE) file.
+Automatics is developed and released under the MIT license. For the full text of the license, please see the [LICENSE](LICENSE) file.

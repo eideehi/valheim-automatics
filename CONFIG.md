@@ -1,1147 +1,1314 @@
-=== [ #1 System ] / [system]
-==== Logging / [enable_logging]
+# Configurations
+
+## [ #1 System ] / [system]
+### Logging / [enable_logging]
 Specify whether to enable log output. System initialization logs for Automatics are always output regardless of the value of this option.
 
 - Default value: false
 
-==== Log Level To Allow Logging / [log_level_to_allow_logging]
+### Log Level To Allow Logging / [log_level_to_allow_logging]
 Specify the log level that allows logging.
 
 - Default value: Fatal, Error, Warning, Message
 - Acceptable values: None, Fatal, Error, Warning, Message, Info, Debug, All
 - Multiple values can be set at the same time by separating them with , (e.g. Fatal, Error)
 
-=== [ #2 General ] / [general]
-==== User-defined Animal / [custom_animal]
+## [ #2 General ] / [general]
+### User-defined Animal / [custom_animal]
 Any animal can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the animal. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the animal. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Dungeon / [custom_dungeon]
+### User-defined Dungeon / [custom_dungeon]
 Any dungeon can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the dungeon. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the dungeon. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Flora / [custom_flora]
+### User-defined Flora / [custom_flora]
 Any flora can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the flora. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the flora. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Mineral / [custom_mineral]
+### User-defined Mineral / [custom_mineral]
 Any mineral can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the mineral. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the mineral. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Monster / [custom_monster]
+### User-defined Monster / [custom_monster]
 Any monster can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the monster. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the monster. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Spawner / [custom_spawner]
+### User-defined Spawner / [custom_spawner]
 Any spawner can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the spawner. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the spawner. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Spot / [custom_spot]
+### User-defined Spot / [custom_spot]
 Any spot can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the spot. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the spot. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Door / [custom_door]
+### User-defined Door / [custom_door]
 Any door can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the door. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the door. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Vehicle / [custom_vehicle]
+### User-defined Vehicle / [custom_vehicle]
 Any vehicle can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the vehicle. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the vehicle. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Other Object / [custom_other]
+### User-defined Other Object / [custom_other]
 Any object can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the object. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal or prefab name of the object. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-==== User-defined Container / [custom_container]
+### User-defined Container / [custom_container]
 Any container can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the container. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal or prefab name of the container. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
 
 - Default value:
 
-=== [ #3 Automatic Door ] / [automatic_door]
-==== Disable Module (Reboot Required) / [module]
+## [ #3 Automatic Door ] / [automatic_door]
+### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: Enabled
 - Acceptable values: Enabled, Disabled
 
-==== Automatic Door / [enable_automatic_door]
+### Automatic Door / [enable_automatic_door]
 Specify whether to enable the feature that automatically opens and closes the door.
 
 - Default value: true
 
-==== Allow Automatic Door / [allow_automatic_door]
+### Allow Automatic Door / [allow_automatic_door]
 Specify which doors are allowed to open and close automatically.
 
-- Default value: WoodDoor, WoodGate, IronGate, DarkwoodGate, PieceHexagonalDoor
+- Default value: WoodDoor, WoodGate, IronGate, DarkwoodGate, PieceHexagonalDoor, AshwoodDoor, FlametalGate, DvergrDoor
 
-==== Interval To Open / [interval_to_open]
+### Interval To Open / [interval_to_open]
 Specify the interval at which the process of automatically opening the door is called. If set to less than 0.1, the function to automatically open the door will be disabled. (Unit: second)
 
 - Default value: 0.1
 - Acceptable value range: From 0 to 8
 
-==== Interval To Close / [interval_to_close]
+### Interval To Close / [interval_to_close]
 Specify the interval at which the process of automatically closing the door is called. If set to less than 0.1, the function to automatically close the door will be disabled. (Unit: second)
 
 - Default value: 0.1
 - Acceptable value range: From 0 to 8
 
-==== Distance For Automatic Opening / [distance_for_automatic_opening]
+### Distance For Automatic Opening / [distance_for_automatic_opening]
 Specify how close the player must be to the door in order for it to open automatically. (Unit: meter)
 
 - Default value: 2.5
 - Acceptable value range: From 1 to 8
 
-==== Distance For Automatic Closing / [distance_for_automatic_closing]
+### Distance For Automatic Closing / [distance_for_automatic_closing]
 Specify how far the player must be from the door for the door to close automatically. (Unit: meter)
 
 - Default value: 2.5
 - Acceptable value range: From 1 to 8
 
-==== Automatic Door Enable/Disable Toggle Message / [automatic_door_enable_disable_toggle_message]
+### Automatic Door Enable/Disable Toggle Message / [automatic_door_enable_disable_toggle_message]
 Specify where a message is displayed when the automatic door is enabled or disabled by a shortcut key.
 
 - Default value: Center
 - Acceptable values: None, Center, TopLeft
 
-==== Automatic Door Enable/Disable Toggle / [automatic_door_enable_disable_toggle]
+### Automatic Door Enable/Disable Toggle / [automatic_door_enable_disable_toggle]
 Specify a shortcut key to enable/disable the automatic door.
 
 - Default value:
 
-=== [ #4 Automatic Mapping ] / [automatic_mapping]
-==== Disable Module (Reboot Required) / [module]
+## [ #4 Automatic Mapping ] / [automatic_mapping]
+### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: Enabled
 - Acceptable values: Enabled, Disabled
 
-==== Automatic Mapping / [enable_automatic_mapping]
+### Automatic Mapping / [enable_automatic_mapping]
 Specify whether to enable the feature that automatically pinning objects and locations to the map.
 
 - Default value: true
 
-==== Dynamic Object Search Range / [dynamic_object_mapping_range]
+### Dynamic Object Search Range / [dynamic_object_mapping_range]
 Specify the range of dynamic objects to be explored. "Dynamic Object" are objects that change position, such as animals, monsters, etc. Set to 0 to disable pinning of dynamic objects. (Unit: meter)
 
 - Default value: 64
 - Acceptable value range: From 0 to 128
 
-==== Static Object Search Range / [static_object_mapping_range]
+### Static Object Search Range / [static_object_mapping_range]
 Specify the range of static objects to be explored. "Static Object" are objects that do not change their position, such as flora, mineral, etc. Setting this to 0 disables pinning of static objects. (Unit: meter)
 
 - Default value: 32
 - Acceptable value range: From 0 to 128
 
-==== Location Search Range / [location_mapping_range]
+### Location Search Range / [location_mapping_range]
 Specify the range of location to be explored. "Location" is a specific place, such as dungeon, fuling village, etc. Setting this to 0 disables location pinning. (Unit: meter)
 
 - Default value: 96
 - Acceptable value range: From 0 to 128
 
-==== Allow Pinning Animal / [allow_pinning_animal]
+### Allow Pinning Animal / [allow_pinning_animal]
 Specify the animals to be automatic pinning.
 
-- Default value: Boar, Piggy, Deer, Wolf, WolfCub, Lox, LoxCalf, Hen, Chicken, Hare, Bird, Fish
+- Default value: Boar, Piggy, Deer, Wolf, WolfCub, Lox, LoxCalf, Hen, Chicken, Hare, Bird, Fish, Asksvin, AsksvinHatchling
 
-==== Allow Pinning Monster / [allow_pinning_monster]
+### Allow Pinning Monster / [allow_pinning_monster]
 Specify the monsters to be automatic pinning.
 
-- Default value: Greyling, Neck, Ghost, Greydwarf, GreydwarfBrute, GreydwarfShaman, RancidRemains, Skeleton, Troll, Abomination, Blob, Draugr, DraugrElite, Leech, Oozer, Surtling, Wraith, Drake, Fenring, StoneGolem, Deathsquito, Fuling, FulingBerserker, FulingShaman, Growth, Serpent, Bat, FenringCultist, Ulv, DvergrRogue, DvergrMage, Tick, Seeker, SeekerBrood, Gjall, SeekerSoldier
+- Default value: Greyling, Neck, Ghost, Greydwarf, GreydwarfBrute, GreydwarfShaman, RancidRemains, Skeleton, Troll, Abomination, Blob, Draugr, DraugrElite, Leech, Oozer, Surtling, Wraith, Drake, Fenring, StoneGolem, Deathsquito, Fuling, FulingBerserker, FulingShaman, Growth, Serpent, Bat, FenringCultist, Ulv, DvergrRogue, DvergrMage, Tick, Seeker, SeekerBrood, Gjall, SeekerSoldier, CharredMelee, CharredArcher, CharredMage, CharredTwitcher, CharredGrunt, Morgen, Volture, BonemawSerpent, FallenValkyrie, Fader, SkeletonFire, FrostBlob, Bear, Vile, LavaBlob
 
-==== Allow Pinning Flora / [allow_pinning_flora]
+### Allow Pinning Flora / [allow_pinning_flora]
 Specify the flora to be automatic pinning.
 
-- Default value: Mushroom, Raspberries, Blueberries, CarrotSeeds, Thistle, TurnipSeeds, Cloudberries, JotunPuffs, Magecap
+- Default value: Mushroom, Raspberries, Blueberries, CarrotSeeds, Thistle, TurnipSeeds, Cloudberries, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds
 
-==== Allow Pinning Mineral / [allow_pinning_mineral]
+### Allow Pinning Mineral / [allow_pinning_mineral]
 Specify the mineral to be automatic pinning.
 
-- Default value: CopperDeposit, TinDeposit, MudPile, SilverVein, PetrifiedBone, SoftTissue
+- Default value: CopperDeposit, TinDeposit, MudPile, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit
 
-==== Allow Pinning Spawner / [allow_pinning_spawner]
+### Allow Pinning Spawner / [allow_pinning_spawner]
 Specify the spawners to be automatic pinning.
 
 - Default value:
 
-==== Allow Pinning Vehicle / [allow_pinning_vehicle]
+### Allow Pinning Vehicle / [allow_pinning_vehicle]
 Specify the vehicles to be automatic pinning.
 
-- Default value: Karve, Longship
+- Default value: Karve, Longship, Drakkar
 
-==== Allow Pinning Other Object / [allow_pinning_other]
+### Allow Pinning Other Object / [allow_pinning_other]
 Specify the other objects to be automatic pinning.
 
 - Default value: WildBeehive
 
-==== Allow Pinning Dungeon / [allow_pinning_dungeon]
+### Allow Pinning Dungeon / [allow_pinning_dungeon]
 Specify the dungeons to be automatic pinning.
 
-- Default value: BurialChambers, TrollCave, SunkenCrypts, MountainCave, InfestedMine
+- Default value: BurialChambers, TrollCave, SunkenCrypts, MountainCave, InfestedMine, MorgenHole
 
-==== Allow Pinning Spot / [allow_pinning_spot]
+### Allow Pinning Spot / [allow_pinning_spot]
 Specify the spots to be automatic pinning.
 
-- Default value: InfestedTree, FireHole, DrakeNest, GoblinCamp, TarPit, DvergrExcavation, DvergrGuardTower, DvergrHarbour, DvergrLighthouse, PetrifiedBone
+- Default value: InfestedTree, FireHole, DrakeNest, GoblinCamp, TarPit, DvergrExcavation, DvergrGuardTower, DvergrHarbour, DvergrLighthouse, PetrifiedBone, CharredFortress, LeviathanLava, BogWitchCamp
 
-==== Allow Pinning Portal / [allow_pinning_portal]
+### Allow Pinning Portal / [allow_pinning_portal]
 Enable automatic pinning for the portal. Portal is treated as a static object.
 
 - Default value: true
 
-==== Not Pinning Tamed Animals / [not_pinning_tamed_animals]
+### Not Pinning Tamed Animals / [not_pinning_tamed_animals]
 Exclude tamed animals from automatic pinning.
 
 - Default value: true
 
-==== Static Object Mapping Interval / [static_object_mapping_interval]
+### Static Object Mapping Interval / [static_object_mapping_interval]
 Specify the interval at which static object mapping. Setting to 0 disables periodic static object mapping. (Unit: second)
 
 - Default value: 0.25
 - Acceptable value range: From 0 to 4
 
-==== Static Object Caching Interval / [static_object_caching_interval]
+### Static Object Caching Interval / [static_object_caching_interval]
 Specify the interval at which static objects will be cached. Mapping of static objects uses this cache. (Unit: second)
 
 - Default value: 3
 - Acceptable value range: From 1 to 8
 
-==== Save Static Object Pins / [save_static_object_pins]
+### Save Static Object Pins / [save_static_object_pins]
 Specify whether to save the pins of static objects.
 
 - Default value: false
 
-==== Remove Pins Of Destroyed Object / [remove_pins_of_destroyed_object]
+### Remove Pins Of Destroyed Object / [remove_pins_of_destroyed_object]
 Specify whether or not to automatically remove pins of objects that have been destroyed and no longer exist.
 
 - Default value: true
 
-==== Flora Pins Merge Range / [flora_pins_merge_range]
+### Flora Pins Merge Range / [flora_pins_merge_range]
 When pinning flora, it recursively searches for the same flora that exist within a specified range and merge them into a single pin. (Unit: meter)
 
 - Default value: 8
 - Acceptable value range: From 0 to 16
 
-==== Need To Equip Wishbone For Underground Minerals / [need_to_equip_wishbone_for_underground_minerals]
+### Need To Equip Wishbone For Underground Minerals / [need_to_equip_wishbone_for_underground_minerals]
 Specify whether the wishbone needs to be equipped to attempt to pinning underground minerals.
 
 - Default value: true
 
-==== Static Object Mapping / [static_object_mapping_key]
+### Static Object Mapping / [static_object_mapping_key]
 Specify shortcut keys for mapping static objects. Setting this item disables the static object mapping at regular intervals, so that it is performed only once each time the shortcut key is pressed.
 
 - Default value:
 
-=== [ #5 Automatic Processing ] / [automatic_processing]
-==== Disable Module (Reboot Required) / [module]
+### Map Navigation Start Key / [navigation_start_key]
+Specify the modifier key used to start navigation by left-clicking a pin on the large map. Left click is fixed.
+
+- Default value: LeftShift
+
+### Mapping Performance Log / [mapping_performance_log]
+Specify whether to output automatic mapping performance metrics to the BepInEx log. This bypasses Automatics' log level options.
+
+- Default value: false
+
+## [ #5 Automatic Processing ] / [automatic_processing]
+### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: Enabled
 - Acceptable values: Enabled, Disabled
 
-==== Automatic Processing / [enable_automatic_processing]
+### Automatic Processing / [enable_automatic_processing]
 Specify whether to enable or disable the ability to automatically perform tasks such as cooking, refining, and refuel.
 
 - Default value: true
 
-==== Allow Container / [allow_container]
+### Storage Connection Effect Color / [storage_connection_effect_color]
+Specify the HTML color code used for the storage connection effect shown by automatic processing. Examples: #4FA9FF, #4FA9FFFF
+
+- Default value: #4FA9FF
+
+### Allow Container / [allow_container]
 Specify containers that allow automatic operations such as item supply and storage.
 
-- Default value: PieceChestWood, PieceChest, PieceChestBlackmetal
+- Default value: PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred
 
-==== Beehive: Allow Process / [allow_processing_by_piece_beehive]
+### Beehive: Allow Process / [allow_processing_by_piece_beehive]
 Specify the automatic processes to allow for Beehive. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Store
 
-==== Beehive: Container Search Range / [container_search_range_by_piece_beehive]
+### Beehive: Container Search Range / [container_search_range_by_piece_beehive]
 Specifies the maximum distance Beehive will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Beehive: Store Only If Product Exists In Container / [piece_beehive_store_only_if_product_exists]
+### Beehive: Container Reference Limit / [container_reference_limit_by_piece_beehive]
+Specifies the maximum number of nearby containers that Beehive will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Beehive: Store Only If Product Exists In Container / [piece_beehive_store_only_if_product_exists]
 Store only if the product item for Beehive is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Bonfire: Allow Process / [allow_processing_by_piece_bonfire]
+### Bonfire: Allow Process / [allow_processing_by_piece_bonfire]
 Specify the automatic processes to allow for Bonfire. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Bonfire: Container Search Range / [container_search_range_by_piece_bonfire]
+### Bonfire: Container Search Range / [container_search_range_by_piece_bonfire]
 Specifies the maximum distance Bonfire will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Bonfire: Number Of Fuels To Stop Refuel / [piece_bonfire_fuel_count_of_suppress_processing]
+### Bonfire: Container Reference Limit / [container_reference_limit_by_piece_bonfire]
+Specifies the maximum number of nearby containers that Bonfire will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Bonfire: Number Of Fuels To Stop Refuel / [piece_bonfire_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Bonfire will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Bonfire: Refuel Only If Fuels Run Out / [piece_bonfire_refuel_only_when_out_of_fuel]
+### Bonfire: Refuel Only If Fuels Run Out / [piece_bonfire_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Bonfire runs out.
 
 - Default value: false
 
-==== Blast furnace: Allow Process / [allow_processing_by_piece_blastfurnace]
+### Blast furnace: Allow Process / [allow_processing_by_piece_blastfurnace]
 Specify the automatic processes to allow for Blast furnace. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Craft, Refuel, Store
 - Acceptable values: None, Craft, Refuel, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
-==== Blast furnace: Container Search Range / [container_search_range_by_piece_blastfurnace]
+### Blast furnace: Container Search Range / [container_search_range_by_piece_blastfurnace]
 Specifies the maximum distance Blast furnace will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Blast furnace: Number Of Materials To Stop Supplying / [piece_blastfurnace_material_count_of_suppress_processing]
+### Blast furnace: Container Reference Limit / [container_reference_limit_by_piece_blastfurnace]
+Specifies the maximum number of nearby containers that Blast furnace will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Blast furnace: Number Of Materials To Stop Supplying / [piece_blastfurnace_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Blast furnace will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Blast furnace: Number Of Product Stacks To Stop Craft / [piece_blastfurnace_product_stacks_of_suppress_processing]
+### Blast furnace: Number Of Product Stacks To Stop Craft / [piece_blastfurnace_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Blast furnace will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Blast furnace: Supply Only If Materials Run Out / [piece_blastfurnace_supply_only_when_materials_run_out]
+### Blast furnace: Supply Only If Materials Run Out / [piece_blastfurnace_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Blast furnace run out.
 
 - Default value: false
 
-==== Blast furnace: Number Of Fuels To Stop Refuel / [piece_blastfurnace_fuel_count_of_suppress_processing]
+### Blast furnace: Number Of Fuels To Stop Refuel / [piece_blastfurnace_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Blast furnace will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Blast furnace: Refuel Only If Fuels Run Out / [piece_blastfurnace_refuel_only_when_out_of_fuel]
+### Blast furnace: Refuel Only If Fuels Run Out / [piece_blastfurnace_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Blast furnace runs out.
 
 - Default value: false
 
-==== Blast furnace: Refuel Only When Materials Supplied / [piece_blastfurnace_refuel_only_when_materials_supplied]
+### Blast furnace: Refuel Only When Materials Supplied / [piece_blastfurnace_refuel_only_when_materials_supplied]
 Refuel only when material items are supplied to Blast furnace.
 
 - Default value: false
 
-==== Blast furnace: Store Only If Product Exists In Container / [piece_blastfurnace_store_only_if_product_exists]
+### Blast furnace: Store Only If Product Exists In Container / [piece_blastfurnace_store_only_if_product_exists]
 Store only if the product item for Blast furnace is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Campfire: Allow Process / [allow_processing_by_piece_firepit]
+### Campfire: Allow Process / [allow_processing_by_piece_firepit]
 Specify the automatic processes to allow for Campfire. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Campfire: Container Search Range / [container_search_range_by_piece_firepit]
+### Campfire: Container Search Range / [container_search_range_by_piece_firepit]
 Specifies the maximum distance Campfire will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Campfire: Number Of Fuels To Stop Refuel / [piece_firepit_fuel_count_of_suppress_processing]
+### Campfire: Container Reference Limit / [container_reference_limit_by_piece_firepit]
+Specifies the maximum number of nearby containers that Campfire will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Campfire: Number Of Fuels To Stop Refuel / [piece_firepit_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Campfire will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Campfire: Refuel Only If Fuels Run Out / [piece_firepit_refuel_only_when_out_of_fuel]
+### Campfire: Refuel Only If Fuels Run Out / [piece_firepit_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Campfire runs out.
 
 - Default value: false
 
-==== Charcoal kiln: Allow Process / [allow_processing_by_piece_charcoalkiln]
+### Charcoal kiln: Allow Process / [allow_processing_by_piece_charcoalkiln]
 Specify the automatic processes to allow for Charcoal kiln. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Craft, Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Charcoal kiln: Container Search Range / [container_search_range_by_piece_charcoalkiln]
+### Charcoal kiln: Container Search Range / [container_search_range_by_piece_charcoalkiln]
 Specifies the maximum distance Charcoal kiln will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Charcoal kiln: Number Of Materials To Stop Supplying / [piece_charcoalkiln_material_count_of_suppress_processing]
+### Charcoal kiln: Container Reference Limit / [container_reference_limit_by_piece_charcoalkiln]
+Specifies the maximum number of nearby containers that Charcoal kiln will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Charcoal kiln: Number Of Materials To Stop Supplying / [piece_charcoalkiln_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Charcoal kiln will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Charcoal kiln: Number Of Product Stacks To Stop Craft / [piece_charcoalkiln_product_stacks_of_suppress_processing]
+### Charcoal kiln: Number Of Product Stacks To Stop Craft / [piece_charcoalkiln_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Charcoal kiln will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Charcoal kiln: Supply Only If Materials Run Out / [piece_charcoalkiln_supply_only_when_materials_run_out]
+### Charcoal kiln: Supply Only If Materials Run Out / [piece_charcoalkiln_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Charcoal kiln run out.
 
 - Default value: false
 
-==== Charcoal kiln: Store Only If Product Exists In Container / [piece_charcoalkiln_store_only_if_product_exists]
+### Charcoal kiln: Store Only If Product Exists In Container / [piece_charcoalkiln_store_only_if_product_exists]
 Store only if the product item for Charcoal kiln is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Cooking station: Allow Process / [allow_processing_by_piece_cookingstation]
+### Cooking station: Allow Process / [allow_processing_by_piece_cookingstation]
 Specify the automatic processes to allow for Cooking station. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Cooking station: Container Search Range / [container_search_range_by_piece_cookingstation]
+### Cooking station: Container Search Range / [container_search_range_by_piece_cookingstation]
 Specifies the maximum distance Cooking station will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Cooking station: Number Of Materials To Stop Supplying / [piece_cookingstation_material_count_of_suppress_processing]
+### Cooking station: Container Reference Limit / [container_reference_limit_by_piece_cookingstation]
+Specifies the maximum number of nearby containers that Cooking station will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Cooking station: Number Of Materials To Stop Supplying / [piece_cookingstation_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Cooking station will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Cooking station: Number Of Product Stacks To Stop Craft / [piece_cookingstation_product_stacks_of_suppress_processing]
+### Cooking station: Number Of Product Stacks To Stop Craft / [piece_cookingstation_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Cooking station will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Cooking station: Supply Only If Materials Run Out / [piece_cookingstation_supply_only_when_materials_run_out]
+### Cooking station: Supply Only If Materials Run Out / [piece_cookingstation_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Cooking station run out.
 
 - Default value: false
 
-==== Cooking station: Store Only If Product Exists In Container / [piece_cookingstation_store_only_if_product_exists]
+### Cooking station: Store Only If Product Exists In Container / [piece_cookingstation_store_only_if_product_exists]
 Store only if the product item for Cooking station is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Fermenter: Allow Process / [allow_processing_by_piece_fermenter]
+### Fermenter: Allow Process / [allow_processing_by_piece_fermenter]
 Specify the automatic processes to allow for Fermenter. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Craft, Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Fermenter: Container Search Range / [container_search_range_by_piece_fermenter]
+### Fermenter: Container Search Range / [container_search_range_by_piece_fermenter]
 Specifies the maximum distance Fermenter will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Fermenter: Number Of Materials To Stop Supplying / [piece_fermenter_material_count_of_suppress_processing]
+### Fermenter: Container Reference Limit / [container_reference_limit_by_piece_fermenter]
+Specifies the maximum number of nearby containers that Fermenter will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Fermenter: Number Of Materials To Stop Supplying / [piece_fermenter_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Fermenter will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Fermenter: Number Of Product Stacks To Stop Craft / [piece_fermenter_product_stacks_of_suppress_processing]
+### Fermenter: Number Of Product Stacks To Stop Craft / [piece_fermenter_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Fermenter will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Fermenter: Supply Only If Materials Run Out / [piece_fermenter_supply_only_when_materials_run_out]
+### Fermenter: Supply Only If Materials Run Out / [piece_fermenter_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Fermenter run out.
 
 - Default value: false
 
-==== Fermenter: Store Only If Product Exists In Container / [piece_fermenter_store_only_if_product_exists]
+### Fermenter: Store Only If Product Exists In Container / [piece_fermenter_store_only_if_product_exists]
 Store only if the product item for Fermenter is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Hanging brazier: Allow Process / [allow_processing_by_piece_brazierceiling01]
+### Hanging brazier: Allow Process / [allow_processing_by_piece_brazierceiling01]
 Specify the automatic processes to allow for Hanging brazier. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Hanging brazier: Container Search Range / [container_search_range_by_piece_brazierceiling01]
+### Hanging brazier: Container Search Range / [container_search_range_by_piece_brazierceiling01]
 Specifies the maximum distance Hanging brazier will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Hanging brazier: Number Of Fuels To Stop Refuel / [piece_brazierceiling01_fuel_count_of_suppress_processing]
+### Hanging brazier: Container Reference Limit / [container_reference_limit_by_piece_brazierceiling01]
+Specifies the maximum number of nearby containers that Hanging brazier will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Hanging brazier: Number Of Fuels To Stop Refuel / [piece_brazierceiling01_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Hanging brazier will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Hanging brazier: Refuel Only If Fuels Run Out / [piece_brazierceiling01_refuel_only_when_out_of_fuel]
+### Hanging brazier: Refuel Only If Fuels Run Out / [piece_brazierceiling01_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Hanging brazier runs out.
 
 - Default value: false
 
-==== Hearth: Allow Process / [allow_processing_by_piece_hearth]
+### Hearth: Allow Process / [allow_processing_by_piece_hearth]
 Specify the automatic processes to allow for Hearth. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Hearth: Container Search Range / [container_search_range_by_piece_hearth]
+### Hearth: Container Search Range / [container_search_range_by_piece_hearth]
 Specifies the maximum distance Hearth will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Hearth: Number Of Fuels To Stop Refuel / [piece_hearth_fuel_count_of_suppress_processing]
+### Hearth: Container Reference Limit / [container_reference_limit_by_piece_hearth]
+Specifies the maximum number of nearby containers that Hearth will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Hearth: Number Of Fuels To Stop Refuel / [piece_hearth_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Hearth will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Hearth: Refuel Only If Fuels Run Out / [piece_hearth_refuel_only_when_out_of_fuel]
+### Hearth: Refuel Only If Fuels Run Out / [piece_hearth_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Hearth runs out.
 
 - Default value: false
 
-==== Iron cooking station: Allow Process / [allow_processing_by_piece_cookingstation_iron]
+### Iron cooking station: Allow Process / [allow_processing_by_piece_cookingstation_iron]
 Specify the automatic processes to allow for Iron cooking station. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Iron cooking station: Container Search Range / [container_search_range_by_piece_cookingstation_iron]
+### Iron cooking station: Container Search Range / [container_search_range_by_piece_cookingstation_iron]
 Specifies the maximum distance Iron cooking station will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Iron cooking station: Number Of Materials To Stop Supplying / [piece_cookingstation_iron_material_count_of_suppress_processing]
+### Iron cooking station: Container Reference Limit / [container_reference_limit_by_piece_cookingstation_iron]
+Specifies the maximum number of nearby containers that Iron cooking station will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Iron cooking station: Number Of Materials To Stop Supplying / [piece_cookingstation_iron_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Iron cooking station will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Iron cooking station: Number Of Product Stacks To Stop Craft / [piece_cookingstation_iron_product_stacks_of_suppress_processing]
+### Iron cooking station: Number Of Product Stacks To Stop Craft / [piece_cookingstation_iron_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Iron cooking station will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Iron cooking station: Supply Only If Materials Run Out / [piece_cookingstation_iron_supply_only_when_materials_run_out]
+### Iron cooking station: Supply Only If Materials Run Out / [piece_cookingstation_iron_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Iron cooking station run out.
 
 - Default value: false
 
-==== Iron cooking station: Store Only If Product Exists In Container / [piece_cookingstation_iron_store_only_if_product_exists]
+### Iron cooking station: Store Only If Product Exists In Container / [piece_cookingstation_iron_store_only_if_product_exists]
 Store only if the product item for Iron cooking station is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Jack-o-turnip: Allow Process / [allow_processing_by_piece_jackoturnip]
+### Jack-o-turnip: Allow Process / [allow_processing_by_piece_jackoturnip]
 Specify the automatic processes to allow for Jack-o-turnip. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Jack-o-turnip: Container Search Range / [container_search_range_by_piece_jackoturnip]
+### Jack-o-turnip: Container Search Range / [container_search_range_by_piece_jackoturnip]
 Specifies the maximum distance Jack-o-turnip will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Jack-o-turnip: Number Of Fuels To Stop Refuel / [piece_jackoturnip_fuel_count_of_suppress_processing]
+### Jack-o-turnip: Container Reference Limit / [container_reference_limit_by_piece_jackoturnip]
+Specifies the maximum number of nearby containers that Jack-o-turnip will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Jack-o-turnip: Number Of Fuels To Stop Refuel / [piece_jackoturnip_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Jack-o-turnip will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Jack-o-turnip: Refuel Only If Fuels Run Out / [piece_jackoturnip_refuel_only_when_out_of_fuel]
+### Jack-o-turnip: Refuel Only If Fuels Run Out / [piece_jackoturnip_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Jack-o-turnip runs out.
 
 - Default value: false
 
-==== Sconce: Allow Process / [allow_processing_by_piece_sconce]
+### Sconce: Allow Process / [allow_processing_by_piece_sconce]
 Specify the automatic processes to allow for Sconce. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Sconce: Container Search Range / [container_search_range_by_piece_sconce]
+### Sconce: Container Search Range / [container_search_range_by_piece_sconce]
 Specifies the maximum distance Sconce will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Sconce: Number Of Fuels To Stop Refuel / [piece_sconce_fuel_count_of_suppress_processing]
+### Sconce: Container Reference Limit / [container_reference_limit_by_piece_sconce]
+Specifies the maximum number of nearby containers that Sconce will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Sconce: Number Of Fuels To Stop Refuel / [piece_sconce_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Sconce will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Sconce: Refuel Only If Fuels Run Out / [piece_sconce_refuel_only_when_out_of_fuel]
+### Sconce: Refuel Only If Fuels Run Out / [piece_sconce_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Sconce runs out.
 
 - Default value: false
 
-==== Smelter: Allow Process / [allow_processing_by_piece_smelter]
+### Smelter: Allow Process / [allow_processing_by_piece_smelter]
 Specify the automatic processes to allow for Smelter. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Craft, Refuel, Store
 - Acceptable values: None, Craft, Refuel, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
-==== Smelter: Container Search Range / [container_search_range_by_piece_smelter]
+### Smelter: Container Search Range / [container_search_range_by_piece_smelter]
 Specifies the maximum distance Smelter will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Smelter: Number Of Materials To Stop Supplying / [piece_smelter_material_count_of_suppress_processing]
+### Smelter: Container Reference Limit / [container_reference_limit_by_piece_smelter]
+Specifies the maximum number of nearby containers that Smelter will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Smelter: Number Of Materials To Stop Supplying / [piece_smelter_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Smelter will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Smelter: Number Of Product Stacks To Stop Craft / [piece_smelter_product_stacks_of_suppress_processing]
+### Smelter: Number Of Product Stacks To Stop Craft / [piece_smelter_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Smelter will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Smelter: Supply Only If Materials Run Out / [piece_smelter_supply_only_when_materials_run_out]
+### Smelter: Supply Only If Materials Run Out / [piece_smelter_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Smelter run out.
 
 - Default value: false
 
-==== Smelter: Number Of Fuels To Stop Refuel / [piece_smelter_fuel_count_of_suppress_processing]
+### Smelter: Number Of Fuels To Stop Refuel / [piece_smelter_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Smelter will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Smelter: Refuel Only If Fuels Run Out / [piece_smelter_refuel_only_when_out_of_fuel]
+### Smelter: Refuel Only If Fuels Run Out / [piece_smelter_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Smelter runs out.
 
 - Default value: false
 
-==== Smelter: Refuel Only When Materials Supplied / [piece_smelter_refuel_only_when_materials_supplied]
+### Smelter: Refuel Only When Materials Supplied / [piece_smelter_refuel_only_when_materials_supplied]
 Refuel only when material items are supplied to Smelter.
 
 - Default value: false
 
-==== Smelter: Store Only If Product Exists In Container / [piece_smelter_store_only_if_product_exists]
+### Smelter: Store Only If Product Exists In Container / [piece_smelter_store_only_if_product_exists]
 Store only if the product item for Smelter is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Spinning wheel: Allow Process / [allow_processing_by_piece_spinningwheel]
+### Spinning wheel: Allow Process / [allow_processing_by_piece_spinningwheel]
 Specify the automatic processes to allow for Spinning wheel. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Spinning wheel: Container Search Range / [container_search_range_by_piece_spinningwheel]
+### Spinning wheel: Container Search Range / [container_search_range_by_piece_spinningwheel]
 Specifies the maximum distance Spinning wheel will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Spinning wheel: Number Of Materials To Stop Supplying / [piece_spinningwheel_material_count_of_suppress_processing]
+### Spinning wheel: Container Reference Limit / [container_reference_limit_by_piece_spinningwheel]
+Specifies the maximum number of nearby containers that Spinning wheel will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Spinning wheel: Number Of Materials To Stop Supplying / [piece_spinningwheel_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Spinning wheel will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Spinning wheel: Number Of Product Stacks To Stop Craft / [piece_spinningwheel_product_stacks_of_suppress_processing]
+### Spinning wheel: Number Of Product Stacks To Stop Craft / [piece_spinningwheel_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Spinning wheel will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Spinning wheel: Supply Only If Materials Run Out / [piece_spinningwheel_supply_only_when_materials_run_out]
+### Spinning wheel: Supply Only If Materials Run Out / [piece_spinningwheel_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Spinning wheel run out.
 
 - Default value: false
 
-==== Spinning wheel: Store Only If Product Exists In Container / [piece_spinningwheel_store_only_if_product_exists]
+### Spinning wheel: Store Only If Product Exists In Container / [piece_spinningwheel_store_only_if_product_exists]
 Store only if the product item for Spinning wheel is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Standing blue-burning iron torch: Allow Process / [allow_processing_by_piece_groundtorchblue]
+### Standing blue-burning iron torch: Allow Process / [allow_processing_by_piece_groundtorchblue]
 Specify the automatic processes to allow for Standing blue-burning iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Standing blue-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchblue]
+### Standing blue-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchblue]
 Specifies the maximum distance Standing blue-burning iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Standing blue-burning iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorchblue_fuel_count_of_suppress_processing]
+### Standing blue-burning iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchblue]
+Specifies the maximum number of nearby containers that Standing blue-burning iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Standing blue-burning iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorchblue_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing blue-burning iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Standing blue-burning iron torch: Refuel Only If Fuels Run Out / [piece_groundtorchblue_refuel_only_when_out_of_fuel]
+### Standing blue-burning iron torch: Refuel Only If Fuels Run Out / [piece_groundtorchblue_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Standing blue-burning iron torch runs out.
 
 - Default value: false
 
-==== Standing brazier: Allow Process / [allow_processing_by_piece_brazierfloor01]
+### Standing brazier: Allow Process / [allow_processing_by_piece_brazierfloor01]
 Specify the automatic processes to allow for Standing brazier. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Standing brazier: Container Search Range / [container_search_range_by_piece_brazierfloor01]
+### Standing brazier: Container Search Range / [container_search_range_by_piece_brazierfloor01]
 Specifies the maximum distance Standing brazier will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Standing brazier: Number Of Fuels To Stop Refuel / [piece_brazierfloor01_fuel_count_of_suppress_processing]
+### Standing brazier: Container Reference Limit / [container_reference_limit_by_piece_brazierfloor01]
+Specifies the maximum number of nearby containers that Standing brazier will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Standing brazier: Number Of Fuels To Stop Refuel / [piece_brazierfloor01_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing brazier will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Standing brazier: Refuel Only If Fuels Run Out / [piece_brazierfloor01_refuel_only_when_out_of_fuel]
+### Standing brazier: Refuel Only If Fuels Run Out / [piece_brazierfloor01_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Standing brazier runs out.
 
 - Default value: false
 
-==== Standing green-burning iron torch: Allow Process / [allow_processing_by_piece_groundtorchgreen]
+### Standing green-burning iron torch: Allow Process / [allow_processing_by_piece_groundtorchgreen]
 Specify the automatic processes to allow for Standing green-burning iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Standing green-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchgreen]
+### Standing green-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchgreen]
 Specifies the maximum distance Standing green-burning iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Standing green-burning iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorchgreen_fuel_count_of_suppress_processing]
+### Standing green-burning iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchgreen]
+Specifies the maximum number of nearby containers that Standing green-burning iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Standing green-burning iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorchgreen_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing green-burning iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Standing green-burning iron torch: Refuel Only If Fuels Run Out / [piece_groundtorchgreen_refuel_only_when_out_of_fuel]
+### Standing green-burning iron torch: Refuel Only If Fuels Run Out / [piece_groundtorchgreen_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Standing green-burning iron torch runs out.
 
 - Default value: false
 
-==== Standing iron torch: Allow Process / [allow_processing_by_piece_groundtorch]
+### Standing iron torch: Allow Process / [allow_processing_by_piece_groundtorch]
 Specify the automatic processes to allow for Standing iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Standing iron torch: Container Search Range / [container_search_range_by_piece_groundtorch]
+### Standing iron torch: Container Search Range / [container_search_range_by_piece_groundtorch]
 Specifies the maximum distance Standing iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Standing iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorch_fuel_count_of_suppress_processing]
+### Standing iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorch]
+Specifies the maximum number of nearby containers that Standing iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Standing iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorch_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Standing iron torch: Refuel Only If Fuels Run Out / [piece_groundtorch_refuel_only_when_out_of_fuel]
+### Standing iron torch: Refuel Only If Fuels Run Out / [piece_groundtorch_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Standing iron torch runs out.
 
 - Default value: false
 
-==== Standing wood torch: Allow Process / [allow_processing_by_piece_groundtorchwood]
+### Standing wood torch: Allow Process / [allow_processing_by_piece_groundtorchwood]
 Specify the automatic processes to allow for Standing wood torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Refuel
 - Acceptable values: None, Refuel
 
-==== Standing wood torch: Container Search Range / [container_search_range_by_piece_groundtorchwood]
+### Standing wood torch: Container Search Range / [container_search_range_by_piece_groundtorchwood]
 Specifies the maximum distance Standing wood torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Standing wood torch: Number Of Fuels To Stop Refuel / [piece_groundtorchwood_fuel_count_of_suppress_processing]
+### Standing wood torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchwood]
+Specifies the maximum number of nearby containers that Standing wood torch will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Standing wood torch: Number Of Fuels To Stop Refuel / [piece_groundtorchwood_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing wood torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Standing wood torch: Refuel Only If Fuels Run Out / [piece_groundtorchwood_refuel_only_when_out_of_fuel]
+### Standing wood torch: Refuel Only If Fuels Run Out / [piece_groundtorchwood_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Standing wood torch runs out.
 
 - Default value: false
 
-==== Stone oven: Allow Process / [allow_processing_by_piece_oven]
+### Stone oven: Allow Process / [allow_processing_by_piece_oven]
 Specify the automatic processes to allow for Stone oven. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Craft, Refuel, Store
 - Acceptable values: None, Craft, Refuel, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
-==== Stone oven: Container Search Range / [container_search_range_by_piece_oven]
+### Stone oven: Container Search Range / [container_search_range_by_piece_oven]
 Specifies the maximum distance Stone oven will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Stone oven: Number Of Materials To Stop Supplying / [piece_oven_material_count_of_suppress_processing]
+### Stone oven: Container Reference Limit / [container_reference_limit_by_piece_oven]
+Specifies the maximum number of nearby containers that Stone oven will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Stone oven: Number Of Materials To Stop Supplying / [piece_oven_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Stone oven will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Stone oven: Number Of Product Stacks To Stop Craft / [piece_oven_product_stacks_of_suppress_processing]
+### Stone oven: Number Of Product Stacks To Stop Craft / [piece_oven_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Stone oven will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Stone oven: Supply Only If Materials Run Out / [piece_oven_supply_only_when_materials_run_out]
+### Stone oven: Supply Only If Materials Run Out / [piece_oven_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Stone oven run out.
 
 - Default value: false
 
-==== Stone oven: Number Of Fuels To Stop Refuel / [piece_oven_fuel_count_of_suppress_processing]
+### Stone oven: Number Of Fuels To Stop Refuel / [piece_oven_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Stone oven will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Stone oven: Refuel Only If Fuels Run Out / [piece_oven_refuel_only_when_out_of_fuel]
+### Stone oven: Refuel Only If Fuels Run Out / [piece_oven_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Stone oven runs out.
 
 - Default value: false
 
-==== Stone oven: Refuel Only When Materials Supplied / [piece_oven_refuel_only_when_materials_supplied]
+### Stone oven: Refuel Only When Materials Supplied / [piece_oven_refuel_only_when_materials_supplied]
 Refuel only when material items are supplied to Stone oven.
 
 - Default value: false
 
-==== Stone oven: Store Only If Product Exists In Container / [piece_oven_store_only_if_product_exists]
+### Stone oven: Store Only If Product Exists In Container / [piece_oven_store_only_if_product_exists]
 Store only if the product item for Stone oven is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Windmill: Allow Process / [allow_processing_by_piece_windmill]
+### Windmill: Allow Process / [allow_processing_by_piece_windmill]
 Specify the automatic processes to allow for Windmill. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
-==== Windmill: Container Search Range / [container_search_range_by_piece_windmill]
+### Windmill: Container Search Range / [container_search_range_by_piece_windmill]
 Specifies the maximum distance Windmill will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Windmill: Number Of Materials To Stop Supplying / [piece_windmill_material_count_of_suppress_processing]
+### Windmill: Container Reference Limit / [container_reference_limit_by_piece_windmill]
+Specifies the maximum number of nearby containers that Windmill will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Windmill: Number Of Materials To Stop Supplying / [piece_windmill_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Windmill will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Windmill: Number Of Product Stacks To Stop Craft / [piece_windmill_product_stacks_of_suppress_processing]
+### Windmill: Number Of Product Stacks To Stop Craft / [piece_windmill_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Windmill will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Windmill: Supply Only If Materials Run Out / [piece_windmill_supply_only_when_materials_run_out]
+### Windmill: Supply Only If Materials Run Out / [piece_windmill_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Windmill run out.
 
 - Default value: false
 
-==== Windmill: Store Only If Product Exists In Container / [piece_windmill_store_only_if_product_exists]
+### Windmill: Store Only If Product Exists In Container / [piece_windmill_store_only_if_product_exists]
 Store only if the product item for Windmill is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Wisp fountain: Allow Process / [allow_processing_by_piece_wisplure]
+### Wisp fountain: Allow Process / [allow_processing_by_piece_wisplure]
 Specify the automatic processes to allow for Wisp fountain. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Store
 
-==== Wisp fountain: Container Search Range / [container_search_range_by_piece_wisplure]
+### Wisp fountain: Container Search Range / [container_search_range_by_piece_wisplure]
 Specifies the maximum distance Wisp fountain will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Wisp fountain: Store Only If Product Exists In Container / [piece_wisplure_store_only_if_product_exists]
+### Wisp fountain: Container Reference Limit / [container_reference_limit_by_piece_wisplure]
+Specifies the maximum number of nearby containers that Wisp fountain will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Wisp fountain: Store Only If Product Exists In Container / [piece_wisplure_store_only_if_product_exists]
 Store only if the product item for Wisp fountain is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Sap extractor : Allow Process / [allow_processing_by_piece_sapcollector]
+### Sap extractor : Allow Process / [allow_processing_by_piece_sapcollector]
 Specify the automatic processes to allow for Sap extractor . "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Store
 
-==== Sap extractor : Container Search Range / [container_search_range_by_piece_sapcollector]
+### Sap extractor : Container Search Range / [container_search_range_by_piece_sapcollector]
 Specifies the maximum distance Sap extractor  will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Sap extractor : Store Only If Product Exists In Container / [piece_sapcollector_store_only_if_product_exists]
+### Sap extractor : Container Reference Limit / [container_reference_limit_by_piece_sapcollector]
+Specifies the maximum number of nearby containers that Sap extractor  will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Sap extractor : Store Only If Product Exists In Container / [piece_sapcollector_store_only_if_product_exists]
 Store only if the product item for Sap extractor  is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Eitr refinery: Allow Process / [allow_processing_by_piece_eitrrefinery]
+### Eitr refinery: Allow Process / [allow_processing_by_piece_eitrrefinery]
 Specify the automatic processes to allow for Eitr refinery. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Store
 - Acceptable values: None, Craft, Refuel, Store
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
-==== Eitr refinery: Container Search Range / [container_search_range_by_piece_eitrrefinery]
+### Eitr refinery: Container Search Range / [container_search_range_by_piece_eitrrefinery]
 Specifies the maximum distance Eitr refinery will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Eitr refinery: Number Of Materials To Stop Supplying / [piece_eitrrefinery_material_count_of_suppress_processing]
+### Eitr refinery: Container Reference Limit / [container_reference_limit_by_piece_eitrrefinery]
+Specifies the maximum number of nearby containers that Eitr refinery will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Eitr refinery: Number Of Materials To Stop Supplying / [piece_eitrrefinery_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Eitr refinery will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Eitr refinery: Number Of Product Stacks To Stop Craft / [piece_eitrrefinery_product_stacks_of_suppress_processing]
+### Eitr refinery: Number Of Product Stacks To Stop Craft / [piece_eitrrefinery_product_stacks_of_suppress_processing]
 When the number of product item stacks stored in the container is about to exceed the specified quantity, craft by Eitr refinery will be stopped. If set to 0, stopping craft based on the number of product items will be disabled.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-==== Eitr refinery: Supply Only If Materials Run Out / [piece_eitrrefinery_supply_only_when_materials_run_out]
+### Eitr refinery: Supply Only If Materials Run Out / [piece_eitrrefinery_supply_only_when_materials_run_out]
 Supply one material item only when the materials supplied to Eitr refinery run out.
 
 - Default value: false
 
-==== Eitr refinery: Number Of Fuels To Stop Refuel / [piece_eitrrefinery_fuel_count_of_suppress_processing]
+### Eitr refinery: Number Of Fuels To Stop Refuel / [piece_eitrrefinery_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Eitr refinery will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-==== Eitr refinery: Refuel Only If Fuels Run Out / [piece_eitrrefinery_refuel_only_when_out_of_fuel]
+### Eitr refinery: Refuel Only If Fuels Run Out / [piece_eitrrefinery_refuel_only_when_out_of_fuel]
 Refuel only when the fuel for Eitr refinery runs out.
 
 - Default value: false
 
-==== Eitr refinery: Refuel Only When Materials Supplied / [piece_eitrrefinery_refuel_only_when_materials_supplied]
+### Eitr refinery: Refuel Only When Materials Supplied / [piece_eitrrefinery_refuel_only_when_materials_supplied]
 Refuel only when material items are supplied to Eitr refinery.
 
 - Default value: false
 
-==== Eitr refinery: Store Only If Product Exists In Container / [piece_eitrrefinery_store_only_if_product_exists]
+### Eitr refinery: Store Only If Product Exists In Container / [piece_eitrrefinery_store_only_if_product_exists]
 Store only if the product item for Eitr refinery is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 
 - Default value: false
 
-==== Ballista: Allow Process / [allow_processing_by_piece_turret]
+### Ballista: Allow Process / [allow_processing_by_piece_turret]
 Specify the automatic processes to allow for Ballista. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
 - Default value: Charge
 - Acceptable values: None, Charge
 
-==== Ballista: Container Search Range / [container_search_range_by_piece_turret]
+### Ballista: Container Search Range / [container_search_range_by_piece_turret]
 Specifies the maximum distance Ballista will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
-==== Ballista: Number Of Items To Stop Charge / [piece_turret_number_of_items_to_stop_charge]
+### Ballista: Container Reference Limit / [container_reference_limit_by_piece_turret]
+Specifies the maximum number of nearby containers that Ballista will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Ballista: Number Of Items To Stop Charge / [piece_turret_number_of_items_to_stop_charge]
 When the number of items stored in the container is about to become less than the specified quantity, charge to Ballista will be stopped. If set to 0, stopping charge based on the number of items will be disabled.
 
 - Default value: 1
 - Acceptable value range: From 0 to 999
 
-=== [ #6 Automatic Feeding ] / [automatic_feeding]
-==== Disable Module (Reboot Required) / [module]
+## [ #6 Automatic Feeding ] / [automatic_feeding]
+### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: Enabled
 - Acceptable values: Enabled, Disabled
 
-==== Automatic Feeding / [enable_automatic_feeding]
+### Automatic Feeding / [enable_automatic_feeding]
 Specify whether to enable the feature for animals to automatically consume feed items from players and containers.
 
 - Default value: true
 
-==== Feed Search Range / [feed_search_range]
+### Feed Search Range / [feed_search_range]
 Specify the range in which the animal searches for food. If set to 0, the default value for each animal will be used. (Unit: meter)
 
 - Default value: 0
 - Acceptable value range: From 0 to 64
 
-==== Need Get Close To Eat The Feed / [need_get_close_to_eat_the_feed]
+### Need Get Close To Eat The Feed / [need_get_close_to_eat_the_feed]
 Specify whether the animal needs to approach the container or player to eat the feed.
 
 - Default value: false
 
-==== Allow To Feed From Container / [allow_to_feed_from_container]
+### Allow To Feed From Container / [allow_to_feed_from_container]
 Specify the types of animals allowed to feed from the container.
 
 - Default value: Tamed
 - Acceptable values: None, Wild, Tamed, All
 - Multiple values can be set at the same time by separating them with , (e.g. Wild, Tamed)
 
-==== Allow To Feed From Player / [allow_to_feed_from_player]
+### Allow To Feed From Player / [allow_to_feed_from_player]
 Specify the types of animals allowed to feed from the player inventory.
 
 - Default value: None
 - Acceptable values: None, Wild, Tamed, All
 - Multiple values can be set at the same time by separating them with , (e.g. Wild, Tamed)
 
-=== [ #7 Automatic Repair ] / [automatic_repair]
-==== Disable Module (Reboot Required) / [module]
+## [ #7 Automatic Repair ] / [automatic_repair]
+### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: Enabled
 - Acceptable values: Enabled, Disabled
 
-==== Automatic Repair / [enable_automatic_repair]
+### Automatic Repair / [enable_automatic_repair]
 Specify whether to enable the feature that automatically repair items and pieces.
 
 - Default value: true
 
-==== Crafting Station Search Range / [crafting_station_search_range]
+### Crafting Station Search Range / [crafting_station_search_range]
 Specify the range to search for a crafting station to be used to repair items. Setting to 0 disables periodic item repair. (Unit: meters)
 
 - Default value: 16
 - Acceptable value range: From 0 to 64
 
-==== Repair Items When Accessing The Crafting Station / [repair_items_when_accessing_the_crafting_station]
+### Repair Items When Accessing The Crafting Station / [repair_items_when_accessing_the_crafting_station]
 Specify whether or not to repair all items that can be repaired when the workbench GUI is opened.
 
 - Default value: false
 
-==== Item Repair Message / [item_repair_message]
+### Item Repair Message / [item_repair_message]
 Specify where the message is displayed when an item is repaired.
 
 - Default value: None
 - Acceptable values: None, Center, TopLeft
 
-==== Piece Search Range / [piece_search_range]
+### Piece Search Range / [piece_search_range]
 Specify the range to search for a pieces to repair. Setting to 0 disables periodic pieces repairs. (Unit: meters)
 
 - Default value: 16
 - Acceptable value range: From 0 to 64
 
-==== Piece Repair Message / [piece_repair_message]
+### Piece Repair Message / [piece_repair_message]
 Specify where the message is displayed when a piece is repaired.
 
 - Default value: None
 - Acceptable values: None, Center, TopLeft
 
-=== [ #8 Automatic Mining ] / [automatic_mining]
-==== Disable Module (Reboot Required) / [module]
+## [ #8 Automatic Mining ] / [automatic_mining]
+### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: Enabled
 - Acceptable values: Enabled, Disabled
 
-==== Automatic Mining / [enable_automatic_mining]
+### Automatic Mining / [enable_automatic_mining]
 Specify whether to enable the feature that mine minerals automatically.
 
 - Default value: true
 
-==== Mining Interval / [mining_interval]
+### Mining Interval / [mining_interval]
 Specify the interval between mining attempts. (Unit: seconds)
 
 - Default value: 1.5
 - Acceptable value range: From 0.1 to 4
 
-==== Mining Range / [mining_range]
+### Mining Range / [mining_range]
 Specify the maximum distance to search for a mineral. Setting to 0 the pickaxe's attack range is used. (Unit: meters)
 
 - Default value: 3
 - Acceptable value range: From 0 to 32
 
-==== Allow Mining Mineral / [allow_mining_mineral]
+### Allow Mining Mineral / [allow_mining_mineral]
 Specify the minerals to be automatically mined.
 
-- Default value: CopperDeposit, TinDeposit, MudPile, ObsidianDeposit, SilverVein, PetrifiedBone, SoftTissue
+- Default value: CopperDeposit, TinDeposit, MudPile, ObsidianDeposit, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit
 
-==== Need To Equip Pickaxe For Mining / [need_to_equip_pickaxe]
+### Need To Equip Pickaxe For Mining / [need_to_equip_pickaxe]
 Specify whether a pickaxe needs to be equipped to attempt automatic mining. Disabling this option will use the most advanced pickaxe in the player's inventory. If there is no pickaxe in the player's inventory, automatic mining will not be attempted.
 
 - Default value: true
 
-==== Allow Mining Underground Minerals / [allow_mining_underground_minerals]
+### Allow Mining Underground Minerals / [allow_mining_underground_minerals]
 Specify whether or not to allow mining underground minerals.
 
 - Default value: true
 
-==== Need To Wishbone For Mining Underground Minerals / [need_to_equip_wishbone_for_mining_underground_minerals]
+### Need To Wishbone For Mining Underground Minerals / [need_to_equip_wishbone_for_mining_underground_minerals]
 Specify whether or not to require a wishbone to mine underground minerals.
 
 - Default value: true
 
-==== Attempt Mining / [mining_key]
+### Attempt Mining / [mining_key]
 Specify a shortcut key to attempt mining. If a valid shortcut key is assigned to this option, mining at regular intervals is disabled.
 
 - Default value:
 
-=== [ #9 Automatic Pickup ] / [automatic_pickup]
-==== Disable Module (Reboot Required) / [module]
+## [ #9 Automatic Pickup ] / [automatic_pickup]
+### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
 - Default value: Enabled
 - Acceptable values: Enabled, Disabled
 
-==== Automatic Pickup Range / [automatic_pickup_range]
+### Automatic Pickup Range / [automatic_pickup_range]
 Specify the range within which objects are automatically pickup. (Unit: meters)
 
 - Default value: 4
 - Acceptable value range: From 1 to 64
 
-==== Automatic Pickup Interval / [automatic_pickup_interval]
+### Automatic Pickup Interval / [automatic_pickup_interval]
 Specify the interval within which objects are automatically pickup. Setting it to 0 disables periodic automatic pickup. (Unit: second)
 
 - Default value: 0.5
 - Acceptable value range: From 0 to 4
 
-==== Pickup All Nearby / [pickup_all_nearby_key]
+### Pickup All Nearby / [pickup_all_nearby_key]
 Interacting with pickable objects using this key makes it possible to pick up the same object in a range at once. If a valid shortcut key is assigned to this option, pickup at regular intervals is disabled.
 
 - Default value:
