@@ -80,7 +80,8 @@ Describes information about the target to which the icon is applied.
 
 #### name
 
-Specify a display name such as `Boar` or an internal name such as `$enemy_boar`; See the [Matching by "Display name" and "Internal name"](../README.md#matching-by-display-name-and-internal-name) section for the difference between matching by display name and internal name.
+Specify a display name such as `Boar` or an internal name such as `$enemy_boar`.
+See [Display name and internal name matching](user-guide.md#display-name-and-internal-name-matching) for the difference between matching by display name and internal name.
 
 #### prefabName
 
