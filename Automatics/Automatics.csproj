@@ -21,14 +21,27 @@
     <NormalizedPlatform Condition="'$(NormalizedPlatform)' == ''">$(Platform)</NormalizedPlatform>
   </PropertyGroup>
 
+  <Choose>
+    <When Condition="Exists('$(VALHEIM_DIR)\valheim_Data\Managed')">
+      <PropertyGroup>
+        <ValheimDirectory>$(VALHEIM_DIR)</ValheimDirectory>
+      </PropertyGroup>
+    </When>
+    <When Condition="'$(ValheimDirectory)' == '' And '$(OS)' == 'Windows_NT'">
+      <PropertyGroup>
+        <ValheimDirectory>$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 892970', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</ValheimDirectory>
+      </PropertyGroup>
+    </When>
+  </Choose>
+
   <PropertyGroup>
-    <ValheimDirectory Condition="Exists('$(VALHEIM_DIR)\valheim_Data\Managed')">$(VALHEIM_DIR)</ValheimDirectory>
     <BepInExDirectory Condition="Exists('$(ValheimDirectory)\BepInEx')">$(ValheimDirectory)\BepInEx</BepInExDirectory>
     <ManagedDataDirectory Condition="Exists('$(ValheimDirectory)\valheim_Data\Managed')">$(ValheimDirectory)\valheim_Data\Managed</ManagedDataDirectory>
     <UnityManagedDirectory Condition="Exists('$(ValheimDirectory)\unstripped_corlib')">$(ValheimDirectory)\unstripped_corlib</UnityManagedDirectory>
     <UnityManagedDirectory Condition="'$(UnityManagedDirectory)' == '' And Exists('$(ManagedDataDirectory)')">$(ManagedDataDirectory)</UnityManagedDirectory>
     <FrameworkPathOverride Condition="'$(OS)' != 'Windows_NT' And '$(ManagedDataDirectory)' != ''">$(ManagedDataDirectory)</FrameworkPathOverride>
     <ILRepackTargetsFile>$(MSBuildProjectDirectory)/ILRepack.targets</ILRepackTargetsFile>
+    <ILRepackTargetsPath Condition="'$(PkgILRepack_Lib_MSBuild_Task)' != ''">$(PkgILRepack_Lib_MSBuild_Task)\build\ILRepack.Lib.MSBuild.Task.targets</ILRepackTargetsPath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
@@ -55,10 +68,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" Condition="'$(OS)' == 'Windows_NT'" />
     <PackageReference Include="LitJson" Version="0.18.0" GeneratePathProperty="true" ExcludeAssets="compile" />
-    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.44.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.44.1" ExcludeAssets="build" GeneratePathProperty="true" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup Label="BepInEx">
@@ -228,7 +238,7 @@
 
   <ItemGroup>
     <Compile Remove="Libraries\**\*.cs" />
-    <Compile Include="Libraries\**\*.cs" Exclude="Libraries\**\AssemblyInfo.cs" />
+    <Compile Include="Libraries\mod-utils\ModUtils\*.cs" />
     <Compile Remove="Debug\**\*.cs" />
     <Compile Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'" Include="Debug\**\*.cs" />
     <None Remove="Languages\**\*" />
@@ -246,6 +256,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <Import Project="$(ILRepackTargetsPath)" Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Release|AnyCPU' And Exists('$(ILRepackTargetsPath)')" />
+
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Release|AnyCPU'">
+    <Error Condition="!Exists('$(ILRepackTargetsPath)')" Text="ILRepack targets were not found. Run restore before building Release." />
+  </Target>
 
   <Target Name="DeployModFiles" AfterTargets="Build" Condition="Exists('$(BepInExDirectory)') And '$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
     <ItemGroup>

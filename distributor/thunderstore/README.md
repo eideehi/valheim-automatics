@@ -9,7 +9,7 @@ Automatics is a mod that automates the tedious tasks of life in Valheim. Most of
 
 > **TIP**: Each of the features described below can be completely disabled using the "Disable Module" option in the configuration.
 
-For feature-by-feature usage, see [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/user-guide.md).
+For released feature documentation, see [README.adoc](https://github.com/eideehi/valheim-automatics/blob/1.5.1/README.adoc).
 
 ### Automatic door
 
@@ -19,9 +19,9 @@ Automatically opens and closes allowed doors near the player. The open and close
 
 Automatically pins nearby dynamic objects, static objects, and locations to the map, including animals, monsters, flora, minerals, vehicles, portals, dungeons, spots, and other configured objects. You can configure search ranges, allowed targets, static pin saving, destroyed-object pin cleanup, and user-defined objects. The map navigation shortcut starts or clears navigation by holding the configured modifier key (Left Shift by default) and left-clicking a pin on the large map; while navigating, the HUD shows the target name and distance.
 
-- **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.md](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/custom-icon-pack.md) for custom icon pack specifications.
+- **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.adoc](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/custom-icon-pack.adoc) for custom icon pack specifications.
 
-![Custom Icon Pack Image](https://raw.githubusercontent.com/eideehi/valheim-automatics/1.5.1/docs/images/readme/custom-icon-pack.png)
+![Custom Icon Pack Image](https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png)
 
 ### Automatic processing
 
@@ -52,23 +52,23 @@ Automatics adds console commands for command discovery, name lookup, nearby obje
 - `printobjects`: Shows nearby objects Automatics can handle.
 - `removemappins`: Removes duplicate or filtered map pins.
 
-See [Console commands](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/user-guide.md#console-commands) in the user guide for usage and options.
+See [Console commands](https://github.com/eideehi/valheim-automatics/blob/1.5.1/README.adoc#console-commands) in the released documentation for usage and options.
 
 ## Configurations
 
 I recommend using [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
-![Configuration Menu](https://raw.githubusercontent.com/eideehi/valheim-automatics/1.5.1/docs/images/readme/config-menu-thumbnail.png)
+![Configuration Menu](https://app.box.com/shared/static/3v57rjpauzzyv0xeugohnw8bn2ye3q2h.png)
 
-Use [CONFIG.md](https://github.com/eideehi/valheim-automatics/blob/1.5.1/CONFIG.md) for every configuration entry, default value, and accepted value range. Use [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/user-guide.md) for feature-by-feature usage notes.
+Use [CONFIG.adoc](https://github.com/eideehi/valheim-automatics/blob/1.5.1/CONFIG.adoc) for every configuration entry, default value, and accepted value range. Use [README.adoc](https://github.com/eideehi/valheim-automatics/blob/1.5.1/README.adoc) for feature-by-feature usage notes.
 
 ### Adding object definitions to Automatics
 
 You can use the [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager) to define objects that you want Automatics to work with.
 
-![User-defined objects in GUI](https://raw.githubusercontent.com/eideehi/valheim-automatics/1.5.1/docs/images/readme/user-defined-objects.png)
+![User-defined objects in GUI](https://app.box.com/shared/static/5f6dvpg1elczu9froqkepxamv03ci9cd.png)
 
-Open [docs/add-user-defined-object.md](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/add-user-defined-object.md) to learn more about adding user-defined objects.
+Open [docs/add-user-defined-object.adoc](https://github.com/eideehi/valheim-automatics/blob/1.5.1/docs/add-user-defined-object.adoc) to learn more about adding user-defined objects.
 
 ## Languages
 

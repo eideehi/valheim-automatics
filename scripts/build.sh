@@ -9,22 +9,33 @@
 #
 # Environment:
 #   VALHEIM_DIR   Path to the Valheim install that contains
-#                 valheim_Data/Managed/assembly_valheim.dll.
-#                 If unset, the script tries a few common Steam locations
-#                 for WSL / Linux / macOS.
+#                 valheim_Data/Managed/assembly_valheim.dll and
+#                 BepInEx/core/{0Harmony.dll,BepInEx.dll}.
+#                 If unset, the script checks common Steam locations on
+#                 WSL, Linux, and macOS.
 #
 set -euo pipefail
 
 config="${1:-Debug}"
 clean="${2:-}"
 
-# Resolve repo root from the script location so the script works from any CWD.
+if [[ $# -gt 2 ]]; then
+    echo "error: usage is scripts/build.sh [Debug|Release] [clean]" >&2
+    exit 1
+fi
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 repo_root="$(cd -- "$script_dir/.." &>/dev/null && pwd)"
+solution="$repo_root/Automatics.sln"
 project="$repo_root/Automatics/Automatics.csproj"
 
+if [[ ! -f "$solution" ]]; then
+    echo "error: solution file not found: Automatics.sln" >&2
+    exit 1
+fi
+
 if [[ ! -f "$project" ]]; then
-    echo "error: project file not found: $project" >&2
+    echo "error: project file not found: Automatics/Automatics.csproj" >&2
     exit 1
 fi
 
@@ -36,8 +47,16 @@ case "$config" in
         ;;
 esac
 
+case "$clean" in
+    "" | clean) ;;
+    *)
+        echo "error: second argument must be clean when provided (got: $clean)" >&2
+        exit 1
+        ;;
+esac
+
 # Auto-detect VALHEIM_DIR from default Steam install locations when the
-# caller did not export it. Only platform defaults are probed — custom
+# caller did not export it. Only platform defaults are probed; custom
 # library folders (SteamLibrary on a non-default drive, etc.) should be
 # supplied via the VALHEIM_DIR environment variable.
 if [[ -z "${VALHEIM_DIR:-}" ]]; then
@@ -56,26 +75,70 @@ if [[ -z "${VALHEIM_DIR:-}" ]]; then
     done
 fi
 
-if [[ -z "${VALHEIM_DIR:-}" ]] \
-    || [[ ! -f "$VALHEIM_DIR/valheim_Data/Managed/assembly_valheim.dll" ]]; then
-    echo "error: VALHEIM_DIR is not set or does not point to a Valheim install." >&2
+if [[ -z "${VALHEIM_DIR:-}" ]]; then
+    echo "error: VALHEIM_DIR is not set and no Valheim install was auto-detected." >&2
     echo "       Expected: \$VALHEIM_DIR/valheim_Data/Managed/assembly_valheim.dll" >&2
-    echo "       Export VALHEIM_DIR=/path/to/Valheim and re-run." >&2
+    echo "       Set VALHEIM_DIR=/path/to/Valheim and re-run." >&2
     exit 1
 fi
 
-if [[ "$clean" == "clean" ]]; then
-    dotnet build "$project" -c "$config" --target:Clean -nologo
+managed_dir="$VALHEIM_DIR/valheim_Data/Managed"
+bepinex_core_dir="$VALHEIM_DIR/BepInEx/core"
+
+required_files=(
+    "$managed_dir/assembly_valheim.dll"
+    "$bepinex_core_dir/0Harmony.dll"
+    "$bepinex_core_dir/BepInEx.dll"
+)
+
+missing_files=()
+for required_file in "${required_files[@]}"; do
+    if [[ ! -f "$required_file" ]]; then
+        missing_files+=("$required_file")
+    fi
+done
+
+if (( ${#missing_files[@]} > 0 )); then
+    echo "error: VALHEIM_DIR is missing required Valheim or BepInEx files." >&2
+    for missing_file in "${missing_files[@]}"; do
+        echo "       Missing: $missing_file" >&2
+    done
+    echo "       Set VALHEIM_DIR=/path/to/Valheim with BepInEx installed and re-run." >&2
+    exit 1
 fi
 
-dotnet build "$project" -c "$config" -nologo
-
 output_dir="$repo_root/Automatics/bin/$config"
+output_dll="$output_dir/Automatics.dll"
+msbuild_args=(
+    "$solution"
+    /restore
+    /nologo
+    "/p:Configuration=$config"
+    "/p:Platform=Any CPU"
+    "/p:FrameworkPathOverride=$managed_dir"
+)
+
+if [[ "$clean" == "clean" ]]; then
+    dotnet msbuild "${msbuild_args[@]}" /t:Clean
+fi
+
+dotnet msbuild "${msbuild_args[@]}" /t:Build
+
 echo
-echo "Build succeeded. Output: $output_dir/Automatics.dll"
-if [[ "$config" == "Release" ]]; then
-    zip=$(find "$output_dir" -maxdepth 1 -name 'Automatics*.zip' -print -quit 2>/dev/null || true)
-    if [[ -n "$zip" ]]; then
-        echo "Release zip:    $zip"
+if [[ -f "$output_dll" ]]; then
+    echo "Build succeeded. Output: $output_dll"
+else
+    echo "Build succeeded. Output directory: $output_dir"
+fi
+if [[ "$config" == "Debug" ]]; then
+    echo "Debug deploy target: $VALHEIM_DIR/BepInEx/plugins/Automatics"
+elif [[ "$config" == "Release" ]]; then
+    nexus_package=$(find "$output_dir" -maxdepth 1 -name 'Automatics - *.7z' -print -quit 2>/dev/null || true)
+    thunderstore_package=$(find "$output_dir" -maxdepth 1 -name 'Automatics - *.zip' -print -quit 2>/dev/null || true)
+    if [[ -n "$nexus_package" ]]; then
+        echo "Nexus package:      $nexus_package"
+    fi
+    if [[ -n "$thunderstore_package" ]]; then
+        echo "Thunderstore zip:   $thunderstore_package"
     fi
 fi

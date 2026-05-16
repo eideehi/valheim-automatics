@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 // General Information about an assembly is controlled through the following
@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("Automatics")]
-[assembly: AssemblyCopyright("Copyright © 2022-2023")]
+[assembly: AssemblyCopyright("Copyright (c) 2022-2026 EideeHi")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

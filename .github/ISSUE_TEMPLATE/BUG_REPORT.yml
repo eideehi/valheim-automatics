@@ -6,11 +6,10 @@ body:
     attributes:
       value: |
         Thank you for reporting a bug.
-        A helpful report usually includes:
-        what you expected, what you did, and what happened instead.
-        If you can reproduce the issue reliably, detailed steps can help us investigate and fix it faster.
-        Logs, screenshots, and videos are optional, but for crashes a log file is especially helpful and may avoid extra back-and-forth.
-        An AI-assisted reply may be posted initially, and maintainers may follow up if needed.
+        A useful report includes what you expected, what you did, and what happened instead.
+        If you can reproduce the issue reliably, include detailed steps.
+        Logs, screenshots, and videos are optional. For crashes, a log file is especially helpful.
+        An AI-assisted reply may be posted first, and maintainers may follow up if needed.
         Reports without enough detail to investigate may be closed until more information is available.
 
   - type: dropdown
@@ -18,8 +17,8 @@ body:
     attributes:
       label: Mod version
       options:
-        - 1.6.0
-        - older version
+        - latest release
+        - older release
         - development build / unknown
     validations:
       required: true
@@ -40,7 +39,7 @@ body:
     id: steps-for-reproduce-bug
     attributes:
       label: Detailed reproduction steps
-      description: Optional. If you can reproduce it reliably, detailed steps may help us fix it faster.
+      description: Optional. If you can reproduce it reliably, include detailed steps.
       placeholder: |
         1. Do AAA
         2. Open BBB
@@ -51,7 +50,7 @@ body:
     id: mods-when-bug-occurred
     attributes:
       label: Other mods involved
-      description: Optional. If other mods may be involved, list their names. Compatibility issues may take longer to investigate and may not always be addressed.
+      description: Optional. If other mods may be involved, list them. Compatibility issues may take longer to investigate and may not always be addressed.
       placeholder: |
         Awesome Weapon v1.2.3
         Awesome NPC v4.5.6
@@ -60,8 +59,8 @@ body:
   - type: textarea
     id: file-attachments
     attributes:
-      label: Logs, screenshots, videos, etc.
-      description: Optional, but especially helpful for crashes. You can drag and drop files here if they help explain the issue.
+      label: Logs, screenshots, or videos
+      description: Optional. For crashes, a log file is especially helpful. You can drag and drop files here if they help explain the issue.
 
   - type: markdown
     attributes:
