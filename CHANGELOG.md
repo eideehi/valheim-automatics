@@ -1,3 +1,14 @@
+#### v1.6.0 [2026-05-17]
+- Updated for Valheim 0.221.12 and added automation data for Ashlands, Bog Witch, and Call to Arms content.
+- Added a config migration that appends new default automation targets to existing allow lists.
+- Added map navigation from selected pins, including HUD distance display while navigating.
+- Improved Automatic Mapping performance and stability with throttled dynamic scans, spatial pin lookups, safer static scan invalidation, dense-area scan fallback, and cached MineRock5 collider data.
+- Improved Automatic Door behavior for predicted player movement and multiplayer or dedicated-server sessions.
+- Added configurable Automatic Processing connection effects and fixed stale container lookup reuse across different search limits.
+- Fixed Automatic Pickup and Automatic Feeding ownership handling in multiplayer or dedicated-server sessions to avoid unsaved item changes or lost pickups.
+- Fixed translations not refreshing after language changes.
+- Modernized the build scripts, release checks, README, configuration reference, and user guide.
+
 #### v1.5.1 [2023-10-15]
 - Fixed an issue that could potentially cause exceptions when attempting to place containers added by specific mods. **([#61])**
 
