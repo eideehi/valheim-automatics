@@ -846,6 +846,14 @@ namespace Automatics.AutomaticMapping
         private static int ObjectMask => ObjectMaskLazy.Value;
         private static int DungeonMask => DungeonMaskLazy.Value;
 
+        // Location.s_allLocations is a private static List<Location>; the field
+        // reference is set once via initializer and only mutated in-place by
+        // Awake/OnDestroy, so resolving it once via Traverse is safe and avoids
+        // per-tick reflection inside Mapping.
+        private const string LocationCloneSuffix = "(Clone)";
+        private static readonly Lazy<List<Location>> AllLocationsLazy = new Lazy<List<Location>>(
+            () => Reflections.GetStaticField<Location, List<Location>>("s_allLocations"));
+
         static StaticObjectMapping()
         {
             ColliderBuffer = new Collider[ColliderBufferInitialLength];
@@ -935,6 +943,14 @@ namespace Automatics.AutomaticMapping
 
             data = ("", false);
             return false;
+        }
+
+        private static string StripCloneSuffix(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name;
+            if (name.EndsWith(LocationCloneSuffix, StringComparison.Ordinal))
+                return name.Substring(0, name.Length - LocationCloneSuffix.Length);
+            return name;
         }
 
         private static bool GetSpot(string name, out (string Identifier, bool IsAllowed) data)
@@ -1175,6 +1191,35 @@ namespace Automatics.AutomaticMapping
                     if ((origin - location.m_position).sqrMagnitude > locationRangeSq) continue;
                     if (DungeonMapping(location)) continue;
                     if (SpotMapping(location)) continue;
+                }
+
+                // ZoneSystem.m_locationInstances is server-only, so non-host
+                // peers (dedicated-server clients, P2P clients) reach this
+                // point with no dungeon pins added. Location.s_allLocations
+                // is populated by every LocationProxy spawn regardless of
+                // role, so iterate it here as a fallback. Gate on Count == 0
+                // to keep SP / host on the single location-domain path
+                // above: running both paths exposes a no-entrance dedup
+                // race where SnapToGround.Snap shifts the spawned
+                // transform's Y while LocationInstance.m_position stays at
+                // the RegisterLocation Y, producing distinct
+                // MapPinIdentify keys that only Map.GetClosestPin's radius
+                // dedup papers over. Spot locations stay on the
+                // m_locationInstances path; #30 is scoped to dungeons.
+                if (ZoneSystem.instance.m_locationInstances.Count == 0)
+                {
+                    var allLocations = AllLocationsLazy.Value;
+                    if (allLocations != null)
+                    {
+                        for (var i = 0; i < allLocations.Count; i++)
+                        {
+                            var loc = allLocations[i];
+                            if (loc == null || !loc.m_hasInterior) continue;
+                            var locPos = loc.transform.position;
+                            if ((origin - locPos).sqrMagnitude > locationRangeSq) continue;
+                            DungeonMappingFromLocation(loc);
+                        }
+                    }
                 }
 
                 EndPassAndPruneStale();
@@ -2252,20 +2297,39 @@ namespace Automatics.AutomaticMapping
 
         private static bool DungeonMapping(ZoneSystem.LocationInstance instance)
         {
+            return TryAddDungeonPin(
+                instance.m_location.m_prefabName,
+                instance.m_position,
+                instance.m_location.m_exteriorRadius);
+        }
+
+        // Client-side fallback for non-host peers (dedicated-server clients,
+        // P2P clients), where ZoneSystem.m_locationInstances is server-only.
+        // LocationProxy spawns the underlying Location prefab on clients too,
+        // so Location.s_allLocations is populated regardless of network role.
+        // The caller gates this on m_locationInstances.Count == 0; SP / host
+        // route every dungeon through the location-domain loop above instead.
+        private static bool DungeonMappingFromLocation(Location location)
+        {
+            if (location == null || !location.m_hasInterior) return false;
+            var prefabName = StripCloneSuffix(location.gameObject.name);
+            return TryAddDungeonPin(prefabName, location.transform.position,
+                location.m_exteriorRadius);
+        }
+
+        private static bool TryAddDungeonPin(string prefabName, Vector3 pos, float radius)
+        {
             Teleport GetTeleport(Collider collider)
             {
                 return collider.GetComponent<Teleport>();
             }
 
-            var prefabName = instance.m_location.m_prefabName;
             if (!GetDungeon(prefabName, out var data)) return false;
             if (!data.IsAllowed) return true;
 
             if (!ValheimObject.Dungeon.GetName(data.Identifier, out var name))
                 name = $"@location_{prefabName.ToLower()}";
 
-            var pos = instance.m_position;
-            var radius = instance.m_location.m_exteriorRadius;
             // Linear min-scan instead of OrderBy: only the nearest teleport
             // collider is consumed, so sorting the whole candidate list would
             // allocate a second list + IComparer<T> for nothing.
