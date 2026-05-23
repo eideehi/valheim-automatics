@@ -43,6 +43,7 @@ namespace Automatics.AutomaticProcessing
 
                 if (Config.StoreOnlyIfProductExists(wispSpawnerName) &&
                     !Inventories.HaveItem(inventory, wispName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
                 if (!inventory.AddItem(wispItem.gameObject, 1)) continue;
 
                 zNetView.GetZDO().Set("LastSpawn", ZNet.instance.GetTime().Ticks);

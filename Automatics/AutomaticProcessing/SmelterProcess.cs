@@ -98,6 +98,8 @@ namespace Automatics.AutomaticProcessing
 
                 if (materialContainer && (maxProductStacks == 0 || productContainerFound))
                 {
+                    if (!Logics.TryClaimContainer(materialContainer)) continue;
+
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
 
@@ -196,6 +198,8 @@ namespace Automatics.AutomaticProcessing
 
                 if (materialContainer && (maxProductStacks == 0 || productContainerFound))
                 {
+                    if (!Logics.TryClaimContainer(materialContainer)) continue;
+
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("RPC_AddOre", item.m_dropPrefab.name);
@@ -244,6 +248,7 @@ namespace Automatics.AutomaticProcessing
             {
                 var inventory = container.GetInventory();
                 if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
 
                 container.GetInventory().RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("RPC_AddFuel");
@@ -295,6 +300,7 @@ namespace Automatics.AutomaticProcessing
             {
                 var inventory = container.GetInventory();
                 if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
 
                 container.GetInventory().RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("RPC_AddFuel");
@@ -330,6 +336,7 @@ namespace Automatics.AutomaticProcessing
                 var itemCountBefore = inventory.CountItems(itemName);
                 if (Config.StoreOnlyIfProductExists(smelterName) &&
                     !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
                 if (!inventory.AddItem(item.gameObject, stack)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;

@@ -69,6 +69,8 @@ namespace Automatics.AutomaticProcessing
 
                 if (materialContainer && (maxProductStacks == 0 || productContainerFound))
                 {
+                    if (!Logics.TryClaimContainer(materialContainer)) continue;
+
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("RPC_AddItem", item.m_dropPrefab.name);
@@ -110,6 +112,7 @@ namespace Automatics.AutomaticProcessing
                 var itemCountBefore = inventory.CountItems(itemName);
                 if (Config.StoreOnlyIfProductExists(fermenterName) &&
                     !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
                 if (!inventory.AddItem(item.gameObject, productRemaining)) continue;
 
                 var storedItemCount = inventory.CountItems(itemName) - itemCountBefore;

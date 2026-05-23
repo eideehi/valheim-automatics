@@ -44,6 +44,7 @@ namespace Automatics.AutomaticProcessing
 
                 if (Config.StoreOnlyIfProductExists(beehiveName) &&
                     !Inventories.HaveItem(inventory, honeyName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
                 if (!inventory.AddItem(honeyItem.gameObject, amount)) continue;
 
                 var storedHoneyCount = inventory.CountItems(honeyName) - honeyCountInContainer;

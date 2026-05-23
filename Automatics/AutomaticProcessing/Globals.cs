@@ -80,6 +80,22 @@ namespace Automatics.AutomaticProcessing
             return (Config.AllowProcessing(target) & type) != 0;
         }
 
+        // Container.OnContainerChanged only saves to the ZDO when the local
+        // peer owns the ZNetView, so on dedicated servers and non-host clients
+        // a mutation of the local mirror is silently dropped and reverted on
+        // the next Container.Load. Claim ownership immediately before mutating
+        // so the change is persisted. Returns false when the container or its
+        // ZNetView became invalid between selection and claim — in that case
+        // the caller must skip the mutation.
+        public static bool TryClaimContainer(Container container)
+        {
+            if (container == null) return false;
+            if (!Objects.GetZNetView(container, out var nview)) return false;
+            if (nview == null || !nview.IsValid() || nview.GetZDO() == null) return false;
+            if (!nview.IsOwner()) nview.ClaimOwnership();
+            return true;
+        }
+
         public static IEnumerable<(Container container, float distance)> GetNearbyContainers(
             string target, Vector3 origin)
         {

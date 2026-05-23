@@ -70,6 +70,7 @@ namespace Automatics.AutomaticProcessing
                 if (item == null) continue;
                 if (!Inventories.HaveItem(inventory, item.m_shared.m_name, 0, WorldLevelMatchMode.Ignore, minAmmoCount + 1))
                     continue;
+                if (!Logics.TryClaimContainer(container)) continue;
 
                 inventory.RemoveItem(item, 1);
                 zNetView.InvokeRPC("RPC_AddAmmo", item.m_dropPrefab.name);

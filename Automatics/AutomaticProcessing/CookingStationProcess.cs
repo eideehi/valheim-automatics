@@ -96,6 +96,8 @@ namespace Automatics.AutomaticProcessing
 
                 if (materialContainer && (maxProductStacks == 0 || productContainerFound))
                 {
+                    if (!Logics.TryClaimContainer(materialContainer)) continue;
+
                     var item = materialContainer.GetInventory().GetItem(materialData.m_name);
                     materialContainer.GetInventory().RemoveOneItem(item);
                     zNetView.InvokeRPC("RPC_AddItem", item.m_dropPrefab.name);
@@ -131,6 +133,7 @@ namespace Automatics.AutomaticProcessing
             {
                 var inventory = container.GetInventory();
                 if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
 
                 inventory.RemoveItem(fuelName, 1);
                 fuel += 1f;
@@ -163,6 +166,7 @@ namespace Automatics.AutomaticProcessing
                 var inventory = container.GetInventory();
                 if (Config.StoreOnlyIfProductExists(stationName) &&
                     !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
                 if (!inventory.AddItem(item.gameObject, 1)) continue;
 
                 zNetView.GetZDO().Set("slot" + slot, "");

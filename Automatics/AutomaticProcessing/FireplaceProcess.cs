@@ -28,6 +28,7 @@ namespace Automatics.AutomaticProcessing
             {
                 var inventory = container.GetInventory();
                 if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
 
                 inventory.RemoveItem(fuelName, 1);
                 zNetView.InvokeRPC("RPC_AddFuel");

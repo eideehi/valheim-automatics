@@ -44,6 +44,7 @@ namespace Automatics.AutomaticProcessing
 
                 if (Config.StoreOnlyIfProductExists(sapCollectorName) &&
                     !Inventories.HaveItem(inventory, sapName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.TryClaimContainer(container)) continue;
                 if (!inventory.AddItem(sapItem.gameObject, amount)) continue;
 
                 var storedSapCount = inventory.CountItems(sapName) - sapCountInContainer;
