@@ -1,6 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 
@@ -48,26 +50,57 @@ namespace Automatics.AutomaticProcessing
                 .InstructionEnumeration();
         }
 
+        /// <summary>
+        ///     Returns the index of the only local variable of <paramref name="localType" />
+        ///     declared by <paramref name="original" />.
+        /// </summary>
+        /// <remarks>
+        ///     Local slot numbers are not part of a method's public contract and shift whenever
+        ///     the game adds or removes a local, so they must never be hardcoded in a transpiler.
+        ///     Resolving them by type makes a future layout change fail loudly here instead of
+        ///     emitting IL that pushes the wrong stack type.
+        /// </remarks>
+        private static int GetSingleLocalIndex(MethodBase original, Type localType)
+        {
+            var body = original?.GetMethodBody();
+            if (body == null)
+                throw new InvalidOperationException(
+                    $"{original?.Name ?? "<unknown>"}: method body is unavailable, " +
+                    $"cannot resolve the {localType.Name} local");
+
+            var indexes = body.LocalVariables
+                .Where(x => x.LocalType == localType)
+                .Select(x => x.LocalIndex)
+                .ToList();
+            if (indexes.Count != 1)
+                throw new InvalidOperationException(
+                    $"{original.Name}: expected exactly one {localType.Name} local, " +
+                    $"found {indexes.Count}");
+
+            return indexes[0];
+        }
+
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(CookingStation), "UpdateCooking")]
         public static IEnumerable<CodeInstruction> CookingStation_UpdateCooking_Transpiler(
-            IEnumerable<CodeInstruction> instructions)
+            IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
             /*
              *   ItemConversion itemConversion = this.GetItemConversion(itemName);
              *   ...
              * + if (!CookingStationProcess.Store(this, this.m_nview, slot, itemConversion))
-             *   this.SetSlot(slot, "", 0.0f, CookingStation.Status.NotDone);
+             *   this.SetSlot(slot, this.m_overCookedItem.name, cookedTime, CookingStation.Status.Burnt, cheated);
              *   ...
              * + if (!CookingStationProcess.Store(this, this.m_nview, slot, itemConversion))
-             *   this.SetSlot(slot, this.m_overCookedItem.name, cookedTime, CookingStation.Status.Burnt);
-             *   ...
-             * + if (!CookingStationProcess.Store(this, this.m_nview, slot, itemConversion))
-             *   this.SetSlot(slot, itemConversion.m_to.name, cookedTime, CookingStation.Status.Done);
-             *   ...
-             * + if (!CookingStationProcess.Store(this, this.m_nview, slot, itemConversion))
-             *   this.SetSlot(slot, itemName, cookedTime, status);
+             *   this.SetSlot(slot, itemConversion.m_to.name, cookedTime, CookingStation.Status.Done, cheated);
+             *
+             *   Both injections jump to the loop-continue target shared by every SetSlot branch
+             *   in the slot loop when CookingStationProcess.Store handled the item.
              */
+            var slotIndex = GetSingleLocalIndex(original, typeof(int));
+            var itemConversionIndex =
+                GetSingleLocalIndex(original, typeof(CookingStation.ItemConversion));
+
             void InsertCodes(CodeMatcher codeMatcher, object label)
             {
                 codeMatcher.Insert(
@@ -75,19 +108,30 @@ namespace Automatics.AutomaticProcessing
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldfld,
                         AccessTools.Field(typeof(CookingStation), "m_nview")),
-                    new CodeInstruction(OpCodes.Ldloc_2),
-                    new CodeInstruction(OpCodes.Ldloc_S, 6),
+                    new CodeInstruction(OpCodes.Ldloc_S, slotIndex),
+                    new CodeInstruction(OpCodes.Ldloc_S, itemConversionIndex),
                     new CodeInstruction(OpCodes.Call,
                         AccessTools.Method(typeof(CookingStationProcess), "Store")),
                     new CodeInstruction(OpCodes.Brtrue_S, label));
             }
 
+            // The burnt-item SetSlot call is anchored through the m_overCookedItem load that
+            // supplies its itemName argument, then through the branch that follows the call.
+            // Anchoring on the Status argument is not stable: SetSlot gained a trailing
+            // `cheated` argument, so the status constant is no longer adjacent to the call.
             var matcher = new CodeMatcher(instructions)
-                .MatchEndForward(
-                    new CodeMatch(OpCodes.Ldc_I4_2),
+                .MatchStartForward(
+                    new CodeMatch(OpCodes.Ldfld,
+                        AccessTools.Field(typeof(CookingStation), "m_overCookedItem")))
+                .ThrowIfInvalid(
+                    "CookingStation.UpdateCooking: CookingStation.m_overCookedItem load not found")
+                .MatchStartForward(
                     new CodeMatch(OpCodes.Call,
                         AccessTools.Method(typeof(CookingStation), "SetSlot")),
-                    new CodeMatch(OpCodes.Br));
+                    new CodeMatch(x => x.opcode == OpCodes.Br || x.opcode == OpCodes.Br_S))
+                .ThrowIfInvalid(
+                    "CookingStation.UpdateCooking: the burnt item SetSlot call followed by a branch to the slot loop continuation was not found")
+                .Advance(1);
 
             var originalCodes = matcher.Operand;
 
@@ -95,14 +139,18 @@ namespace Automatics.AutomaticProcessing
                     .MatchStartBackwards(
                         new CodeMatch(OpCodes.Ldarg_0),
                         new CodeMatch(OpCodes.Ldfld,
-                            AccessTools.Field(typeof(CookingStation), "m_overcookedEffect"))),
+                            AccessTools.Field(typeof(CookingStation), "m_overcookedEffect")))
+                    .ThrowIfInvalid(
+                        "CookingStation.UpdateCooking: CookingStation.m_overcookedEffect load not found"),
                 originalCodes);
 
             InsertCodes(matcher
                     .MatchStartForward(
                         new CodeMatch(OpCodes.Ldarg_0),
                         new CodeMatch(OpCodes.Ldfld,
-                            AccessTools.Field(typeof(CookingStation), "m_doneEffect"))),
+                            AccessTools.Field(typeof(CookingStation), "m_doneEffect")))
+                    .ThrowIfInvalid(
+                        "CookingStation.UpdateCooking: CookingStation.m_doneEffect load not found"),
                 originalCodes);
 
             return matcher.InstructionEnumeration();

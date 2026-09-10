@@ -78,6 +78,10 @@ namespace Automatics.AutomaticDoor
         {
             try
             {
+                // Character.m_collider is declared as CapsuleCollider, but AccessTools binds a
+                // reference-typed field whenever the requested type is assignable from it
+                // (AccessTools.ValidateFieldType). Requesting the base Collider therefore binds
+                // today and keeps binding if the field's concrete type changes again.
                 return AccessTools.FieldRefAccess<Character, Collider>("m_collider");
             }
             catch (Exception e)
@@ -342,7 +346,13 @@ namespace Automatics.AutomaticDoor
 
         private bool CanOpen(Player player)
         {
-            return !_door.m_keyItem || Reflections.InvokeMethod<bool>(_door, "HaveKey", player);
+            // Door.HaveKey(Humanoid player, bool matchWorldLevel = true): Traverse resolves the
+            // method from the runtime types of the arguments passed. Reference types bind by
+            // assignability (Player satisfies Humanoid), but a defaulted parameter is never
+            // filled in for us, so the arity must match or resolution fails and the call throws.
+            // true mirrors the vanilla Door.Interact eligibility check.
+            return !_door.m_keyItem ||
+                   Reflections.InvokeMethod<bool>(_door, "HaveKey", player, true);
         }
 
         private bool ShouldOpen(Vector3 playerPosition, Vector3 velocity, float openRange)

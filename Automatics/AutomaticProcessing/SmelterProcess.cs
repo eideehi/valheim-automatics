@@ -118,7 +118,11 @@ namespace Automatics.AutomaticProcessing
                             out var prefabName))
                         continue;
 
-                    Reflections.InvokeMethod(smelter, "QueueOre", prefabName);
+                    // Smelter.QueueOre(string name, bool cheated): `cheated` records whether
+                    // the queued ore was cheat-spawned. Logics.TryRemoveItem only reports the
+                    // prefab name, so the removed item's flag is not reachable here; false
+                    // matches the legitimately-obtained ore path.
+                    Reflections.InvokeMethod(smelter, "QueueOre", prefabName, false);
 
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position, smelterName,

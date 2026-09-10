@@ -69,7 +69,7 @@ namespace Automatics.AutomaticMapping
             if (!Config.NavigationStartKey.IsPressed()) return false;
 
             var pos = Reflections.InvokeMethod<Vector3>(map, "ScreenToWorldPoint",
-                ZInput.mousePosition);
+                ZInput.pointerPosition);
             var removeRadius = Reflections.GetField<float>(map, "m_removeRadius");
             var largeZoom = Reflections.GetField<float>(map, "m_largeZoom");
             var radius = removeRadius * (largeZoom * 2f);

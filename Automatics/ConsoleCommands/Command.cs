@@ -255,7 +255,7 @@ namespace Automatics.ConsoleCommands
             Commands[command] = this;
             _ = new Terminal.ConsoleCommand(command, Description(),
                 CommandAction, isCheat, isNetwork, onlyServer, isSecret, allowInDevBuild,
-                GetSuggestions);
+                optionsFetcher: GetSuggestions);
             DebugLog();
         }
     }

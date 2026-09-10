@@ -323,7 +323,12 @@ namespace Automatics.AutomaticFeeding
 
         private bool IsLookingAt(Vector3 point, float minAngle)
         {
-            return Reflections.InvokeMethod<bool>(_baseAI, "IsLookingAt", point, minAngle);
+            // BaseAI.IsLookingAt(Vector3 point, float minAngle, bool inverted = false): Traverse
+            // resolves the method from the runtime types of the arguments passed, and a defaulted
+            // parameter is never filled in for us, so the arity must match or resolution fails and
+            // the call throws. false is the vanilla default.
+            return Reflections.InvokeMethod<bool>(_baseAI, "IsLookingAt", point, minAngle,
+                false);
         }
     }
 }

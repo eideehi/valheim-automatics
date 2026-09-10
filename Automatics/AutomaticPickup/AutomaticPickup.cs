@@ -71,7 +71,7 @@ namespace Automatics.AutomaticPickup
                         var pickableName = GetPickableName(pickable);
                         PickupAllNearby(_player, x => GetPickableName(x) == pickableName);
                         Reflections.InvokeMethod(_player, "DoInteractAnimation",
-                            hovering.transform.position);
+                            pickable.gameObject);
                         continue;
                     }
 
@@ -83,7 +83,7 @@ namespace Automatics.AutomaticPickup
                         var itemName = GetPickableItemName(pickableItem);
                         PickupAllNearby(_player, x => GetPickableItemName(x) == itemName);
                         Reflections.InvokeMethod(_player, "DoInteractAnimation",
-                            hovering.transform.position);
+                            pickableItem.gameObject);
                         continue;
                     }
 
@@ -95,7 +95,7 @@ namespace Automatics.AutomaticPickup
                         var itemName = GetItemDropName(itemDrop);
                         PickupAllNearby(_player, x => GetItemDropName(x) == itemName);
                         Reflections.InvokeMethod(_player, "DoInteractAnimation",
-                            hovering.transform.position);
+                            itemDrop.gameObject);
                         continue;
                     }
                 }
@@ -300,7 +300,6 @@ namespace Automatics.AutomaticPickup
         private static List<ItemDrop> GetAllItemDrop()
         {
             return Reflections.GetStaticField<ItemDrop, List<ItemDrop>>("s_instances") ??
-                   Reflections.GetStaticField<ItemDrop, List<ItemDrop>>("m_instances") ??
                    EmptyItemDrops;
         }
     }
