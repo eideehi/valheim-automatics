@@ -242,6 +242,8 @@
     "@config_automatic_farming_designate_container_key_description": "見ているコンテナの役割を「なし」「栽培箱」「採種箱」「収納箱」の順に切り替えるショートカットキーを指定します。「種の供給元」が「周囲のコンテナ」に設定されている場合、栽培箱は保管している種から作物を育て、採種箱は保管している作物から種を育て、収穫物は優先的に近くの収納箱へ、無ければ対応する植え付け用の箱へ収納されます。役割の変更はチェストの所有権を取得するため、アクセス可能なコンテナにのみ機能します。",
     "@config_common_disable_module_name": "モジュールを無効化 (再起動が必要)",
     "@config_common_disable_module_description": "この機能を完全に無効化し、不要な処理が追加される事を防ぐことができます。 （このオプションを反映させるためにはゲームの再起動が必要です）",
+    "@config_common_disable_module_runtime_name": "モジュールを無効化",
+    "@config_common_disable_module_runtime_description": "この機能を完全に無効化し、不要な処理が追加される事を防ぐことができます。 （このオプションはゲームの実行中に反映されるため、ゲームの再起動は不要です）",
     "@text_automatic_mapping_creature_level_symbol": "★",
     "@text_automatic_mapping_empty_portal_tag": "空のタグ",
     "@text_automatic_mapping_flora_cluster_pin_name": "$1 x$2",

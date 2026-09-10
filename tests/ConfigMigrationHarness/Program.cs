@@ -19,6 +19,10 @@ namespace Automatics
             Run("bepinex-style version header still migrates", BepInExStyleVersionHeaderStillMigrates);
             Run("config without a version header is left unchanged", ConfigWithoutVersionHeaderIsLeftUnchanged);
             Run("door migration appends PieceHexagonalDoor", DoorMigrationAppendsPieceHexagonalDoor);
+            Run("F-A: an enabled automatic_pickup module survives migration", EnabledPickupModuleSurvivesMigration);
+            Run("F-B: a disabled automatic_pickup module survives migration", DisabledPickupModuleSurvivesMigration);
+            Run("F-C: user values inside automatic_pickup survive migration", PickupInnerValuesSurviveMigration);
+            Run("F-D: a missing config file migrates without doing anything", MissingConfigFileMigratesToNothing);
 
             return _failures == 0 ? 0 : 1;
         }
@@ -55,6 +59,108 @@ namespace Automatics
             {
                 Directory.Delete(directory, recursive: true);
             }
+        }
+
+        // The same as Migrate, but for the case R5.6 calls a first install: no file at all.
+        // Returns whether the migrator left the directory as empty as it found it.
+        private static bool MigrateWithoutAConfigFile()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "automatics-config-migration-tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+
+            var path = Path.Combine(directory, "Automatics.cfg");
+
+            try
+            {
+                ConfigMigration.Migration(new ConfigFile(path));
+                return !File.Exists(path);
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        // Automatic Pickup binds its inner settings unconditionally from this slice on, so its
+        // section is the one the migrator must not disturb: the module value is the user's
+        // choice and BepInEx would happily write back whatever survives here. Each fixture
+        // includes an automatic_mapping section from an older version so the 1.6.0 pass really
+        // rewrites the file - a fixture the migrator skips entirely proves nothing about what
+        // it preserves.
+        private static void EnabledPickupModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_pickup]",
+                "module = Enabled");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "[automatic_pickup]");
+            AssertEqual(1, CountOccurrences(migrated, "module = Enabled"), "The pickup module value should be carried over once.");
+            AssertDoesNotContain(migrated, "module = Disabled");
+
+            // A file that is already current is not rewritten at all.
+            var current = Migrate(
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_pickup]",
+                "module = Enabled");
+
+            AssertContains(current, "[automatic_pickup]");
+            AssertEqual(1, CountOccurrences(current, "module = Enabled"), "A current config should keep its pickup module value.");
+        }
+
+        private static void DisabledPickupModuleSurvivesMigration()
+        {
+            // The setting is the user's, and no part of this mod is allowed to write it back
+            // (R1.3b). A migration that turned Disabled into Enabled would re-enable a module
+            // the user switched off.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_pickup]",
+                "module = Disabled");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "[automatic_pickup]");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The pickup module value should be carried over once.");
+            AssertDoesNotContain(migrated, "module = Enabled");
+        }
+
+        private static void PickupInnerValuesSurviveMigration()
+        {
+            // These three are the entries that start being bound even for a disabled module.
+            // Their stored values have to survive, or the bind that follows re-creates them at
+            // their defaults and silently discards what the user set.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_pickup]",
+                "module = Disabled",
+                "automatic_pickup_range = 12",
+                "automatic_pickup_interval = 1.5",
+                "pickup_all_nearby_key = LeftAlt");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "module = Disabled");
+            AssertContains(migrated, "automatic_pickup_range = 12");
+            AssertContains(migrated, "automatic_pickup_interval = 1.5");
+            AssertContains(migrated, "pickup_all_nearby_key = LeftAlt");
+        }
+
+        private static void MissingConfigFileMigratesToNothing()
+        {
+            // A first install has no config file. The migrator has to return quietly rather
+            // than throw or invent one; BepInEx creates the file when the entries are bound.
+            if (!MigrateWithoutAConfigFile())
+                throw new Exception("The migrator must not create a config file that was not there.");
         }
 
         private static void RegexMigrationsPreserveCapturedProcessingSuffixes()

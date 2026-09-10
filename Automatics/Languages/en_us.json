@@ -242,6 +242,8 @@
     "@config_automatic_farming_designate_container_key_description": "Specify a shortcut key that cycles the role of the container you are looking at between none, cultivation, seed harvest, and storage. When Seed Source is set to Nearby Containers, a cultivation box grows crops from the seeds it holds, a seed-harvest box grows seeds from the crops it holds, and harvested yield is deposited into nearby storage boxes first, otherwise back into the matching planting box. Changing a role claims ownership of the chest, so it only works on containers you can access.",
     "@config_common_disable_module_name": "Disable Module (Reboot Required)",
     "@config_common_disable_module_description": "You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)",
+    "@config_common_disable_module_runtime_name": "Disable Module",
+    "@config_common_disable_module_runtime_description": "You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.",
     "@text_automatic_mapping_creature_level_symbol": "★",
     "@text_automatic_mapping_empty_portal_tag": "Empty tag",
     "@text_automatic_mapping_flora_cluster_pin_name": "$1 x$2",

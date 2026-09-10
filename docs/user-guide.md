@@ -24,9 +24,10 @@ Start with the README for a short overview. Use this guide for practical usage
 notes, and use `CONFIG.md` when you need the exact option name, default value,
 or accepted value range.
 
-Automatics is split into feature modules. Each module has a `Disable Module
-(Reboot Required)` option, and most modules also have a separate on/off option
-for the feature behavior.
+Automatics is split into feature modules. Each module has a `Disable Module`
+option, and most modules also have a separate on/off option for the feature
+behavior. Automatic pickup applies that option while the game is running; every
+other module still needs a restart, and says so in the option name.
 
 ## Common configuration concepts
 
@@ -35,9 +36,20 @@ to edit Automatics options in game.
 
 ### Module disable options
 
-Each feature section has a `Disable Module (Reboot Required)` entry. Use it when
-you do not want Automatics to patch or run that feature at all. Restart the game
-after changing this option.
+Each feature section has a module disable entry. Use it when you do not want
+Automatics to patch or run that feature at all.
+
+| Module | Entry | When the change takes effect |
+| --- | --- | --- |
+| Automatic pickup | `Disable Module` | Immediately. No restart. |
+| Every other module | `Disable Module (Reboot Required)` | After the game is restarted. |
+
+Automatic pickup stops producing effects as soon as you change the option, and
+its patches, hooks, and components are removed a frame later. Turning it back on
+also takes effect immediately, including for objects that appeared while it was
+off. If the Automatics log reports that this Harmony build cannot remove patches
+at runtime, turning the module off only stops it and the patches stay applied
+until you restart the game.
 
 Feature-specific enable options, such as `Automatic Door` or `Automatic
 Mapping`, only turn the feature behavior on or off while the module stays
@@ -363,6 +375,9 @@ private chests, guard stones, and containers already in use.
 ## Automatic pickup
 
 Automatic pickup collects nearby items for the local player.
+
+This is the one module whose `Disable Module` option takes effect without a
+restart. See [Module disable options](#module-disable-options).
 
 Modes:
 
