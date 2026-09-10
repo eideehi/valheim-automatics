@@ -86,6 +86,28 @@ require_json_key() {
   fi
 }
 
+require_text_pattern() {
+  local text="$1"
+  local pattern="$2"
+  local message="$3"
+
+  if ! printf '%s\n' "$text" | rg -q "$pattern"; then
+    fail "$message"
+  fi
+}
+
+# A body extracted by sed is empty when its anchor was renamed, which would turn
+# every assertion scoped to it into a failure with a misleading message. Prove
+# the body was actually located before asserting anything about its contents.
+require_nonempty_body() {
+  local text="$1"
+  local message="$2"
+
+  if [[ -z "${text//[[:space:]]/}" ]]; then
+    fail "$message"
+  fi
+}
+
 require_source_pattern \
   "$module_source" \
   "Hooks\\.OnPlayerUpdate \\+= OnPlayerUpdate" \
@@ -290,10 +312,47 @@ require_source_pattern \
   "Automatic Storage" \
   "user guide must include automatic storage"
 
-require_source_pattern \
+# Guard stone (ward) access. The invariant is that a container which opts into
+# the ward check cannot be used unless every enclosing, enabled ward permits the
+# *acting* player. It is deliberately not spelled `PrivateArea.CheckAccess`:
+# 9e98d30 replaced that vanilla call because it is hardcoded to
+# Player.m_localPlayer and cannot validate an arbitrary acting player, which the
+# server-aware mutation paths require. Assert the behaviour, and reject a revert
+# to the local-player-only API.
+can_use_container_body="$(
+  sed -n '/public static bool CanUseContainer/,/public static bool CanDirectlyMutateContainer/p' \
+    "$container_access_source"
+)"
+check_ward_access_body="$(
+  sed -n '/private static bool CheckWardAccess/,/private static bool IsEnabled/p' \
+    "$container_access_source"
+)"
+require_nonempty_body \
+  "$can_use_container_body" \
+  "ContainerAccess.CanUseContainer body could not be extracted; the guard stone assertions cannot be evaluated"
+require_nonempty_body \
+  "$check_ward_access_body" \
+  "ContainerAccess.CheckWardAccess body could not be extracted; the guard stone assertions cannot be evaluated"
+require_text_pattern \
+  "$can_use_container_body" \
+  "container\\.m_checkGuardStone" \
+  "guard stone access must be checked whenever the container opts into the ward check"
+require_text_pattern \
+  "$can_use_container_body" \
+  "!CheckWardAccess\\(player, container\\.transform\\.position\\)" \
+  "guard stone access must be evaluated for the acting player at the container position and must deny use when it fails"
+require_text_pattern \
+  "$check_ward_access_body" \
+  "GetStaticField<PrivateArea, List<PrivateArea>>" \
+  "ward access must be resolved against PrivateArea's registered areas"
+require_text_pattern \
+  "$check_ward_access_body" \
+  "!HasPlayerAccess\\(area, player\\)" \
+  "ward access must deny the acting player when an enclosing ward does not permit them"
+reject_source_pattern \
   "$container_access_source" \
   "PrivateArea\\.CheckAccess" \
-  "guard stone access must be checked"
+  "ward access must not use PrivateArea.CheckAccess: it is hardcoded to the local player and cannot validate an arbitrary acting player"
 require_source_pattern \
   "$container_access_source" \
   "Reflections\\.InvokeMethod<bool>\\(container, \"CheckAccess\"" \

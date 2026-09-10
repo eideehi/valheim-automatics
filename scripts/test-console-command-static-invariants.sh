@@ -39,6 +39,18 @@ require_text_pattern() {
   fi
 }
 
+# A body extracted by sed is empty when its anchor was renamed. Positive checks
+# fail loudly on an empty body, but a *negative* check would pass vacuously, so
+# every body that only feeds a rejection must be proven non-empty first.
+require_nonempty_body() {
+  local text="$1"
+  local message="$2"
+
+  if [[ -z "${text//[[:space:]]/}" ]]; then
+    fail "$message"
+  fi
+}
+
 require_case_guard_before_call() {
   local case_label="$1"
   local guard_call="$2"
@@ -121,10 +133,26 @@ require_source_pattern \
   "$command" \
   "TryCreateTextFilter" \
   "console regex filters must be validated when they are created"
+# The invariant is that the pattern is compiled into a Regex on the creation
+# path and that the compiled Regex is what the filter ends up holding, so an
+# invalid pattern surfaces here instead of at first use. The exact constructor
+# argument list is not part of the invariant: d3b31ae added a match timeout and
+# the previous spelling-exact assertion went stale for the whole v1.7.0 line.
 require_text_pattern \
   "$try_create_body" \
-  "new Regex\\(pattern\\)" \
-  "regex filters must be compiled before command filtering starts"
+  "filter = new TextFilter\\(new Regex\\(pattern[,)]" \
+  "regex filters must be compiled from the pattern and installed as the filter when the filter is created"
+# d3b31ae hardened this against catastrophic backtracking. Without this
+# assertion the check above would happily accept a revert to `new Regex(pattern)`
+# and reintroduce a client freeze on a hostile printnames/printobjects filter.
+require_text_pattern \
+  "$try_create_body" \
+  "new Regex\\(pattern,[^)]*RegexTimeout\\)" \
+  "regex filters must be compiled with a match timeout so a catastrophic pattern cannot freeze the client"
+require_source_pattern \
+  "$command" \
+  "RegexTimeout = TimeSpan\\.From" \
+  "the regex match timeout must be a bounded TimeSpan constant"
 require_text_pattern \
   "$try_create_body" \
   "catch \\(ArgumentException" \
@@ -181,6 +209,9 @@ require_text_before_text \
   "TryCreateTextFilter(args, _exclude" \
   "foreach" \
   "printobjects exclude filters must be validated before object scans"
+require_nonempty_body \
+  "$print_objects_command_action_body" \
+  "printobjects CommandAction body could not be extracted; the filter-dispatch rejection below would pass vacuously"
 if printf '%s\n' "$print_objects_command_action_body" | rg -q "TryCreateTextFilter"; then
   fail "printobjects must not validate include/exclude filters before type dispatch"
 fi
