@@ -29,10 +29,13 @@ namespace Automatics.AutomaticFarming
 
         /// <summary>
         /// True when Automatic Farming owns the harvest of <paramref name="pickable"/>
-        /// (module enabled, feature on, and the crop is allowlisted). Automatic Pickup
-        /// queries this to skip crops that farming will harvest and replant. The
-        /// module-disabled short-circuit keeps it safe even before this module's
-        /// configuration is bound.
+        /// (module effectively running, feature on, and the crop is allowlisted).
+        /// Automatic Pickup queries this to skip crops that farming will harvest and
+        /// replant, so the answer has to track whether farming is actually running rather
+        /// than what the module setting says: a crop claimed for a module that never
+        /// initialized would be skipped by pickup and harvested by nobody (R7.5). The
+        /// <see cref="Module.Active"/> short-circuit also keeps this cross-module call
+        /// safe before this module's configuration is bound.
         /// </summary>
         public static bool ClaimsCrop(Pickable pickable)
         {
@@ -42,7 +45,7 @@ namespace Automatics.AutomaticFarming
         public static bool ClaimsCrop(Player player, Pickable pickable)
         {
             if (!pickable) return false;
-            if (Config.ModuleDisabled) return false;
+            if (!Module.Active) return false;
             if (!Config.EnableAutomaticFarming) return false;
 
             if (!TryGetCropIdentifier(pickable, out var identifier)) return false;

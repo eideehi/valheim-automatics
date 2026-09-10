@@ -7,6 +7,20 @@ namespace Automatics.AutomaticFarming
 {
     internal static class Module
     {
+        // True only while this module is effectively running, i.e. Initialize() reached
+        // its last statement, so the hooks and patches below are wired up and the rest of
+        // Config is bound. A `module = Enabled` setting is not enough on its own: the
+        // initializer can early-return on a disabled module, or throw and be swallowed by
+        // Automatics.InitializeModules, leaving the setting Enabled with nothing running.
+        // Automatic Pickup reads this through AutomaticFarming.ClaimsCrop to avoid leaving
+        // a crop for a module that will never harvest it (R7.5).
+        //
+        // When this module is migrated to the module lifecycle framework the meaning stays
+        // exactly the same and only the mutability changes: Enable(scope) sets it true as
+        // its last statement and Disable(scope) clears it as its first, instead of the
+        // one-way assignment at the end of Initialize().
+        internal static bool Active;
+
         private static readonly Dictionary<long, float> FarmingTimers;
 
         static Module()
@@ -30,6 +44,10 @@ namespace Automatics.AutomaticFarming
             Hooks.OnPlayerFixedUpdate += OnPlayerFixedUpdate;
             Harmony.CreateAndPatchAll(typeof(Patches),
                 Automatics.GetHarmonyId("automatic-farming"));
+
+            // Last statement on purpose: everything the module needs is wired up above, so
+            // nothing observes Active as true while initialization is still in progress.
+            Active = true;
         }
 
         private static void OnPlayerUpdate(Player player, bool takeInput)
