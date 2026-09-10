@@ -31,12 +31,24 @@ namespace Automatics.AutomaticProcessing
              * + fuel = CookingStationProcess.Refuel(this, this.m_nview, fuel);
              *   this.SetFuel(fuel);
              */
+            // Local 1 is `fuel` (float). CookingStation.UpdateFuel declares
+            // `.locals init ([0] float32, [1] float32)` in 1.0.7: slot 0 is the
+            // per-frame fuel burn (dt / m_secPerFuel), slot 1 is the value read
+            // from GetFuel and handed to SetFuel. ADR-0001 asks for the local to
+            // be resolved by type, but System.Single is not unique here, so
+            // GetSingleLocalIndex would throw on a method it can never resolve.
+            // Instead the slot is pinned by the match itself: the anchor below
+            // requires Ldloc_1 to be the value flowing into SetFuel, so a layout
+            // change breaks the match and ThrowIfInvalid reports it at patch
+            // time rather than emitting IL that reads the wrong local.
             return new CodeMatcher(instructions)
                 .MatchStartForward(
                     new CodeMatch(OpCodes.Ldarg_0),
                     new CodeMatch(OpCodes.Ldloc_1),
                     new CodeMatch(OpCodes.Call,
                         AccessTools.Method(typeof(CookingStation), "SetFuel")))
+                .ThrowIfInvalid(
+                    "CookingStation.UpdateFuel: the SetFuel call taking local 1 (fuel) was not found")
                 .Advance(1)
                 .Insert(
                     new CodeInstruction(OpCodes.Ldarg_0),
@@ -183,7 +195,7 @@ namespace Automatics.AutomaticProcessing
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(Smelter), "UpdateSmelter")]
         public static IEnumerable<CodeInstruction> Smelter_UpdateSmelter_Transpiler(
-            IEnumerable<CodeInstruction> instructions)
+            IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
             /*
              *   while (accumulator >= 1f) {
@@ -193,12 +205,30 @@ namespace Automatics.AutomaticProcessing
              *     string queuedOre = this.GetQueuedOre();
              * +   queuedOre = SmelterProcess.QuickCraft(this, this.m_nview, accumulator, queuedOre);
              */
+            // Smelter.UpdateSmelter declares in 1.0.7:
+            //   [0] float64  deltaTime
+            //   [1] float32  accumulator
+            //   [2] float32  windmill power output
+            //   [3] float32  fuel
+            //   [4] string   queuedOre
+            //   [5..7] float32  scratch (num2, num3, bakeTimer)
+            // Only `queuedOre` has a type that is unique among those locals, so
+            // it is the only one ADR-0001's by-type resolution can handle here.
+            // The two float locals stay pinned by their anchors instead:
+            // `fuel` is required to be the destination of the store that follows
+            // GetFuel, and a layout change therefore breaks the match and is
+            // reported by ThrowIfInvalid at patch time. `accumulator` (local 1)
+            // has no such anchor and remains a hardcoded slot; see F2/ADR-0001.
+            var queuedOreIndex = GetSingleLocalIndex(original, typeof(string));
+
             return new CodeMatcher(instructions)
                 .MatchEndForward(
                     new CodeMatch(OpCodes.Ldarg_0),
                     new CodeMatch(OpCodes.Call,
                         AccessTools.Method(typeof(Smelter), "GetFuel")),
                     new CodeMatch(OpCodes.Stloc_3))
+                .ThrowIfInvalid(
+                    "Smelter.UpdateSmelter: the GetFuel call storing into local 3 (fuel) was not found")
                 .Advance(1)
                 .Insert(
                     new CodeInstruction(OpCodes.Ldarg_0),
@@ -214,7 +244,9 @@ namespace Automatics.AutomaticProcessing
                     new CodeMatch(OpCodes.Ldarg_0),
                     new CodeMatch(OpCodes.Call,
                         AccessTools.Method(typeof(Smelter), "GetQueuedOre")),
-                    new CodeMatch(OpCodes.Stloc_S))
+                    new CodeMatch(x => x.IsStloc()))
+                .ThrowIfInvalid(
+                    "Smelter.UpdateSmelter: the GetQueuedOre call storing into a local was not found")
                 .Advance(1)
                 .Insert(
                     new CodeInstruction(OpCodes.Ldarg_0),
@@ -222,10 +254,10 @@ namespace Automatics.AutomaticProcessing
                     new CodeInstruction(OpCodes.Ldfld,
                         AccessTools.Field(typeof(Smelter), "m_nview")),
                     new CodeInstruction(OpCodes.Ldloc_1),
-                    new CodeInstruction(OpCodes.Ldloc_S, 4),
+                    new CodeInstruction(OpCodes.Ldloc_S, queuedOreIndex),
                     new CodeInstruction(OpCodes.Call,
                         AccessTools.Method(typeof(SmelterProcess), "QuickCraft")),
-                    new CodeInstruction(OpCodes.Stloc_S, 4))
+                    new CodeInstruction(OpCodes.Stloc_S, queuedOreIndex))
                 .InstructionEnumeration();
         }
 
@@ -265,11 +297,18 @@ namespace Automatics.AutomaticProcessing
              *   this.m_nview.GetZDO().Set("LastSpawn", ZNet.instance.GetTime().Ticks);
              *   TODO: If other mods add code to this location, if the return value of WispSpawnerProcess.Store is true, the code added by other mods will no longer be called.
              */
+            // No IL local is referenced here: the injection is anchored purely on
+            // the `this.m_spawnPoint` field load that opens the spawn-position
+            // statement, and the original Ldarg_0 of that load is reused as the
+            // first argument of WispSpawnerProcess.Store (the inserted Ldarg_0
+            // below replaces it for the field load and carries the skip label).
             return new CodeMatcher(instructions, generator)
                 .MatchEndForward(
                     new CodeMatch(OpCodes.Ldarg_0),
                     new CodeMatch(OpCodes.Ldfld,
                         AccessTools.Field(typeof(WispSpawner), "m_spawnPoint")))
+                .ThrowIfInvalid(
+                    "WispSpawner.TrySpawn: WispSpawner.m_spawnPoint load not found")
                 .Insert(
                     new CodeInstruction(OpCodes.Ldarg_0))
                 .CreateLabel(out var originalCodes)
