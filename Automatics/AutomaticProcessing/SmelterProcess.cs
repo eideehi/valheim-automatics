@@ -72,6 +72,11 @@ namespace Automatics.AutomaticProcessing
             var smelterName = smelter.m_name;
             if (!Logics.IsAllowProcessing(smelterName, Process.Craft)) return ore;
 
+            // Smelter.OnAddOre refuses once the queue is full; QuickCraft is injected
+            // ahead of UpdateSmelter's own m_maxOre gate, so enforce the same bound here
+            // (notably m_maxOre == 0, where the station accepts no ore at all).
+            if (zNetView.GetZDO().GetInt("queued") >= smelter.m_maxOre) return ore;
+
             var minMaterialCount = Config.MaterialCountOfSuppressProcessing(smelterName);
             var maxProductStacks = Config.ProductStacksOfSuppressProcessing(smelterName);
 
@@ -84,7 +89,7 @@ namespace Automatics.AutomaticProcessing
             var oreAdded = false;
             foreach (var conversion in smelter.m_conversion)
             {
-                Container materialContainer = null;
+                var materialContainers = new List<Container>();
                 var productContainerFound = false;
 
                 var materialItem = conversion.m_from.m_itemData;
@@ -93,12 +98,14 @@ namespace Automatics.AutomaticProcessing
                 var productData = productItem.m_shared;
                 foreach (var (container, inventory) in containersWithInventory)
                 {
-                    if (materialContainer && productContainerFound) break;
-
-                    if (materialContainer == null)
-                        if (Inventories.HaveItem(inventory, materialData.m_name,
-                                0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
-                            materialContainer = container;
+                    // Keep every container that satisfies the material predicate, not just
+                    // the first: the pick is by shared display name while the removal is by
+                    // drop prefab name, so the first match is not guaranteed to hold an item
+                    // this conversion accepts. Latching only the first lets a permanent
+                    // display-name decoy starve the conversion for good.
+                    if (Inventories.HaveItem(inventory, materialData.m_name,
+                            0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
+                        materialContainers.Add(container);
 
                     if (maxProductStacks > 0 && !productContainerFound)
                     {
@@ -109,20 +116,19 @@ namespace Automatics.AutomaticProcessing
                     }
                 }
 
-                if (materialContainer && (maxProductStacks == 0 || productContainerFound))
+                if (materialContainers.Count > 0 &&
+                    (maxProductStacks == 0 || productContainerFound))
                 {
-                    if (!Logics.TryClaimContainer(materialContainer)) continue;
-
-                    var inventory = materialContainer.GetInventory();
-                    if (!Logics.TryRemoveItem(inventory, materialData.m_name, minMaterialCount,
-                            out var prefabName))
+                    // Walks the candidates in distance order, skipping any that holds no
+                    // eligible item without claiming it.
+                    if (!Logics.TryTakeMaterial(materialContainers, materialData.m_name,
+                            minMaterialCount, conversion.m_from.gameObject.name,
+                            out var materialContainer, out var prefabName, out var cheated))
                         continue;
 
                     // Smelter.QueueOre(string name, bool cheated): `cheated` records whether
-                    // the queued ore was cheat-spawned. Logics.TryRemoveItem only reports the
-                    // prefab name, so the removed item's flag is not reachable here; false
-                    // matches the legitimately-obtained ore path.
-                    Reflections.InvokeMethod(smelter, "QueueOre", prefabName, false);
+                    // the queued ore was cheat-spawned, and is what RPC_AddOre forwards.
+                    Reflections.InvokeMethod(smelter, "QueueOre", prefabName, cheated);
 
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position, smelterName,
@@ -197,7 +203,7 @@ namespace Automatics.AutomaticProcessing
             var oreAdded = false;
             foreach (var conversion in conversions)
             {
-                Container materialContainer = null;
+                var materialContainers = new List<Container>();
                 var productContainerFound = false;
 
                 var materialItem = conversion.m_from.m_itemData;
@@ -206,12 +212,14 @@ namespace Automatics.AutomaticProcessing
                 var productData = productItem.m_shared;
                 foreach (var (container, inventory) in containersWithInventory)
                 {
-                    if (materialContainer && productContainerFound) break;
-
-                    if (materialContainer == null)
-                        if (Inventories.HaveItem(inventory, materialData.m_name,
-                                0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
-                            materialContainer = container;
+                    // Keep every container that satisfies the material predicate, not just
+                    // the first: the pick is by shared display name while the removal is by
+                    // drop prefab name, so the first match is not guaranteed to hold an item
+                    // this conversion accepts. Latching only the first lets a permanent
+                    // display-name decoy starve the conversion for good.
+                    if (Inventories.HaveItem(inventory, materialData.m_name,
+                            0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
+                        materialContainers.Add(container);
 
                     if (maxProductStacks > 0 && !productContainerFound)
                     {
@@ -225,15 +233,17 @@ namespace Automatics.AutomaticProcessing
                     }
                 }
 
-                if (materialContainer && (maxProductStacks == 0 || productContainerFound))
+                if (materialContainers.Count > 0 &&
+                    (maxProductStacks == 0 || productContainerFound))
                 {
-                    if (!Logics.TryClaimContainer(materialContainer)) continue;
-
-                    var inventory = materialContainer.GetInventory();
-                    if (!Logics.TryRemoveItem(inventory, materialData.m_name, minMaterialCount,
-                            out var prefabName))
+                    // Walks the candidates in distance order, skipping any that holds no
+                    // eligible item without claiming it.
+                    if (!Logics.TryTakeMaterial(materialContainers, materialData.m_name,
+                            minMaterialCount, conversion.m_from.gameObject.name,
+                            out var materialContainer, out var prefabName, out var cheated))
                         continue;
-                    zNetView.InvokeRPC("RPC_AddOre", prefabName);
+                    // Smelter registers Register<string, bool>("RPC_AddOre", RPC_AddOre).
+                    zNetView.InvokeRPC("RPC_AddOre", prefabName, cheated);
 
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position, smelterName,

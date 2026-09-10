@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using ModUtils;
 using UnityEngine;
@@ -41,7 +42,7 @@ namespace Automatics.AutomaticProcessing
 
             foreach (var conversion in fermenter.m_conversion)
             {
-                Container materialContainer = null;
+                var materialContainers = new List<Container>();
                 var productContainerFound = false;
 
                 var materialItem = conversion.m_from.m_itemData;
@@ -50,12 +51,14 @@ namespace Automatics.AutomaticProcessing
                 var productData = productItem.m_shared;
                 foreach (var (container, inventory) in containersWithInventory)
                 {
-                    if (materialContainer && productContainerFound) break;
-
-                    if (materialContainer == null)
-                        if (Inventories.HaveItem(inventory, materialData.m_name,
-                                0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
-                            materialContainer = container;
+                    // Keep every container that satisfies the material predicate, not just
+                    // the first: the pick is by shared display name while the removal is by
+                    // drop prefab name, so the first match is not guaranteed to hold an item
+                    // this conversion accepts. Latching only the first lets a permanent
+                    // display-name decoy starve the conversion for good.
+                    if (Inventories.HaveItem(inventory, materialData.m_name,
+                            0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
+                        materialContainers.Add(container);
 
                     if (maxProductStacks > 0 && !productContainerFound)
                     {
@@ -67,15 +70,18 @@ namespace Automatics.AutomaticProcessing
                     }
                 }
 
-                if (materialContainer && (maxProductStacks == 0 || productContainerFound))
+                if (materialContainers.Count > 0 &&
+                    (maxProductStacks == 0 || productContainerFound))
                 {
-                    if (!Logics.TryClaimContainer(materialContainer)) continue;
-
-                    var inventory = materialContainer.GetInventory();
-                    if (!Logics.TryRemoveItem(inventory, materialData.m_name, minMaterialCount,
-                            out var prefabName))
+                    // Walks the candidates in distance order, skipping any that holds no
+                    // eligible item without claiming it.
+                    if (!Logics.TryTakeMaterial(materialContainers, materialData.m_name,
+                            minMaterialCount, conversion.m_from.gameObject.name,
+                            out var materialContainer, out var prefabName, out var cheated))
                         continue;
-                    zNetView.InvokeRPC("RPC_AddItem", prefabName);
+                    // Fermenter registers Register<int, bool>("RPC_AddItem", RPC_AddItem) and
+                    // Fermenter.AddItem sends item.m_dropPrefab.name.GetStableHashCode().
+                    zNetView.InvokeRPC("RPC_AddItem", prefabName.GetStableHashCode(), cheated);
 
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position,
@@ -95,9 +101,14 @@ namespace Automatics.AutomaticProcessing
 
             if (GetStatus(fermenter) != Status.Ready) return;
 
-            var itemId = zNetView.GetZDO().GetString("Content");
-            var conversion =
-                fermenter.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == itemId);
+            // Fermenter stores its content as the drop prefab name's stable hash
+            // (RPC_AddItem does ZDO.Set(ZDOVars.s_content, nameHash)) and resolves it back
+            // with GetItemConversion(nameHash). ZDOVars.s_content is "Content"
+            // .GetStableHashCode() and ZDO's string-key overloads hash the key the same
+            // way, so this reads the very slot Valheim writes.
+            var contentHash = zNetView.GetZDO().GetInt("Content");
+            var conversion = fermenter.m_conversion.FirstOrDefault(
+                x => x.m_from.gameObject.name.GetStableHashCode() == contentHash);
             if (conversion == null) return;
 
             var origin = fermenter.transform.position;
@@ -126,7 +137,9 @@ namespace Automatics.AutomaticProcessing
 
             if (productRemaining == conversion.m_producedItems) return;
 
-            zNetView.GetZDO().Set("Content", "");
+            // Fermenter.RPC_Tap/DropAllItems empty the barrel with Set(s_content, 0);
+            // 0 is the value GetStatus() reads as Status.Empty.
+            zNetView.GetZDO().Set("Content", 0);
             zNetView.GetZDO().Set("StartTime", 0);
 
             fermenter.m_spawnEffects.Create(fermenter.m_outputPoint.transform.position,

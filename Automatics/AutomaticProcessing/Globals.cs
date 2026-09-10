@@ -91,7 +91,26 @@ namespace Automatics.AutomaticProcessing
         public static bool TryRemoveItem(Inventory inventory, string itemName, int minCount,
             out string prefabName)
         {
+            return TryRemoveItem(inventory, itemName, minCount, out prefabName, out _);
+        }
+
+        /// <summary>
+        /// Removes one matching item and reports both the drop prefab name and the removed
+        /// item's cheat provenance, which the vanilla add RPCs carry alongside the name.
+        /// </summary>
+        /// <param name="requiredPrefabName">
+        /// When set, only items whose drop prefab has this exact name are eligible. The
+        /// vanilla add paths validate the item against the station's conversion list before
+        /// removing it (Smelter.OnAddOre / CookingStation.CookItem / Fermenter.AddItem all
+        /// call IsItemAllowed first), and items are looked up here by shared display name,
+        /// which several prefabs can share. Filtering before the removal keeps an item the
+        /// receiving RPC would reject in the container instead of destroying it.
+        /// </param>
+        public static bool TryRemoveItem(Inventory inventory, string itemName, int minCount,
+            out string prefabName, out bool cheated, string requiredPrefabName = null)
+        {
             prefabName = null;
+            cheated = false;
             if (inventory == null || string.IsNullOrEmpty(itemName)) return false;
 
             if (!Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore,
@@ -100,19 +119,108 @@ namespace Automatics.AutomaticProcessing
 
             foreach (var item in Inventories.GetItems(inventory, itemName, 0,
                          WorldLevelMatchMode.Ignore))
-                if (TryRemoveItem(inventory, item, out prefabName))
-                    return true;
+            {
+                if (requiredPrefabName != null &&
+                    (item.m_dropPrefab == null || item.m_dropPrefab.name != requiredPrefabName))
+                    continue;
 
+                if (TryRemoveItem(inventory, item, out prefabName, out cheated))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Non-mutating counterpart of the by-name <see cref="TryRemoveItem(Inventory,string,int,out string,out bool,string)" />:
+        /// returns the item that call would remove, or null when the inventory holds no
+        /// eligible one. Probing has to be possible without touching the container, because
+        /// claiming a container cannot be undone (see <see cref="TryTakeMaterial" />), so
+        /// eligibility must be decided before the claim.
+        /// </summary>
+        public static ItemDrop.ItemData FindRemovableItem(Inventory inventory, string itemName,
+            int minCount, string requiredPrefabName = null)
+        {
+            if (inventory == null || string.IsNullOrEmpty(itemName)) return null;
+
+            if (!Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore,
+                    minCount + 1))
+                return null;
+
+            return Inventories.GetItems(inventory, itemName, 0, WorldLevelMatchMode.Ignore)
+                .FirstOrDefault(x => x.m_dropPrefab != null &&
+                                     (requiredPrefabName == null ||
+                                      x.m_dropPrefab.name == requiredPrefabName));
+        }
+
+        /// <summary>
+        /// Takes one material from the first candidate container that actually holds an item
+        /// the station accepts. Candidates are chosen by shared display name while the
+        /// removal is filtered by drop prefab name, so a candidate can match the name and
+        /// still hold nothing eligible; when that happens the search continues with the next
+        /// candidate instead of abandoning the conversion for the tick, which a permanent
+        /// decoy item would otherwise do forever.
+        /// </summary>
+        /// <remarks>
+        /// Eligibility is probed with <see cref="FindRemovableItem" /> before
+        /// <see cref="TryClaimContainer" /> is called, so a container holding no eligible
+        /// item is skipped without being claimed. That is the whole guarantee: claiming
+        /// takes ZDO ownership (ZNetView.ClaimOwnership -> ZDO.SetOwner plus an
+        /// owner-revision bump) and nothing here can hand ownership back, while
+        /// ContainerAccess claims before its post-claim access checks and a removal can
+        /// still fail after a successful probe. Ownership can therefore change on a
+        /// container this ends up not taking from; that matches the pre-existing behaviour
+        /// and is not something the caller can undo.
+        /// </remarks>
+        public static bool TryTakeMaterial(IEnumerable<Container> candidates, string itemName,
+            int minCount, string requiredPrefabName, out Container source, out string prefabName,
+            out bool cheated)
+        {
+            source = null;
+            prefabName = null;
+            cheated = false;
+            if (candidates == null) return false;
+
+            foreach (var container in candidates)
+            {
+                if (!container) continue;
+
+                var inventory = container.GetInventory();
+                if (FindRemovableItem(inventory, itemName, minCount, requiredPrefabName) == null)
+                    continue;
+
+                if (!TryClaimContainer(container)) continue;
+                // Removal goes back through the filtered by-name path on purpose: the
+                // drop-prefab guard that keeps a would-be-rejected item from being destroyed
+                // stays on the removal itself, not only on the pre-claim probe.
+                if (!TryRemoveItem(inventory, itemName, minCount, out prefabName, out cheated,
+                        requiredPrefabName))
+                    continue;
+
+                source = container;
+                return true;
+            }
+
+            prefabName = null;
+            cheated = false;
             return false;
         }
 
         public static bool TryRemoveItem(Inventory inventory, ItemDrop.ItemData item,
             out string prefabName)
         {
+            return TryRemoveItem(inventory, item, out prefabName, out _);
+        }
+
+        public static bool TryRemoveItem(Inventory inventory, ItemDrop.ItemData item,
+            out string prefabName, out bool cheated)
+        {
             prefabName = null;
+            cheated = false;
             if (inventory == null || item == null || item.m_dropPrefab == null) return false;
 
             prefabName = item.m_dropPrefab.name;
+            cheated = item.m_cheated;
             return inventory.RemoveItem(item, 1);
         }
 
