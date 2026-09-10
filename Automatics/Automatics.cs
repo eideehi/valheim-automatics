@@ -113,6 +113,14 @@ namespace Automatics
 
             Logger.Debug($"Mod location: {_modLocation}");
 
+            HarmonyCapabilities.Probe();
+            Logger.Info(HarmonyCapabilities.DescribeEnvironment());
+            if (!HarmonyCapabilities.CanUnpatch)
+                Logger.Warning(
+                    "This Harmony build cannot remove patches at runtime. Modules that are " +
+                    "turned off can only be soft gated, and their patches stay applied until " +
+                    "the game is restarted.");
+
             ConfigMigration.Migration(Plugin.Config);
 
             ValheimObject.Initialize(GetAllResourcePath("Data"));
