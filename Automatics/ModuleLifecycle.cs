@@ -1,10 +1,100 @@
 using System;
 using System.Reflection;
 using BepInEx;
+using BepInEx.Configuration;
 using HarmonyLib;
 
 namespace Automatics
 {
+    /// <summary>
+    ///     One module as the registry sees it. The registry only ever reads
+    ///     <see cref="ModuleToggle" />; nothing here lets it write the stored setting back, which
+    ///     is how R1.3b is kept structural rather than conventional.
+    /// </summary>
+    internal interface IAutomaticsModule
+    {
+        /// <summary>
+        ///     The suffix of this module's Harmony id, for example <c>automatic-pickup</c>. It is
+        ///     handed to <see cref="Automatics.GetHarmonyId" />, so every module owns a separate
+        ///     id and no teardown can reach the always-on root patches (R3.1).
+        /// </summary>
+        string Name { get; }
+
+        /// <summary>The config section, for example <c>automatic_pickup</c>.</summary>
+        string ConfigSection { get; }
+
+        /// <summary>
+        ///     False means the module keeps the historical start-up-only path: the registry does
+        ///     not subscribe to its toggle, so changing the setting takes a restart.
+        /// </summary>
+        bool SupportsRuntimeToggle { get; }
+
+        /// <summary>Valid once <see cref="BindConfig" /> has run.</summary>
+        ConfigEntry<AutomaticsModule> ModuleToggle { get; }
+
+        /// <summary>
+        ///     The R1.5a stop request. The registry raises it the moment a transition is asked
+        ///     for, long before the pump applies it, so a hot path stops producing side effects
+        ///     in the frame the user changed the setting rather than in the frame after it.
+        ///     Implementations only write their own static field: the hot path reads that field
+        ///     directly instead of paying for an interface call.
+        /// </summary>
+        void SetStopRequested(bool value);
+
+        void BindConfig();
+
+        /// <summary>
+        ///     Acquires everything this activation owns through <paramref name="scope" />, and
+        ///     raises the module's own effective-state flag as its very last statement, so a
+        ///     throw part way through leaves the module inactive.
+        /// </summary>
+        void Enable(ModuleScope scope);
+
+        /// <summary>
+        ///     Lowers the effective-state flag as its very first statement (R1.5) and resets
+        ///     module-private session state. It must not undo anything the scope owns: patches,
+        ///     subscriptions and components are removed by <see cref="ModuleScope.Dispose" /> in
+        ///     reverse acquisition order (R1.6).
+        /// </summary>
+        void Disable(ModuleScope scope);
+    }
+
+    /// <summary>
+    ///     A component a <see cref="ModuleScope" /> can stamp with a generation and shut down
+    ///     synchronously before it destroys it (R4.5 / R1.6).
+    /// </summary>
+    internal interface IScopedComponent
+    {
+        /// <summary>
+        ///     The activation that owns this component. Zero is reserved for "not attached yet":
+        ///     the scope writes the real generation immediately after <c>AddComponent</c>, and a
+        ///     component that reads this from its own <c>Awake</c> would still see zero.
+        /// </summary>
+        int ScopeGeneration { get; set; }
+
+        /// <summary>
+        ///     Called synchronously by the owning scope immediately before it destroys this
+        ///     component. Engine destruction is deferred to the end of the frame, so anything
+        ///     that cannot wait that long - a running coroutine above all - has to be stopped
+        ///     here rather than in <c>OnDestroy</c>.
+        /// </summary>
+        void OnScopeDetaching();
+    }
+
+    /// <summary>
+    ///     Thrown by <see cref="ModuleScope.Attach{TComponent}" /> when the target still carries a
+    ///     component from an older generation that the engine has not destroyed yet. The registry
+    ///     turns this into a deferral and retries on the next tick; it is never allowed to escape
+    ///     into a game call stack, which is what <see cref="ModuleScope.TryAttach{TComponent}" />
+    ///     is for.
+    /// </summary>
+    internal sealed class ScopeAttachDeferredException : Exception
+    {
+        public ScopeAttachDeferredException(string message) : base(message)
+        {
+        }
+    }
+
     /// <summary>
     ///     Startup probe for the Harmony features the module lifecycle depends on, and the
     ///     source of the one-line environment banner (R3.4).

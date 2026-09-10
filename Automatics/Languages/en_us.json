@@ -6,6 +6,8 @@
     "@select_all": "All",
     "@message_module_enabled": "Do Not Disable This Module",
     "@message_module_disabled": "Disable This Module",
+    "@message_module_state_faulted": "This module is in a faulted state: something it installed could not be removed. Check the Automatics log for details, then change this setting again to retry.",
+    "@message_module_runtime_toggle_degraded": "This Harmony build cannot remove patches at runtime. Turning this module off only gates it, and its patches stay applied until the game is restarted.",
     "@message_none": "Do Not Display",
     "@message_center": "Display In The Center",
     "@message_top_left": "Display In Top Left",

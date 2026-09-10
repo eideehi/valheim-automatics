@@ -6,6 +6,8 @@
     "@select_all": "すべて選択",
     "@message_module_enabled": "モジュールを無効化しない",
     "@message_module_disabled": "モジュールを無効化する",
+    "@message_module_state_faulted": "このモジュールは異常状態です。導入したものの一部を撤去できませんでした。詳細は Automatics のログを確認してください。この設定を変更し直すと再試行します。",
+    "@message_module_runtime_toggle_degraded": "この Harmony ビルドは実行中にパッチを撤去できません。このモジュールを無効にしても動作を止めるだけで、パッチはゲームを再起動するまで残ります。",
     "@message_none": "表示しない",
     "@message_center": "中央に表示",
     "@message_top_left": "左上に表示",

@@ -26,6 +26,14 @@ namespace Automatics
             Automatics.Initialize(this, Logger);
         }
 
+        private void Update()
+        {
+            // The module transition pump. It runs on the main menu too, which is harmless:
+            // with no outstanding request it returns immediately, and with nothing registered
+            // it does not even look.
+            ModuleRegistry.Pump();
+        }
+
         private void FixedUpdate()
         {
             if (Player.m_localPlayer != null) return;
@@ -153,6 +161,7 @@ namespace Automatics
             Plugin.Config.Save();
 
             InitializeModules(Assembly.GetExecutingAssembly());
+            ModuleRegistry.RequestInitialStates();
 
             Plugin.Config.Save();
             ValheimObject.PostInitialize();
