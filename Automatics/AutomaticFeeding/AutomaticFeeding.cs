@@ -8,7 +8,7 @@ using UnityEngine;
 namespace Automatics.AutomaticFeeding
 {
     [DisallowMultipleComponent]
-    internal class AutomaticFeeding : MonoBehaviour
+    internal class AutomaticFeeding : MonoBehaviour, IScopedComponent
     {
         // MonsterAI.CanConsume resolved once into a cached delegate so the
         // per-AI-tick food check never allocates a Traverse + params array per
@@ -24,6 +24,8 @@ namespace Automatics.AutomaticFeeding
         private Container _closestFeedBox;
         private Humanoid _closestFeeder;
         private ItemDrop.ItemData _consumeTargetItem;
+
+        public int ScopeGeneration { get; set; }
 
         static AutomaticFeeding()
         {
@@ -70,8 +72,29 @@ namespace Automatics.AutomaticFeeding
             _consumeTargetItem = null;
         }
 
+        /// <summary>
+        ///     Drops the feed targets and the search state before the scope destroys the component.
+        ///     No item is held here: a feeding call takes an item out and feeds it within the same
+        ///     call, so there is nothing to put back.
+        /// </summary>
+        public void OnScopeDetaching()
+        {
+            _closestFeedBox = null;
+            _closestFeeder = null;
+            _consumeTargetItem = null;
+            _consumeSearchTimer = 0f;
+            _feedBoxBuffer.Clear();
+        }
+
+        /// <summary>
+        ///     Only reads the animal's surroundings, but it still opens with the stop request, so a
+        ///     wild animal is back on the game's own targeting as soon as the module is asked to
+        ///     stop. false leaves the game's result as it is.
+        /// </summary>
         public static bool CancelAttackOnFeedBox(BaseAI baseAI, StaticTarget target)
         {
+            if (!Module.Running) return false;
+
             // AutomaticFeeding lives on the same GameObject as the patched AI, so resolve
             // it directly instead of scanning every animal in the world. The old
             // AllInstance.Any scan made each per-frame postfix O(animals), i.e.
@@ -80,8 +103,22 @@ namespace Automatics.AutomaticFeeding
             return feeding != null && feeding.CancelAttackOnFeedBox(target);
         }
 
+        /// <summary>
+        ///     The entry point that moves an item (R8.11). It reads the stop request once, as its
+        ///     first statement, and nothing it reaches reads it again. A call claims a feed box,
+        ///     takes one item out of it or out of the local player's inventory, and hands the item
+        ///     to the animal's consume callback within the same call. The claim, the removal and
+        ///     the callback all run code that is not ours, and a callback there can change the
+        ///     setting, and so raise the stop request, before the call returns. A second check after
+        ///     the item left its inventory would lose it without feeding the animal, so there is
+        ///     none, and nothing in the call reaches an entry point again. A call that passed the
+        ///     gate finishes; the next one sees the stop, and false leaves the game's result as it
+        ///     is.
+        /// </summary>
         public static bool Feeding(MonsterAI monsterAI, Humanoid humanoid, float delta)
         {
+            if (!Module.Running) return false;
+
             var feeding = monsterAI.GetComponent<AutomaticFeeding>();
             return feeding != null && feeding.Feeding(humanoid, delta);
         }

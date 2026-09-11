@@ -26,9 +26,10 @@ or accepted value range.
 
 Automatics is split into feature modules. Each module has a `Disable Module`
 option, and most modules also have a separate on/off option for the feature
-behavior. Automatic pickup, automatic processing, automatic mapping and automatic
-storage apply that option while the game is running; every other module still
-needs a restart, and says so in the option name.
+behavior. Automatic door, automatic pickup, automatic processing, automatic
+mapping, automatic mining, automatic feeding and automatic storage apply that
+option while the game is running; every other module still needs a restart, and
+says so in the option name.
 
 ## Common configuration concepts
 
@@ -63,22 +64,26 @@ off.
 | Automatic processing | `Disable Module` | While the game is running. No restart. |
 | Automatic mapping | `Disable Module` | While the game is running. No restart. |
 | Automatic mining | `Disable Module` | While the game is running. No restart. |
+| Automatic feeding | `Disable Module` | While the game is running. No restart. |
 | Automatic storage | `Disable Module` | While the game is running. No restart. |
-| Automatic farming, feeding and repair | `Disable Module (Reboot Required)` | After the game is restarted. |
+| Automatic farming and repair | `Disable Module (Reboot Required)` | After the game is restarted. |
 
 When you turn automatic door, automatic pickup, automatic processing, automatic
-mapping, automatic mining or automatic storage off, it stops starting new
-automatic actions, such as door movement, pickups, item transfers, pin updates,
-mining passes and storage passes, right away, and lets an action that is already
-in progress finish. For automatic
+mapping, automatic mining, automatic feeding or automatic storage off, it stops
+starting new automatic actions, such as door movement, pickups, item transfers,
+pin updates, mining passes, feeding and storage passes, right away, and lets an
+action that is already in progress finish. For automatic
 storage, `Store Items` does nothing from then on, and a storage pass that has
 already started still moves every item it selected. For automatic mining, a
 pass that has already started completes all of its selected hits, including
-damage, pickaxe durability, noise and skill updates. The switch itself completes
+damage, pickaxe durability, noise and skill updates. For automatic feeding, an
+animal that has already taken a feed item out of a container or your inventory
+still eats it. The switch itself completes
 over the next few frames, when the module's patches and hooks are removed, along
 with the components automatic door adds to doors, automatic pickup adds to
 players and items, automatic mapping adds to fish, birds, ships, rocks and flora,
-and automatic mining adds to destructible mineral objects. Turning any of them
+automatic mining adds to destructible mineral objects, and automatic feeding adds
+to animals that can be tamed. Turning any of them
 back on also completes over the next few frames, and it then also works on
 objects that appeared while it was off. If the Automatics
 log reports that this Harmony build cannot remove patches at runtime, turning one
@@ -373,6 +378,9 @@ If no container feed is found and player feeding is allowed, it checks the local
 player's inventory. When a wild animal is allowed to feed from containers,
 Automatics also prevents that animal from treating a feed box as an attack
 target when the box contains edible food.
+
+Its `Disable Module` option takes effect without a restart. See
+[Module disable options](#module-disable-options).
 
 ## Automatic repair
 

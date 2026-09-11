@@ -1183,8 +1183,8 @@ When the number of items stored in the container is about to become less than th
 - Acceptable value range: From 0 to 999
 
 ## [ #6 Automatic Feeding ] / [automatic_feeding]
-### Disable Module (Reboot Required) / [module]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+### Disable Module / [module]
+You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled

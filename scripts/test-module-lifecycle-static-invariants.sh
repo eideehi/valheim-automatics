@@ -40,6 +40,7 @@ migrated_module_dirs=(
   "Automatics/AutomaticStorage"
   "Automatics/AutomaticDoor"
   "Automatics/AutomaticMining"
+  "Automatics/AutomaticFeeding"
 )
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
@@ -47,7 +48,6 @@ migrated_module_dirs=(
 # does not verify (R5.1a).
 unmigrated_module_configs=(
   "Automatics/AutomaticFarming/Config.cs"
-  "Automatics/AutomaticFeeding/Config.cs"
   "Automatics/AutomaticRepair/Config.cs"
 )
 
@@ -190,6 +190,45 @@ mining_config_entries=(
   'allow_mining_underground_minerals|config *\. *Bind *\( *"allow_mining_underground_minerals" *, *true *\)'
   'need_to_equip_wishbone_for_mining_underground_minerals|config *\. *Bind *\( *"need_to_equip_wishbone_for_mining_underground_minerals" *, *true *\)'
   'mining_key|config *\. *Bind *\( *"mining_key" *, *new KeyboardShortcut *\( *\) *\)'
+)
+
+feeding_dir="Automatics/AutomaticFeeding"
+feeding_config="$feeding_dir/Config.cs"
+feeding_module="$feeding_dir/Module.cs"
+feeding_patches="$feeding_dir/Patches.cs"
+feeding_component="$feeding_dir/AutomaticFeeding.cs"
+feeding_globals="$feeding_dir/Globals.cs"
+feeding_animal_type="$feeding_dir/AnimalType.cs"
+feeding_smoke="smoke/Automatics.SmokeTest/LifecycleSmokeModules.cs"
+
+# The two static entry points of Automatic Feeding, in the form of processing_entries. Feeding
+# takes one item out of a feed box or the local player's inventory and feeds it within the same
+# call; CancelAttackOnFeedBox only reads. Each looks at the stop request in its first statement
+# and nowhere else. AttachFeeding is discovery rather than an effect, and is checked with the
+# attach paths.
+feeding_entries=(
+  "AutomaticFeeding.Feeding|$feeding_component|public static bool Feeding\\(MonsterAI |if (!Module.Running) return false;"
+  "AutomaticFeeding.CancelAttackOnFeedBox|$feeding_component|public static bool CancelAttackOnFeedBox\\(BaseAI |if (!Module.Running) return false;"
+)
+
+# The operations with which the instance Feeding commits an item: the feed box claim, the removal
+# and the animal's consume callback. Each has to be found on its own, so one renamed out of this
+# list stops the check instead of silently moving the first change later.
+feeding_change_anchors=(
+  'claim (TryPrepareContainerMutationServerAware)|(^|[^A-Za-z0-9_])TryPrepareContainerMutationServerAware *\('
+  'removal (RemoveOneItem)|(^|[^A-Za-z0-9_])RemoveOneItem *\('
+  'consume callback (m_onConsumedItem)|(^|[^A-Za-z0-9_])m_onConsumedItem([^A-Za-z0-9_]|$)'
+)
+feeding_changes='(^|[^A-Za-z0-9_])(TryPrepareContainerMutationServerAware|RemoveOneItem|ClaimOwnership) *\(|(^|[^A-Za-z0-9_])m_onConsumedItem([^A-Za-z0-9_]|$)'
+
+# Every bind in Automatic Feeding, in its persisted order, defaults included.
+feeding_config_entries=(
+  'module|config *\. *Bind *\( *"module" *, *AutomaticsModule *\. *Disabled'
+  'enable_automatic_feeding|config *\. *Bind *\( *"enable_automatic_feeding" *, *true *\)'
+  'feed_search_range|config *\. *Bind *\( *"feed_search_range" *, *0 *, *\( *0 *, *64 *\) *\)'
+  'need_get_close_to_eat_the_feed|config *\. *Bind *\( *"need_get_close_to_eat_the_feed" *, *false *\)'
+  'allow_to_feed_from_container|config *\. *Bind *\( *"allow_to_feed_from_container" *, *AnimalType *\. *Tamed *\)'
+  'allow_to_feed_from_player|config *\. *Bind *\( *"allow_to_feed_from_player" *, *AnimalType *\. *None *\)'
 )
 
 # The Automatic Processing patterns are POSIX EREs matched against a stream in which every run
@@ -397,6 +436,8 @@ for source_file in \
   "$door_config" "$door_module" "$door_patches" "$door_component" \
   "$door_smoke" "$door_world_smoke" "$door_startup_smoke" \
   "$mining_config" "$mining_module" "$mining_patches" "$mining_component" "$mining_smoke" \
+  "$feeding_config" "$feeding_module" "$feeding_patches" "$feeding_component" \
+  "$feeding_globals" "$feeding_animal_type" "$feeding_smoke" \
   "${unmigrated_module_configs[@]}"; do
   if [[ ! -r "$source_file" ]]; then
     fail "cannot read $source_file; none of the checks below would mean anything"
@@ -441,6 +482,13 @@ for mining_entry in "${mining_entries[@]}"; do
   IFS='|' read -r _ mining_entry_file _ _ <<<"$mining_entry"
   if [[ ! -r "$mining_entry_file" ]]; then
     fail "cannot read $mining_entry_file; none of the Mining checks below would mean anything"
+  fi
+done
+
+for feeding_entry in "${feeding_entries[@]}"; do
+  IFS='|' read -r _ feeding_entry_file _ _ <<<"$feeding_entry"
+  if [[ ! -r "$feeding_entry_file" ]]; then
+    fail "cannot read $feeding_entry_file; none of the Feeding checks below would mean anything"
   fi
 done
 
@@ -2081,6 +2129,25 @@ count_hits() {
   count_hits_after 0 "$1"
 }
 
+# Exactly one match of the pattern in the file's code, read through strip_code so a comment or a
+# literal holding the expected text cannot stand in for the code itself. Do not use it for a
+# pattern that contains a string literal: strip_code blanks those.
+require_single_code_match() {
+  local file="$1"
+  local pattern="$2"
+  local message="$3"
+  local stripped
+  local found
+
+  stripped="$(strip_code "$file")"
+  found="$(printf '%s\n' "$stripped" | count_hits "$pattern")"
+  if lookup_failed "$found"; then
+    fail "could not search the code of $file; the check behind this was not run: $message"
+  elif ((found != 1)); then
+    fail "$message (found $found occurrence(s) in code)"
+  fi
+}
+
 # The text of every match in the text on stdin with its whitespace removed, one per line, or
 # ERROR, which no expected set contains.
 hit_texts() {
@@ -3610,10 +3677,10 @@ require_mining_state_and_registration() {
   require_source_pattern "$mining_module" '\[AutomaticsInitializer\(6\)\]' \
     "the Mining module initializer order must remain 6"
 
-  require_source_pattern "$mining_module" \
+  require_single_code_match "$mining_module" \
     'internal static bool Running *=> *Active *&& *!StopRequested *;' \
     "Mining Running must be exactly Active && !StopRequested"
-  require_source_pattern "$mining_module" \
+  require_single_code_match "$mining_module" \
     'internal static bool Discovering *=> *Active *&& *CurrentScope *!= *null *;' \
     "Mining Discovering must be exactly Active && CurrentScope != null"
 
@@ -3930,6 +3997,453 @@ require_mining_smoke_descriptor() {
     "the Mining lifecycle smoke must not change the user's Mining settings"
 }
 
+# ---------------------------------------------------------------------------------------
+# Automatic Feeding: one patch class, no hook subscription, and one scoped component on every
+# tameable animal with a ZDO. The component's two static entry points are the only places the
+# module state is read; one of them takes an item out and feeds it within the same call.
+# ---------------------------------------------------------------------------------------
+
+require_feeding_state_and_registration() {
+  local stripped
+  local raised
+  local lowered
+  local file
+  local found
+
+  require_source_pattern "$feeding_module" 'internal sealed class Module *: *IAutomaticsModule' \
+    "the Feeding module must implement IAutomaticsModule"
+  require_source_pattern "$feeding_module" 'public string Name *=> *"automatic-feeding" *;' \
+    "the Feeding module registry name must remain automatic-feeding"
+  require_source_pattern "$feeding_module" 'public string ConfigSection *=> *"automatic_feeding" *;' \
+    "the Feeding module config section must remain automatic_feeding"
+  require_source_pattern "$feeding_module" 'public bool SupportsRuntimeToggle *=> *true *;' \
+    "the Feeding module must declare runtime toggle support"
+  require_source_pattern "$feeding_module" '\[AutomaticsInitializer\(4\)\]' \
+    "the Feeding module initializer order must remain 4"
+  require_single_code_match "$feeding_module" \
+    'internal static bool Running *=> *Active *&& *!StopRequested *;' \
+    "Feeding Running must be exactly Active && !StopRequested"
+  require_single_code_match "$feeding_module" \
+    'internal static bool Discovering *=> *Active *&& *CurrentScope *!= *null *;' \
+    "Feeding Discovering must be exactly Active && CurrentScope != null"
+
+  require_exact_method_body "$feeding_module" 'public void SetStopRequested\(bool value\)' \
+    'publicvoidSetStopRequested(boolvalue){StopRequested=value;}' \
+    "Feeding SetStopRequested must do nothing but assign the requested value"
+  require_exact_method_body "$feeding_module" 'private static void Initialize\(\)' \
+    'privatestaticvoidInitialize(){ModuleRegistry.Register(Instance);}' \
+    "the Feeding initializer must only register Module.Instance"
+
+  stripped="$(strip_code "$feeding_module")"
+  raised="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Active *= *true *;')"
+  lowered="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Active *= *false *;')"
+  if lookup_failed "$raised" "$lowered"; then
+    fail "could not count the assignments of Active in the Feeding module; the check was not run"
+  elif ((raised != 1 || lowered != 1)); then
+    fail "the Feeding module must raise Active exactly once, as the last statement of Enable, and lower it exactly once, as the first statement of Disable (R1.5): found $raised raise(s) and $lowered lowering(s)"
+  fi
+
+  # Automatic Feeding subscribes to nothing. The acquisition-order check only sees Enable; a
+  # subscription made anywhere else in the module would be one the teardown never removes, and the
+  # hook counts the lifecycle smoke holds at their baseline would contradict it.
+  for file in "$feeding_dir"/*.cs; do
+    found="$(strip_code "$file" | count_hits '(^|[^A-Za-z0-9_])(Subscribe *<|Hooks *\.)')"
+    if lookup_failed "$found"; then
+      fail "could not search $file for hook subscriptions; the check was not run"
+    elif ((found != 0)); then
+      fail "$file must not subscribe to a hook or name Hooks: Automatic Feeding owns no subscription; found $found"
+    fi
+  done
+}
+
+# Both entry points and who may call them. Each instance method behind an entry shares its name, so
+# a name alone cannot tell the two apart: the only calls allowed are the qualified one from the
+# MonsterAI or BaseAI postfix, and the dispatch from the static entry to its instance method after
+# the gate. A call from anywhere else - the teardown, Awake, Enable, an attach path, the smoke -
+# raises the count. The file list is taken with its exit status, for the reason given at the Mining
+# call-site count.
+require_feeding_entries_and_call_sites() {
+  local files
+  local list_status=0
+  local file
+  local stripped
+  local found
+  local name
+  local body
+  local qualified
+  local dispatched
+  local -A total=([Feeding]=0 [CancelAttackOnFeedBox]=0)
+  local -A declared=([Feeding]=0 [CancelAttackOnFeedBox]=0)
+  local -A postfix=(
+    [Feeding]='private static void MonsterAI_UpdateConsumeItem_Postfix\('
+    [CancelAttackOnFeedBox]='private static void BaseAI_CanSeeTarget_Postfix\('
+  )
+  local -A entry=(
+    [Feeding]='public static bool Feeding\(MonsterAI '
+    [CancelAttackOnFeedBox]='public static bool CancelAttackOnFeedBox\(BaseAI '
+  )
+
+  require_item_entries_open_with_the_gate feeding_entries "$feeding_dir" "$feeding_module" 2
+
+  files="$(rg --files Automatics smoke -g '*.cs')" || list_status=$?
+  if ((list_status != 0)) || [[ -z "$files" ]]; then
+    fail "could not list the C# files under Automatics and smoke (rg exit $list_status); the Feeding call-site check was not run"
+    return
+  fi
+
+  while IFS= read -r file; do
+    [[ "$file" == Automatics/Libraries/* ]] && continue
+    stripped="$(strip_code "$file")"
+    for name in Feeding CancelAttackOnFeedBox; do
+      found="$(printf '%s\n' "$stripped" | count_hits "(^|[^A-Za-z0-9_])$name *\\(")"
+      if lookup_failed "$found"; then
+        fail "could not search $file for $name; the Feeding call-site check was not run"
+        return
+      fi
+      total[$name]=$((total[$name] + found))
+
+      found="$(printf '%s\n' "$stripped" | count_hits "(^|[^A-Za-z0-9_])(public|private|internal|protected)( +static)? +bool +$name *\\(")"
+      if lookup_failed "$found"; then
+        fail "could not distinguish the $name declarations in $file; the Feeding call-site check was not run"
+        return
+      fi
+      declared[$name]=$((declared[$name] + found))
+    done
+  done <<<"$files"
+
+  for name in Feeding CancelAttackOnFeedBox; do
+    body="$(method_body "$feeding_patches" "${postfix[$name]}")"
+    qualified="$(printf '%s\n' "$body" | count_hits "AutomaticFeeding *\\. *$name *\\(")"
+    body="$(method_body "$feeding_component" "${entry[$name]}")"
+    dispatched="$(printf '%s\n' "$body" | count_hits "(^|[^A-Za-z0-9_])feeding *\\. *$name *\\(")"
+    if lookup_failed "$qualified" "$dispatched"; then
+      fail "could not inspect the callers of $name; the Feeding call-site check was not run"
+      continue
+    fi
+
+    if ((declared[$name] != 2 || total[$name] - declared[$name] != 2 || qualified != 1 || dispatched != 1)); then
+      fail "$name must be declared exactly twice (the static entry and the instance method behind it) and called exactly twice across Automatics (excluding Libraries) and smoke: once qualified from ${postfix[$name]//\\/}, and once from the static entry to its instance method after the gate; found ${declared[$name]} declaration(s), $((total[$name] - declared[$name])) call(s), $qualified in the postfix and $dispatched in the entry"
+    fi
+  done
+}
+
+# R8.11 for the instance Feeding, where an item leaves its inventory. Its first change is the
+# earliest of the claim, the removal and the consume callback; from that line on it may neither
+# read the module state nor call an entry point, qualified or not - the instance method shares its
+# name with the static entry, which needs no qualifier inside the class. The file's only reads of
+# the module state are the two entry gates, and the files whose code runs inside a feeding call
+# read none.
+require_feeding_never_rechecks_after_a_change() {
+  local stripped
+  local found
+  local gates
+  local file
+  local body
+  local row
+  local what
+  local pattern
+  local line
+  local missing=0
+  local change_line
+  local late
+  local nested
+
+  stripped="$(strip_code "$feeding_component")"
+  found="$(printf '%s\n' "$stripped" | count_hits "$module_read")"
+  gates="$(printf '%s\n' "$stripped" | count_hits 'if *\( *! *Module *\. *Running *\) *return *false *;')"
+  if lookup_failed "$found" "$gates"; then
+    fail "could not search $feeding_component for module state reads; the check was not run"
+  elif ((found != 2 || gates != 2)); then
+    fail "$feeding_component must read the module state only in the gates of its two entry points (R8.11): found $found read(s) of Module., $gates of them the gate \"if (!Module.Running) return false;\""
+  fi
+
+  for file in "$feeding_globals" "$feeding_animal_type" "$feeding_config"; do
+    found="$(strip_code "$file" | count_hits "$module_read")"
+    if lookup_failed "$found"; then
+      fail "could not search $file for module state reads; the check was not run"
+    elif ((found != 0)); then
+      fail "$file must not read the module state (R8.11): its code runs inside a feeding call, between the entry gate and the item's delivery; found $found"
+    fi
+  done
+
+  body="$(method_body "$feeding_component" 'private bool Feeding\(Humanoid ')"
+  if [[ -z "$body" ]]; then
+    fail "cannot find the instance AutomaticFeeding.Feeding(Humanoid, float); the check on what follows its first change was not run"
+    return
+  fi
+
+  for row in "${feeding_change_anchors[@]}"; do
+    IFS='|' read -r what pattern <<<"$row"
+    line="$(printf '%s\n' "$body" | first_hit "$pattern")"
+    if lookup_failed "$line"; then
+      fail "could not search the instance AutomaticFeeding.Feeding for its $what; the check on what follows its first change was not run"
+      return
+    fi
+    if [[ -z "$line" ]]; then
+      fail "could not find the $what in the instance AutomaticFeeding.Feeding: the claim, the removal and the consume callback each have to be found, or the first change this check measures from may not be the one the code makes"
+      missing=1
+    fi
+  done
+  if ((missing)); then
+    return
+  fi
+
+  change_line="$(printf '%s\n' "$body" | first_hit "$feeding_changes")"
+  if lookup_failed "$change_line" || [[ -z "$change_line" ]]; then
+    fail "could not locate the first change in the instance AutomaticFeeding.Feeding; the check on what follows it was not run"
+    return
+  fi
+
+  # From the line of the first change on, that line included.
+  late="$(printf '%s\n' "$body" | count_hits_after "$((change_line - 1))" "$module_read")"
+  nested="$(printf '%s\n' "$body" | count_hits_after "$((change_line - 1))" '(^|[^A-Za-z0-9_])(Feeding|CancelAttackOnFeedBox) *\(')"
+  if lookup_failed "$late" "$nested"; then
+    fail "could not search the instance AutomaticFeeding.Feeding after its first change; the check was not run"
+    return
+  fi
+
+  if ((late != 0)); then
+    fail "the instance AutomaticFeeding.Feeding must not read the module state after its first change (R8.11): a stop seen there loses an item that already left its inventory; found $late"
+  fi
+  if ((nested != 0)); then
+    fail "the instance AutomaticFeeding.Feeding must not call Feeding or CancelAttackOnFeedBox, qualified or not, after its first change (R8.11): the static entry checks the stop request again, and after the removal that can lose the item; found $nested"
+  fi
+}
+
+# AC-S11: the instance methods act only while this peer owns the animal, and a feed box is claimed -
+# in its guard form, so a failed claim returns before anything moves - before an item is removed
+# from it.
+require_feeding_checks_ownership_first() {
+  local declaration
+  local body
+  local first
+  local claim
+  local removal
+
+  for declaration in 'private bool Feeding\(Humanoid ' 'private bool CancelAttackOnFeedBox\(StaticTarget '; do
+    body="$(method_body "$feeding_component" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "cannot find ${declaration//\\/} in $feeding_component; its ownership check was not run"
+      continue
+    fi
+    first="$(printf '%s\n' "$body" | first_statement)"
+    if [[ "$first" != "if(!HasNetworkOwnership())returnfalse;" ]]; then
+      fail "${declaration//\\/} in $feeding_component must open with \"if (!HasNetworkOwnership()) return false;\" (AC-S11): nothing may be read or changed for an animal this peer does not own; found \"$first\""
+    fi
+  done
+
+  require_exact_method_body "$feeding_component" 'private bool HasNetworkOwnership\(\)' \
+    'privateboolHasNetworkOwnership(){returnObjects.HasValidOwnership(_character);}' \
+    "AutomaticFeeding.HasNetworkOwnership must remain the Objects.HasValidOwnership check on the animal (AC-S11)"
+
+  body="$(method_body "$feeding_component" 'private bool Feeding\(Humanoid ')"
+  claim="$(printf '%s\n' "$body" | first_hit 'TryPrepareContainerMutationServerAware *\(')"
+  removal="$(printf '%s\n' "$body" | first_hit 'RemoveOneItem *\(')"
+  if lookup_failed "$claim" "$removal" || [[ -z "$claim" || -z "$removal" ]]; then
+    fail "could not locate the claim and the removal in the instance AutomaticFeeding.Feeding; the claim-before-removal check was not run"
+  elif ((claim >= removal)); then
+    fail "the instance AutomaticFeeding.Feeding must claim the feed box (TryPrepareContainerMutationServerAware) before it removes an item (RemoveOneItem) (AC-S11): an item removed from a box this peer has not claimed desyncs the container"
+  fi
+  if ! printf '%s\n' "$body" | has_match 'if *\( *! *ContainerAccess *\. *TryPrepareContainerMutationServerAware *\( *Player *\. *m_localPlayer *, *_closestFeedBox *\) *\) *return true *;'; then
+    fail "the instance AutomaticFeeding.Feeding must return when the feed box claim fails, before anything is removed (AC-S11): a claim whose result is thrown away confirms nothing"
+  fi
+}
+
+# The patch class, the two attach paths and the component's scope contract. The patches carry no
+# gate of their own: the gates sit in the entry points they call (ADR-0004) and in AttachFeeding.
+require_feeding_component_ownership() {
+  local stripped
+  local found
+  local row
+  local pattern
+  local rest
+  local expected
+  local message
+
+  stripped="$(strip_code "$feeding_patches")"
+  found="$(printf '%s\n' "$stripped" | count_hits '\[ *HarmonyPatch *\( *typeof *\(')"
+  if lookup_failed "$found"; then
+    fail "could not count the Feeding patch targets; the check was not run"
+  elif ((found != 3)); then
+    fail "the Feeding patch class must patch exactly its three audited targets (Tameable.Awake, MonsterAI.UpdateConsumeItem and BaseAI.CanSeeTarget(StaticTarget)): found $found"
+  fi
+
+  found="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Module *\. *(Running|Active|StopRequested|Discovering)([^A-Za-z0-9_]|$)')"
+  if lookup_failed "$found"; then
+    fail "could not search the Feeding patches for module state reads; the check was not run"
+  elif ((found != 0)); then
+    fail "the Feeding patches must not read the module state (ADR-0004): the gates sit in the entry points they call and in AttachFeeding, and a gate in a patch is a second, unlisted place to look at the stop request; found $found"
+  fi
+
+  found="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Module *\. *AttachFeeding *\(')"
+  if lookup_failed "$found"; then
+    fail "could not search the Feeding patches for the runtime attach path; the check was not run"
+  elif ((found != 1)); then
+    fail "the Tameable.Awake postfix must route through Module.AttachFeeding exactly once, and no other patch may attach: found $found"
+  fi
+
+  stripped="$(strip_code "$feeding_module")"
+  for row in \
+    'CurrentScope *\. *TryAttach *< *AutomaticFeeding *> *\(@@1@@the Feeding runtime attach path must attach through CurrentScope.TryAttach exactly once' \
+    '(^|[^A-Za-z0-9_])scope *\. *Attach *< *AutomaticFeeding *> *\(@@1@@ReconcileTameables must attach through the supplied scope exactly once' \
+    'FindObjectsByType *< *Tameable *> *\(@@1@@the Feeding activation scan must enumerate Tameable itself exactly once (R4.2)' \
+    'FindObjectsInactive *\. *Include@@1@@the Feeding activation scan must ask for inactive animals (R4.2): without it a re-enable misses every animal under a deactivated root' \
+    'FindObjectsOfType@@0@@the Feeding activation scan must use FindObjectsByType, not the deprecated FindObjectsOfType' \
+    'GetAllCharacters@@0@@the Feeding activation scan must not use Character.GetAllCharacters (R4.2): it lists the characters alive now, not the objects that ran Tameable.Awake'; do
+    pattern="${row%%@@*}"
+    rest="${row#*@@}"
+    expected="${rest%%@@*}"
+    message="${rest#*@@}"
+    found="$(printf '%s\n' "$stripped" | count_hits "$pattern")"
+    if lookup_failed "$found"; then
+      fail "could not search the Feeding module for '$pattern'; the component ownership check was not run"
+    elif ((found != expected)); then
+      fail "$message: found $found"
+    fi
+  done
+
+  require_source_pattern "$feeding_component" \
+    'class AutomaticFeeding *: *MonoBehaviour *, *IScopedComponent' \
+    "AutomaticFeeding must implement IScopedComponent so its activation scope can stamp and detach it"
+  require_source_pattern "$feeding_component" 'public int ScopeGeneration *\{ *get *; *set *; *\}' \
+    "AutomaticFeeding must expose its scope generation stamp"
+
+  require_component_declares_only_allowed_unity_messages "$feeding_component" AutomaticFeeding
+}
+
+# Every Feeding method that runs without the entry gate, pinned to its whole body: the teardown, the
+# component's engine callbacks, the three postfixes and the two attach paths. The call-site count
+# above catches an entry point called from one of them; these catch any other statement, such as a
+# claim or a removal made directly.
+require_feeding_gate_free_bodies_are_fixed() {
+  require_exact_method_body "$feeding_module" 'public void Disable\(ModuleScope scope\)' \
+    'publicvoidDisable(ModuleScopescope){Active=false;Generation=0;CurrentScope=null;}' \
+    "Feeding Disable must only lower Active and clear the generation and the scope; the scope removes the patch and the components"
+  require_exact_method_body "$feeding_component" 'public void OnScopeDetaching\(\)' \
+    'publicvoidOnScopeDetaching(){_closestFeedBox=null;_closestFeeder=null;_consumeTargetItem=null;_consumeSearchTimer=0f;_feedBoxBuffer.Clear();}' \
+    "AutomaticFeeding.OnScopeDetaching must only drop its feed targets, reset its search timer and clear its buffer; no item is held to put back"
+  require_exact_method_body "$feeding_component" 'private void OnDestroy\(\)' \
+    'privatevoidOnDestroy(){_baseAI=null;_monsterAI=null;_tamable=null;_character=null;_closestFeeder=null;_closestFeedBox=null;_consumeTargetItem=null;}' \
+    "AutomaticFeeding.OnDestroy must only drop its references"
+  require_exact_method_body "$feeding_component" 'private void Awake\(\)' \
+    'privatevoidAwake(){_tamable=GetComponent<Tameable>();_character=GetComponent<Character>();_monsterAI=GetComponent<MonsterAI>();_baseAI=GetComponent<BaseAI>();}' \
+    "AutomaticFeeding.Awake must only acquire the animal's components"
+  require_exact_method_body "$feeding_patches" 'private static void Tameable_Awake_Postfix\(' \
+    'privatestaticvoidTameable_Awake_Postfix(Tameable__instance,ZNetView___m_nview){if(___m_nview&&___m_nview.GetZDO()!=null)Module.AttachFeeding(__instance.gameObject);}' \
+    "the Tameable.Awake postfix must only attach to a networked animal through Module.AttachFeeding"
+  require_exact_method_body "$feeding_patches" 'private static void MonsterAI_UpdateConsumeItem_Postfix\(' \
+    'privatestaticvoidMonsterAI_UpdateConsumeItem_Postfix(MonsterAI__instance,refbool__result,Humanoidhumanoid,floatdt){if(!Config.EnableAutomaticFeeding)return;if(!__result&&AutomaticFeeding.Feeding(__instance,humanoid,dt))__result=true;}' \
+    "the MonsterAI.UpdateConsumeItem postfix must only call the gated Feeding entry, once, when the game found nothing to eat"
+  require_exact_method_body "$feeding_patches" 'private static void BaseAI_CanSeeTarget_Postfix\(' \
+    'privatestaticvoidBaseAI_CanSeeTarget_Postfix(BaseAI__instance,refbool__result,StaticTargettarget){if(!__result)return;if(!Config.EnableAutomaticFeeding)return;if(AutomaticFeeding.CancelAttackOnFeedBox(__instance,target))__result=false;}' \
+    "the BaseAI.CanSeeTarget postfix must only call the gated CancelAttackOnFeedBox entry, once"
+  require_exact_method_body "$feeding_module" 'internal static void AttachFeeding\(GameObject target\)' \
+    'internalstaticvoidAttachFeeding(GameObjecttarget){if(!Discovering)return;CurrentScope.TryAttach<AutomaticFeeding>(target,out_);}' \
+    "Feeding AttachFeeding must only recheck the discovery state and attach through the current scope"
+  require_exact_method_body "$feeding_module" 'private static void ReconcileTameables\(ModuleScope scope\)' \
+    'privatestaticvoidReconcileTameables(ModuleScopescope){foreach(vartameableinUnityEngine.Object.FindObjectsByType<Tameable>(FindObjectsInactive.Include,FindObjectsSortMode.None)){if(!Objects.GetZNetView(tameable,outvarzNetView))continue;if(zNetView.GetZDO()==null)continue;scope.Attach<AutomaticFeeding>(tameable.gameObject);}}' \
+    "Feeding ReconcileTameables must remain the audited scan of networked tameables and must not feed"
+}
+
+# R5.1 / R5.2 and R1.5: every entry is bound, in its persisted order and with its default, and
+# nothing in the module reads the setting as a flag.
+require_feeding_config_contract() {
+  local body
+  local stripped
+  local row
+  local key
+  local pattern
+  local line
+  local previous=0
+  local file
+
+  if ((${#feeding_config_entries[@]} != 6)); then
+    fail "the Feeding config table must name exactly its six persisted entries: found ${#feeding_config_entries[@]}"
+  fi
+
+  stripped="$(strip_code "$feeding_config" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - 'public static void Initialize\(\)')"
+  if [[ -z "$body" ]]; then
+    fail "the Feeding config initializer could not be extracted; its bind contract was not checked"
+    return
+  fi
+
+  for row in "${feeding_config_entries[@]}"; do
+    IFS='|' read -r key pattern <<<"$row"
+    line="$(printf '%s\n' "$body" | first_match_line "$pattern")"
+    if lookup_failed "$line"; then
+      fail "could not search the Feeding config for $key; its bind check was not run"
+    elif [[ -z "$line" ]]; then
+      fail "Feeding config must bind $key with its audited default and constraints"
+    elif ((line <= previous)); then
+      fail "Feeding config must keep its six entries in persisted order; $key is out of order"
+    else
+      previous=$line
+    fi
+  done
+
+  require_source_pattern "$feeding_config" \
+    'public static ConfigEntry<AutomaticsModule> ModuleEntry *=> *_module *;' \
+    "Feeding Config.ModuleEntry must publicly expose the module toggle"
+
+  for file in "$feeding_dir"/*.cs; do
+    reject_source_pattern "$file" "ModuleDisabled" \
+      "$file must not declare or read ModuleDisabled (R1.5): the entry points read Module.Running, which carries the stop request"
+    reject_source_pattern "$file" '_module\s*\.\s*Value' \
+      "$file must not read the module setting's value (R1.5): the registry follows the setting, and the entry points read Module.Running"
+    reject_source_pattern "$file" 'ModuleEntry\s*\.\s*Value' \
+      "$file must not read the module setting's value (R1.5): the registry follows the setting, and the entry points read Module.Running"
+  done
+}
+
+require_feeding_smoke_descriptor() {
+  local body
+  local found
+  local stripped
+  local row
+  local pattern
+  local message
+
+  stripped="$(strip_code "$feeding_smoke" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - 'private static ModuleDescriptor DescribeFeeding\(\)')"
+  if [[ -z "$body" ]]; then
+    fail "the lifecycle smoke must define a Feeding descriptor; its probes could not be checked"
+    return
+  fi
+
+  for row in \
+    'Argument *= *"feeding"@@the Feeding descriptor must be reached by the argument feeding' \
+    'Module *= *FeedingModule *\. *Instance@@the Feeding descriptor must use the registered Feeding module' \
+    'Active *= *\(\) *=> *FeedingModule *\. *Active *,@@the Feeding descriptor must read the Feeding applied state' \
+    'Running *= *\(\) *=> *FeedingModule *\. *Running *,@@the Feeding descriptor must read the Feeding Running predicate' \
+    'PatchTypes *= *new\[\] *\{ *typeof *\( *FeedingPatches *\) *\}@@the Feeding descriptor must declare its one patch type' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerAwake" *, *\(\) *=> *Hooks *\. *OnPlayerAwake *, *0 *\)@@the Feeding descriptor must hold Hooks.OnPlayerAwake at its baseline' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerUpdate" *, *\(\) *=> *Hooks *\. *OnPlayerUpdate *, *0 *\)@@the Feeding descriptor must hold Hooks.OnPlayerUpdate at its baseline' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerFixedUpdate" *, *\(\) *=> *Hooks *\. *OnPlayerFixedUpdate *, *0 *\)@@the Feeding descriptor must hold Hooks.OnPlayerFixedUpdate at its baseline' \
+    'Probe *\. *Handlers *\( *"Hooks.OnDedicatedServerFixedUpdate" *, *\(\) *=> *Hooks *\. *OnDedicatedServerFixedUpdate *, *0 *\)@@the Feeding descriptor must hold Hooks.OnDedicatedServerFixedUpdate at its baseline' \
+    'Probe *\. *Components *< *FeedingComponent *> *\( *CountEligibleTameables *\)@@the Feeding descriptor must compare the components with the tameables loaded at that moment' \
+    'Precondition *= *null@@the Feeding descriptor must declare no precondition' \
+    'new ExtraCheck *\( *"components_current_generation" *, *Phase *\. *AfterOn@@the Feeding descriptor must verify component generations after every enable'; do
+    pattern="${row%%@@*}"
+    message="${row#*@@}"
+    found="$(printf '%s\n' "$body" | count_hits "$pattern")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the Feeding lifecycle descriptor; the check behind '$message' was not run"
+    elif ((found != 1)); then
+      fail "$message exactly once: found $found"
+    fi
+  done
+
+  require_exact_method_body "$feeding_smoke" 'private static Tameable\[\] EligibleTameables\(\)' \
+    'privatestaticTameable[]EligibleTameables(){returnObject.FindObjectsByType<Tameable>(FindObjectsInactive.Include,FindObjectsSortMode.None).Where(x=>Objects.GetZNetView(x,outvarzNetView)&&zNetView.GetZDO()!=null).ToArray();}' \
+    "EligibleTameables must count every loaded Tameable with a ZDO, inactive ones included, by the rule the module attaches by"
+  require_exact_method_body "$feeding_smoke" 'private static int CountEligibleTameables\(\)' \
+    'privatestaticintCountEligibleTameables(){returnEligibleTameables().Length;}' \
+    "CountEligibleTameables must count the eligible tameables and nothing else"
+  reject_source_pattern "$feeding_smoke" 'AutomaticFeeding\.Config|FeedingConfig' \
+    "the lifecycle smoke must not read or change the user's Feeding settings"
+}
+
 require_enable_acquires_in_order "$door_module" scope patch subscribe reconcile
 require_disable_lowers_the_flag_first "$door_module"
 require_attach_paths_recheck_the_effective_state "$door_module" \
@@ -3959,6 +4473,21 @@ require_mining_gate_free_bodies_are_fixed
 require_mining_cleanup_contract
 require_mining_config_contract
 require_mining_smoke_descriptor
+
+# Automatic Feeding: one patch class, no hook subscription, and one scoped component on every
+# tameable animal with a ZDO. A feeding call is accepted only at the gate of its static entry point.
+require_enable_acquires_in_order "$feeding_module" scope patch reconcile
+require_disable_lowers_the_flag_first "$feeding_module"
+require_attach_paths_recheck_the_effective_state "$feeding_module" \
+  "internal static void AttachFeeding"
+require_feeding_state_and_registration
+require_feeding_entries_and_call_sites
+require_feeding_never_rechecks_after_a_change
+require_feeding_checks_ownership_first
+require_feeding_component_ownership
+require_feeding_gate_free_bodies_are_fixed
+require_feeding_config_contract
+require_feeding_smoke_descriptor
 
 # Automatic Storage: one subscription, no patch, no component, and one entry point that moves
 # items. StoragePlanner and Config run inside a storage pass, between its gate and its last

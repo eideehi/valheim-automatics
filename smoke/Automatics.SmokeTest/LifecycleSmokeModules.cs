@@ -12,6 +12,9 @@ using Object = UnityEngine.Object;
 using DoorComponent = Automatics.AutomaticDoor.AutomaticDoor;
 using DoorModule = Automatics.AutomaticDoor.Module;
 using DoorPatches = Automatics.AutomaticDoor.Patches;
+using FeedingComponent = Automatics.AutomaticFeeding.AutomaticFeeding;
+using FeedingModule = Automatics.AutomaticFeeding.Module;
+using FeedingPatches = Automatics.AutomaticFeeding.Patches;
 using MiningComponent = Automatics.AutomaticMining.AutomaticMining;
 using MiningConfig = Automatics.AutomaticMining.Config;
 using MiningModule = Automatics.AutomaticMining.Module;
@@ -47,6 +50,7 @@ namespace Automatics.SmokeTest
             new Dictionary<string, Func<ModuleDescriptor>>(StringComparer.Ordinal)
             {
                 ["door"] = DescribeDoor,
+                ["feeding"] = DescribeFeeding,
                 ["mining"] = DescribeMining,
                 ["storage"] = DescribeStorage
             };
@@ -188,6 +192,70 @@ namespace Automatics.SmokeTest
             }
 
             return states;
+        }
+
+        // Automatic Feeding owns one patch and one component on every Tameable with a ZDO, and no
+        // hook subscription, so the four hook counts stay where they were throughout. The check
+        // spawns no animal and no food and changes no Feeding setting: a component only acts when a
+        // hungry animal already finds food, as it would with the module left on.
+        private static ModuleDescriptor DescribeFeeding()
+        {
+            return new ModuleDescriptor
+            {
+                Argument = "feeding",
+                Module = FeedingModule.Instance,
+                Active = () => FeedingModule.Active,
+                Running = () => FeedingModule.Running,
+                PatchTypes = new[] { typeof(FeedingPatches) },
+                Probes = new[]
+                {
+                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 0),
+                    Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 0),
+                    Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 0),
+                    Probe.Handlers("Hooks.OnDedicatedServerFixedUpdate",
+                        () => Hooks.OnDedicatedServerFixedUpdate, 0),
+                    // Animals move and zones load while the check runs, so the component count is
+                    // compared with the tameables loaded at that moment rather than with the count
+                    // before the run, and a scene with none is inconclusive.
+                    Probe.Components<FeedingComponent>(CountEligibleTameables)
+                },
+                Precondition = null,
+                Extras = new[]
+                {
+                    new ExtraCheck("components_current_generation", Phase.AfterOn,
+                        (record, cycle) =>
+                        {
+                            var tameables = EligibleTameables();
+                            var generation = FeedingModule.Generation;
+                            var attached = tameables.Count(x =>
+                            {
+                                var component = x.GetComponent<FeedingComponent>();
+                                return component && component.ScopeGeneration == generation;
+                            });
+                            var name = record.Check("components_current_generation");
+                            if (tameables.Length == 0)
+                                record.CycleSkip(name, cycle,
+                                    "no loaded Tameable with a ZDO was available, so the generation could not be observed");
+                            else
+                                record.Cycle(name, cycle, attached == tameables.Length,
+                                    $"all {attached} eligible tameable(s) carry the current generation {generation}",
+                                    $"{attached} of {tameables.Length} eligible tameable(s) carry the current generation {generation}");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        })
+                }
+            };
+        }
+
+        private static Tameable[] EligibleTameables()
+        {
+            return Object.FindObjectsByType<Tameable>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Where(x => Objects.GetZNetView(x, out var zNetView) && zNetView.GetZDO() != null)
+                .ToArray();
+        }
+
+        private static int CountEligibleTameables()
+        {
+            return EligibleTameables().Length;
         }
 
         // Automatic Mining owns one patch, three hook subscriptions and one component on every

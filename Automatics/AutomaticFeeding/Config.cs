@@ -13,7 +13,13 @@ namespace Automatics.AutomaticFeeding
         private static ConfigEntry<AnimalType> _allowToFeedFromContainer;
         private static ConfigEntry<AnimalType> _allowToFeedFromPlayer;
 
-        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
+        /// <summary>
+        ///     The toggle the module registry follows. The registry reads it and subscribes to its
+        ///     changes; nothing writes it back, and the entry points read the applied state on
+        ///     <see cref="Module" /> instead (R1.5).
+        /// </summary>
+        public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
+
         public static bool EnableAutomaticFeeding => _enableAutomaticFeeding.Value;
         public static float FeedSearchRange => _feedSearchRange.Value;
         public static bool NeedGetCloseToEatTheFeed => _needGetCloseToEatTheFeed.Value;
@@ -27,12 +33,16 @@ namespace Automatics.AutomaticFeeding
             config.ChangeSection(Section);
             _module = config.Bind("module", AutomaticsModule.Disabled, initializer: x =>
             {
-                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
-                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+                x.DispName =
+                    Automatics.L10N.Translate("@config_common_disable_module_runtime_name");
+                x.Description =
+                    Automatics.L10N.Translate("@config_common_disable_module_runtime_description");
             });
 
-            if (_module.Value == AutomaticsModule.Disabled) return;
-
+            // Bound unconditionally (R5.1). The module can be turned on while the game runs, so
+            // the settings it needs have to exist whether it starts on or off. This section has no
+            // SettingChanged bridge, so binding a disabled module costs nothing but the lines it
+            // writes to the config file.
             _enableAutomaticFeeding = config.Bind("enable_automatic_feeding", true);
             _feedSearchRange = config.Bind("feed_search_range", 0, (0, 64));
             _needGetCloseToEatTheFeed = config.Bind("need_get_close_to_eat_the_feed", false);

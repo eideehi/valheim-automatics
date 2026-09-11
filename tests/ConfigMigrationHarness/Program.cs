@@ -59,6 +59,11 @@ namespace Automatics
             Run("an enabled automatic_mining module survives migration", EnabledMiningModuleSurvivesMigration);
             Run("a disabled automatic_mining module survives migration", DisabledMiningModuleSurvivesMigration);
             Run("user values inside automatic_mining survive migration", MiningInnerValuesSurviveMigration);
+            Run("an enabled automatic_feeding module survives migration", EnabledFeedingModuleSurvivesMigration);
+            Run("a disabled automatic_feeding module survives migration", DisabledFeedingModuleSurvivesMigration);
+            Run("user values inside automatic_feeding survive migration", FeedingInnerValuesSurviveMigration);
+            Run("1.2.0 automatic_feeding renames keep a disabled module disabled", OldFeedingKeysMigrateUnderADisabledModule);
+            Run("a current disabled automatic_feeding config is left byte for byte", CurrentDisabledFeedingConfigIsLeftUntouched);
             Run("a 1.7.0 config without the defaults marker keeps automatic_storage Disabled and gains the marker", DisabledStorageModuleStaysDisabled);
             Run("user values inside a disabled automatic_storage survive migration", StorageInnerValuesSurviveMigration);
             Run("a config from before module entries existed gets every module Enabled", ConfigFromBeforeModuleEntriesGetsEveryModuleEnabled);
@@ -585,6 +590,111 @@ namespace Automatics
                     StringComparison.Ordinal));
             AssertContains(minerals, "CopperDeposit");
             AssertContains(minerals, "FlametalDeposit");
+        }
+
+        // Automatic Feeding binds its inner settings even while the module is disabled, so a user
+        // who had turned it off gets the whole section written back on the next start. The
+        // rewriting fixtures carry an older Mapping entry so the migration has real work to do,
+        // and that rewrite has to carry over the module value the user chose and every inner
+        // value: whatever survives here is what the bind picks up once the module is turned on.
+        private static void EnabledFeedingModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_feeding]",
+                "module = Enabled");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "[automatic_feeding]");
+            AssertModule(migrated, "automatic_feeding", "Enabled");
+            AssertDoesNotContain(migrated, "module = Disabled");
+        }
+
+        private static void DisabledFeedingModuleSurvivesMigration()
+        {
+            // The setting is the user's, and no part of this mod is allowed to write it back
+            // (R1.3b). A migration that turned Disabled into Enabled would re-enable a module the
+            // user switched off.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_feeding]",
+                "module = Disabled");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "[automatic_feeding]");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The feeding module value should be carried over once.");
+            AssertModule(migrated, "automatic_feeding", "Disabled");
+        }
+
+        private static void FeedingInnerValuesSurviveMigration()
+        {
+            // One entry of each shape a disabled module now binds: a range, a switch and an animal
+            // type set. Their stored values have to survive, or the bind that follows re-creates
+            // them at their defaults and silently discards what the user set.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_feeding]",
+                "module = Disabled",
+                "feed_search_range = 12",
+                "need_get_close_to_eat_the_feed = true",
+                "allow_to_feed_from_player = Wild, Tamed");
+
+            AssertContains(migrated, "Morgen");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The feeding module value should be carried over once.");
+            AssertModule(migrated, "automatic_feeding", "Disabled");
+            AssertContains(migrated, "feed_search_range = 12");
+            AssertContains(migrated, "need_get_close_to_eat_the_feed = true");
+            AssertContains(migrated, "allow_to_feed_from_player = Wild, Tamed");
+        }
+
+        private static void OldFeedingKeysMigrateUnderADisabledModule()
+        {
+            // A 1.2.0 file still carries the old key names. The renames apply to the whole section
+            // whatever the module value is, which is what makes the renamed values the ones a later
+            // enable uses. What they must not touch is the module value itself.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.2.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_feeding]",
+                "module = Disabled",
+                "automatic_feeding_enabled = false",
+                "need_close_to_eat_the_feed = true");
+
+            AssertContains(migrated, "enable_automatic_feeding = false");
+            AssertContains(migrated, "need_get_close_to_eat_the_feed = true");
+            AssertDoesNotContain(migrated, "automatic_feeding_enabled");
+            AssertDoesNotContain(migrated, "need_close_to_eat_the_feed");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The feeding module value should be carried over once.");
+            AssertModule(migrated, "automatic_feeding", "Disabled");
+        }
+
+        private static void CurrentDisabledFeedingConfigIsLeftUntouched()
+        {
+            // A file that already carries the defaults marker needs no migration, and a disabled
+            // module is not a reason to rewrite it: the file has to come back byte for byte.
+            var lines = new[]
+            {
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_feeding]",
+                "module = Disabled",
+                "[hidden]",
+                "defaults_revision = 1"
+            };
+
+            var migrated = Migrate(lines);
+            var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
+            if (migrated != expected)
+                throw new Exception($"A current config must not be rewritten. Expected:\n{expected}\nGot:\n{migrated}");
         }
 
         // Automatic Storage binds its inner settings unconditionally from this change on, so a

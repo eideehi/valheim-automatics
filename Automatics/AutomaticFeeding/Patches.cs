@@ -12,7 +12,7 @@ namespace Automatics.AutomaticFeeding
         private static void Tameable_Awake_Postfix(Tameable __instance, ZNetView ___m_nview)
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<AutomaticFeeding>();
+                Module.AttachFeeding(__instance.gameObject);
         }
 
         [HarmonyPostfix]

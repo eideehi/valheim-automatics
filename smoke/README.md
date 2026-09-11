@@ -199,9 +199,9 @@ safe.
 
 `automatics_smoke_lifecycle` (no arguments) exercises the runtime module
 lifecycle on Automatic Pickup; with the argument `mapping` it exercises Automatic
-Mapping instead, and with `door`, `mining` or `storage` it exercises Automatic
-Door, Automatic Mining or Automatic Storage through the module runner the migrated
-modules share (described after this one). Run it from the
+Mapping instead, and with `door`, `feeding`, `mining` or `storage` it exercises
+Automatic Door, Automatic Feeding, Automatic Mining or Automatic Storage through the
+module runner the migrated modules share (described after this one). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
 through off → on → off:
@@ -462,6 +462,34 @@ few frames. Turning it back on also completes over the next few frames and scans
 loaded inactive objects as well as active ones. Under the required stationary,
 no-pickaxe conditions, the check does not strike a mineral, change tool durability
 or create a drop.
+
+#### `automatics_smoke_lifecycle feeding`
+
+`feeding` uses the descriptor-driven runner for `automatic_feeding / module`. It
+takes an enabled module through three off → on cycles, spawns nothing (no animal
+and no food), changes no Feeding setting and restores the module setting
+afterwards. Run it where some of your animals are loaded: the component checks
+need at least one loaded `Tameable` with a ZDO, and SKIP as inconclusive without
+one.
+
+In addition to the runner's state, patch and error checks, the Feeding descriptor
+checks:
+
+| Check | Asserts |
+|---|---|
+| `feeding_off_stopped_at_request` | In the frame of the disable request the module remains applied but no longer running, which is what both of its entry points open with, so no new feeding starts |
+| `feeding_off_probes_as_expected` | Every `AutomaticFeeding` component is gone, and the four hook handler counts are where they were at the baseline: Automatic Feeding subscribes to none |
+| `feeding_on_patches_applied` | The patches under Feeding's Harmony id exactly match the three postfixes of `Automatics.AutomaticFeeding.Patches` (`Tameable.Awake`, `MonsterAI.UpdateConsumeItem` and `BaseAI.CanSeeTarget(StaticTarget)`) |
+| `feeding_on_probes_at_baseline` | Every loaded `Tameable` with a ZDO, inactive ones included, has one `AutomaticFeeding` component, counted against the animals loaded at that moment rather than a stale baseline, and the four hook counts are still at the baseline |
+| `feeding_components_current_generation` | Every eligible `Tameable` carries an `AutomaticFeeding` component stamped with the current activation generation; SKIP when none is loaded |
+
+Turning the module off stops new feeding immediately and lets a feeding call
+already accepted finish: an item that has left a container or the inventory is
+always eaten. The patches and components are removed over the next few frames.
+Turning it back on also completes over the next few frames and attaches the
+component to every loaded animal, inactive ones included. While the module is on
+between cycles, a hungry animal near food may eat as it normally would; the check
+itself moves no item.
 
 ### Processing smoke command
 
