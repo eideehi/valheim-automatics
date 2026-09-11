@@ -194,7 +194,7 @@ namespace Automatics.AutomaticRepair
                 player.UseStamina(GetBuildStamina(player, tool));
                 player.UseEitr(toolData.m_attack.m_attackEitr);
                 if (toolData.m_useDurability)
-                    tool.m_durability -= toolData.m_useDurabilityDrain;
+                    tool.m_durability -= toolData.m_useDurabilityDrain * Game.m_durabilityRate;
 
                 Automatics.Logger.Debug(() =>
                     $"Repair piece: [{piece.m_name}({Automatics.L10N.Translate(piece.m_name)}), pos: {piece.transform.position}]");

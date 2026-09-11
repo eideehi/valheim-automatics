@@ -287,7 +287,7 @@ namespace Automatics.AutomaticMining
             var attack = shared.m_attack;
 
             if (shared.m_useDurability)
-                pickaxe.m_durability -= shared.m_useDurabilityDrain;
+                pickaxe.m_durability -= shared.m_useDurabilityDrain * Game.m_durabilityRate;
 
             player.AddNoise(attack.m_attackHitNoise);
             player.RaiseSkill(shared.m_skillType);

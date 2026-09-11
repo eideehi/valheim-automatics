@@ -108,8 +108,12 @@ require_source_pattern \
   "piece repair must consume the selected tool's repair eitr cost"
 require_source_pattern \
   "$piece_file" \
-  "tool\\.m_durability -= toolData\\.m_useDurabilityDrain" \
-  "piece repair must consume Player.Repair durability after successful repair"
+  "tool\\.m_durability -= toolData\\.m_useDurabilityDrain \\* Game\\.m_durabilityRate;" \
+  "piece repair must consume Player.Repair durability, scaled by the world durability rate, after successful repair"
+reject_source_pattern \
+  "$piece_file" \
+  "m_durability -= [A-Za-z_.]*m_useDurabilityDrain;" \
+  "piece repair must not subtract the raw durability drain: vanilla scales it by Game.m_durabilityRate"
 
 require_source_pattern \
   "$item_file" \

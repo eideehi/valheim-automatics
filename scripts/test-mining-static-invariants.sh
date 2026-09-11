@@ -86,6 +86,12 @@ require_source_pattern \
 require_source_pattern \
   "var colliders = GetColliders\\(parent\\)" \
   "mining should fetch colliders only after a sufficient pickaxe was selected"
+require_source_pattern \
+  "pickaxe\\.m_durability -= shared\\.m_useDurabilityDrain \\* Game\\.m_durabilityRate;" \
+  "mining must wear the pickaxe the way a vanilla attack does, scaled by the world durability rate"
+reject_source_pattern \
+  "m_durability -= [A-Za-z_.]*m_useDurabilityDrain;" \
+  "mining must not subtract the raw durability drain: vanilla scales it by Game.m_durabilityRate"
 
 if ((failures > 0)); then
   exit 1
