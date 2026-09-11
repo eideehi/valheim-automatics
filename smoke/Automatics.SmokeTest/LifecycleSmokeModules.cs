@@ -5,8 +5,12 @@ using System.Linq;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using ModUtils;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using DoorComponent = Automatics.AutomaticDoor.AutomaticDoor;
+using DoorModule = Automatics.AutomaticDoor.Module;
+using DoorPatches = Automatics.AutomaticDoor.Patches;
 using StorageModule = Automatics.AutomaticStorage.Module;
 
 namespace Automatics.SmokeTest
@@ -37,8 +41,148 @@ namespace Automatics.SmokeTest
         private static readonly Dictionary<string, Func<ModuleDescriptor>> Descriptors =
             new Dictionary<string, Func<ModuleDescriptor>>(StringComparer.Ordinal)
             {
+                ["door"] = DescribeDoor,
                 ["storage"] = DescribeStorage
             };
+
+        // Automatic Door owns one patch, four hook subscriptions and one component on every Door
+        // with a ZDO. The state fingerprint is read only: pausing the module must not close a door
+        // or otherwise rewrite the world's record of it.
+        private static ModuleDescriptor DescribeDoor()
+        {
+            Dictionary<ZDOID, int> beforeDisable = null;
+            return new ModuleDescriptor
+            {
+                Argument = "door",
+                Module = DoorModule.Instance,
+                Active = () => DoorModule.Active,
+                Running = () => DoorModule.Running,
+                PatchTypes = new[] { typeof(DoorPatches) },
+                Probes = new[]
+                {
+                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
+                    Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
+                    Probe.Handlers("Hooks.OnDedicatedServerFixedUpdate",
+                        () => Hooks.OnDedicatedServerFixedUpdate, 1),
+                    // The four probes above only show the hook's total handler count, which
+                    // another subscriber's own add or remove can move by exactly as much as
+                    // Door's, and comparing only against the value before the run would let a
+                    // Door handler stuck at 0 or duplicated at 2 pass as long as it read the same
+                    // both times (0 -> 0 -> 0, 2 -> 0 -> 2). These name Door's own handler,
+                    // count only its occurrences, and pin the re-enabled reading to exactly 1
+                    // instead, so either failure shows.
+                    Probe.Counter("door.OnPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(DoorModule), "OnPlayerAwake"),
+                        OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("door.OnPlayerUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(DoorModule), "OnPlayerUpdate"),
+                        OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("door.OnPlayerFixedUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(DoorModule),
+                            "OnPlayerFixedUpdate"),
+                        OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("door.OnDedicatedServerFixedUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnDedicatedServerFixedUpdate, typeof(DoorModule),
+                            "OnDedicatedServerFixedUpdate"),
+                        OffExpectation.Zero, 0, () => 1),
+                    Probe.Components<DoorComponent>(CountEligibleDoors),
+                    Probe.Counter("RegisteredDoorCount", () => DoorComponent.RegisteredDoorCount,
+                        OffExpectation.Zero, 0, CountActiveDoorComponents)
+                },
+                Precondition = null,
+                Extras = new[]
+                {
+                    // Captured just before the disable is written (Phase.BeforeRequest), not at
+                    // the request: the request itself can move a door (a config SettingChanged or
+                    // SetStopRequested reacting to it), and a snapshot taken after that write
+                    // would already miss it.
+                    new ExtraCheck("state_snapshot_captured", Phase.BeforeRequest,
+                        (record, cycle) =>
+                        {
+                            beforeDisable = DoorStates();
+                            var name = record.Check("state_snapshot_captured");
+                            record.Cycle(name, cycle, beforeDisable.Count > 0,
+                                $"recorded {beforeDisable.Count} door state(s) without changing them",
+                                "no loaded Door with a readable ZDO was available as a positive control");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("door_id_set_unchanged", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            var after = DoorStates();
+                            var same = beforeDisable != null &&
+                                       new HashSet<ZDOID>(beforeDisable.Keys).SetEquals(after.Keys);
+                            var name = record.Check("door_id_set_unchanged");
+                            record.Cycle(name, cycle, same,
+                                $"the same {after.Count} readable door ZDO id(s) remained while off",
+                                $"the readable door ZDO ids changed across the disable ({beforeDisable?.Count ?? 0} before, {after.Count} after)");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("door_state_unchanged", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            var after = DoorStates();
+                            var same = beforeDisable != null && beforeDisable.Count == after.Count &&
+                                       beforeDisable.All(x => after.TryGetValue(x.Key, out var state) &&
+                                                              state == x.Value);
+                            var name = record.Check("door_state_unchanged");
+                            record.Cycle(name, cycle, same,
+                                $"all {after.Count} readable door state value(s) were unchanged",
+                                "one or more readable Door ZDO state values changed across the disable");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("components_current_generation", Phase.AfterOn,
+                        (record, cycle) =>
+                        {
+                            var doors = EligibleDoors();
+                            var generation = DoorModule.Generation;
+                            var attached = doors.Count(x =>
+                            {
+                                var component = x.GetComponent<DoorComponent>();
+                                return component && component.ScopeGeneration == generation;
+                            });
+                            var name = record.Check("components_current_generation");
+                            record.Cycle(name, cycle, doors.Length > 0 && attached == doors.Length,
+                                $"all {attached} eligible door(s) carry the current generation {generation}",
+                                $"{attached} of {doors.Length} eligible door(s) carry the current generation {generation}");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        })
+                }
+            };
+        }
+
+        private static Door[] EligibleDoors()
+        {
+            return Object.FindObjectsByType<Door>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Where(x => Objects.GetZNetView(x, out var zNetView) && zNetView.GetZDO() != null)
+                .ToArray();
+        }
+
+        private static int CountEligibleDoors()
+        {
+            return EligibleDoors().Length;
+        }
+
+        private static int CountActiveDoorComponents()
+        {
+            return Object.FindObjectsByType<DoorComponent>(
+                    FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Count(x => x && x.gameObject.activeInHierarchy);
+        }
+
+        private static Dictionary<ZDOID, int> DoorStates()
+        {
+            var states = new Dictionary<ZDOID, int>();
+            foreach (var door in EligibleDoors())
+            {
+                Objects.GetZNetView(door, out var zNetView);
+                var zdo = zNetView.GetZDO();
+                if (zdo.m_uid != ZDOID.None) states[zdo.m_uid] = zdo.GetInt("state");
+            }
+
+            return states;
+        }
 
         // Automatic Storage moves items only when its key is pressed, and the check never presses
         // it: the module's one subscription is what comes and goes. The other two player hooks are
@@ -122,6 +266,17 @@ namespace Automatics.SmokeTest
         private static int CountHandlers(Delegate handlers)
         {
             return handlers == null ? 0 : handlers.GetInvocationList().Length;
+        }
+
+        // The occurrence count of one named handler within a delegate's invocation list, so a
+        // module's own subscription can be told apart from another subscriber's on the same
+        // hook: the multicast list's total can land back where it started for the wrong reason.
+        private static int CountHandlersOf(Delegate handlers, Type declaringType, string methodName)
+        {
+            return handlers == null
+                ? 0
+                : handlers.GetInvocationList()
+                    .Count(x => x.Method.DeclaringType == declaringType && x.Method.Name == methodName);
         }
 
         // An event is read through the field behind it; -1 when there is no such field.
@@ -236,14 +391,24 @@ namespace Automatics.SmokeTest
 
             // Any other number, such as a private static read by reflection that returns -1 when the
             // field is not there.
-            public static Probe Counter(string name, Func<int> read, OffExpectation off, int delta)
+            public static Probe Counter(string name, Func<int> read, OffExpectation off, int delta,
+                Func<int> target = null)
             {
-                return new Probe { Name = name, Read = read, Off = off, Delta = delta };
+                return new Probe
+                {
+                    Name = name, Read = read, Off = off, Delta = delta, Target = target
+                };
             }
         }
 
         private enum Phase
         {
+            // Just before the disable is written, in the same synchronous step, whether or not
+            // the write itself goes on to happen. A check here may not wait for a frame either:
+            // it exists to see the state the disable request is about to act on, and a write
+            // itself can already move that state.
+            BeforeRequest,
+
             // Straight after the disable is written, before any frame passes. A check here may not
             // wait for a frame.
             AtRequest,
@@ -446,7 +611,9 @@ namespace Automatics.SmokeTest
 
                 // The order the checks are recorded in, which is also the order they are reported
                 // in: the module's extra checks sit after the checks of the phase they run in.
-                var order = new List<string> { _settled, _offStopped };
+                var order = new List<string> { _settled };
+                order.AddRange(ExtraNames(Phase.BeforeRequest));
+                order.Add(_offStopped);
                 order.AddRange(ExtraNames(Phase.AtRequest));
                 order.AddRange(new[] { _offState, _offPatches, _offProbes });
                 order.AddRange(ExtraNames(Phase.WhileOff));
@@ -611,6 +778,12 @@ namespace Automatics.SmokeTest
             {
                 _proceed = false;
 
+                // Run before the write itself, synchronously, whether or not the write goes on to
+                // succeed: this is the last point a check can see the state the disable is about
+                // to act on, since the write can already move it (a config SettingChanged or
+                // SetStopRequested reacting to it).
+                RunExtrasSync(Phase.BeforeRequest, cycle);
+
                 if (!Write(AutomaticsModule.Disabled, _offStopped, cycle)) yield break;
 
                 // The write itself raises the stop request, frames before the pump takes anything
@@ -623,7 +796,7 @@ namespace Automatics.SmokeTest
                 _record.Cycle(_offStopped, cycle, applied && !running,
                     "right after the disable request the module was still applied but no longer running",
                     $"right after the disable request the module was {(applied ? "applied" : "not applied")} and {(running ? "still running" : "not running")} (R1.5a)");
-                RunExtrasAtRequest(cycle);
+                RunExtrasSync(Phase.AtRequest, cycle);
 
                 var wait = Await(ModuleState.Disabled, true, true);
                 while (wait.MoveNext()) yield return wait.Current;
@@ -780,7 +953,9 @@ namespace Automatics.SmokeTest
                         target = eligible;
                     }
 
-                    var showsNothing = target.HasValue ? target.Value == 0 : probe.NeedsNonZeroBaseline && before == 0;
+                    var showsNothing = target.HasValue
+                        ? target.Value == 0
+                        : probe.NeedsNonZeroBaseline && before == 0;
 
                     int expected;
                     string expectation;
@@ -846,11 +1021,12 @@ namespace Automatics.SmokeTest
                 return ExtrasIn(phase).Select(x => _descriptor.Argument + "_" + x.Name);
             }
 
-            // At the request nothing may wait for a frame: the frame the request was made in is
-            // what these checks are there to see.
-            private void RunExtrasAtRequest(int cycle)
+            // Neither BeforeRequest nor AtRequest may wait for a frame: each is there to see the
+            // frame it runs in (respectively, just before the disable is written, and right
+            // after), and yielding would mean it no longer saw that frame.
+            private void RunExtrasSync(Phase phase, int cycle)
             {
-                foreach (var extra in ExtrasIn(Phase.AtRequest))
+                foreach (var extra in ExtrasIn(phase))
                 {
                     var name = _record.Check(extra.Name);
                     var passes = _record.Passes(name);
@@ -859,7 +1035,7 @@ namespace Automatics.SmokeTest
                         var steps = extra.Run(_record, cycle);
                         if (steps != null && steps.MoveNext())
                             _record.Cycle(name, cycle, false, "",
-                                "a check made at the disable request waited for a frame, so it no longer saw the frame of the request");
+                                "a synchronous check waited for a frame, so it no longer saw the frame it was recorded for");
                     }
                     catch (Exception e)
                     {

@@ -199,8 +199,9 @@ safe.
 
 `automatics_smoke_lifecycle` (no arguments) exercises the runtime module
 lifecycle on Automatic Pickup; with the argument `mapping` it exercises Automatic
-Mapping instead, and with `storage` Automatic Storage, through the module runner
-the migrated modules share (both described after this one). Run it from the
+Mapping instead, and with `door` or `storage` it exercises Automatic Door or
+Automatic Storage through the module runner the migrated modules share (described
+after this one). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
 through off → on → off:
@@ -392,6 +393,34 @@ A passing run looks like this:
 [Automatics Smoke] PASS storage_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
 [Automatics Smoke] Summary: total=11 passed=11 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
+
+#### `automatics_smoke_lifecycle door`
+
+`door` uses the same descriptor-driven runner for `automatic_door / module`. It
+takes an enabled module through three off → on cycles, changes no other setting,
+spawns nothing and restores the setting afterwards.
+
+In addition to the runner's state, patch and error checks, the Door descriptor
+checks:
+
+| Check | Asserts |
+|---|---|
+| `door_state_snapshot_captured` | Immediately before the disable is written, synchronously and without waiting a frame, every readable Door ZDO id and state is snapshotted without changing any of them |
+| `door_off_stopped_at_request` | In the frame of the disable request the module remains applied but no longer starts automatic door or shortcut work |
+| `door_off_probes_as_expected` | The four Door hook handlers and every `AutomaticDoor` component are gone, the active-component registration count is zero, and each Door-owned handler's own occurrence in its hook (not just the hook's total handler count) is zero |
+| `door_door_id_set_unchanged` | The readable Door ZDO ids after teardown are the same as immediately before it |
+| `door_door_state_unchanged` | Every readable Door ZDO keeps the same open/closed state across teardown |
+| `door_on_patches_applied` | The patches under Door's Harmony id exactly match `Automatics.AutomaticDoor.Patches` |
+| `door_on_probes_at_baseline` | All four handlers are restored, every currently eligible Door has a component, the registration count matches the active components rather than a stale baseline, and each Door-owned handler's own occurrence in its hook is back at one |
+| `door_components_current_generation` | Every eligible Door, including inactive objects, has an `AutomaticDoor` component stamped with the current activation generation |
+
+The scene must contain at least one loaded Door with a readable ZDO; otherwise the
+positive-control check fails. Inactive Doors count as eligible components, but do
+not count as registered until Unity activates them and runs their `Awake` method.
+Turning the module off starts no new opening or closing, allows an operation already
+in progress to finish, and completes the switch over the next few frames. It does
+not close any Door or call a Door API. Turning it back on reconciles eligible Doors
+that appeared or remained inactive while it was off.
 
 ### Processing smoke command
 

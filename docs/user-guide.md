@@ -58,21 +58,22 @@ off.
 
 | Module | Entry | When the change takes effect |
 | --- | --- | --- |
+| Automatic door | `Disable Module` | While the game is running. No restart. |
 | Automatic pickup | `Disable Module` | While the game is running. No restart. |
 | Automatic processing | `Disable Module` | While the game is running. No restart. |
 | Automatic mapping | `Disable Module` | While the game is running. No restart. |
 | Automatic storage | `Disable Module` | While the game is running. No restart. |
 | Every other module | `Disable Module (Reboot Required)` | After the game is restarted. |
 
-When you turn automatic pickup, automatic processing, automatic mapping or
-automatic storage off, it stops starting new automatic actions, such as pickups,
-item transfers, pin updates and storage passes, right away, and lets an action
-that is already in progress finish. For automatic storage, `Store Items` does
-nothing from then on, and a storage pass that has already started still moves
-every item it selected. The switch itself completes over the next few frames,
-when the module's patches and
-hooks are removed, along with the components automatic pickup adds to players
-and items and those automatic mapping adds to fish, birds, ships, rocks and
+When you turn automatic door, automatic pickup, automatic processing, automatic
+mapping or automatic storage off, it stops starting new automatic actions, such
+as door movement, pickups, item transfers, pin updates and storage passes, right
+away, and lets an action that is already in progress finish. For automatic
+storage, `Store Items` does nothing from then on, and a storage pass that has
+already started still moves every item it selected. The switch itself completes
+over the next few frames, when the module's patches and hooks are removed, along
+with the components automatic door adds to doors, automatic pickup adds to
+players and items, and automatic mapping adds to fish, birds, ships, rocks and
 flora. Turning any of them back on also completes over the next few frames, and
 it then also works on objects that appeared while it was off. If the Automatics
 log reports that this Harmony build cannot remove patches at runtime, turning one
@@ -166,6 +167,19 @@ Key settings:
 
 Doors must be allowed by the door definition list. You can add extra door
 definitions with `User-defined Door` in the `General` section.
+
+Its `Disable Module` option takes effect without a restart. New automatic opening,
+closing and shortcut handling stop right away, while an action already in progress
+finishes. The switch itself completes over the next few frames. Turning the module
+off does not close doors or otherwise change their current open state. Turning it
+back on attaches the automatic-door behavior to eligible loaded doors again,
+including doors that appeared or were inactive while it was off. See
+[Module disable options](#module-disable-options).
+
+If you had automatic door disabled, the first start of this version writes all of
+its settings to the configuration file, together with `custom_door` in the General
+section. The module stays disabled. Values already present in the file are kept and
+apply once you turn the module back on in game.
 
 ## Automatic mapping
 

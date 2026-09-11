@@ -528,7 +528,8 @@ namespace Automatics.SmokeTest
             var player = Player.m_localPlayer;
             if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
 
-            if (global::Automatics.AutomaticDoor.Config.ModuleDisabled)
+            if (ModuleRegistry.GetState("automatic-door") != ModuleState.Enabled ||
+                !global::Automatics.AutomaticDoor.Module.Running)
                 return CheckResult.Skip("automatic_door module disabled");
             if (!global::Automatics.AutomaticDoor.Config.EnableAutomaticDoor)
                 return CheckResult.Skip("enable_automatic_door is off");

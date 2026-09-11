@@ -40,6 +40,11 @@ namespace Automatics
             Run("bepinex-style version header still migrates", BepInExStyleVersionHeaderStillMigrates);
             Run("config without a version header skips the version migrations", ConfigWithoutVersionHeaderSkipsTheVersionMigrations);
             Run("door migration appends PieceHexagonalDoor", DoorMigrationAppendsPieceHexagonalDoor);
+            Run("an enabled automatic_door module survives migration", EnabledDoorModuleSurvivesMigration);
+            Run("a disabled automatic_door module survives migration", DisabledDoorModuleSurvivesMigration);
+            Run("user values inside automatic_door survive migration", DoorInnerValuesSurviveMigration);
+            Run("old automatic_door renames and allowlist additions keep the module disabled", OldDoorKeysMigrateUnderADisabledModule);
+            Run("a current disabled automatic_door config is left byte for byte", CurrentDisabledDoorConfigIsLeftUntouched);
             Run("F-A: an enabled automatic_pickup module survives migration", EnabledPickupModuleSurvivesMigration);
             Run("F-B: a disabled automatic_pickup module survives migration", DisabledPickupModuleSurvivesMigration);
             Run("F-C: user values inside automatic_pickup survive migration", PickupInnerValuesSurviveMigration);
@@ -146,6 +151,118 @@ namespace Automatics
             {
                 Directory.Delete(directory, recursive: true);
             }
+        }
+
+        // Automatic Door binds its settings and object registry whether it starts on or off. The
+        // rewriting fixtures carry an older Mapping entry so the migration has real work to do;
+        // they prove the user's Door values survive that rewrite rather than merely being skipped.
+        private static void EnabledDoorModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_door]",
+                "module = Enabled");
+
+            AssertContains(migrated, "Morgen");
+            AssertModule(migrated, "automatic_door", "Enabled");
+        }
+
+        private static void DisabledDoorModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_door]",
+                "module = Disabled");
+
+            AssertContains(migrated, "Morgen");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"),
+                "The door module value should be carried over once.");
+            AssertModule(migrated, "automatic_door", "Disabled");
+        }
+
+        private static void DoorInnerValuesSurviveMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_door]",
+                "module = Disabled",
+                "enable_automatic_door = false",
+                "interval_to_open = 1.25",
+                "distance_for_automatic_closing = 7",
+                "automatic_door_enable_disable_toggle = LeftAlt",
+                "[general]",
+                "custom_door = MyDoor, Custom door, MyDoorPrefab");
+
+            AssertModule(migrated, "automatic_door", "Disabled");
+            AssertContains(migrated, "enable_automatic_door = false");
+            AssertContains(migrated, "interval_to_open = 1.25");
+            AssertContains(migrated, "distance_for_automatic_closing = 7");
+            AssertContains(migrated, "automatic_door_enable_disable_toggle = LeftAlt");
+            AssertContains(migrated, "custom_door = MyDoor, Custom door, MyDoorPrefab");
+        }
+
+        private static void OldDoorKeysMigrateUnderADisabledModule()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.2.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_door]",
+                "module = Disabled",
+                "automatic_door_enabled = false",
+                "player_search_radius_to_open = 6",
+                "toggle_automatic_door_enabled_key = F",
+                "allow_automatic_door = WoodDoor");
+
+            AssertModule(migrated, "automatic_door", "Disabled");
+            AssertContains(migrated, "enable_automatic_door = false");
+            AssertContains(migrated, "distance_for_automatic_opening = 6");
+            AssertContains(migrated, "automatic_door_enable_disable_toggle = F");
+            AssertDoesNotContain(migrated, "automatic_door_enabled = false");
+            AssertDoesNotContain(migrated, "player_search_radius_to_open");
+            AssertDoesNotContain(migrated, "toggle_automatic_door_enabled_key");
+
+            var allowlist = migrated
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+                .Single(line => line.StartsWith("allow_automatic_door = ", StringComparison.Ordinal));
+            AssertContains(allowlist, "WoodDoor");
+            AssertContains(allowlist, "PieceHexagonalDoor");
+        }
+
+        private static void CurrentDisabledDoorConfigIsLeftUntouched()
+        {
+            var lines = new[]
+            {
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_door]",
+                "module = Disabled",
+                "enable_automatic_door = false",
+                "allow_automatic_door = WoodDoor, PieceHexagonalDoor",
+                "interval_to_open = 1.25",
+                "interval_to_close = 1.5",
+                "distance_for_automatic_opening = 6",
+                "distance_for_automatic_closing = 7",
+                "automatic_door_enable_disable_toggle_message = TopLeft",
+                "automatic_door_enable_disable_toggle = F",
+                "[general]",
+                "custom_door = MyDoor, Custom door, MyDoorPrefab",
+                "[hidden]",
+                "defaults_revision = 1"
+            };
+
+            var migrated = Migrate(lines);
+            var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
+            if (migrated != expected)
+                throw new Exception($"A current Door config must not be rewritten. Expected:\n{expected}\nGot:\n{migrated}");
         }
 
         // Automatic Pickup binds its inner settings unconditionally from this slice on, so its

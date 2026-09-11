@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Automatics.AutomaticDoor
 {
     [DisallowMultipleComponent]
-    internal sealed class AutomaticDoor : MonoBehaviour
+    internal sealed class AutomaticDoor : MonoBehaviour, IScopedComponent
     {
         private const float PredictionLookAheadSeconds = 0.35f;
         private const float MaxPredictionDistance = 1.5f;
@@ -39,6 +39,8 @@ namespace Automatics.AutomaticDoor
         private float _lastAutomaticOpenTime;
 
         public static bool HasRegisteredDoor => AllInstance.Count > 0;
+        internal static int RegisteredDoorCount => AllInstance.Count;
+        public int ScopeGeneration { get; set; }
 
         static AutomaticDoor()
         {
@@ -104,6 +106,16 @@ namespace Automatics.AutomaticDoor
 
         private void OnDestroy()
         {
+            Unregister();
+        }
+
+        public void OnScopeDetaching()
+        {
+            Unregister();
+        }
+
+        private void Unregister()
+        {
             AllInstance.Remove(this);
 
             _zNetView = null;
@@ -113,6 +125,8 @@ namespace Automatics.AutomaticDoor
 
         public static void MarkAllowAutomaticDoorDirty()
         {
+            if (AllInstance.Count == 0) return;
+
             foreach (var automaticDoor in AllInstance)
                 if (automaticDoor)
                     automaticDoor._allowAutomaticDoorDirty = true;
@@ -120,6 +134,7 @@ namespace Automatics.AutomaticDoor
 
         public static void TryOpenNearby(Player player, Vector3 velocity)
         {
+            if (!Module.Running) return;
             if (!player) return;
 
             var openRange = Config.DistanceForAutomaticOpening;
@@ -143,6 +158,7 @@ namespace Automatics.AutomaticDoor
 
         public static void TryCloseDoors()
         {
+            if (!Module.Running) return;
             var closeRange = Config.DistanceForAutomaticClosing;
             if (closeRange <= 0f) return;
 

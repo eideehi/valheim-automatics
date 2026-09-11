@@ -1,5 +1,5 @@
 #### Unreleased
-- Automatic Pickup, Automatic Processing, Automatic Mapping and Automatic Storage can be turned on and off while the game is running; the other modules still need a restart.
+- Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping and Automatic Storage can be turned on and off while the game is running; the other modules still need a restart.
 - Every module is now off on a new install; turn on the ones you want with their `Disable Module` option. An existing config keeps each module on or off as it was (a module whose `Disable Module` entry is missing from an older config, or holds a value Automatics cannot read, is turned on), and the settings inside each module keep their defaults.
 
 #### v1.7.0 [2026-07-19]

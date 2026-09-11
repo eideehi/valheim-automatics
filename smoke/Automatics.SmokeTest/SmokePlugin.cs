@@ -403,15 +403,8 @@ namespace Automatics.SmokeTest
 
         private CheckResult CheckDoorInternalNameResolution()
         {
-            // Globals.Door is a per-module ValheimObject that only populates from the
-            // JSON cache when the automatic_door module is enabled (its registry is
-            // touched during that module's Config.Initialize, before the cache is
-            // cleared). With the module disabled the registry is empty for the session,
-            // which is an environment/config state, not a regression: SKIP, not FAIL.
-            if (!AutomaticDoor.Globals.Door.GetAllElements().Any())
-                return CheckResult.Skip(
-                    "automatic_door module disabled; door registry not loaded this session");
-
+            // Door settings are bound even when the module starts off, so its object registry is
+            // always available to console commands and to a later runtime enable.
             Expect(AutomaticDoor.Globals.Door.GetIdentify("$piece_wooddoor", out var wood) &&
                    wood == "WoodDoor",
                 "$piece_wooddoor should resolve to WoodDoor");

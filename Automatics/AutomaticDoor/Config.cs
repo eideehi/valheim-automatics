@@ -17,7 +17,11 @@ namespace Automatics.AutomaticDoor
         private static ConfigEntry<Message> _automaticDoorEnableDisableToggleMessage;
         private static ConfigEntry<KeyboardShortcut> _automaticDoorEnableDisableToggle;
 
-        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
+        /// <summary>
+        ///     The toggle the module registry follows. The registry reads it and subscribes to its
+        ///     changes; hot paths read the applied state on <see cref="Module" /> instead.
+        /// </summary>
+        public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
 
         public static bool EnableAutomaticDoor
         {
@@ -44,12 +48,15 @@ namespace Automatics.AutomaticDoor
             config.ChangeSection(Section);
             _module = config.Bind("module", AutomaticsModule.Disabled, initializer: x =>
             {
-                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
-                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+                x.DispName =
+                    Automatics.L10N.Translate("@config_common_disable_module_runtime_name");
+                x.Description =
+                    Automatics.L10N.Translate("@config_common_disable_module_runtime_description");
             });
 
-            if (_module.Value == AutomaticsModule.Disabled) return;
-
+            // Bound unconditionally because the module can be turned on while the game runs. The
+            // two SettingChanged handlers belong to this process-lifetime config binding, not to
+            // an activation, so they are installed once and also observe edits made while off.
             _enableAutomaticDoor = config.Bind("enable_automatic_door", true);
             _allowAutomaticDoor = config.BindValheimObjectList("allow_automatic_door", Globals.Door, excludes: new[] { "WoodShutter" });
             _allowAutomaticDoor.SettingChanged += (_, __) => AutomaticDoor.MarkAllowAutomaticDoorDirty();

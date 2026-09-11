@@ -38,13 +38,13 @@ migrated_module_dirs=(
   "Automatics/AutomaticProcessing"
   "Automatics/AutomaticMapping"
   "Automatics/AutomaticStorage"
+  "Automatics/AutomaticDoor"
 )
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
 # removing it before the module is migrated hands non-activation guards to code this slice
 # does not verify (R5.1a).
 unmigrated_module_configs=(
-  "Automatics/AutomaticDoor/Config.cs"
   "Automatics/AutomaticFarming/Config.cs"
   "Automatics/AutomaticFeeding/Config.cs"
   "Automatics/AutomaticMining/Config.cs"
@@ -132,6 +132,36 @@ storage_module="$storage_dir/Module.cs"
 # require_item_entries_open_with_the_gate.
 storage_entries=(
   "AutomaticStorage.Store|$storage_dir/AutomaticStorage.cs|public static Result Store\\(Player |if (!Module.Running) return new Result();"
+)
+
+door_dir="Automatics/AutomaticDoor"
+door_config="$door_dir/Config.cs"
+door_module="$door_dir/Module.cs"
+door_patches="$door_dir/Patches.cs"
+door_component="$door_dir/AutomaticDoor.cs"
+door_smoke="smoke/Automatics.SmokeTest/LifecycleSmokeModules.cs"
+door_world_smoke="smoke/Automatics.SmokeTest/WorldSmokeCommand.cs"
+door_startup_smoke="smoke/Automatics.SmokeTest/SmokePlugin.cs"
+
+# Every Door entry that can be reached after a stop request, in the same table shape as the
+# Processing and Mapping entries. OnPlayerAwake is intentionally absent: it only clears session
+# bookkeeping and is checked among the gate-free callbacks below.
+door_entries=(
+  "Module.OnPlayerUpdate|$door_module|private static void OnPlayerUpdate\\(|if (!Running) return;"
+  "Module.OnPlayerFixedUpdate|$door_module|private static void OnPlayerFixedUpdate\\(|if (!Running) return;"
+  "Module.OnDedicatedServerFixedUpdate|$door_module|private static void OnDedicatedServerFixedUpdate\\(|if (!Running) return;"
+  "AutomaticDoor.TryOpenNearby|$door_component|public static void TryOpenNearby\\(|if (!Module.Running) return;"
+  "AutomaticDoor.TryCloseDoors|$door_component|public static void TryCloseDoors\\(|if (!Module.Running) return;"
+  "Patches.Door_Awake_Postfix|$door_patches|private static void Door_Awake_Postfix\\(|if (!Module.Discovering) return;"
+  "Module.AttachAutomaticDoor|$door_module|internal static void AttachAutomaticDoor\\(|if (!Discovering) return;"
+)
+
+door_callbacks=(
+  "Module.OnPlayerAwake|$door_module|private static void OnPlayerAwake\\(|ResetState();"
+  "AutomaticDoor.MarkAllowAutomaticDoorDirty|$door_component|public static void MarkAllowAutomaticDoorDirty\\(|if (AllInstance.Count == 0) return;"
+  "AutomaticDoor.Awake|$door_component|private void Awake\\(|_door = GetComponent<Door>();"
+  "AutomaticDoor.OnScopeDetaching|$door_component|public void OnScopeDetaching\\(|Unregister();"
+  "AutomaticDoor.OnDestroy|$door_component|private void OnDestroy\\(|Unregister();"
 )
 
 # The Automatic Processing patterns are POSIX EREs matched against a stream in which every run
@@ -336,6 +366,8 @@ for source_file in \
   "$mapping_config" "$mapping_module" "$mapping_patches" "$mapping_flora" "$mapping_icon_pack" \
   "$printobjects_file" \
   "$storage_config" "$storage_module" \
+  "$door_config" "$door_module" "$door_patches" "$door_component" \
+  "$door_smoke" "$door_world_smoke" "$door_startup_smoke" \
   "${unmigrated_module_configs[@]}"; do
   if [[ ! -r "$source_file" ]]; then
     fail "cannot read $source_file; none of the checks below would mean anything"
@@ -366,6 +398,13 @@ for storage_entry in "${storage_entries[@]}"; do
   IFS='|' read -r _ storage_entry_file _ _ <<<"$storage_entry"
   if [[ ! -r "$storage_entry_file" ]]; then
     fail "cannot read $storage_entry_file; none of the checks below would mean anything"
+  fi
+done
+
+for door_row in "${door_entries[@]}" "${door_callbacks[@]}"; do
+  IFS='|' read -r _ door_row_file _ _ <<<"$door_row"
+  if [[ ! -r "$door_row_file" ]]; then
+    fail "cannot read $door_row_file; none of the Door checks below would mean anything"
   fi
 done
 
@@ -3166,6 +3205,346 @@ require_mapping_destroy_callbacks_are_added_once
 require_mapping_icons_are_registered_once_per_minimap
 require_mapping_disable_keeps_the_pin_rule
 require_console_commands_never_write_a_setting
+
+# Automatic Door: one patch, four subscriptions, one scoped component and seven gated entries.
+# Its player-awake hook and four component/config callbacks only maintain bookkeeping, so they
+# deliberately do not use the side-effect gate.
+require_door_entries_and_callbacks() {
+  local row
+  local name
+  local file
+  local declaration
+  local expected
+  local body
+  local first
+
+  if ((${#door_entries[@]} != 7)); then
+    fail "the Door entry table must name exactly the seven audited gated entries: found ${#door_entries[@]}"
+  fi
+  if ((${#door_callbacks[@]} != 5)); then
+    fail "the Door callback table must name exactly the five audited gate-free bookkeeping entries: found ${#door_callbacks[@]}"
+  fi
+
+  for row in "${door_entries[@]}"; do
+    IFS='|' read -r name file declaration expected <<<"$row"
+    body="$(method_body "$file" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "$name must remain an audited Door entry in $file; its first-statement check could not run"
+      continue
+    fi
+    first="$(printf '%s\n' "$body" | first_statement)"
+    expected="${expected// /}"
+    if [[ "$first" != "$expected" ]]; then
+      fail "$name must open with the audited module gate; expected \"$expected\", found \"$first\""
+    fi
+  done
+
+  for row in "${door_callbacks[@]}"; do
+    IFS='|' read -r name file declaration expected <<<"$row"
+    body="$(method_body "$file" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "$name must remain an audited gate-free Door bookkeeping entry in $file; its first-statement check could not run"
+      continue
+    fi
+    first="$(printf '%s\n' "$body" | first_statement)"
+    expected="${expected// /}"
+    if [[ "$first" != "$expected" ]]; then
+      fail "$name must open with its audited bookkeeping statement and no module gate; expected \"$expected\", found \"$first\""
+    fi
+  done
+}
+
+require_door_acquisition_and_component_ownership() {
+  local body
+  local found
+
+  body="$(method_body "$door_module" "private static void ReconcileDoors\\(")"
+  if [[ -z "$body" ]]; then
+    fail "the Door module must define ReconcileDoors; its activation scan could not be checked"
+    return
+  fi
+
+  for pattern in \
+    'FindObjectsByType *< *Door *> *\( *FindObjectsInactive *\. *Include *, *FindObjectsSortMode *\. *None *\)' \
+    'Objects *\. *GetZNetView *\(' \
+    'GetZDO *\( *\) *== *null' \
+    'scope *\. *Attach *< *AutomaticDoor *> *\('; do
+    found="$(printf '%s\n' "$body" | count_hits "$pattern")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the Door activation scan; the component ownership check was not run"
+      return
+    fi
+    if ((found != 1)); then
+      fail "ReconcileDoors must enumerate inactive Doors, require a ZDO and attach AutomaticDoor through the supplied scope exactly once; pattern '$pattern' occurred $found time(s)"
+    fi
+  done
+
+  found="$(printf '%s\n' "$body" | count_hits 'AttachAutomaticDoor *\(')"
+  if lookup_failed "$found"; then
+    fail "could not inspect ReconcileDoors for the runtime attach helper; the check was not run"
+  elif ((found != 0)); then
+    fail "ReconcileDoors must attach through its supplied scope, not AttachAutomaticDoor: Active is raised only after reconciliation, so the runtime helper would reject every scanned Door"
+  fi
+
+  body="$(method_body "$door_module" "internal static void AttachAutomaticDoor\\(")"
+  found="$(printf '%s\n' "$body" | count_hits 'CurrentScope *\. *TryAttach *< *AutomaticDoor *> *\(')"
+  if lookup_failed "$found"; then
+    fail "could not inspect the Door runtime attach path; the check was not run"
+  elif ((found != 1)); then
+    fail "AttachAutomaticDoor must attach through CurrentScope.TryAttach exactly once: found $found"
+  fi
+
+  body="$(method_body "$door_patches" "private static void Door_Awake_Postfix\\(")"
+  found="$(printf '%s\n' "$body" | count_hits 'Module *\. *AttachAutomaticDoor *\(')"
+  if lookup_failed "$found"; then
+    fail "could not inspect the Door Awake postfix; the runtime attach routing check was not run"
+  elif ((found != 1)); then
+    fail "the Door Awake postfix must route exactly once through Module.AttachAutomaticDoor: found $found"
+  fi
+  found="$(printf '%s\n' "$body" | count_hits '(CurrentScope *\. *(Try)?Attach|scope *\. *(Try)?Attach) *<')"
+  if lookup_failed "$found"; then
+    fail "could not inspect the Door Awake postfix for a direct scope attach; the check was not run"
+  elif ((found != 0)); then
+    fail "the Door Awake postfix must not attach directly; it has to go through the gated Module.AttachAutomaticDoor path"
+  fi
+
+  require_source_pattern "$door_component" 'class AutomaticDoor *: *MonoBehaviour *, *IScopedComponent' \
+    "AutomaticDoor must implement IScopedComponent so its activation scope can stamp and detach it"
+  require_source_pattern "$door_component" 'public int ScopeGeneration *\{ *get *; *set *; *\}' \
+    "AutomaticDoor must expose its scope generation stamp"
+}
+
+require_door_cleanup_is_non_destructive() {
+  local body
+  local compact
+  local found
+
+  body="$(method_body "$door_module" "public void Disable\\(ModuleScope scope\\)")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'publicvoidDisable(ModuleScopescope){Active=false;Generation=0;CurrentScope=null;ResetState();}' ]]; then
+    fail "Door Disable must only lower Active, clear generation and scope, then ResetState; it must never operate a Door"
+  fi
+
+  body="$(method_body "$door_module" "private static void ResetState\\(\\)")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatestaticvoidResetState(){_openTimer=0f;_closeTimer=0f;PlayerMotionStates.Clear();ActivePlayerStateKeys.Clear();PlayerStateKeysBuffer.Clear();}' ]]; then
+    fail "Door ResetState must reset both timers and clear all three player-motion collections, and do nothing else"
+  fi
+
+  body="$(method_body "$door_component" "private void Unregister\\(\\)")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatevoidUnregister(){AllInstance.Remove(this);_zNetView=null;_transform=null;_door=null;}' ]]; then
+    fail "AutomaticDoor.Unregister must only remove its static registration and borrowed references; it must never change Door state"
+  fi
+
+  # The dispatch table only checks each callback's first statement, which a later statement
+  # in the same body can undermine: e.g. an open/close call added right after Unregister();
+  # would still pass a first-statement check while quietly touching a door on teardown or
+  # bookkeeping. Every gate-free bookkeeping callback in door_callbacks is pinned to its
+  # full, whitespace-collapsed body instead, the same way Disable/ResetState/Unregister are
+  # pinned above.
+  body="$(method_body "$door_component" "public void OnScopeDetaching\\(\\)")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'publicvoidOnScopeDetaching(){Unregister();}' ]]; then
+    fail "AutomaticDoor.OnScopeDetaching must do nothing but Unregister; it must never change a door on teardown"
+  fi
+
+  body="$(method_body "$door_component" "private void OnDestroy\\(\\)")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatevoidOnDestroy(){Unregister();}' ]]; then
+    fail "AutomaticDoor.OnDestroy must do nothing but Unregister; it must never change a door on teardown"
+  fi
+
+  body="$(method_body "$door_module" "private static void OnPlayerAwake\\(")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatestaticvoidOnPlayerAwake(Playerplayer,ZNetViewnview){ResetState();}' ]]; then
+    fail "Door OnPlayerAwake must do nothing but ResetState; it must never touch a door"
+  fi
+
+  body="$(method_body "$door_module" "public void SetStopRequested\\(bool value\\)")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'publicvoidSetStopRequested(boolvalue){StopRequested=value;}' ]]; then
+    fail "Door SetStopRequested must do nothing but set the flag; it must never touch a door"
+  fi
+
+  body="$(method_body "$door_component" "public static void MarkAllowAutomaticDoorDirty\\(\\)")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'publicstaticvoidMarkAllowAutomaticDoorDirty(){if(AllInstance.Count==0)return;foreach(varautomaticDoorinAllInstance)if(automaticDoor)automaticDoor._allowAutomaticDoorDirty=true;}' ]]; then
+    fail "AutomaticDoor.MarkAllowAutomaticDoorDirty must do nothing but mark every registered instance dirty; it must never touch a door"
+  fi
+
+  # Awake and OnDestroy are the component's only Unity message methods (5.1); any of the
+  # others is a gate-free entry the table above does not audit. Read over the
+  # comment/literal-stripped, whitespace-collapsed stream rather than raw source lines: a
+  # declaration split across lines after its return type (`private void\n    OnDisable()`)
+  # shares no line with the method name, so a per-line search would not see it. The (void|
+  # IEnumerator) anchor keeps a longer name that merely ends or starts with one of the six
+  # (UpdateAutomaticDoor, StartCoroutine) from matching, since neither has one of the six
+  # names directly preceded by a return-type keyword or directly followed by "(".
+  found="$(strip_code "$door_component" | count_hits '(void|IEnumerator) *(OnDisable|OnEnable|Update|FixedUpdate|LateUpdate|Start) *\(')"
+  if lookup_failed "$found"; then
+    fail "could not search $door_component; the Unity message method check was not run"
+  elif ((found != 0)); then
+    fail "AutomaticDoor must not declare OnDisable, OnEnable, Update, FixedUpdate, LateUpdate or Start; Awake and OnDestroy are its only Unity message methods"
+  fi
+}
+
+require_door_access_checks_precede_opening() {
+  local body
+  local valid
+  local interact
+  local open
+
+  body="$(method_body "$door_component" "private void TryOpen\\(Player ")"
+  valid="$(printf '%s\n' "$body" | first_match_line 'IsValid *\( *\)')"
+  interact="$(printf '%s\n' "$body" | first_match_line 'CanInteract *\( *player *\)')"
+  open="$(printf '%s\n' "$body" | first_match_line 'OpenDoor *\(')"
+  if lookup_failed "$valid" "$interact" "$open" || [[ -z "$valid" || -z "$interact" || -z "$open" ]]; then
+    fail "could not locate IsValid, CanInteract and OpenDoor in Door.TryOpen; the ownership and ward ordering check was not run"
+  elif ((valid >= interact || interact >= open)); then
+    fail "Door.TryOpen must pass ownership and interaction/ward checks before OpenDoor"
+  fi
+  if ! printf '%s\n' "$body" | has_match 'if *\( *!CanInteract *\( *player *\) *\) *return *;'; then
+    fail "Door.TryOpen must return when CanInteract rejects the player before it opens the door"
+  fi
+
+  body="$(method_body "$door_component" "private void TryClose\\(")"
+  valid="$(printf '%s\n' "$body" | first_match_line 'IsValid *\( *\)')"
+  interact="$(printf '%s\n' "$body" | first_match_line 'CanInteract *\( *player *\)')"
+  open="$(printf '%s\n' "$body" | first_match_line 'OpenDoor *\(')"
+  if lookup_failed "$valid" "$interact" "$open" || [[ -z "$valid" || -z "$interact" || -z "$open" ]]; then
+    fail "could not locate IsValid, CanInteract and OpenDoor in AutomaticDoor.TryClose; the ownership and ward ordering check was not run"
+  elif ((valid >= interact || interact >= open)); then
+    fail "AutomaticDoor.TryClose must pass ownership and interaction/ward checks before OpenDoor"
+  fi
+  if ! printf '%s\n' "$body" | has_match 'if *\( *!canInteract *\) *continue *;'; then
+    fail "AutomaticDoor.TryClose must skip players that CanInteract rejects"
+  fi
+  if ! printf '%s\n' "$body" | has_match 'if *\( *!closestInteractablePlayer *\) *return *;'; then
+    fail "AutomaticDoor.TryClose must return without closing when no player can interact"
+  fi
+
+  body="$(method_body "$door_component" "private bool CanInteract\\(")"
+  if ! printf '%s\n' "$body" | has_match 'if *\( *_door *\. *m_checkGuardStone *&& *!CheckWardAccess *\( *player *, *_transform *\. *position *\) *\) *return false *;'; then
+    fail "AutomaticDoor.CanInteract must reject a player denied by the ward check"
+  fi
+
+  require_source_pattern "$door_component" 'return Objects *\. *HasValidOwnership *\( *_zNetView *\) *;' \
+    "AutomaticDoor.IsValid must keep ownership validation through Objects.HasValidOwnership"
+}
+
+require_door_registration_contract() {
+  local body
+
+  require_source_pattern "$door_module" 'public string Name *=> *"automatic-door" *;' \
+    "the Door module registry name must remain automatic-door"
+  require_source_pattern "$door_module" 'public string ConfigSection *=> *"automatic_door" *;' \
+    "the Door module config section must remain automatic_door"
+  require_source_pattern "$door_module" 'public bool SupportsRuntimeToggle *=> *true *;' \
+    "the Door module must declare runtime toggle support"
+  require_source_pattern "$door_module" '\[AutomaticsInitializer\(1\)\]' \
+    "the Door module initializer order must remain 1"
+
+  body="$(method_body "$door_module" "private static void Initialize\\(\\)")"
+  if [[ -z "$body" ]]; then
+    fail "the Door module must define its initializer; the registry check could not run"
+  elif ! printf '%s\n' "$body" | has_match 'ModuleRegistry *\. *Register *\( *Instance *\) *;'; then
+    fail "the Door initializer must register Module.Instance instead of directly initializing config and patches"
+  fi
+}
+
+require_door_smoke_descriptor() {
+  local body
+  local found
+  local stripped
+
+  stripped="$(strip_code "$door_smoke" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - "private static ModuleDescriptor DescribeDoor\\(\\)")"
+  if [[ -z "$body" ]]; then
+    fail "the lifecycle smoke must define a Door descriptor; its probes could not be checked"
+    return
+  fi
+
+  for row in \
+    'Module *= *DoorModule *\. *Instance@@the Door descriptor must use the registered Door module' \
+    'PatchTypes *= *new\[\] *\{ *typeof *\( *DoorPatches *\) *\}@@the Door descriptor must declare its one patch type' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerAwake"[^;]*, *1 *\)@@the Door descriptor must probe its OnPlayerAwake handler' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerUpdate"[^;]*, *1 *\)@@the Door descriptor must probe its OnPlayerUpdate handler' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerFixedUpdate"[^;]*, *1 *\)@@the Door descriptor must probe its OnPlayerFixedUpdate handler' \
+    'Probe *\. *Handlers *\( *"Hooks.OnDedicatedServerFixedUpdate"[^;]*, *1 *\)@@the Door descriptor must probe its dedicated-server handler' \
+    'Probe *\. *Counter *\( *"door.OnPlayerAwake.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerAwake *, *typeof *\( *DoorModule *\) *, *"OnPlayerAwake" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Door descriptor must probe its own OnPlayerAwake handler occurrence, separately from the hook total, and require it back at exactly 1' \
+    'Probe *\. *Counter *\( *"door.OnPlayerUpdate.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerUpdate *, *typeof *\( *DoorModule *\) *, *"OnPlayerUpdate" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Door descriptor must probe its own OnPlayerUpdate handler occurrence, separately from the hook total, and require it back at exactly 1' \
+    'Probe *\. *Counter *\( *"door.OnPlayerFixedUpdate.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerFixedUpdate *, *typeof *\( *DoorModule *\) *, *"OnPlayerFixedUpdate" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Door descriptor must probe its own OnPlayerFixedUpdate handler occurrence, separately from the hook total, and require it back at exactly 1' \
+    'Probe *\. *Counter *\( *"door.OnDedicatedServerFixedUpdate.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnDedicatedServerFixedUpdate *, *typeof *\( *DoorModule *\) *, *"OnDedicatedServerFixedUpdate" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Door descriptor must probe its own dedicated-server handler occurrence, separately from the hook total, and require it back at exactly 1' \
+    'Probe *\. *Components *< *DoorComponent *> *\( *CountEligibleDoors *\)@@the Door descriptor must compare every component with the current eligible Door count' \
+    'Probe *\. *Counter *\( *"RegisteredDoorCount"[^;]*CountActiveDoorComponents *\)@@the Door descriptor must compare its registration count with active components, with no allow-zero override'; do
+    local pattern="${row%%@@*}"
+    local message="${row#*@@}"
+    found="$(printf '%s\n' "$body" | count_hits "$pattern")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the Door lifecycle descriptor; the check behind '$message' was not run"
+    elif ((found != 1)); then
+      fail "$message exactly once: found $found"
+    fi
+  done
+
+  for extra in state_snapshot_captured door_id_set_unchanged door_state_unchanged components_current_generation; do
+    found="$(printf '%s\n' "$body" | count_hits "new ExtraCheck *\\( *\"$extra\"")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the Door lifecycle descriptor for $extra; the check was not run"
+    elif ((found != 1)); then
+      fail "the Door descriptor must include the $extra read-only check exactly once: found $found"
+    fi
+  done
+
+  require_source_pattern "$door_smoke" 'Dictionary *< *ZDOID *, *int *> *DoorStates *\(' \
+    "the Door lifecycle smoke must normalize its state fingerprint by ZDOID"
+  require_source_pattern "$door_smoke" 'zdo *\. *GetInt *\( *"state" *\)' \
+    "the Door lifecycle smoke fingerprint must read each Door ZDO state"
+}
+
+require_door_existing_smokes_follow_runtime_state() {
+  local body
+  local stripped
+
+  stripped="$(strip_code "$door_world_smoke" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - "private static CheckResult CheckDoorOpenSetsZdoState\\(\\)")"
+  if [[ -z "$body" ]]; then
+    fail "the world smoke Door check could not be extracted; its runtime-state guard was not checked"
+  else
+    if ! printf '%s\n' "$body" | has_match 'ModuleRegistry *\. *GetState *\( *"automatic-door" *\) *!= *ModuleState *\. *Enabled'; then
+      fail "the world smoke Door check must skip unless the registry reports automatic-door Enabled"
+    fi
+    if ! printf '%s\n' "$body" | has_match 'AutomaticDoor *\. *Module *\. *Running'; then
+      fail "the world smoke Door check must also require the Door module Running predicate"
+    fi
+    if printf '%s\n' "$body" | has_match 'Config *\. *ModuleDisabled'; then
+      fail "the world smoke Door check must not read the removed start-up-only ModuleDisabled flag"
+    fi
+  fi
+
+  stripped="$(strip_code "$door_startup_smoke" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - "private CheckResult CheckDoorInternalNameResolution\\(\\)")"
+  if [[ -z "$body" ]]; then
+    fail "the startup Door registry check could not be extracted; its unconditional-bind contract was not checked"
+  elif printf '%s\n' "$body" | has_match 'CheckResult *\. *Skip|ModuleDisabled'; then
+    fail "the startup Door registry check must not SKIP because the module is disabled; its config binds unconditionally"
+  fi
+}
+
+require_enable_acquires_in_order "$door_module" scope patch subscribe reconcile
+require_disable_lowers_the_flag_first "$door_module"
+require_attach_paths_recheck_the_effective_state "$door_module" \
+  "internal static void AttachAutomaticDoor"
+require_module_enable_and_disable_shape "$door_module" door --patches \
+  OnPlayerAwake OnPlayerUpdate OnPlayerFixedUpdate OnDedicatedServerFixedUpdate
+require_door_entries_and_callbacks
+require_door_acquisition_and_component_ownership
+require_door_cleanup_is_non_destructive
+require_door_access_checks_precede_opening
+require_door_registration_contract
+require_door_smoke_descriptor
+require_door_existing_smokes_follow_runtime_state
 
 # Automatic Storage: one subscription, no patch, no component, and one entry point that moves
 # items. StoragePlanner and Config run inside a storage pass, between its gate and its last

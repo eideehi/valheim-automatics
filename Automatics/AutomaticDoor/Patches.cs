@@ -11,8 +11,9 @@ namespace Automatics.AutomaticDoor
         [HarmonyPatch(typeof(Door), "Awake")]
         private static void Door_Awake_Postfix(Door __instance, ZNetView ___m_nview)
         {
+            if (!Module.Discovering) return;
             if (___m_nview && ___m_nview.GetZDO() != null && !__instance.GetComponent<AutomaticDoor>())
-                __instance.gameObject.AddComponent<AutomaticDoor>();
+                Module.AttachAutomaticDoor(__instance.gameObject);
         }
     }
 }

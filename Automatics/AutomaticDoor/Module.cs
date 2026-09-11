@@ -1,11 +1,33 @@
-﻿using System.Collections.Generic;
-using HarmonyLib;
+using System;
+using System.Collections.Generic;
+using BepInEx.Configuration;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticDoor
 {
-    internal static class Module
+    /// <summary>
+    ///     Automatic Door on the module lifecycle. A scope owns its patch, four hook
+    ///     subscriptions and every <see cref="AutomaticDoor" /> component it attaches, so turning
+    ///     the module off removes them without changing any door's open state.
+    /// </summary>
+    internal sealed class Module : IAutomaticsModule
     {
+        public static readonly Module Instance = new Module();
+
+        internal static bool Active;
+        internal static bool StopRequested;
+        internal static bool Running => Active && !StopRequested;
+        internal static int Generation;
+        internal static ModuleScope CurrentScope;
+
+        /// <summary>
+        ///     Discovery follows the applied activation rather than the stop request. If a disable
+        ///     request is withdrawn before the pump runs, no later reconciliation occurs, so an
+        ///     object seen in that window still has to join the current scope.
+        /// </summary>
+        internal static bool Discovering => Active && CurrentScope != null;
+
         private struct PlayerMotionState
         {
             public Vector3 LastPosition;
@@ -26,17 +48,105 @@ namespace Automatics.AutomaticDoor
             PlayerStateKeysBuffer = new List<int>();
         }
 
+        private Module()
+        {
+        }
+
+        public string Name => "automatic-door";
+        public string ConfigSection => "automatic_door";
+        public bool SupportsRuntimeToggle => true;
+        public ConfigEntry<AutomaticsModule> ModuleToggle => Config.ModuleEntry;
+
+        public void SetStopRequested(bool value)
+        {
+            StopRequested = value;
+        }
+
+        public void BindConfig()
+        {
+            Config.Initialize();
+        }
+
+        /// <summary>
+        ///     Acquires the patch first, then subscriptions, then components. The scope tears these
+        ///     down in reverse, leaving the patch installed until every handler and component is
+        ///     inactive.
+        /// </summary>
+        public void Enable(ModuleScope scope)
+        {
+            Generation = scope.Generation;
+            CurrentScope = scope;
+
+            // The Awake postfix must be installed before the scan, or a door that appears between
+            // them is reached by neither path.
+            scope.PatchAll(typeof(Patches));
+
+            // Named handlers let the scope remove the same delegates that it added.
+            scope.Subscribe<Action<Player, ZNetView>>(
+                h => Hooks.OnPlayerAwake += h,
+                h => Hooks.OnPlayerAwake -= h,
+                OnPlayerAwake);
+            scope.Subscribe<Action<Player, bool>>(
+                h => Hooks.OnPlayerUpdate += h,
+                h => Hooks.OnPlayerUpdate -= h,
+                OnPlayerUpdate);
+            scope.Subscribe<Action<Player, float>>(
+                h => Hooks.OnPlayerFixedUpdate += h,
+                h => Hooks.OnPlayerFixedUpdate -= h,
+                OnPlayerFixedUpdate);
+            scope.Subscribe<Action<float>>(
+                h => Hooks.OnDedicatedServerFixedUpdate += h,
+                h => Hooks.OnDedicatedServerFixedUpdate -= h,
+                OnDedicatedServerFixedUpdate);
+
+            ReconcileDoors(scope);
+            Active = true;
+        }
+
+        /// <summary>
+        ///     Stops new automatic open and close work before clearing session bookkeeping. The
+        ///     scope removes its resources; this method deliberately never closes a door.
+        /// </summary>
+        public void Disable(ModuleScope scope)
+        {
+            Active = false;
+            Generation = 0;
+            CurrentScope = null;
+            ResetState();
+        }
+
         [AutomaticsInitializer(1)]
         private static void Initialize()
         {
-            Config.Initialize();
-            if (Config.ModuleDisabled) return;
+            ModuleRegistry.Register(Instance);
+        }
 
-            Hooks.OnPlayerAwake += (_, __) => ResetState();
-            Hooks.OnPlayerUpdate += OnPlayerUpdate;
-            Hooks.OnPlayerFixedUpdate += OnPlayerFixedUpdate;
-            Hooks.OnDedicatedServerFixedUpdate += OnDedicatedServerFixedUpdate;
-            Harmony.CreateAndPatchAll(typeof(Patches), Automatics.GetHarmonyId("automatic-door"));
+        /// <summary>
+        ///     A new player marks a new world session. This only clears bookkeeping, so it remains
+        ///     safe and useful when a previously fetched invocation list reaches it after a stop.
+        /// </summary>
+        private static void OnPlayerAwake(Player player, ZNetView nview)
+        {
+            ResetState();
+        }
+
+        internal static void AttachAutomaticDoor(GameObject target)
+        {
+            if (!Discovering) return;
+
+            CurrentScope.TryAttach<AutomaticDoor>(target, out _);
+        }
+
+        private static void ReconcileDoors(ModuleScope scope)
+        {
+            foreach (var door in UnityEngine.Object.FindObjectsByType<Door>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (!Objects.GetZNetView(door, out var zNetView)) continue;
+                if (zNetView.GetZDO() == null) continue;
+
+                scope.Attach<AutomaticDoor>(door.gameObject);
+            }
         }
 
         private static void ResetState()
@@ -56,6 +166,7 @@ namespace Automatics.AutomaticDoor
 
         private static void OnPlayerUpdate(Player player, bool takeInput)
         {
+            if (!Running) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
 
@@ -76,11 +187,14 @@ namespace Automatics.AutomaticDoor
 
         private static void OnDedicatedServerFixedUpdate(float delta)
         {
+            if (!Running) return;
+
             UpdateAutomaticDoor(Player.GetAllPlayers(), delta);
         }
 
         private static void OnPlayerFixedUpdate(Player player, float delta)
         {
+            if (!Running) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
 
             UpdateAutomaticDoor(Player.GetAllPlayers(), delta);
@@ -162,7 +276,7 @@ namespace Automatics.AutomaticDoor
                     PlayerStateKeysBuffer.Add(key);
 
             foreach (var key in PlayerStateKeysBuffer)
-                    PlayerMotionStates.Remove(key);
+                PlayerMotionStates.Remove(key);
         }
 
         private static void InvalidatePlayerMotion()
