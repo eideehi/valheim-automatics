@@ -14,7 +14,7 @@ namespace Automatics.AutomaticRepair
         private static ConfigEntry<int> _pieceSearchRange;
         private static ConfigEntry<Message> _pieceRepairMessage;
 
-        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
+        public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
         public static bool EnableAutomaticRepair => _enableAutomaticRepair.Value;
         public static int CraftingStationSearchRange => _craftingStationSearchRange.Value;
 
@@ -32,11 +32,9 @@ namespace Automatics.AutomaticRepair
             config.ChangeSection(Section);
             _module = config.Bind("module", AutomaticsModule.Disabled, initializer: x =>
             {
-                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
-                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_runtime_name");
+                x.Description = Automatics.L10N.Translate("@config_common_disable_module_runtime_description");
             });
-
-            if (_module.Value == AutomaticsModule.Disabled) return;
 
             _enableAutomaticRepair = config.Bind("enable_automatic_repair", true);
             _craftingStationSearchRange = config.Bind("crafting_station_search_range", 16, (0, 64));

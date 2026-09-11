@@ -42,13 +42,13 @@ migrated_module_dirs=(
   "Automatics/AutomaticMining"
   "Automatics/AutomaticFeeding"
   "Automatics/AutomaticFarming"
+  "Automatics/AutomaticRepair"
 )
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
 # removing it before the module is migrated hands non-activation guards to code this slice
 # does not verify (R5.1a).
 unmigrated_module_configs=(
-  "Automatics/AutomaticRepair/Config.cs"
 )
 
 pickup_config="Automatics/AutomaticPickup/Config.cs"
@@ -5089,6 +5089,190 @@ require_hook_handlers_open_with_the_gate "$storage_module" "private static void 
 require_item_entries_open_with_the_gate storage_entries "$storage_dir" "$storage_module" 1
 require_item_entries_never_recheck_after_a_change storage_entries "$storage_changes" \
   "$storage_dir/StoragePlanner.cs" "$storage_config"
+
+# Automatic Repair owns no component. Its dispatcher accepts item and piece batches separately;
+# private repair helpers finish the accepted batch without another state check.
+repair_dir="Automatics/AutomaticRepair"
+repair_module="$repair_dir/Module.cs"
+repair_item="$repair_dir/ItemRepair.cs"
+repair_piece="$repair_dir/PieceRepair.cs"
+repair_smoke="smoke/Automatics.SmokeTest/LifecycleSmokeModules.cs"
+repair_entries=(
+  "Module.OnPlayerFixedUpdate|$repair_module|private static void OnPlayerFixedUpdate\\(|if (!Module.Running) return;"
+  "ItemRepair.Repair|$repair_item|public static void Repair\\(|if (!Module.Running) return;"
+  "ItemRepair.CraftingStationInteractHook|$repair_item|public static void CraftingStationInteractHook\\(|if (!Module.Running) return;"
+  "PieceRepair.Repair|$repair_piece|public static void Repair\\(|if (!Module.Running) return;"
+)
+
+require_enable_acquires_in_order "$repair_module" scope patch subscribe
+require_disable_lowers_the_flag_first "$repair_module"
+require_module_enable_and_disable_shape "$repair_module" repair --patches OnPlayerAwake OnPlayerFixedUpdate
+# Repair retains the agreed scope/generation/discovery fields without attaching components.
+reject_source_pattern "$repair_module" 'scope\.(Attach|Reconcile)|AddComponent|FindObjectsByType|Reconcile[A-Za-z]+\(' \
+  'Repair must not acquire components or reconcile scene objects'
+require_item_entries_open_with_the_gate repair_entries "$repair_dir" "$repair_module" 4
+require_single_code_match "$repair_module" 'internal static bool Running *=> *Active *&& *!StopRequested *;' \
+  'Repair Running must combine the applied state and stop request'
+require_single_code_match "$repair_module" 'internal static bool Discovering *=> *Active *&& *CurrentScope *!= *null *;' \
+  'Repair Discovering must combine the applied state and scope'
+require_single_code_match "$repair_module" '\[AutomaticsInitializer\(5\)\]' \
+  'Repair must retain initializer number 5'
+require_source_pattern "$repair_module" 'public string Name => "automatic-repair";' 'Repair must retain its registry name'
+require_source_pattern "$repair_module" 'public string ConfigSection => "automatic_repair";' 'Repair must retain its config section'
+require_single_code_match "$repair_module" 'public bool SupportsRuntimeToggle *=> *true *;' 'Repair must support runtime toggling'
+require_single_code_match "$repair_module" 'public ConfigEntry<AutomaticsModule> ModuleToggle *=> *Config.ModuleEntry *;' 'Repair must expose its toggle to the registry'
+
+require_exact_method_body "$repair_module" 'public void SetStopRequested\(' \
+  'publicvoidSetStopRequested(boolvalue){StopRequested=value;}' 'Repair SetStopRequested must only record the request'
+require_exact_method_body "$repair_module" 'public void BindConfig\(' \
+  'publicvoidBindConfig(){Config.Initialize();}' 'Repair BindConfig must bind unconditionally'
+require_exact_method_body "$repair_module" 'private static void Initialize\(' \
+  'privatestaticvoidInitialize(){ModuleRegistry.Register(Instance);}' 'Repair Initialize must only register its instance'
+require_exact_method_body "$repair_module" 'public void Enable\(' \
+  'publicvoidEnable(ModuleScopescope){ResetSession();CurrentScope=scope;Generation=scope.Generation;scope.PatchAll(typeof(Patches));scope.Subscribe<Action<Player,ZNetView>>(h=>Hooks.OnPlayerAwake+=h,h=>Hooks.OnPlayerAwake-=h,OnPlayerAwake);scope.Subscribe<Action<Player,float>>(h=>Hooks.OnPlayerFixedUpdate+=h,h=>Hooks.OnPlayerFixedUpdate-=h,OnPlayerFixedUpdate);Active=true;}' \
+  'Repair Enable must reset the session, publish its scope, patch, subscribe its two named handlers and become active last'
+require_exact_method_body "$repair_module" 'public void Disable\(' \
+  'publicvoidDisable(ModuleScopescope){Active=false;Generation=0;CurrentScope=null;ResetSession();}' \
+  'Repair Disable must lower Active, drop scope and generation, then reset the session without a gate'
+require_exact_method_body "$repair_module" 'private static void ResetSession\(' \
+  'privatestaticvoidResetSession(){ItemRepairTimers.Clear();PieceRepairTimers.Clear();ItemRepair.Cleanup();PieceRepair.Cleanup();}' \
+  'Repair ResetSession must clear both timers and both repair helpers without a gate'
+require_exact_method_body "$repair_module" 'private static void OnPlayerAwake\(' \
+  'privatestaticvoidOnPlayerAwake(Playerplayer,ZNetViewzNetView){ResetSession();}' \
+  'Repair OnPlayerAwake must only reset the session without a gate'
+require_exact_method_body "$repair_item" 'internal static void Cleanup\(' \
+  'internalstaticvoidCleanup(){WornItemsBuffer.Clear();}' 'Repair item cleanup must clear its entire worn-item buffer'
+require_exact_method_body "$repair_piece" 'internal static void Cleanup\(' \
+  'internalstaticvoidCleanup(){PieceBuffer.Clear();PieceSet.Clear();Array.Clear(ColliderBuffer,0,ColliderBuffer.Length);_skipRadiusMethodLookup=false;}' \
+  'Repair piece cleanup must clear both collections, the full collider array and the lookup failure flag'
+
+# The common nested-entry checker counts vanilla wearNTear.Repair as a gated Repair call too.
+# Use qualified calls here, with a separate count of unqualified calls in each repair helper.
+require_repair_call_sites() {
+  local files status=0 file stripped count body row name pattern expected total
+  files="$(rg --files "$repair_dir" -g '*.cs')" || status=$?
+  if ((status != 0)) || [[ -z "$files" ]]; then
+    fail "could not list Repair sources (rg exit $status); call-site checks were not run"
+    return
+  fi
+  for name in ItemRepair PieceRepair; do
+    total=0
+    while IFS= read -r file; do
+      stripped="$(strip_code "$file")"
+      count="$(printf '%s\n' "$stripped" | count_hits "$name *\\. *Repair *\\(")"
+      if lookup_failed "$count"; then fail "could not count $name.Repair calls"; return; fi
+      total=$((total + count))
+      # An unqualified Repair call outside Module is a second entry, not the vanilla instance call.
+      if [[ "$file" != "$repair_module" ]]; then
+        count="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_.])Repair *\(')"
+        expected=0
+        [[ "$file" == "$repair_item" || "$file" == "$repair_piece" ]] && expected=1
+        if lookup_failed "$count" || [[ "$count" != "$expected" ]]; then
+          fail "$file must not call an unqualified gated Repair entry from a helper"
+        fi
+      fi
+    done <<<"$files"
+    body="$(method_body "$repair_module" 'private static void OnPlayerFixedUpdate\(')"
+    count="$(printf '%s\n' "$body" | count_hits "$name *\\. *Repair *\\(")"
+    if lookup_failed "$count" || [[ "$count" != 1 || "$total" != 1 ]]; then
+      fail "$name.Repair must be called exactly once, inside Repair OnPlayerFixedUpdate"
+    fi
+  done
+  require_single_code_match "$repair_dir/Patches.cs" 'nameof *\( *ItemRepair *\. *CraftingStationInteractHook *\)' \
+    'Repair transpiler must inject the crafting-station entry exactly once'
+  for file in "$repair_dir"/*.cs; do
+    reject_source_pattern "$file" 'ClaimOwnership|ZDO\s*\.\s*Set|\.Set\(|AddItem\s*\(|RemoveItem\s*\(|ModuleEntry\s*\.\s*Value|_module\s*\.\s*Value' \
+      'Repair must not claim ownership, write ZDO/inventory membership or read the module setting'
+  done
+}
+require_repair_call_sites
+
+# A call to the injected entry from another helper would open a second stop boundary. Its only
+# production references are its declaration and the transpiler's nameof operand.
+repair_hook_total=0
+for repair_file in "$repair_dir"/*.cs; do
+  repair_code="$(strip_code "$repair_file")"
+  if [[ "$repair_file" != "$repair_module" ]]; then
+    repair_reads="$(printf '%s\n' "$repair_code" | count_hits "$module_read")"
+    repair_gates="$(printf '%s\n' "$repair_code" | count_hits "$module_running_read")"
+    if lookup_failed "$repair_reads" "$repair_gates" || [[ "$repair_reads" != "$repair_gates" ]]; then
+      fail "$repair_file must not read any module state besides its entry gates"
+    fi
+  fi
+  repair_hooks="$(printf '%s\n' "$repair_code" | count_hits '(^|[^A-Za-z0-9_])CraftingStationInteractHook([^A-Za-z0-9_]|$)')"
+  if lookup_failed "$repair_hooks"; then
+    fail "could not count the crafting-station entry in $repair_file"
+  else
+    repair_hook_total=$((repair_hook_total + repair_hooks))
+  fi
+done
+if ((repair_hook_total != 2)); then
+  fail 'Repair crafting-station entry must be named only by its declaration and transpiler injection'
+fi
+
+for repair_entry in "${repair_entries[@]:1}"; do
+  IFS='|' read -r qualified file declaration _ <<<"$repair_entry"
+  body="$(method_body "$file" "$declaration")"
+  # Both statements precede any local player access or mutation; no check may be delayed to a helper.
+  first_two="$(printf '%s\n' "$body" | sed -n '/if (!Module.Running)/,+1p' | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$first_two" != 'if(!Module.Running)return;if(player==null||player!=Player.m_localPlayer||!Objects.HasValidOwnership(player))return;' ]]; then
+    fail "$qualified must immediately check null, local player and valid ownership after its stop gate"
+  fi
+done
+
+require_repair_config_contract() {
+  local body row key pattern line previous=0 count
+  body="$(strip_code "$repair_dir/Config.cs" keep)"
+  count="$(printf '%s\n' "$body" | count_hits 'config *\. *Bind *\(')"
+  if lookup_failed "$count" || [[ "$count" != 7 ]]; then fail 'Repair must keep exactly seven config binds'; fi
+  for row in \
+    'module|"module", AutomaticsModule.Disabled, initializer: x =>' \
+    'enable_automatic_repair|"enable_automatic_repair", true\)' \
+    'crafting_station_search_range|"crafting_station_search_range", 16, \(0, 64\)\)' \
+    'repair_items_when_accessing_the_crafting_station|"repair_items_when_accessing_the_crafting_station", false\)' \
+    'item_repair_message|"item_repair_message", Message.None\)' \
+    'piece_search_range|"piece_search_range", 16, \(0, 64\)\)' \
+    'piece_repair_message|"piece_repair_message", Message.None\)'; do
+    IFS='|' read -r key pattern <<<"$row"
+    line="$(printf '%s\n' "$body" | first_match_line "$pattern")"
+    if lookup_failed "$line"; then fail "could not search Repair config for $key";
+    elif [[ -z "$line" ]]; then fail "Repair config must bind $key with its audited default and constraints";
+    elif ((line <= previous)); then fail "Repair config must keep its seven entries in persisted order; $key is out of order";
+    else previous=$line; fi
+  done
+}
+require_repair_config_contract
+
+require_source_pattern "$repair_smoke" '\["repair"\] = DescribeRepair' 'Repair smoke must use the shared descriptor runner'
+require_source_pattern "$repair_smoke" 'using RepairPatches = Automatics.AutomaticRepair.Patches;' 'Repair smoke must inspect the Repair patch type'
+require_farming_steps_in_order "$repair_smoke" 'public IEnumerator Execute\(' 'Repair shared smoke runner' \
+  'disabled setting skip|if *\( *_toggle *\. *Value *!= *AutomaticsModule *\. *Enabled *\) *\{ *_record *\. *SkipAll *\( *\$?"" *\) *; *yield break *; *\}' \
+  'toggle ownership|SmokeSession *\. *BeginToggle *\('
+require_exact_method_body "$repair_smoke" 'private static ModuleDescriptor DescribeRepair\(' \
+  'privatestaticModuleDescriptorDescribeRepair(){varextras=newList<ExtraCheck>{newExtraCheck("",Phase.WhileOff,(record,cycle)=>{varname=record.Check("");if(RepairModule.Running){record.Cycle(name,cycle,false,"","");returnEnumerable.Empty<object>().GetEnumerator();}RepairItems.Repair(null);RepairPieces.Repair(null);RepairItems.CraftingStationInteractHook(null,null);record.Cycle(name,cycle,true,"","");returnEnumerable.Empty<object>().GetEnumerator();})};AddRepairCleanupCheck(extras,typeof(RepairModule),"");AddRepairCleanupCheck(extras,typeof(RepairModule),"");AddRepairCleanupCheck(extras,typeof(RepairItems),"");AddRepairCleanupCheck(extras,typeof(RepairPieces),"");AddRepairCleanupCheck(extras,typeof(RepairPieces),"");AddRepairCleanupCheck(extras,typeof(RepairPieces),"");AddRepairCleanupCheck(extras,typeof(RepairPieces),"");returnnewModuleDescriptor{Argument="",Module=RepairModule.Instance,Active=()=>RepairModule.Active,Running=()=>RepairModule.Running,PatchTypes=new[]{typeof(RepairPatches)},Probes=new[]{Probe.Handlers("",()=>Hooks.OnPlayerAwake,1),Probe.Handlers("",()=>Hooks.OnPlayerFixedUpdate,1),Probe.Counter("",()=>CountHandlersOf(Hooks.OnPlayerAwake,typeof(RepairModule),""),OffExpectation.Zero,0,()=>1),Probe.Counter("",()=>CountHandlersOf(Hooks.OnPlayerFixedUpdate,typeof(RepairModule),""),OffExpectation.Zero,0,()=>1)},Precondition=null,Extras=extras.ToArray()};}' \
+  'Repair smoke must use its declared patch and two hook deltas, observe cleanup and call only stopped null entries without spawning or writing settings'
+require_exact_method_body "$repair_smoke" 'private static void AddRepairCleanupCheck\(' \
+  'privatestaticvoidAddRepairCleanupCheck(List<ExtraCheck>extras,Typeowner,stringfield){varbefore=-1;extras.Add(newExtraCheck(field+"",Phase.BeforeRequest,(record,cycle)=>{before=ReadRepairState(owner,field);record.Cycle(record.Check(field+""),cycle,before>=0,$"",$"");returnEnumerable.Empty<object>().GetEnumerator();}));extras.Add(newExtraCheck(field+"",Phase.WhileOff,(record,cycle)=>{varafter=ReadRepairState(owner,field);varname=record.Check(field+"");if(before<0||after!=0)record.Cycle(name,cycle,false,"",$"");elseif(before==0)record.CycleSkip(name,cycle,$"");elserecord.Cycle(name,cycle,true,$"","");returnEnumerable.Empty<object>().GetEnumerator();}));}' \
+  'Repair smoke cleanup must fail unreadable or populated state and skip only a zero baseline'
+require_exact_method_body "$repair_smoke" 'private static int ReadRepairState\(' \
+  'privatestaticintReadRepairState(Typeowner,stringfieldName){varfield=AccessTools.Field(owner,fieldName);if(field==null)return-1;varvalue=field.GetValue(null);if(valueisboolflag)returnflag?1:0;if(valueisArrayarray)returnarray.Cast<object>().Count(x=>x!=null);if(value==null)return-1;varcount=AccessTools.Property(value.GetType(),"");returncount?.GetValue(value,null)isintnumber?number:-1;}' \
+  'Repair smoke must read every retained state without treating failed reflection as empty'
+for repair_state in 'RepairModule|ItemRepairTimers' 'RepairModule|PieceRepairTimers' \
+  'RepairItems|WornItemsBuffer' 'RepairPieces|PieceBuffer' 'RepairPieces|PieceSet' \
+  'RepairPieces|ColliderBuffer' 'RepairPieces|_skipRadiusMethodLookup'; do
+  IFS='|' read -r owner field <<<"$repair_state"
+  require_source_pattern "$repair_smoke" "AddRepairCleanupCheck\\(extras, typeof\\($owner\\), \"$field\"\\);" \
+    "Repair smoke must observe and clear $owner.$field"
+done
+
+require_farming_steps_in_order "$repair_piece" 'public static void Repair\(' 'Repair piece batch' \
+  'ward guard|if *\( *! *PrivateArea *\. *CheckAccess *\(position\) *\|\| *! *CheckCanRepairPiece *\(player, piece\) *\) *continue *;' \
+  'stamina guard|if *\( *! *player *\. *HaveStamina *\(toolData *\. *m_attack *\. *m_attackStamina\) *\) *break *;' \
+  'successful repair|if *\( *wearNTear *== *null *\|\| *! *wearNTear *\. *Repair *\(\) *\) *continue *;' \
+  'repair effect|piece *\. *m_placeEffect *\. *Create *\(' \
+  'stamina payment|player *\. *UseStamina *\(' \
+  'eitr payment|player *\. *UseEitr *\(' \
+  'durability payment|tool *\. *m_durability *-= *toolData *\. *m_useDurabilityDrain *\* *Game *\. *m_durabilityRate *;'
 
 if ((failures > 0)); then
   exit 1

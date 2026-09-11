@@ -28,6 +28,10 @@ using MiningModule = Automatics.AutomaticMining.Module;
 using MiningPatches = Automatics.AutomaticMining.Patches;
 using PickupConfig = Automatics.AutomaticPickup.Config;
 using PickupModule = Automatics.AutomaticPickup.Module;
+using RepairModule = Automatics.AutomaticRepair.Module;
+using RepairPatches = Automatics.AutomaticRepair.Patches;
+using RepairItems = Automatics.AutomaticRepair.ItemRepair;
+using RepairPieces = Automatics.AutomaticRepair.PieceRepair;
 using StorageModule = Automatics.AutomaticStorage.Module;
 
 namespace Automatics.SmokeTest
@@ -62,6 +66,7 @@ namespace Automatics.SmokeTest
                 ["farming"] = DescribeFarming,
                 ["feeding"] = DescribeFeeding,
                 ["mining"] = DescribeMining,
+                ["repair"] = DescribeRepair,
                 ["storage"] = DescribeStorage
             };
 
@@ -714,6 +719,94 @@ namespace Automatics.SmokeTest
                 Precondition = null,
                 Extras = new ExtraCheck[0]
             };
+        }
+
+        // Repair's normal enabled behavior can continue during this run. The check itself only
+        // calls its repair entries while off, with null arguments, and never damages anything.
+        private static ModuleDescriptor DescribeRepair()
+        {
+            var extras = new List<ExtraCheck>
+            {
+                new ExtraCheck("stopped_entries", Phase.WhileOff, (record, cycle) =>
+                {
+                    var name = record.Check("stopped_entries");
+                    if (RepairModule.Running)
+                    {
+                        record.Cycle(name, cycle, false, "", "Repair is still running");
+                        return Enumerable.Empty<object>().GetEnumerator();
+                    }
+                    RepairItems.Repair(null);
+                    RepairPieces.Repair(null);
+                    RepairItems.CraftingStationInteractHook(null, null);
+                    record.Cycle(name, cycle, true, "all three stopped entries returned with null arguments", "");
+                    return Enumerable.Empty<object>().GetEnumerator();
+                })
+            };
+            AddRepairCleanupCheck(extras, typeof(RepairModule), "ItemRepairTimers");
+            AddRepairCleanupCheck(extras, typeof(RepairModule), "PieceRepairTimers");
+            AddRepairCleanupCheck(extras, typeof(RepairItems), "WornItemsBuffer");
+            AddRepairCleanupCheck(extras, typeof(RepairPieces), "PieceBuffer");
+            AddRepairCleanupCheck(extras, typeof(RepairPieces), "PieceSet");
+            AddRepairCleanupCheck(extras, typeof(RepairPieces), "ColliderBuffer");
+            AddRepairCleanupCheck(extras, typeof(RepairPieces), "_skipRadiusMethodLookup");
+
+            return new ModuleDescriptor
+            {
+                Argument = "repair",
+                Module = RepairModule.Instance,
+                Active = () => RepairModule.Active,
+                Running = () => RepairModule.Running,
+                PatchTypes = new[] { typeof(RepairPatches) },
+                Probes = new[]
+                {
+                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
+                    Probe.Counter("repair.OnPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(RepairModule), "OnPlayerAwake"),
+                        OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("repair.OnPlayerFixedUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(RepairModule), "OnPlayerFixedUpdate"),
+                        OffExpectation.Zero, 0, () => 1)
+                },
+                Precondition = null,
+                Extras = extras.ToArray()
+            };
+        }
+
+        private static void AddRepairCleanupCheck(List<ExtraCheck> extras, Type owner, string field)
+        {
+            var before = -1;
+            extras.Add(new ExtraCheck(field + "_observed", Phase.BeforeRequest, (record, cycle) =>
+            {
+                before = ReadRepairState(owner, field);
+                record.Cycle(record.Check(field + "_observed"), cycle, before >= 0,
+                    $"{field} held {before} before disabling", $"could not read {field}");
+                return Enumerable.Empty<object>().GetEnumerator();
+            }));
+            extras.Add(new ExtraCheck(field + "_cleared", Phase.WhileOff, (record, cycle) =>
+            {
+                var after = ReadRepairState(owner, field);
+                var name = record.Check(field + "_cleared");
+                if (before < 0 || after != 0)
+                    record.Cycle(name, cycle, false, "", $"{field}: before={before}, while off={after}; expected readable and empty");
+                else if (before == 0)
+                    record.CycleSkip(name, cycle, $"{field} was already empty before disabling; cleanup was not observed");
+                else
+                    record.Cycle(name, cycle, true, $"{field} cleared {before} retained value(s)", "");
+                return Enumerable.Empty<object>().GetEnumerator();
+            }));
+        }
+
+        private static int ReadRepairState(Type owner, string fieldName)
+        {
+            var field = AccessTools.Field(owner, fieldName);
+            if (field == null) return -1;
+            var value = field.GetValue(null);
+            if (value is bool flag) return flag ? 1 : 0;
+            if (value is Array array) return array.Cast<object>().Count(x => x != null);
+            if (value == null) return -1;
+            var count = AccessTools.Property(value.GetType(), "Count");
+            return count?.GetValue(value, null) is int number ? number : -1;
         }
 
         // Every argument the command takes besides none at all, in the order the usage lists them.

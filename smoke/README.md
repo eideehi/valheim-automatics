@@ -199,9 +199,10 @@ safe.
 
 `automatics_smoke_lifecycle` (no arguments) exercises the runtime module
 lifecycle on Automatic Pickup; with the argument `mapping` it exercises Automatic
-Mapping instead, and with `door`, `feeding`, `mining` or `storage` it exercises
-Automatic Door, Automatic Feeding, Automatic Mining or Automatic Storage through the
-module runner the migrated modules share (described after this one). Run it from the
+Mapping instead, and with `door`, `farming`, `feeding`, `mining`, `repair` or
+`storage` it exercises Automatic Door, Automatic Farming, Automatic Feeding,
+Automatic Mining, Automatic Repair or Automatic Storage through the module runner
+the migrated modules share (described after this one). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
 through off → on → off:
@@ -537,6 +538,25 @@ crop it harvested is replanted in the same call. The patch and subscriptions are
 removed over the next few frames, and container roles stay on their containers.
 While the module is on between cycles, farming may harvest and replant within its
 range as it normally would; the check itself moves no item.
+
+#### `automatics_smoke_lifecycle repair`
+
+`repair` uses the descriptor-driven runner for three off/on cycles of
+`automatic_repair / module`. It checks Repair's one transpiler, both player
+subscriptions and each named handler, immediate stopping, and the release of
+both timer dictionaries, all item/piece/collider buffers and the
+radius-lookup failure flag. It calls the three repair entries only while off,
+with null arguments. It spawns nothing, damages or repairs nothing itself, and
+changes no internal Repair setting. Normal repairs can continue while Repair is
+enabled. A module already disabled in your settings is left untouched and SKIPs.
+
+Each retained state has `<field>_observed` and `<field>_cleared` checks, prefixed
+with `repair_`. The first reads the state immediately before disabling in each
+cycle. Cleanup SKIPs if that state was already empty, FAILs if it cannot be read
+or remains populated, and otherwise PASSes. `repair_stopped_entries` checks that
+the stopped entries return without throwing. SKIP is unverified; this command
+does not demonstrate successful repairs, tool payment or multiplayer RPC delivery.
+The original module setting is restored under the shared session rules.
 
 ### Processing smoke command
 

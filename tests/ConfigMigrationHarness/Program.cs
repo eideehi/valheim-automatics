@@ -34,6 +34,11 @@ namespace Automatics
         {
             Run("regex migrations preserve captured processing suffixes", RegexMigrationsPreserveCapturedProcessingSuffixes);
             Run("old automatic_repair section keeps disabled repair", OldAutomaticRepairSectionKeepsDisabledRepair);
+            Run("an enabled automatic_repair module survives migration", () => RepairModuleSurvivesMigration("Enabled"));
+            Run("a disabled automatic_repair module survives migration", () => RepairModuleSurvivesMigration("Disabled"));
+            Run("all six automatic_repair user values survive migration", RepairInnerValuesSurviveMigration);
+            Run("old repair keys keep the module disabled", OldRepairKeysKeepModuleDisabled);
+            Run("a current repair config is left byte for byte", CurrentRepairConfigIsLeftUntouched);
             Run("misplaced automatic_feeding repair key remains compatible", MisplacedAutomaticFeedingRepairKeyRemainsCompatible);
             Run("rename-category block still renames its config keys", RenameCategoryBlockStillRenamesConfigKeys);
             Run("map pinning rename chains through 1.4.0 mineral rename", MapPinningRenameChainsThroughMineralRename);
@@ -1249,6 +1254,46 @@ namespace Automatics
             AssertContains(migrated, "smelter_fuel_count_of_suppress_processing = 20");
             AssertDoesNotContain(migrated, "r/^");
             AssertDoesNotContain(migrated, "$1");
+        }
+
+        private static void RepairModuleSurvivesMigration(string value)
+        {
+            var migrated = Migrate("## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = " + value);
+            AssertModule(migrated, "automatic_repair", value);
+            AssertEqual(1, CountOccurrences(migrated, "defaults_revision = 1"), "The defaults marker is added once.");
+        }
+
+        private static void RepairInnerValuesSurviveMigration()
+        {
+            var values = new[] { "enable_automatic_repair = false", "crafting_station_search_range = 11",
+                "repair_items_when_accessing_the_crafting_station = true", "item_repair_message = Center",
+                "piece_search_range = 23", "piece_repair_message = TopLeft" };
+            var lines = new[] { "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = Disabled" };
+            var migrated = Migrate(lines.Concat(values).ToArray());
+            AssertModule(migrated, "automatic_repair", "Disabled");
+            foreach (var value in values) AssertContains(migrated, value);
+        }
+
+        private static void OldRepairKeysKeepModuleDisabled()
+        {
+            var migrated = Migrate("## Settings file was created by plugin Automatics v1.2.0",
+                "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]",
+                "module = Disabled", "automatic_repair_enabled = false");
+            AssertModule(migrated, "automatic_repair", "Disabled");
+            AssertContains(migrated, "enable_automatic_repair = false");
+            AssertDoesNotContain(migrated, "automatic_repair_enabled");
+        }
+
+        private static void CurrentRepairConfigIsLeftUntouched()
+        {
+            var lines = new[] { "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = Disabled",
+                "crafting_station_search_range = 11", "[hidden]", "defaults_revision = 1" };
+            var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
+            if (Migrate(lines) != expected)
+                throw new Exception("A current Repair config must not be rewritten.");
         }
 
         private static void OldAutomaticRepairSectionKeepsDisabledRepair()

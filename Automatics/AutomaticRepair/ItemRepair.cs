@@ -14,6 +14,11 @@ namespace Automatics.AutomaticRepair
             WornItemsBuffer = new List<ItemDrop.ItemData>();
         }
 
+        internal static void Cleanup()
+        {
+            WornItemsBuffer.Clear();
+        }
+
         private static void ShowRepairMessage(Player player, int repairCount)
         {
             if (repairCount == 0) return;
@@ -87,6 +92,8 @@ namespace Automatics.AutomaticRepair
 
         public static void CraftingStationInteractHook(Player player, CraftingStation station)
         {
+            if (!Module.Running) return;
+            if (player == null || player != Player.m_localPlayer || !Objects.HasValidOwnership(player)) return;
             if (!Config.EnableAutomaticRepair) return;
             if (!Config.RepairItemsWhenAccessingTheCraftingStation) return;
 
@@ -99,6 +106,8 @@ namespace Automatics.AutomaticRepair
 
         public static void Repair(Player player)
         {
+            if (!Module.Running) return;
+            if (player == null || player != Player.m_localPlayer || !Objects.HasValidOwnership(player)) return;
             // No-cost-cheat repair needs no crafting station, so it must not be
             // gated by the station search range (which can be set to 0 to disable
             // only the station-based path).

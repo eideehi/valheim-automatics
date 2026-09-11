@@ -28,6 +28,8 @@ failures=0
 patches_file="Automatics/AutomaticProcessing/Patches.cs"
 locals_file="Automatics/AutomaticProcessing/TranspilerLocals.cs"
 mapping_patches_file="Automatics/AutomaticMapping/Patches.cs"
+repair_patches_file="Automatics/AutomaticRepair/Patches.cs"
+repair_locals_file="Automatics/AutomaticRepair/TranspilerLocals.cs"
 
 # The files whose transpilers are held to these rules. Another module's transpilers join this
 # list when they are brought under the same resolution.
@@ -37,11 +39,11 @@ transpiler_files=("$patches_file" "$locals_file")
 # Mapping transpilers are held to that rule alone: they still write their local slots as numbers,
 # which the other rules here reject. tests/TranspilerLocalsHarness checks that their anchors
 # match the released game's method bodies.
-match_checked_files=("${transpiler_files[@]}" "$mapping_patches_file")
+match_checked_files=("${transpiler_files[@]}" "$mapping_patches_file" "$repair_patches_file")
 
 # The files that must contain at least one CodeMatcher match, so that the ThrowIfInvalid check
 # cannot pass for having nothing to look at.
-matching_files=("$patches_file" "$mapping_patches_file")
+matching_files=("$patches_file" "$mapping_patches_file" "$repair_patches_file")
 
 # The only code that may spell a local slot as a short-form opcode (ldloc.0-3, stloc.0-3) or as
 # a literal operand, because encoding and decoding local opcodes is what these helpers are for.
@@ -312,6 +314,10 @@ fi
 # local is resolved from the method (by type, or from an anchor that is checked against the
 # declared local types) and encoded by the exempted helpers.
 require_no_hardcoded_local_slots() {
+  local locals_file="${1:-$locals_file}"
+  local patches_file="${2:-$patches_file}"
+  local -a selected_exempt=()
+  if (($# == 0)); then selected_exempt=("${exempt_helpers[@]}"); fi
   local stripped_locals
   local stripped_patches
   local name
@@ -327,7 +333,7 @@ require_no_hardcoded_local_slots() {
   stripped_locals="$(strip_code "$locals_file")"
   stripped_patches="$(strip_code "$patches_file")"
 
-  for name in "${exempt_helpers[@]}"; do
+  for name in "${selected_exempt[@]}"; do
     pattern="$(declaration_pattern "$name")"
 
     count="$(printf '%s\n' "$stripped_locals" | count_stdin_matches "$pattern")"
@@ -587,9 +593,19 @@ require_one_derivation_path_per_transpiler() {
 }
 
 require_no_hardcoded_local_slots
+require_no_hardcoded_local_slots "$repair_locals_file" "$repair_patches_file"
 require_every_match_is_checked
 require_the_resolvers_refuse
 require_one_derivation_path_per_transpiler
+
+# Keep the complete Repair transformation on one path through the shipped validators. A mere
+# call-presence check would accept a discarded local result or a bypass of Show uniqueness.
+repair_body="$(strip_code "$repair_patches_file")"
+repair_body="$(printf '%s\n' "$repair_body" | extract_block - 'public static IEnumerable<CodeInstruction> CraftingStation_Interact_Transpiler\(' | sed ':join;N;$!b join;s/[[:space:]]//g')"
+repair_expected='publicstaticIEnumerable<CodeInstruction>CraftingStation_Interact_Transpiler(IEnumerable<CodeInstruction>instructions,MethodBaseoriginal){varcode=instructions.ToList();varplayerLocal=TranspilerLocals.RequireUniqueLocal(original,typeof(Player));varshow=AccessTools.Method(typeof(InventoryGui),nameof(InventoryGui.Show));TranspilerLocals.RequireUniqueShow(code.Select(instruction=>instruction.opcode==OpCodes.Callvirt&&Equals(instruction.operand,show)));returnnewCodeMatcher(code).MatchStartForward(newCodeMatch(OpCodes.Callvirt,show)).ThrowIfInvalid("").Advance(1).Insert(newCodeInstruction(OpCodes.Ldloc,playerLocal),newCodeInstruction(OpCodes.Ldarg_0),newCodeInstruction(OpCodes.Call,AccessTools.Method(typeof(ItemRepair),nameof(ItemRepair.CraftingStationInteractHook)))).InstructionEnumeration();}'
+if [[ "$repair_body" != "$repair_expected" ]]; then
+  fail 'Repair transpiler must use the shared Player and unique Show validators, check its match, and inject only the resolved Player immediately after Show'
+fi
 
 if ((failures > 0)); then
   exit 1

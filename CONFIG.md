@@ -1220,8 +1220,8 @@ Specify the types of animals allowed to feed from the player inventory.
 - Multiple values can be set at the same time by separating them with , (e.g. Wild, Tamed)
 
 ## [ #7 Automatic Repair ] / [automatic_repair]
-### Disable Module (Reboot Required) / [module]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+### Disable Module / [module]
+You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled

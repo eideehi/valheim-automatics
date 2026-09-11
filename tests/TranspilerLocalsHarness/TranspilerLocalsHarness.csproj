@@ -8,5 +8,6 @@
 
   <ItemGroup>
     <Compile Include="../../Automatics/AutomaticProcessing/TranspilerLocals.cs" Link="TranspilerLocals.cs" />
+    <Compile Include="../../Automatics/AutomaticRepair/TranspilerLocals.cs" Link="RepairTranspilerLocals.cs" />
   </ItemGroup>
 </Project>

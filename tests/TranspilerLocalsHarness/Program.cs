@@ -97,6 +97,7 @@ namespace Automatics.AutomaticProcessing
             Run("the released Valheim 1.0.7 method bodies resolve as f1e7d90 patched them",
                 ReleasedGameMethodBodies);
             RunMappingAnchorCases();
+            RunRepairAnchorCases();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -815,8 +816,22 @@ namespace Automatics.AutomaticProcessing
                 }
             }
 
-            public Type GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind) => typeof(OtherType);
-            public Type GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) => typeof(OtherType);
+            public Type GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
+            {
+                var type = reader.GetTypeDefinition(handle);
+                return NamedType(reader.GetString(type.Namespace), reader.GetString(type.Name));
+            }
+
+            public Type GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind)
+            {
+                var type = reader.GetTypeReference(handle);
+                return NamedType(reader.GetString(type.Namespace), reader.GetString(type.Name));
+            }
+
+            internal static Type NamedType(string space, string name)
+            {
+                return space == "" && name == "Player" ? typeof(RepairPlayer) : typeof(OtherType);
+            }
             public Type GetTypeFromSpecification(MetadataReader reader, object genericContext, TypeSpecificationHandle handle, byte rawTypeKind) => typeof(OtherType);
             public Type GetSZArrayType(Type elementType) => typeof(OtherType);
             public Type GetArrayType(Type elementType, ArrayShape shape) => typeof(OtherType);

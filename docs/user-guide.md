@@ -27,9 +27,8 @@ or accepted value range.
 Automatics is split into feature modules. Each module has a `Disable Module`
 option, and most modules also have a separate on/off option for the feature
 behavior. Automatic door, automatic pickup, automatic processing, automatic
-mapping, automatic mining, automatic feeding, automatic farming and automatic
-storage apply that option while the game is running; every other module still
-needs a restart, and says so in the option name.
+mapping, automatic mining, automatic feeding, automatic farming, automatic
+repair and automatic storage all apply that option while the game is running.
 
 ## Common configuration concepts
 
@@ -44,8 +43,7 @@ Automatics to patch or run that feature at all.
 A new install starts with every module turned off. Turn on the modules you want
 by setting each section's `Disable Module` option to `Enabled`; the settings
 inside each module keep their usual defaults, so turning the module on is
-normally all you need. For modules that need a restart, their other options
-appear after you turn the module on and restart.
+normally all you need. Their other options remain available while the module is off.
 
 An existing configuration file keeps each module on or off as it was: a module
 you turned off stays off. If the file comes from an older version and has no
@@ -67,13 +65,13 @@ off.
 | Automatic feeding | `Disable Module` | While the game is running. No restart. |
 | Automatic farming | `Disable Module` | While the game is running. No restart. |
 | Automatic storage | `Disable Module` | While the game is running. No restart. |
-| Automatic repair | `Disable Module (Reboot Required)` | After the game is restarted. |
+| Automatic repair | `Disable Module` | While the game is running. No restart. |
 
 When you turn automatic door, automatic pickup, automatic processing, automatic
-mapping, automatic mining, automatic feeding, automatic farming or automatic
+mapping, automatic mining, automatic feeding, automatic farming, automatic repair or automatic
 storage off, it stops starting new automatic actions, such as door movement,
 pickups, item transfers, pin updates, mining passes, feeding, harvests,
-replanting and sowing, and storage passes, right away, and lets an action that is
+replanting and sowing, repairs, and storage passes, right away, and lets an action that is
 already in progress finish. For automatic
 storage, `Store Items` does nothing from then on, and a storage pass that has
 already started still moves every item it selected. For automatic mining, a
@@ -81,7 +79,8 @@ pass that has already started completes all of its selected hits, including
 damage, pickaxe durability, noise and skill updates. For automatic feeding, an
 animal that has already taken a feed item out of a container or your inventory
 still eats it. For automatic farming, a pass that has already started replants
-every crop it harvested. The switch itself completes
+every crop it harvested. For automatic repair, an accepted batch finishes all of
+its repairs and tool costs. The switch itself completes
 over the next few frames, when the module's patches and hooks are removed, along
 with the components automatic door adds to doors, automatic pickup adds to
 players and items, automatic mapping adds to fish, birds, ships, rocks and flora,
@@ -386,6 +385,12 @@ Its `Disable Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
 ## Automatic repair
+
+Its `Disable Module` option takes effect without a restart. Turning it off stops
+new repair batches immediately; an accepted batch finishes its repairs and tool
+costs. The switch completes over the next few frames. Turning it back on keeps
+your settings and starts fresh one-second timers. See
+[Module disable options](#module-disable-options).
 
 Automatic repair repairs worn items near usable crafting stations and damaged
 pieces when the player has a build tool and meets access or station

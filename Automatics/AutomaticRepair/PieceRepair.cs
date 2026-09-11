@@ -22,6 +22,14 @@ namespace Automatics.AutomaticRepair
         private static readonly HashSet<Piece> PieceSet = new HashSet<Piece>();
         private static readonly Collider[] ColliderBuffer = new Collider[256];
 
+        internal static void Cleanup()
+        {
+            PieceBuffer.Clear();
+            PieceSet.Clear();
+            Array.Clear(ColliderBuffer, 0, ColliderBuffer.Length);
+            _skipRadiusMethodLookup = false;
+        }
+
         private static void ShowRepairMessage(Player player, int repairCount)
         {
             if (repairCount == 0) return;
@@ -169,6 +177,8 @@ namespace Automatics.AutomaticRepair
 
         public static void Repair(Player player)
         {
+            if (!Module.Running) return;
+            if (player == null || player != Player.m_localPlayer || !Objects.HasValidOwnership(player)) return;
             if (Config.PieceSearchRange <= 0) return;
             if (!TryGetRepairTool(player, out var tool)) return;
 
