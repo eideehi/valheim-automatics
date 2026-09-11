@@ -27,10 +27,21 @@ set -euo pipefail
 failures=0
 patches_file="Automatics/AutomaticProcessing/Patches.cs"
 locals_file="Automatics/AutomaticProcessing/TranspilerLocals.cs"
+mapping_patches_file="Automatics/AutomaticMapping/Patches.cs"
 
 # The files whose transpilers are held to these rules. Another module's transpilers join this
 # list when they are brought under the same resolution.
 transpiler_files=("$patches_file" "$locals_file")
+
+# The files in which every CodeMatcher match must be checked with ThrowIfInvalid. The Automatic
+# Mapping transpilers are held to that rule alone: they still write their local slots as numbers,
+# which the other rules here reject. tests/TranspilerLocalsHarness checks that their anchors
+# match the released game's method bodies.
+match_checked_files=("${transpiler_files[@]}" "$mapping_patches_file")
+
+# The files that must contain at least one CodeMatcher match, so that the ThrowIfInvalid check
+# cannot pass for having nothing to look at.
+matching_files=("$patches_file" "$mapping_patches_file")
 
 # The only code that may spell a local slot as a short-form opcode (ldloc.0-3, stloc.0-3) or as
 # a literal operand, because encoding and decoding local opcodes is what these helpers are for.
@@ -286,7 +297,7 @@ declaration_pattern() {
 
 # A rejection against a file that is not there passes every time, so the files are checked
 # before anything else and a missing one ends the run.
-for source_file in "${transpiler_files[@]}"; do
+for source_file in "${match_checked_files[@]}"; do
   if [[ ! -r "$source_file" ]]; then
     fail "cannot read $source_file; none of the checks below would mean anything"
   fi
@@ -377,9 +388,9 @@ require_every_match_is_checked() {
   local file
   local report
   local line
-  local matches_in_patches=""
+  local matched_files=""
 
-  for file in "${transpiler_files[@]}"; do
+  for file in "${match_checked_files[@]}"; do
     report="$(strip_code "$file" | CHECKED_FILE="$file" awk '
       {
         line = $0
@@ -454,8 +465,8 @@ require_every_match_is_checked() {
     while IFS= read -r line; do
       case "$line" in
         matches=*)
-          if [[ "$file" == "$patches_file" ]]; then
-            matches_in_patches="${line#matches=}"
+          if [[ "${line#matches=}" != "0" ]]; then
+            matched_files+="$file"$'\n'
           fi
           ;;
         "") ;;
@@ -464,9 +475,12 @@ require_every_match_is_checked() {
     done <<<"$report"
   done
 
-  if [[ -z "$matches_in_patches" || "$matches_in_patches" == "0" ]]; then
-    fail "no CodeMatcher match was found in $patches_file; the ThrowIfInvalid check had nothing to look at, so it did not show anything"
-  fi
+  for file in "${matching_files[@]}"; do
+    case $'\n'"$matched_files" in
+      *$'\n'"$file"$'\n'*) ;;
+      *) fail "no CodeMatcher match was found in $file; the ThrowIfInvalid check had nothing to look at, so it did not show anything" ;;
+    esac
+  done
 }
 
 # A resolver that returns a fallback instead of refusing is how a transpiler reads the wrong

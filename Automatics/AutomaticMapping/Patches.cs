@@ -95,11 +95,16 @@ namespace Automatics.AutomaticMapping
              * +   return;
              *   PinData closestPin = this.GetClosestPin(pos, this.m_removeRadius * (this.m_largeZoom * 2f));
              */
+            // Local 0 is `pos` (Vector3). The slot stays hardcoded, but the anchor
+            // requires the ScreenToWorldPoint result to be stored into local 0, so a
+            // layout change breaks the match and ThrowIfInvalid reports it at patch time.
             return new CodeMatcher(instructions, generator)
                 .MatchEndForward(
                     new CodeMatch(OpCodes.Call,
                         AccessTools.Method(typeof(Minimap), "ScreenToWorldPoint")),
                     new CodeMatch(OpCodes.Stloc_0))
+                .ThrowIfInvalid(
+                    "Minimap.OnMapLeftClick: the ScreenToWorldPoint call storing into local 0 (pos) was not found")
                 .Advance(1)
                 .CreateLabel(out var originalCodes)
                 .Insert(
@@ -212,12 +217,16 @@ namespace Automatics.AutomaticMapping
                         AccessTools.Method(typeof(Map), nameof(Map.ShouldHideAutomaticPin))),
                     new CodeInstruction(OpCodes.Brtrue_S, destroyHiddenPinLabel));
 
+            // Repeat does nothing, and says nothing, when its first match fails, so the check
+            // sits before it: at least one size computation must be found.
             return matcher
                 .MatchEndForward(
                     new CodeMatch(OpCodes.Ldloc_3),
                     new CodeMatch(OpCodes.Ldc_R4, 2f),
                     new CodeMatch(OpCodes.Mul),
                     new CodeMatch(OpCodes.Stloc_S))
+                .ThrowIfInvalid(
+                    "Minimap.UpdatePins: the doubled pin size (local 3 * 2) stored into a local was not found")
                 .Repeat(x =>
                 {
                     var numIndex = x.Operand;
@@ -298,6 +307,9 @@ namespace Automatics.AutomaticMapping
              *       pinData.m_NamePinData = new PinNameData(pinData);
              *   }
              */
+            // Local 0 is `pinData`. The slot stays hardcoded, but the anchor requires local 0
+            // to be the pin whose m_name is tested, so a layout change breaks the match and
+            // ThrowIfInvalid reports it at patch time.
             var matcher = new CodeMatcher(instructions, generator)
                 .MatchEndForward(
                     new CodeMatch(OpCodes.Ldloc_0),
@@ -305,7 +317,9 @@ namespace Automatics.AutomaticMapping
                         AccessTools.Field(typeof(Minimap.PinData), "m_name")),
                     new CodeMatch(OpCodes.Call,
                         AccessTools.Method(typeof(string), nameof(string.IsNullOrEmpty))),
-                    new CodeMatch(OpCodes.Brtrue));
+                    new CodeMatch(OpCodes.Brtrue))
+                .ThrowIfInvalid(
+                    "Minimap.AddPin: the IsNullOrEmpty check on local 0's (pinData) m_name was not found");
             var skipLabel = matcher.Operand;
             matcher.Set(OpCodes.Brtrue_S, skipLabel);
             return matcher
@@ -425,8 +439,12 @@ namespace Automatics.AutomaticMapping
                 .MatchStartBackwards(
                     new CodeMatch(OpCodes.Callvirt,
                         AccessTools.Method(typeof(ZNetView), "Destroy")))
+                .ThrowIfInvalid(
+                    "Pickable.SetPicked: the ZNetView.Destroy call was not found")
                 .MatchStartBackwards(
                     new CodeMatch(OpCodes.Ldarg_0))
+                .ThrowIfInvalid(
+                    "Pickable.SetPicked: the Ldarg_0 before the ZNetView.Destroy call was not found")
                 .Insert(
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldarg_0),
@@ -457,6 +475,8 @@ namespace Automatics.AutomaticMapping
                         AccessTools.Field(typeof(MineRock5), "m_nview")),
                     new CodeMatch(OpCodes.Callvirt,
                         AccessTools.Method(typeof(ZNetView), "Destroy")))
+                .ThrowIfInvalid(
+                    "MineRock5.DamageArea: the m_nview.Destroy() call was not found")
                 .Advance(1)
                 .Insert(
                     new CodeInstruction(OpCodes.Ldarg_0),

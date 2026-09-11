@@ -30,7 +30,7 @@ namespace Automatics.AutomaticProcessing
     ///     Every refusal case checks the reason it was refused, so a case cannot pass on an
     ///     exception that an earlier, unrelated check happened to throw.
     /// </summary>
-    internal static class Program
+    internal static partial class Program
     {
         private static int _failures;
 
@@ -96,6 +96,7 @@ namespace Automatics.AutomaticProcessing
                 InsertionsLandWhereTheyWereDerived);
             Run("the released Valheim 1.0.7 method bodies resolve as f1e7d90 patched them",
                 ReleasedGameMethodBodies);
+            RunMappingAnchorCases();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -710,6 +711,10 @@ namespace Automatics.AutomaticProcessing
                             operand = ResolveCall(reader, BitConverter.ToInt32(il, pos), typeName);
                             pos += 4;
                             break;
+                        case OperandType.InlineField:
+                            operand = ResolveField(reader, BitConverter.ToInt32(il, pos));
+                            pos += 4;
+                            break;
                         case OperandType.InlineSwitch:
                             var count = BitConverter.ToInt32(il, pos);
                             var next = pos + 4 + 4 * count;
@@ -768,6 +773,29 @@ namespace Automatics.AutomaticProcessing
                 return owner == typeName && StandIns.TryGetValue(name, out var standIn)
                     ? standIn
                     : (object)$"{owner}::{name}";
+            }
+
+            /// <summary>A field operand as <c>Owner::name</c>, the owner being the declaring type's own name.</summary>
+            private static object ResolveField(MetadataReader reader, int token)
+            {
+                var handle = MetadataTokens.EntityHandle(token);
+                if (handle.Kind == HandleKind.FieldDefinition)
+                {
+                    var field = reader.GetFieldDefinition((FieldDefinitionHandle)handle);
+                    var owner = reader.GetString(reader.GetTypeDefinition(field.GetDeclaringType()).Name);
+                    return $"{owner}::{reader.GetString(field.Name)}";
+                }
+
+                if (handle.Kind == HandleKind.MemberReference)
+                {
+                    var member = reader.GetMemberReference((MemberReferenceHandle)handle);
+                    var owner = member.Parent.Kind == HandleKind.TypeReference
+                        ? reader.GetString(reader.GetTypeReference((TypeReferenceHandle)member.Parent).Name)
+                        : "?";
+                    return $"{owner}::{reader.GetString(member.Name)}";
+                }
+
+                return "field";
             }
         }
 
