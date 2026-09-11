@@ -22,12 +22,39 @@ namespace Automatics.SmokeTest
 
         private bool _hasRun;
 
+        // A coroutine stops with the component that runs it and is never disposed, so neither
+        // its remaining steps nor an iterator's finally hand anything back on that path.
+        // Whatever a smoke command still owes the user's game - the Automatic Pickup setting,
+        // a spawned test object - is handed back from here instead (SmokeSession).
+        private void OnApplicationQuit()
+        {
+            SmokeSession.HandBack("the game is quitting");
+        }
+
+        private void OnDisable()
+        {
+            SmokeSession.HandBack("the smoke plugin was disabled");
+        }
+
+        private void OnDestroy()
+        {
+            SmokeSession.HandBack("the smoke plugin was destroyed");
+        }
+
         private IEnumerator Start()
         {
-            // Register the optional in-game world smoke command before the readiness
-            // wait so the Hooks.OnInitTerminal subscription is in place before the
+            // A lifecycle check cut short by a crash or a killed process left a record of the
+            // setting it changed. It is reported as a warning and never acted on: the config is
+            // not written from it.
+            SmokeSession.WarnAboutInterruptedRun();
+
+            // Register the optional in-game world smoke commands before the readiness
+            // wait so the Hooks.OnInitTerminal subscriptions are in place before the
             // terminal's one-time init fires (mirrors how Automatics itself registers).
-            WorldSmokeCommand.EnsureRegistered();
+            // Both run across frames, so they are handed this plugin to run their
+            // coroutines on.
+            WorldSmokeCommand.EnsureRegistered(this);
+            LifecycleSmokeCommand.EnsureRegistered(this);
 
             // Only Localization.instance is consumed by a check (and that check
             // skip-guards on it), so the readiness wait covers just that. The object

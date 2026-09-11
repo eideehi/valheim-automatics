@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Automatics;
@@ -21,23 +22,42 @@ namespace Automatics.SmokeTest
     // Valheim Terminal type (Automatics reads it only via Harmony field injection),
     // so there is no immediate-build branch — the one-time terminal init fires the
     // subscribed callback. _commandBuilt keeps BuildCommand idempotent.
+    //
+    // The pickup check has to wait for vanilla to accept a fresh drop, so the command
+    // runs as a coroutine on the smoke plugin rather than in the console call. The other
+    // three checks still run synchronously, each within a single frame, so nothing they
+    // spawn lives long enough to be updated or saved. Only one smoke command runs at a
+    // time, and what a run owes the game if it is cut short is held by SmokeSession.
+    //
+    // Item safety is asymmetric: a test item left behind is harmless, a real item removed
+    // is not. Nothing is removed from an inventory unless it is provably the check's own.
     internal static class WorldSmokeCommand
     {
         private const string CommandName = "automatics_smoke_world";
         private const string Smelter = "$piece_smelter";
-        private const string ChestWood = "$piece_chest_wood";
+
+        // The Container's m_name, which TryFindPrefabByObjectName compares against. The
+        // GameObject is piece_chest_wood, but its m_name has no underscore; this is the
+        // token the mod's own data matches (PieceChestWood in
+        // Automatics/Data/Objects/AutomaticProcessing/container.json).
+        private const string ChestWood = "$piece_chestwood";
         private const string WoodDoorObjectName = "$piece_wooddoor";
         private const string WoodPrefab = "Wood";
-        private const string WoodItemName = "$item_wood";
+
+        // A bound on waiting for a fresh drop to become pickable, not an estimate of it:
+        // vanilla refuses a drop for 0.5 s after it spawns.
+        private const float PickupTimeoutSeconds = 5f;
 
         private static readonly ManualLogSource Log =
             BepInEx.Logging.Logger.CreateLogSource("Automatics Smoke World");
 
+        private static MonoBehaviour _host;
         private static bool _registered;
         private static bool _commandBuilt;
 
-        internal static void EnsureRegistered()
+        internal static void EnsureRegistered(MonoBehaviour host)
         {
+            _host = host;
             if (_registered) return;
             _registered = true;
 
@@ -64,34 +84,94 @@ namespace Automatics.SmokeTest
 
         private static void OnCommand(Terminal.ConsoleEventArgs args)
         {
-            var results = new List<CheckResult>
+            var context = args.Context;
+            if (!_host)
             {
-                RunCheck("world_storage_store_moves_items", CheckStorageStoreMovesItems),
-                RunCheck("world_door_open_sets_zdo_state", CheckDoorOpenSetsZdoState),
-                RunCheck("world_pickup_itemdrop_to_inventory", CheckPickupItemDropToInventory),
-                RunCheck("world_processing_smelter_refuel", CheckProcessingSmelterRefuel)
-            };
+                Emit(context, LogLevel.Error,
+                    $"[Automatics Smoke] {CommandName}: the smoke plugin is not available to run it");
+                return;
+            }
 
+            if (!SmokeSession.TryBegin(CommandName, out var runId, out var refusal))
+            {
+                Emit(context, LogLevel.Warning,
+                    $"[Automatics Smoke] {CommandName} was not started: {refusal}");
+                return;
+            }
+
+            // Guard hands back the run's obligations and releases the lock however the body
+            // ends, a throw included.
+            _host.StartCoroutine(SmokeSession.Guard(runId, CommandName, Run(context, runId)));
+        }
+
+        private static IEnumerator Run(Terminal context, int runId)
+        {
+            IEnumerator steps = null;
+            try
+            {
+                var results = new List<CheckResult>
+                {
+                    RunCheck("world_storage_store_moves_items", CheckStorageStoreMovesItems),
+                    RunCheck("world_door_open_sets_zdo_state", CheckDoorOpenSetsZdoState)
+                };
+
+                // The pickup check spans frames, so it is advanced here instead of by
+                // RunCheck. A yield cannot sit inside a try that has a catch, so each step
+                // is taken inside one and the yield happens outside it.
+                CheckResult pickup = null;
+                steps = CheckPickupItemDropToInventory(runId, result => pickup = result);
+                while (true)
+                {
+                    object current = null;
+                    bool more;
+                    try
+                    {
+                        more = steps.MoveNext();
+                        if (more) current = steps.Current;
+                    }
+                    catch (Exception e)
+                    {
+                        pickup = CheckResult.Fail("", e.GetType().Name + ": " + e.Message);
+                        more = false;
+                    }
+
+                    if (!more) break;
+                    yield return current;
+                }
+
+                results.Add((pickup ?? CheckResult.Fail("", "the check ended without a result"))
+                    .WithName("world_pickup_itemdrop_to_inventory"));
+                results.Add(SmokeSession.IsCurrent(runId)
+                    ? RunCheck("world_processing_smelter_refuel", CheckProcessingSmelterRefuel)
+                    : CheckResult.Skip("the run was abandoned before this check")
+                                 .WithName("world_processing_smelter_refuel"));
+
+                Report(context, results);
+            }
+            finally
+            {
+                // Reached when the body finishes or throws, not when the coroutine is stopped:
+                // Unity never disposes a stopped coroutine. That path is SmokeSession's, from the
+                // plugin's own hooks, and the drop the pickup check waits on is recorded there.
+                // Guard hands back the run's obligations and releases the lock after this.
+                (steps as IDisposable)?.Dispose();
+            }
+        }
+
+        private static void Report(Terminal context, List<CheckResult> results)
+        {
             foreach (var result in results)
             {
-                string line;
                 if (result.Status == CheckStatus.Pass)
-                {
-                    line = $"[Automatics Smoke] PASS {result.Name}";
-                    Log.LogInfo(line);
-                }
+                    Emit(context, LogLevel.Info, string.IsNullOrEmpty(result.Message)
+                        ? $"[Automatics Smoke] PASS {result.Name}"
+                        : $"[Automatics Smoke] PASS {result.Name}: {result.Message}");
                 else if (result.Status == CheckStatus.Skip)
-                {
-                    line = $"[Automatics Smoke] SKIP {result.Name}: {result.Message}";
-                    Log.LogWarning(line);
-                }
+                    Emit(context, LogLevel.Warning,
+                        $"[Automatics Smoke] SKIP {result.Name}: {result.Message}");
                 else
-                {
-                    line = $"[Automatics Smoke] FAIL {result.Name}: {result.Message}";
-                    Log.LogError(line);
-                }
-
-                args.Context?.AddString(line);
+                    Emit(context, LogLevel.Error,
+                        $"[Automatics Smoke] FAIL {result.Name}: {result.Message}");
             }
 
             var failed = results.Where(result => result.Status == CheckStatus.Fail)
@@ -102,10 +182,16 @@ namespace Automatics.SmokeTest
                                  .ToArray();
             var passed = results.Count(result => result.Status == CheckStatus.Pass);
 
-            var summary =
-                $"[Automatics Smoke] Summary: total={results.Count} passed={passed} failed={failed.Length} skipped={skipped.Length} failedChecks=[{string.Join(", ", failed)}] skippedChecks=[{string.Join(", ", skipped)}]";
-            Log.LogInfo(summary);
-            args.Context?.AddString(summary);
+            Emit(context, LogLevel.Info,
+                $"[Automatics Smoke] Summary: total={results.Count} passed={passed} failed={failed.Length} skipped={skipped.Length} failedChecks=[{string.Join(", ", failed)}] skippedChecks=[{string.Join(", ", skipped)}]");
+        }
+
+        private static void Emit(Terminal context, LogLevel level, string line)
+        {
+            Log.Log(level, line);
+
+            // The run can outlive the console that started it (a logout while it waits).
+            if (context) context.AddString(line);
         }
 
         private static CheckResult RunCheck(string name, Func<CheckResult> check)
@@ -171,6 +257,17 @@ namespace Automatics.SmokeTest
                 var chestInventory = chest.GetInventory();
                 if (chestInventory == null) return CheckResult.Skip("spawned chest inventory is null");
 
+                // Everything in the chest after Store is handed back to the player below, so
+                // it has to start empty or the hand-back would give the player items they
+                // never had.
+                if (chestInventory.NrOfItems() != 0)
+                {
+                    // Whatever it holds is not the check's, so the chest stays in the world.
+                    scope.Keep(chestGo);
+                    return CheckResult.Skip(
+                        $"the spawned chest was not empty, so {ChestLocation(chestGo)} was left in the world holding: {ListItems(chestInventory.GetAllItems())}");
+                }
+
                 // AutomaticStorage.Store only routes to containers registered in
                 // ContainerCache. If the chest's ContainerCache.Awake has not registered it
                 // this frame (same-frame spawn timing / ZDO-at-Awake gating), Store cannot
@@ -180,38 +277,165 @@ namespace Automatics.SmokeTest
                     return CheckResult.Skip(
                         "spawned chest not registered in ContainerCache this frame; cannot drive Store");
 
+                // Store moves every eligible item in the player's inventory into every
+                // allowed container in range, not only the test Wood into this chest. What
+                // reached another container would stay there after the check, so it only
+                // runs where this chest is the one container Store can reach.
+                var otherTargets = CountOtherStorageTargets(player, chest);
+                if (otherTargets > 0)
+                    return CheckResult.Skip(
+                        $"{otherTargets} other container(s) within storage_search_range would also receive items; run it away from other containers");
+
                 var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
                 if (sample == null) return CheckResult.Skip("could not build Wood sample item");
 
+                // The player's own count of this exact Wood. The cleanup never takes them
+                // below it, whatever else happens.
+                var ownWood = PickableHarvester.CountExactItems(playerInventory, sample);
+
                 var added = AddItemsLooped(playerInventory, woodPrefab, 5);
                 if (added <= 0) return CheckResult.Skip("could not add test Wood to player inventory");
-                scope.TrackItemForCleanup(playerInventory, sample, added);
-                scope.TrackItemForCleanup(chestInventory, sample, added);
 
-                // Hotbar guard: store_hotbar_items default false rejects row-0 items.
-                if (!global::Automatics.AutomaticStorage.Config.StoreHotbarItems &&
-                    !HasTestItemOffHotbar(playerInventory, sample))
-                    return CheckResult.Skip(
-                        "test item landed on hotbar and store_hotbar_items is off");
+                // From here on the chest can hold the player's own items, so it is taken out
+                // of the scope's destruction first and handed back only once it has been seen
+                // empty again. Nothing between here and that point can destroy it.
+                scope.Keep(chestGo);
 
-                var beforeCount = PickableHarvester.CountExactItems(playerInventory, sample);
-                var chestBefore = chestInventory.CountItems(WoodItemName);
+                CheckResult result;
+                try
+                {
+                    result = StoreAndAssert(player, playerInventory, chestInventory, sample);
+                }
+                catch (Exception e)
+                {
+                    result = CheckResult.Fail("", e.GetType().Name + ": " + e.Message);
+                }
 
-                var result = global::Automatics.AutomaticStorage.AutomaticStorage.Store(player);
+                var leftInChest = ReturnChestContents(scope, chestGo, chestInventory, playerInventory);
+                var testWoodLeft = RemoveTestWood(playerInventory, sample, added, ownWood);
 
-                var afterCount = PickableHarvester.CountExactItems(playerInventory, sample);
-                var moved = beforeCount - afterCount;
+                if (leftInChest != null)
+                    return CheckResult.Fail("", result.Status == CheckStatus.Fail
+                        ? $"{leftInChest}; the check itself also failed: {result.Message}"
+                        : leftInChest);
 
-                Expect(moved > 0, "Store should move at least one Wood out of the player inventory");
-                Expect(result.StoredItems == moved,
-                    $"result.StoredItems ({result.StoredItems}) should equal moved delta ({moved})");
-                Expect(result.TouchedContainers > 0, "result.TouchedContainers should be > 0");
+                if (testWoodLeft > 0 && result.Status == CheckStatus.Pass)
+                    return CheckResult.Pass(
+                        $"{testWoodLeft} test Wood could not be told apart from yours and was left in the inventory");
 
-                var chestAfter = chestInventory.CountItems(WoodItemName);
-                Expect(chestAfter - chestBefore >= result.StoredItems,
-                    $"chest should have received at least {result.StoredItems} Wood (delta {chestAfter - chestBefore})");
+                return result;
+            }
+        }
 
-                return CheckResult.Pass();
+        private static CheckResult StoreAndAssert(Player player, Inventory playerInventory,
+            Inventory chestInventory, ItemDrop.ItemData sample)
+        {
+            // Hotbar guard: store_hotbar_items default false rejects row-0 items.
+            if (!global::Automatics.AutomaticStorage.Config.StoreHotbarItems &&
+                !HasTestItemOffHotbar(playerInventory, sample))
+                return CheckResult.Skip("test item landed on hotbar and store_hotbar_items is off");
+
+            var beforeCount = PickableHarvester.CountExactItems(playerInventory, sample);
+
+            var result = global::Automatics.AutomaticStorage.AutomaticStorage.Store(player);
+
+            var afterCount = PickableHarvester.CountExactItems(playerInventory, sample);
+            var moved = beforeCount - afterCount;
+
+            // The chest started empty and is the only container Store could reach, so
+            // everything Store reports as stored is in it - the player's own eligible items
+            // included, which is why this is not compared with the Wood delta.
+            var storedInChest = chestInventory.GetAllItems().Sum(item => item.m_stack);
+            var woodInChest = PickableHarvester.CountExactItems(chestInventory, sample);
+
+            Expect(moved > 0, "Store should move at least one Wood out of the player inventory");
+            Expect(result.StoredItems == storedInChest,
+                $"result.StoredItems ({result.StoredItems}) should equal the items that reached the chest ({storedInChest})");
+            Expect(result.TouchedContainers == 1,
+                $"result.TouchedContainers ({result.TouchedContainers}) should be 1: the spawned chest is the only container in range");
+            Expect(woodInChest == moved,
+                $"the chest should hold the {moved} Wood that left the player (it holds {woodInChest})");
+
+            return CheckResult.Pass();
+        }
+
+        // The selection AutomaticStorage.Store makes - range, allow_container, and whether the
+        // player may mutate the container - applied to every container except the test chest.
+        private static int CountOtherStorageTargets(Player player, Container testChest)
+        {
+            var origin = player.transform.position;
+            var range = global::Automatics.AutomaticStorage.Config.StorageSearchRange;
+            var allowed = global::Automatics.AutomaticStorage.Config.AllowContainer;
+
+            return global::Automatics.ContainerCache.GetAllInstance().Count(container =>
+                container != null &&
+                container != testChest &&
+                Vector3.Distance(origin, container.transform.position) <= range &&
+                ContainerAccess.IsAllowed(container, allowed) &&
+                ContainerAccess.CanDirectlyMutateContainer(player, container));
+        }
+
+        // The chest is already kept when this runs. Everything in it goes back to the player,
+        // and the chest is handed back to the scope for destruction only once it has been seen
+        // empty. Returns null in that case, or a description of what was left and where - the
+        // chest then stays in the world, so nothing in it is destroyed.
+        private static string ReturnChestContents(SpawnScope scope, GameObject chestGo,
+            Inventory chestInventory, Inventory playerInventory)
+        {
+            string moveFailure = null;
+            try
+            {
+                playerInventory.MoveAll(chestInventory);
+            }
+            catch (Exception e)
+            {
+                moveFailure = e.GetType().Name + ": " + e.Message;
+            }
+
+            var where = ChestLocation(chestGo);
+
+            List<ItemDrop.ItemData> left;
+            try
+            {
+                left = new List<ItemDrop.ItemData>(chestInventory.GetAllItems());
+            }
+            catch (Exception e)
+            {
+                var unreadable =
+                    $"{where} could not be read after its contents were returned ({e.GetType().Name}: {e.Message}); it was left in the world in case it still holds your items";
+                Log.LogWarning($"[Automatics Smoke] world_storage_store_moves_items: {unreadable}");
+                return unreadable;
+            }
+
+            if (left.Count == 0)
+            {
+                scope.Release(chestGo);
+                return null;
+            }
+
+            var items = ListItems(left);
+            var message =
+                $"{left.Count} stack(s) could not be returned to your inventory{(moveFailure == null ? "" : $" ({moveFailure})")} and were left in {where}: {items}";
+            Log.LogWarning($"[Automatics Smoke] world_storage_store_moves_items: {message}");
+            return message;
+        }
+
+        // Removes the test Wood the storage check added, but never takes the player below the
+        // count of that exact Wood they had before it started. Returns how many were left.
+        private static int RemoveTestWood(Inventory inventory, ItemDrop.ItemData sample, int added,
+            int ownWood)
+        {
+            try
+            {
+                var surplus = PickableHarvester.CountExactItems(inventory, sample) - ownWood;
+                var removed = RemoveExactItems(inventory, sample, Mathf.Clamp(surplus, 0, added));
+                return added - removed;
+            }
+            catch (Exception e)
+            {
+                Log.LogWarning(
+                    $"[Automatics Smoke] world_storage_store_moves_items: the test Wood was left in the inventory ({e.GetType().Name}: {e.Message})");
+                return added;
             }
         }
 
@@ -274,36 +498,101 @@ namespace Automatics.SmokeTest
 
         // -- 4.3 Pickup ------------------------------------------------------------
 
-        private static CheckResult CheckPickupItemDropToInventory()
+        // Reproduces AutomaticPickup.PickItemDrop: the harvester gate, then vanilla
+        // ItemDrop.Pickup. ModuleDisabled is NOT a SKIP here — this drives the shared pickup
+        // API directly, not the module.
+        //
+        // ItemDrop.Pickup(Humanoid) completes synchronously only when CanPickup() is true, and
+        // CanPickup() is false for the first 0.5 s after the drop's Awake whoever owns it.
+        // PickItemDrop runs over drops already lying in range, so for every drop older than
+        // that - owned by the local peer, as every drop is in single player - it takes exactly
+        // this synchronous branch. The check waits, bounded, for the drop to reach that state
+        // and then makes the call PickItemDrop makes.
+        //
+        // Doing the call synchronously is also what lets the result be attributed. The two
+        // inventory counts bracket one call with no frame boundary in between, so the only
+        // Wood that can enter the inventory between them is what that call hands over, and
+        // Wood is removed afterwards only when the drop was consumed within the call and
+        // exactly its one Wood arrived. Anything short of that removes nothing.
+        private static IEnumerator CheckPickupItemDropToInventory(int runId, Action<CheckResult> report)
         {
-            if (ZNetScene.instance == null) return CheckResult.Skip("ZNetScene.instance is null");
+            if (ZNetScene.instance == null)
+            {
+                report(CheckResult.Skip("ZNetScene.instance is null"));
+                yield break;
+            }
+
             var player = Player.m_localPlayer;
-            if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
+            if (player == null)
+            {
+                report(CheckResult.Skip("Player.m_localPlayer is null"));
+                yield break;
+            }
+
             var playerInventory = player.GetInventory();
-            if (playerInventory == null) return CheckResult.Skip("player inventory is null");
+            if (playerInventory == null)
+            {
+                report(CheckResult.Skip("player inventory is null"));
+                yield break;
+            }
 
             if (ObjectDB.instance == null || ObjectDB.instance.m_items.Count == 0)
-                return CheckResult.Skip("ObjectDB not ready");
+            {
+                report(CheckResult.Skip("ObjectDB not ready"));
+                yield break;
+            }
 
             if (!TryGetPrefab(WoodPrefab, out var woodPrefab))
-                return CheckResult.Skip("Wood prefab not found");
+            {
+                report(CheckResult.Skip("Wood prefab not found"));
+                yield break;
+            }
+
             if (woodPrefab.GetComponent<ItemDrop>() == null)
-                return CheckResult.Skip("Wood prefab lacks ItemDrop");
+            {
+                report(CheckResult.Skip("Wood prefab lacks ItemDrop"));
+                yield break;
+            }
 
             if (playerInventory.GetEmptySlots() == 0)
-                return CheckResult.Skip("inventory full");
+            {
+                report(CheckResult.Skip("inventory full"));
+                yield break;
+            }
+
+            var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
+            if (sample == null)
+            {
+                report(CheckResult.Skip("could not build Wood sample item"));
+                yield break;
+            }
 
             var forward = player.transform.forward;
             var origin = player.transform.position;
 
-            using (var scope = new SpawnScope())
+            GameObject go = null;
+            var woodMayBeLeft = false;
+            try
             {
-                var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
-                if (sample == null) return CheckResult.Skip("could not build Wood sample item");
+                // Spawned outside a SpawnScope: the drop belongs to SmokeSession, which destroys
+                // it only while it still holds the one Wood the check gives it (see finally).
+                go = UnityEngine.Object.Instantiate(woodPrefab, origin + forward * 1.5f,
+                    Quaternion.identity);
 
-                var go = scope.Spawn(woodPrefab, origin + forward * 1.5f, Quaternion.identity);
+                // Recorded before the first frame boundary, so a run that is cut short still
+                // has the drop removed.
+                SmokeSession.TrackSpawn(go, 1);
+                if (Objects.GetZNetView(go.transform, out var spawnedNview) && spawnedNview != null &&
+                    spawnedNview.IsValid() && !spawnedNview.IsOwner())
+                    spawnedNview.ClaimOwnership();
+
+                var spawnedAt = Time.time;
                 var itemDrop = go.GetComponent<ItemDrop>();
-                if (itemDrop == null) return CheckResult.Skip("spawned object lacks ItemDrop");
+                if (itemDrop == null)
+                {
+                    report(CheckResult.Skip("spawned object lacks ItemDrop"));
+                    yield break;
+                }
 
                 itemDrop.m_itemData.m_stack = 1;
                 itemDrop.m_itemData.m_worldLevel = (byte)Game.m_worldLevel;
@@ -311,29 +600,129 @@ namespace Automatics.SmokeTest
 
                 if (!Objects.GetZNetView(itemDrop, out var dropNview) || dropNview == null ||
                     dropNview.GetZDO() == null)
-                    return CheckResult.Skip("spawned ItemDrop ZNetView/ZDO null");
+                {
+                    report(CheckResult.Skip("spawned ItemDrop ZNetView/ZDO null"));
+                    yield break;
+                }
 
-                // Track the picked-up Wood for removal regardless of outcome.
-                scope.TrackItemForCleanup(playerInventory, sample, 1);
+                // Left out of every world save, so a drop that outlives an interrupted run can
+                // never end up in the user's world.
+                dropNview.GetZDO().Persistent = false;
 
-                // Reproduces AutomaticPickup.PickItemDrop: harvester gate, then vanilla Pickup.
-                // ModuleDisabled is NOT a SKIP here — this drives the shared pickup API directly.
+                // Keeps vanilla auto-pickup and Automatic Pickup's own pass off this drop
+                // while the check waits. Both skip a drop whose m_autoPickup is false
+                // (vanilla's flag for an item the player dropped), and ItemDrop.Pickup never
+                // reads it.
+                itemDrop.m_autoPickup = false;
+
+                // Keeps real drops from merging into this one. Vanilla ItemDrop.AutoStackItems -
+                // run from SlowUpdate, and only while more than 200 drops exist - pulls nearby
+                // drops of the same name and quality into this drop unless its m_haveAutoStacked
+                // is already set. That relies on the private field keeping its 1.0.7 name and
+                // meaning; if it is gone, the stack check before the drop is destroyed still
+                // catches a merge. The other direction - this drop pulled into a real one - only
+                // ends the check as "disappeared" and removes nothing.
+                var haveAutoStacked = typeof(ItemDrop).GetField("m_haveAutoStacked",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (haveAutoStacked != null && haveAutoStacked.FieldType == typeof(bool))
+                    haveAutoStacked.SetValue(itemDrop, true);
+
+                // Pickability runs on game time, which stands still while the game is paused, so
+                // a wait that saw a pause cannot tell anything about the drop.
+                var pausedDuringWait = Game.IsPaused();
+                var waitStarted = Time.realtimeSinceStartup;
+                while (SmokeSession.IsCurrent(runId) && !IsConsumed(go, itemDrop) &&
+                       !itemDrop.CanPickup() &&
+                       Time.realtimeSinceStartup - waitStarted < PickupTimeoutSeconds)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) pausedDuringWait = true;
+                }
+
+                if (!SmokeSession.IsCurrent(runId))
+                {
+                    report(CheckResult.Skip("inconclusive: the run was abandoned before the pickup"));
+                    yield break;
+                }
+
+                if (!player)
+                {
+                    report(CheckResult.Skip("inconclusive: the local player went away while the check waited"));
+                    yield break;
+                }
+
+                if (IsConsumed(go, itemDrop))
+                {
+                    report(CheckResult.Fail("",
+                        "the test drop disappeared before it could be picked up; its m_autoPickup was false, so neither vanilla auto-pickup nor Automatic Pickup should have taken it. Nothing was removed from the inventory"));
+                    yield break;
+                }
+
+                if (!itemDrop.CanPickup() && pausedDuringWait)
+                {
+                    report(CheckResult.Skip(
+                        $"inconclusive: the game was paused while the check waited up to {PickupTimeoutSeconds:0.#}s for the drop to become pickable"));
+                    yield break;
+                }
+
+                if (!itemDrop.CanPickup())
+                {
+                    report(CheckResult.Fail("",
+                        $"the drop did not become pickable within {PickupTimeoutSeconds:0.#}s " +
+                        $"(owner={dropNview.IsOwner()}, sinceSpawn={Time.time - spawnedAt:0.00}s, " +
+                        $"timeScale={Time.timeScale:0.##}, paused={Game.IsPaused()})"));
+                    yield break;
+                }
+
                 if (!PickableHarvester.CanAddItem(player, itemDrop.m_itemData))
-                    return CheckResult.Skip("harvester gate rejects add (weight/space)");
+                {
+                    report(CheckResult.Skip("harvester gate rejects add (weight/space)"));
+                    yield break;
+                }
 
+                // No frame boundary from here to the end of the check.
                 var before = PickableHarvester.CountExactItems(playerInventory, sample);
+                woodMayBeLeft = true;
                 itemDrop.Pickup(player);
-                var after = PickableHarvester.CountExactItems(playerInventory, sample);
+                var delta = PickableHarvester.CountExactItems(playerInventory, sample) - before;
+                var consumed = IsConsumed(go, itemDrop);
+                if (delta <= 0) woodMayBeLeft = false;
 
-                Expect(after - before >= 1, "picked-up Wood should enter the player inventory");
+                if (!consumed || delta != 1)
+                {
+                    report(CheckResult.Fail("",
+                        $"ItemDrop.Pickup did not hand the drop over within the call although CanPickup() was true (consumed={consumed}, woodDelta={delta}); nothing was removed from the inventory"));
+                    yield break;
+                }
 
-                var dropGone = !go ||
-                               !Objects.GetZNetView(itemDrop, out var nv) || nv == null ||
-                               !nv.IsValid() || nv.GetZDO() == null;
-                Expect(dropGone, "world ItemDrop should be consumed after a full pickup");
+                // Proven to be the test drop's Wood: removed at once, in the same frame.
+                if (RemoveExactItems(playerInventory, sample, 1) == 1) woodMayBeLeft = false;
 
-                return CheckResult.Pass();
+                report(woodMayBeLeft
+                    ? CheckResult.Pass("the test Wood could not be removed afterwards and was left in the inventory")
+                    : CheckResult.Pass());
             }
+            finally
+            {
+                if (woodMayBeLeft)
+                    Log.LogWarning(
+                        "[Automatics Smoke] world_pickup_itemdrop_to_inventory: the Wood this check picked up was not removed, because it could not be attributed to the test drop; at most one test Wood was left in the inventory");
+
+                // A drop still there is destroyed only while it holds the one Wood the check gave
+                // it; one that grew has absorbed real Wood and is left in the world. A removal
+                // that fails stays recorded with the session for the next trigger.
+                if (SmokeSession.DestroyTestObject(go, 1, "world_pickup_itemdrop_to_inventory"))
+                    SmokeSession.ReleaseSpawn(go);
+            }
+        }
+
+        // Humanoid.Pickup destroys the drop through ZNetScene.Destroy, which drops the ZDO
+        // at once and the GameObject at the end of the frame.
+        private static bool IsConsumed(GameObject go, ItemDrop itemDrop)
+        {
+            return !go || !itemDrop ||
+                   !Objects.GetZNetView(itemDrop, out var nview) || nview == null ||
+                   !nview.IsValid() || nview.GetZDO() == null;
         }
 
         // -- 4.4 Processing --------------------------------------------------------
@@ -401,6 +790,10 @@ namespace Automatics.SmokeTest
                 var minFuelCount =
                     global::Automatics.AutomaticProcessing.Config.FuelCountOfSuppressProcessing(Smelter);
                 var seeded = AddItemsLooped(chestInventory, fuelPrefab, minFuelCount + 4);
+
+                // The fuel just seeded is the check's own; the scope destroys this chest only
+                // while it holds nothing else and no more of it.
+                scope.AllowContents(chestGo, fuelName, seeded);
                 if (seeded <= minFuelCount)
                     return CheckResult.Skip("could not seed enough fuel into the chest");
 
@@ -408,9 +801,20 @@ namespace Automatics.SmokeTest
                 global::Automatics.AutomaticProcessing.Logics.Cleanup();
                 global::Automatics.AutomaticProcessing.SmelterProcess.Cleanup();
 
-                if (!global::Automatics.AutomaticProcessing.Logics
-                        .GetNearbyContainers(Smelter, smelterPos).Any())
+                var sources = global::Automatics.AutomaticProcessing.Logics
+                    .GetNearbyContainers(Smelter, smelterPos)
+                    .Select(x => x.container)
+                    .ToList();
+                if (!sources.Contains(chest))
                     return CheckResult.Skip("no fuel source container in range");
+
+                // QuickRefuel can take its fuel from any container in range. Another one would
+                // give up the user's own fuel and fail the delta below for a reason that is not
+                // a regression, so the check only runs where the spawned chest is the only
+                // source.
+                if (sources.Count > 1)
+                    return CheckResult.Skip(
+                        $"{sources.Count - 1} other container(s) within the smelter's container range could supply fuel; run it away from other containers");
 
                 var containerFuelBefore = chestInventory.CountItems(fuelName);
                 var fuelBefore = smelterNview.GetZDO().GetFloat("fuel");
@@ -435,10 +839,16 @@ namespace Automatics.SmokeTest
 
         // -- Spawn / prefab helpers ------------------------------------------------
 
+        // A spawned container is destroyed only while it is empty, or holds nothing but what
+        // the check registered with AllowContents; anything else keeps it in the world, and the
+        // log says where and what. The rule covers every exit of every check that uses the
+        // scope, the early SKIPs included.
         private sealed class SpawnScope : IDisposable
         {
             private readonly List<GameObject> _spawned = new List<GameObject>();
-            private readonly List<ItemCleanup> _itemsToRemove = new List<ItemCleanup>();
+
+            private readonly Dictionary<GameObject, KeyValuePair<string, int>> _allowedContents =
+                new Dictionary<GameObject, KeyValuePair<string, int>>();
 
             // Spawn a networked prefab and claim ownership so IsOwner() is true for the
             // synchronous mutation checks on a single-player host.
@@ -453,41 +863,68 @@ namespace Automatics.SmokeTest
                 return go;
             }
 
-            public void TrackItemForCleanup(Inventory inventory, ItemDrop.ItemData sample, int amount)
+            // Takes a spawned object out of Dispose's destruction.
+            public void Keep(GameObject go)
             {
-                _itemsToRemove.Add(new ItemCleanup(inventory, sample, amount));
+                _spawned.RemoveAll(x => ReferenceEquals(x, go));
+            }
+
+            // Hands a kept object back to Dispose's destruction.
+            public void Release(GameObject go)
+            {
+                if (!_spawned.Exists(x => ReferenceEquals(x, go))) _spawned.Add(go);
+            }
+
+            // Items the check put into a spawned container itself: up to amount of itemName may
+            // still be in it when it is destroyed.
+            public void AllowContents(GameObject go, string itemName, int amount)
+            {
+                _allowedContents[go] = new KeyValuePair<string, int>(itemName, amount);
+            }
+
+            // Null when the object may be destroyed; otherwise why it has to stay.
+            private string UnexpectedContents(GameObject go)
+            {
+                var inventory = go.GetComponent<Container>()?.GetInventory();
+                if (inventory == null) return null;
+
+                var items = inventory.GetAllItems();
+                if (items.Count == 0) return null;
+
+                if (_allowedContents.TryGetValue(go, out var allowed) &&
+                    items.All(item => item.m_shared.m_name == allowed.Key) &&
+                    items.Sum(item => item.m_stack) <= allowed.Value)
+                    return null;
+
+                return $"{ChestLocation(go)} was left in the world because it holds items the check did not put there: {ListItems(items)}";
             }
 
             public void Dispose()
             {
-                foreach (var entry in _itemsToRemove)
-                {
-                    try
-                    {
-                        if (entry.Inventory == null || entry.Sample == null) continue;
-                        Inventories.RemoveItem(entry.Inventory, entry.Sample.m_shared.m_name, 0f,
-                            WorldLevelMatchMode.Ignore, entry.Amount);
-                    }
-                    catch
-                    {
-                        // best effort
-                    }
-                }
-
                 foreach (var go in _spawned)
                 {
                     try
                     {
                         if (!go) continue;
+
+                        var unexpected = UnexpectedContents(go);
+                        if (unexpected != null)
+                        {
+                            Log.LogWarning($"[Automatics Smoke] {unexpected}");
+                            continue;
+                        }
+
                         if (Objects.GetZNetView(go.transform, out var nview) && nview != null &&
                             nview.IsValid())
                             nview.Destroy();
                         else
                             UnityEngine.Object.Destroy(go);
                     }
-                    catch
+                    catch (Exception e)
                     {
-                        // best effort
+                        // Not destroyed: an object whose contents could not be checked stays.
+                        Log.LogWarning(
+                            $"[Automatics Smoke] a test object was left in the world because it could not be checked or removed ({e.GetType().Name}: {e.Message})");
                     }
                 }
 
@@ -502,20 +939,6 @@ namespace Automatics.SmokeTest
                 {
                     // best effort
                 }
-            }
-
-            private readonly struct ItemCleanup
-            {
-                public ItemCleanup(Inventory inventory, ItemDrop.ItemData sample, int amount)
-                {
-                    Inventory = inventory;
-                    Sample = sample;
-                    Amount = amount;
-                }
-
-                public Inventory Inventory { get; }
-                public ItemDrop.ItemData Sample { get; }
-                public int Amount { get; }
             }
         }
 
@@ -566,6 +989,59 @@ namespace Automatics.SmokeTest
             return total;
         }
 
+        // Removes up to amount of this exact item - name, quality and world level, the
+        // identity CountExactItems counts - and nothing else. Returns how many were removed.
+        private static int RemoveExactItems(Inventory inventory, ItemDrop.ItemData sample, int amount)
+        {
+            var remaining = amount;
+            foreach (var item in new List<ItemDrop.ItemData>(inventory.GetAllItems()))
+            {
+                if (remaining <= 0) break;
+                if (item.m_shared.m_name != sample.m_shared.m_name) continue;
+                if (item.m_quality != sample.m_quality) continue;
+                if (item.m_worldLevel != sample.m_worldLevel) continue;
+
+                var remove = Mathf.Min(remaining, item.m_stack);
+                if (remove <= 0) continue;
+                if (!inventory.RemoveItem(item, remove)) continue;
+
+                remaining -= remove;
+            }
+
+            return amount - remaining;
+        }
+
+        private static string ChestLocation(GameObject chestGo)
+        {
+            try
+            {
+                var position = chestGo.transform.position;
+                return $"the test chest at ({position.x:0.0}, {position.y:0.0}, {position.z:0.0})";
+            }
+            catch
+            {
+                return "the test chest next to where the check ran";
+            }
+        }
+
+        private static string ListItems(IEnumerable<ItemDrop.ItemData> items)
+        {
+            return string.Join(", ",
+                items.Select(item => $"{DisplayName(item.m_shared.m_name)} x{item.m_stack}"));
+        }
+
+        private static string DisplayName(string token)
+        {
+            try
+            {
+                return Localization.instance != null ? Localization.instance.Localize(token) : token;
+            }
+            catch
+            {
+                return token;
+            }
+        }
+
         private static bool HasTestItemOffHotbar(Inventory inventory, ItemDrop.ItemData sample)
         {
             foreach (var item in inventory.GetAllItems())
@@ -605,9 +1081,10 @@ namespace Automatics.SmokeTest
             public string Name { get; }
             public string Message { get; }
 
-            public static CheckResult Pass()
+            // A pass can carry a note - a test item that had to be left behind, for instance.
+            public static CheckResult Pass(string note = "")
             {
-                return new CheckResult(CheckStatus.Pass, "", "");
+                return new CheckResult(CheckStatus.Pass, "", note);
             }
 
             public static CheckResult Fail(string name, string message)

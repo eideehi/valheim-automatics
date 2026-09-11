@@ -71,6 +71,8 @@
   <ItemGroup>
     <Compile Include="SmokePlugin.cs" />
     <Compile Include="WorldSmokeCommand.cs" />
+    <Compile Include="LifecycleSmokeCommand.cs" />
+    <Compile Include="SmokeSession.cs" />
   </ItemGroup>
 
   <ItemGroup Label="BepInEx">
