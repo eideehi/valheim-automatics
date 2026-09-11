@@ -35,7 +35,9 @@ namespace Automatics.SmokeTest
     // while the check ran stays as the user set it, and stops the run.
     //
     // With the argument "mapping" the command takes Automatic Mapping through three off -> on
-    // cycles instead, under the same rules; see LifecycleSmokeMapping.cs.
+    // cycles instead, under the same rules; see LifecycleSmokeMapping.cs. With the name of another
+    // migrated module, such as "storage", it runs the descriptor-driven cycles of
+    // LifecycleSmokeModules.cs, under the same rules again.
     internal static partial class LifecycleSmokeCommand
     {
         private const string CommandName = "automatics_smoke_lifecycle";
@@ -78,7 +80,7 @@ namespace Automatics.SmokeTest
 
             _ = new Terminal.ConsoleCommand(
                 CommandName,
-                "Turn Automatic Pickup off, on and off through its setting, check the runtime lifecycle, then restore the setting. With 'mapping', turn Automatic Mapping off and on three times instead.",
+                $"Turn Automatic Pickup off, on and off through its setting, check the runtime lifecycle, then restore the setting. With a module name ({string.Join(", ", ModuleArguments())}), turn that module off and on three times instead.",
                 OnCommand);
         }
 
@@ -94,14 +96,25 @@ namespace Automatics.SmokeTest
 
             var argument = (args.Args.Skip(1).FirstOrDefault(x => !string.IsNullOrEmpty(x)) ?? "")
                 .ToLowerInvariant();
+            ModuleDescriptor descriptor = null;
             if (argument.Length != 0 && argument != MappingArgument)
             {
-                Emit(context, LogLevel.Warning,
-                    $"[Automatics Smoke] usage: {CommandName} [{MappingArgument}] ('{argument}' is not an argument)");
-                return;
+                if (!Descriptors.ContainsKey(argument))
+                {
+                    Emit(context, LogLevel.Warning,
+                        $"[Automatics Smoke] usage: {CommandName} [{string.Join("|", ModuleArguments())}] ('{argument}' is not an argument)");
+                    return;
+                }
+
+                if (!TryDescribe(argument, out descriptor, out var problem))
+                {
+                    Emit(context, LogLevel.Error,
+                        $"[Automatics Smoke] {CommandName} {argument} was not started: {problem}");
+                    return;
+                }
             }
 
-            var runner = argument.Length == 0 ? CommandName : $"{CommandName} {MappingArgument}";
+            var runner = argument.Length == 0 ? CommandName : $"{CommandName} {argument}";
             if (!SmokeSession.TryBegin(runner, out var runId, out var refusal))
             {
                 Emit(context, LogLevel.Warning,
@@ -111,9 +124,10 @@ namespace Automatics.SmokeTest
 
             // Guard hands back the run's obligations and releases the lock however the body
             // ends, a throw included.
-            var body = argument.Length == 0
-                ? Run(context, runId)
-                : RunMapping(context, runId, runner);
+            IEnumerator body;
+            if (argument.Length == 0) body = Run(context, runId);
+            else if (argument == MappingArgument) body = RunMapping(context, runId, runner);
+            else body = RunModule(context, runId, runner, descriptor);
             _host.StartCoroutine(SmokeSession.Guard(runId, runner, body));
         }
 

@@ -51,6 +51,8 @@ namespace Automatics
             Run("M-A: an enabled automatic_mapping module survives migration", EnabledMappingModuleSurvivesMigration);
             Run("M-B: a disabled automatic_mapping module survives migration", DisabledMappingModuleSurvivesMigration);
             Run("M-C: user values inside automatic_mapping survive migration", MappingInnerValuesSurviveMigration);
+            Run("a 1.7.0 config without the defaults marker keeps automatic_storage Disabled and gains the marker", DisabledStorageModuleStaysDisabled);
+            Run("user values inside a disabled automatic_storage survive migration", StorageInnerValuesSurviveMigration);
             Run("a config from before module entries existed gets every module Enabled", ConfigFromBeforeModuleEntriesGetsEveryModuleEnabled);
             Run("a 1.7.0 config keeps each module's value, Disabled included", VersionOneSevenConfigKeepsEachModuleValue);
             Run("a config without a header gets the module entries it lacks as Enabled", HeaderlessConfigGetsItsMissingModulesEnabled);
@@ -398,6 +400,56 @@ namespace Automatics
                 .Single(line => line.StartsWith("allow_pinning_monster = ", StringComparison.Ordinal));
             AssertContains(monsters, "Boar");
             AssertContains(monsters, "Morgen");
+        }
+
+        // Automatic Storage binds its inner settings unconditionally from this change on, so a
+        // user who had turned it off gets the whole section written back on the next start. The
+        // section first appeared in 1.7.0, which wrote the module entry, so what the migrator
+        // meets is a 1.7.0 file without the defaults marker: it adds the marker and the entries of
+        // the modules the file lacks, and has to carry the module value and every inner value over
+        // as they are, because whatever survives here is what the bind picks up and what applies
+        // once the module is turned on.
+        private static void DisabledStorageModuleStaysDisabled()
+        {
+            // The setting is the user's, and no part of this mod is allowed to write it back
+            // (R1.3b). A migration that turned Disabled into Enabled would re-enable a module the
+            // user switched off.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_storage]",
+                "module = Disabled");
+
+            AssertEqual(1, CountOccurrences(migrated, "[automatic_storage]"), "The storage section should appear once.");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The storage module value should be carried over once.");
+            AssertModule(migrated, "automatic_storage", "Disabled");
+            AssertMarker(migrated);
+        }
+
+        private static void StorageInnerValuesSurviveMigration()
+        {
+            // Entries a disabled module now binds, one of each shape: a range, a flag, a key, a
+            // plain list and a list entry that is a regular expression. Their stored values have to
+            // survive, or the bind that follows re-creates them at their defaults and silently
+            // discards what the user set.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_storage]",
+                "module = Disabled",
+                "storage_search_range = 16",
+                "store_hotbar_items = true",
+                "store_items_key = F",
+                "excluded_items = r/Trophy",
+                "allowed_item_types = Material");
+
+            AssertModule(migrated, "automatic_storage", "Disabled");
+            AssertMarker(migrated);
+            AssertContains(migrated, "storage_search_range = 16");
+            AssertContains(migrated, "store_hotbar_items = true");
+            AssertContains(migrated, "store_items_key = F");
+            AssertContains(migrated, "excluded_items = r/Trophy");
+            AssertContains(migrated, "allowed_item_types = Material");
         }
 
         // Every module's `module` entry defaults to Disabled, but only a new install is meant to

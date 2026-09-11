@@ -199,7 +199,8 @@ safe.
 
 `automatics_smoke_lifecycle` (no arguments) exercises the runtime module
 lifecycle on Automatic Pickup; with the argument `mapping` it exercises Automatic
-Mapping instead (described after this one). Run it from the
+Mapping instead, and with `storage` Automatic Storage, through the module runner
+the migrated modules share (both described after this one). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
 through off → on → off:
@@ -320,6 +321,76 @@ A passing run looks like this:
 ...
 [Automatics Smoke] PASS mapping_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
 [Automatics Smoke] Summary: total=15 passed=15 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+```
+
+#### `automatics_smoke_lifecycle storage`: the module runner
+
+`storage` is the first argument of the module runner in
+`LifecycleSmokeModules.cs`. A migrated module joins it as a descriptor rather
+than as code of its own: the module, its applied-state flags, the patch classes
+it applies, the numbers it changes (its probes), a precondition that is asked
+before anything is written, and the checks only that module can make. Each
+descriptor is one more argument of the command.
+
+The runner takes the module's `module` setting from `Enabled` through three
+off → on cycles by writing it, the way a user does, and makes sure it ends at its
+starting value. It spawns nothing and changes no other setting. Before the first
+cycle it reads every probe, again on each frame until two frames in a row agree
+(at most 10), and keeps that as the baseline.
+
+| Check | Asserts |
+|---|---|
+| `storage_initial_state_settled` | The registry reports `Enabled` before anything is changed |
+| `storage_off_stopped_at_request` | In the frame of the disable request the module is still applied but no longer running, which is what its entry points check: the stop takes hold at the request, not at the teardown |
+| `storage_off_state_disabled` | The registry reports `Disabled` after the disable request |
+| `storage_off_patches_removed` | No patch is left under the module's Harmony id (SKIP when runtime patch removal is unavailable) |
+| `storage_off_probes_as_expected` | Every probe reads what it should while the module is off. For Automatic Storage, `Hooks.OnPlayerUpdate` has one handler fewer than at the baseline, and `Hooks.OnPlayerAwake` and `Hooks.OnPlayerFixedUpdate` have as many as at the baseline |
+| `storage_on_state_enabled` | The registry reports `Enabled` after the enable request |
+| `storage_on_running` | The module is applied and running again |
+| `storage_on_patches_applied` | The patches under the module's Harmony id are exactly the (target, patch method) pairs its patch classes declare. Automatic Storage declares none, so there must be none (SKIP when runtime patch removal is unavailable) |
+| `storage_on_probes_at_baseline` | Every probe is back at its baseline |
+| `storage_restored_initial_state` | The setting is back at `Enabled` and the registry reports it |
+| `storage_no_errors_logged` | No error or exception was logged while the check ran |
+
+The checks between the settle and the restore are made in every cycle, and pass
+only when all three cycles pass; a FAIL names the cycle. The probes are read
+again for up to 10 frames before a mismatch is reported. The run stops at the
+first state that is not reached and goes straight to the restore. The waits and
+the log check follow the same rules as `automatics_smoke_lifecycle mapping`; the
+log check's deliberate entry is `InvalidOperationException:
+AutomaticsObserverProbe-storage: a deliberate test entry …`, which is expected in
+`LogOutput.log` and is not an error.
+
+A probe is a handler count, a component count or any other number. While the
+module is off it has to read 0, its baseline less a fixed number (0 for a count
+the module must not touch), or anything at all; once the module is back on, its
+baseline, or, for a component count with a target, the number of objects the
+module should be on at that moment. A probe that can show nothing, such as a
+component count that was 0 at the baseline or a target of 0, makes its check
+SKIP as inconclusive. A module's own checks are reported after the checks of the
+phase they run in (at the request, while off or after the enable), and each one
+reports PASS, FAIL or SKIP.
+
+Safety, on top of the rules above:
+
+- The check only ever pauses the module, never turns it on for you. If its
+  `module` setting is not `Enabled` when it starts, or its precondition does not
+  hold, every check SKIPs and nothing is written.
+- Automatic Storage moves items only when `Store Items` is pressed, and the
+  check never presses it, so no item moves.
+- The handler counts are shared with other modules, so turning another module on
+  or off while the check runs makes a probe check FAIL. The message names the
+  count that moved.
+
+A passing run looks like this:
+
+```text
+[Automatics Smoke] automatics_smoke_lifecycle storage started: automatic_storage/module is turned off and on 3 times through its setting, nothing is spawned, and the setting is restored
+[Automatics Smoke] PASS storage_initial_state_settled: nothing was changed
+[Automatics Smoke] PASS storage_off_stopped_at_request: all 3 cycles; right after the disable request the module was still applied but no longer running
+...
+[Automatics Smoke] PASS storage_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
+[Automatics Smoke] Summary: total=11 passed=11 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 ### Processing smoke command

@@ -96,6 +96,44 @@ require_text_pattern() {
   fi
 }
 
+# The 1-based line of the first match in a text, nothing when there is none,
+# and ERROR when the search could not run.
+first_line_in_text() {
+  local text="$1"
+  local pattern="$2"
+  local status=0
+  local out=""
+
+  out="$(printf '%s\n' "$text" | rg -n "$pattern")" || status=$?
+  case "$status" in
+    0) printf '%s\n' "${out%%:*}" ;;
+    1) ;;
+    *) printf 'ERROR\n' ;;
+  esac
+}
+
+# Both patterns occur in the text, and the first one before the second.
+require_text_order() {
+  local text="$1"
+  local first_pattern="$2"
+  local second_pattern="$3"
+  local message="$4"
+  local first_line
+  local second_line
+
+  first_line="$(first_line_in_text "$text" "$first_pattern")"
+  second_line="$(first_line_in_text "$text" "$second_pattern")"
+
+  if [[ "$first_line" == "ERROR" || "$second_line" == "ERROR" ]]; then
+    fail "could not search for the order; the check behind this was not run: $message"
+    return
+  fi
+
+  if [[ -z "$first_line" || -z "$second_line" ]] || ((first_line >= second_line)); then
+    fail "$message"
+  fi
+}
+
 # A body extracted by sed is empty when its anchor was renamed, which would turn
 # every assertion scoped to it into a failure with a misleading message. Prove
 # the body was actually located before asserting anything about its contents.
@@ -108,10 +146,21 @@ require_nonempty_body() {
   fi
 }
 
+# The hotkey path is wired through the module's scope, as the two halves of one
+# scope.Subscribe with OnPlayerUpdate as its handler, so turning the module off
+# removes it.
 require_source_pattern \
   "$module_source" \
-  "Hooks\\.OnPlayerUpdate \\+= OnPlayerUpdate" \
-  "storage must run from the player update hotkey path"
+  "h => Hooks\\.OnPlayerUpdate \\+= h" \
+  "storage must run from the player update hotkey path through the module's scope: the add half of scope.Subscribe is missing"
+require_source_pattern \
+  "$module_source" \
+  "h => Hooks\\.OnPlayerUpdate -= h" \
+  "storage must run from the player update hotkey path through the module's scope: the remove half of scope.Subscribe is missing"
+require_source_pattern \
+  "$module_source" \
+  "^\\s*OnPlayerUpdate\\);" \
+  "storage must run from the player update hotkey path through the module's scope: OnPlayerUpdate is not the subscribed handler"
 reject_source_pattern \
   "$module_source" \
   "OnPlayerFixedUpdate|Hooks\\.OnPlayerFixedUpdate" \
@@ -243,6 +292,62 @@ require_source_pattern \
   "$storage_source" \
   "StoragePlanner\\.Plan" \
   "runtime storage must use the pure routing planner"
+
+# The order of one transfer, inside TransferAmount itself: the owned-container
+# check before the copy into the destination, and the copy before the removal
+# of the accepted amount from the player. The file-wide order check above only
+# compares first occurrences, so a second, reordered copy of these calls would
+# pass it.
+transfer_amount_body="$(
+  sed -n '/private static int TransferAmount(/,/^        }$/p' "$storage_source"
+)"
+require_nonempty_body \
+  "$transfer_amount_body" \
+  "AutomaticStorage.TransferAmount body could not be extracted; the transfer order assertions cannot be evaluated"
+require_text_order \
+  "$transfer_amount_body" \
+  "ContainerAccess\\.TryPrepareOwnedContainerMutation\\(target\\.Container\\)" \
+  "target\\.Inventory\\.AddItem\\(clone\\)" \
+  "TransferAmount must validate the owned-container mutation before it adds the clone to the destination"
+require_text_order \
+  "$transfer_amount_body" \
+  "target\\.Inventory\\.AddItem\\(clone\\)" \
+  "playerInventory\\.RemoveItem\\(sourceItem, accepted\\)" \
+  "TransferAmount must add the clone to the destination before it removes the accepted amount from the player inventory"
+
+# Turning the module off forgets the invalid exclusion patterns already
+# reported, so a pattern that is still invalid is reported again once the
+# module is back on instead of never again.
+disable_body="$(
+  sed -n '/public void Disable(ModuleScope scope)/,/^        }$/p' "$module_source"
+)"
+reset_session_body="$(
+  sed -n '/internal static void ResetSession()/,/^        }$/p' "$storage_source"
+)"
+forget_regexes_body="$(
+  sed -n '/public static void ForgetReportedRegexes()/,/^            }$/p' "$storage_source"
+)"
+require_nonempty_body \
+  "$disable_body" \
+  "Module.Disable body could not be extracted; the session reset assertions cannot be evaluated"
+require_nonempty_body \
+  "$reset_session_body" \
+  "AutomaticStorage.ResetSession body could not be extracted; the session reset assertions cannot be evaluated"
+require_nonempty_body \
+  "$forget_regexes_body" \
+  "ItemExclusionMatcher.ForgetReportedRegexes body could not be extracted; the session reset assertions cannot be evaluated"
+require_text_pattern \
+  "$disable_body" \
+  "^\\s*AutomaticStorage\\.ResetSession\\(\\);" \
+  "disabling storage must drop its session state through AutomaticStorage.ResetSession()"
+require_text_pattern \
+  "$reset_session_body" \
+  "^\\s*ItemExclusionMatcher\\.ForgetReportedRegexes\\(\\);" \
+  "AutomaticStorage.ResetSession must forget the invalid exclusion patterns already reported"
+require_text_pattern \
+  "$forget_regexes_body" \
+  "^\\s*ReportedInvalidRegexes\\.Clear\\(\\);" \
+  "ItemExclusionMatcher.ForgetReportedRegexes must clear the reported invalid patterns"
 
 require_source_count_exact \
   "$root_config_source" \

@@ -23,8 +23,15 @@ namespace Automatics.AutomaticStorage
             public int TouchedContainers { get; set; }
         }
 
+        /// <summary>
+        ///     The one method that moves items, and so the stop boundary for them (R1.5a). It checks
+        ///     <see cref="Module.Running" /> once, as its first statement, and never again; see
+        ///     there for why.
+        /// </summary>
         public static Result Store(Player player)
         {
+            if (!Module.Running) return new Result();
+
             var result = new Result();
             if (player == null) return result;
 
@@ -89,6 +96,16 @@ namespace Automatics.AutomaticStorage
             player.Message(type,
                 Automatics.L10N.Localize("@message_automatic_storage_stored_items",
                     result.StoredItems, result.TouchedContainers));
+        }
+
+        /// <summary>
+        ///     Everything this module keeps between calls: the invalid exclusion patterns it has
+        ///     already warned about. A disable starts again from here, so a pattern that is still
+        ///     invalid is reported once more after the module is turned back on (R6.1).
+        /// </summary>
+        internal static void ResetSession()
+        {
+            ItemExclusionMatcher.ForgetReportedRegexes();
         }
 
         private static List<StorageRoute> GetRoutes(ItemDrop.ItemData item,
@@ -374,6 +391,11 @@ namespace Automatics.AutomaticStorage
                 }
 
                 return new ItemExclusionMatcher(partialMatches, regexes);
+            }
+
+            public static void ForgetReportedRegexes()
+            {
+                ReportedInvalidRegexes.Clear();
             }
 
             public bool IsExcluded(ItemDrop.ItemData item)

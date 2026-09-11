@@ -259,8 +259,11 @@ namespace Automatics.SmokeTest
             var playerInventory = player.GetInventory();
             if (playerInventory == null) return CheckResult.Skip("player inventory is null");
 
-            if (global::Automatics.AutomaticStorage.Config.ModuleDisabled)
-                return CheckResult.Skip("automatic_storage module disabled");
+            // The applied state, not the setting: AutomaticStorage.Store moves nothing while the
+            // module is not running.
+            if (ModuleRegistry.GetState(global::Automatics.AutomaticStorage.Module.Instance.Name) !=
+                ModuleState.Enabled || !global::Automatics.AutomaticStorage.Module.Running)
+                return CheckResult.Skip("automatic_storage module is not running");
             if (!global::Automatics.AutomaticStorage.Config.EnableAutomaticStorage)
                 return CheckResult.Skip("enable_automatic_storage is off");
             if (global::Automatics.AutomaticStorage.Config.StorageSearchRange < 2)

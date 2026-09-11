@@ -12,14 +12,14 @@
 # distinguishes "no match" from "could not search", and a missing or unreadable file stops
 # the script rather than quietly satisfying every reject_source_pattern in it.
 #
-# The Automatic Processing and Automatic Mapping checks read code with comments and literals
+# The Automatic Processing, Automatic Mapping and Automatic Storage checks read code with comments and literals
 # blanked over a whitespace-collapsed stream, yet they still only see what is spelled out, so a
 # state read, a change or a gated call made through a delegate, a method group, a stored ZDO or
 # inventory reference, or a helper their patterns do not name still passes them.
 #
 # Two halves: the framework itself, and the modules that have been migrated onto it. The
 # migrated list below is explicit and grows by one line per migration, because "check every
-# module" would fail for the six that still follow the start-up-only path on purpose (R5.1a).
+# module" would fail for the ones that still follow the start-up-only path on purpose (R5.1a).
 #
 set -euo pipefail
 
@@ -37,6 +37,7 @@ migrated_module_dirs=(
   "Automatics/AutomaticPickup"
   "Automatics/AutomaticProcessing"
   "Automatics/AutomaticMapping"
+  "Automatics/AutomaticStorage"
 )
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
@@ -48,7 +49,6 @@ unmigrated_module_configs=(
   "Automatics/AutomaticFeeding/Config.cs"
   "Automatics/AutomaticMining/Config.cs"
   "Automatics/AutomaticRepair/Config.cs"
-  "Automatics/AutomaticStorage/Config.cs"
 )
 
 pickup_config="Automatics/AutomaticPickup/Config.cs"
@@ -122,6 +122,18 @@ mapping_entries=(
   "Patches.Vagon_Awake_Postfix|$mapping_patches|private static void Vagon_Awake_Postfix\\(|if (!Module.Discovering) return;"
 )
 
+storage_dir="Automatics/AutomaticStorage"
+storage_config="$storage_dir/Config.cs"
+storage_module="$storage_dir/Module.cs"
+
+# Every Automatic Storage method that moves items, in the form of processing_entries. There is one:
+# Store moves every item a key press selected, from the player's inventory into containers. Its
+# first statement is the only place it may look at the stop request; see
+# require_item_entries_open_with_the_gate.
+storage_entries=(
+  "AutomaticStorage.Store|$storage_dir/AutomaticStorage.cs|public static Result Store\\(Player |if (!Module.Running) return new Result();"
+)
+
 # The Automatic Processing patterns are POSIX EREs matched against a stream in which every run
 # of whitespace, line breaks included, is a single space (see strip_code and find_all below).
 #
@@ -135,14 +147,19 @@ processing_changes='(^|[^A-Za-z0-9_])(TryTakeMaterial|TryClaimContainer|TryRemov
 # them.
 processing_patch_changes='(^|[^A-Za-z0-9_])(InvokeRPC|QueueOre|Instantiate|ClaimOwnership|TryTakeMaterial|TryClaimContainer|TryRemoveItem|AddItemAndGetCountDelta) *\(|(^|[^A-Za-z0-9_])(Logics|Reflections|Inventories|ContainerAccess) *\.|GetZDO *\( *\) *\. *Set *\(|\. *(Add|Remove)Item *\('
 
-# Reads of the module state: the gate predicate, the two flags behind it, and any member at all.
-processing_running_read='(^|[^A-Za-z0-9_])Module *\. *Running([^A-Za-z0-9_]|$)'
-processing_raw_state_read='(^|[^A-Za-z0-9_])Module *\. *(Active|StopRequested)([^A-Za-z0-9_]|$)'
-processing_module_read='(^|[^A-Za-z0-9_])Module *\.'
+# The operations with which Automatic Storage moves an item: the transfer helpers Store calls and
+# any inventory add or remove. The first of them in Store is where an item is committed.
+storage_changes='(^|[^A-Za-z0-9_])(TransferExactStacks|TransferAny|TransferAmount|RollbackTransfer) *\(|\. *(Add|Remove)Item *\('
+
+# Reads of the module state, in any migrated module: the gate predicate, the two flags behind it,
+# and any member at all.
+module_running_read='(^|[^A-Za-z0-9_])Module *\. *Running([^A-Za-z0-9_]|$)'
+module_raw_state_read='(^|[^A-Za-z0-9_])Module *\. *(Active|StopRequested)([^A-Za-z0-9_]|$)'
+module_read='(^|[^A-Za-z0-9_])Module *\.'
 
 # The module brought in under another name, which would let its state be read without spelling
 # Module. at all.
-processing_module_import='(^|[^A-Za-z0-9_])using +static +([A-Za-z0-9_.:]*[.:])?Module *;|(^|[^A-Za-z0-9_])using +[A-Za-z_][A-Za-z0-9_]* *= *([A-Za-z0-9_.:]*[.:])?Module *;'
+module_import='(^|[^A-Za-z0-9_])using +static +([A-Za-z0-9_.:]*[.:])?Module *;|(^|[^A-Za-z0-9_])using +[A-Za-z_][A-Za-z0-9_]* *= *([A-Za-z0-9_.:]*[.:])?Module *;'
 
 # Identifiers that are followed by an argument list but are not calls.
 keywords="if|for|foreach|while|switch|catch|using|lock|return|new|do|fixed|sizeof|typeof|nameof"
@@ -318,6 +335,7 @@ for source_file in \
   "$processing_config" "$processing_module" "$processing_patches" "$processing_globals" \
   "$mapping_config" "$mapping_module" "$mapping_patches" "$mapping_flora" "$mapping_icon_pack" \
   "$printobjects_file" \
+  "$storage_config" "$storage_module" \
   "${unmigrated_module_configs[@]}"; do
   if [[ ! -r "$source_file" ]]; then
     fail "cannot read $source_file; none of the checks below would mean anything"
@@ -341,6 +359,13 @@ for mapping_entry in "${mapping_entries[@]}"; do
   IFS='|' read -r _ mapping_entry_file _ _ <<<"$mapping_entry"
   if [[ ! -r "$mapping_entry_file" ]]; then
     fail "cannot read $mapping_entry_file; none of the checks below would mean anything"
+  fi
+done
+
+for storage_entry in "${storage_entries[@]}"; do
+  IFS='|' read -r _ storage_entry_file _ _ <<<"$storage_entry"
+  if [[ ! -r "$storage_entry_file" ]]; then
+    fail "cannot read $storage_entry_file; none of the checks below would mean anything"
   fi
 done
 
@@ -1186,6 +1211,25 @@ require_unmigrated_modules_keep_their_early_return() {
   done
 }
 
+# R1.5: a migrated module follows its applied state, never the setting read as a flag.
+# ModuleDisabled was that flag - the start-up-only path read it once and wired nothing when it was
+# set - and a read of it left in a migrated module acts on the setting instead of the state and
+# ignores the stop request. Once a module is migrated nothing needs the flag, and it must not come
+# back.
+require_migrated_modules_read_no_start_up_flag() {
+  local module_dir
+  local file
+
+  for module_dir in "${migrated_module_dirs[@]}"; do
+    while IFS= read -r file; do
+      reject_source_pattern \
+        "$file" \
+        "ModuleDisabled" \
+        "$file must not declare or read ModuleDisabled (R1.5): a migrated module follows its applied state, Module.Running, which carries the stop request, not its setting read as a flag"
+    done < <(find "$module_dir" -name '*.cs' -type f | sort)
+  done
+}
+
 # I2 / I3 (AC-S5, R2.4): a migrated module owns no subscription directly. Every add has to be
 # half of a scope.Subscribe pair, or the teardown has nothing to remove. The lambda form is
 # what makes the pair; a bare `Hooks.X += Handler;` statement is the defect shape. The event may
@@ -1384,48 +1428,122 @@ require_every_patch_is_gated() {
 # undoes registrations in reverse, so acquiring patches first is what puts their removal
 # last. Subscribing or attaching before the first PatchAll silently moves the patch removal
 # ahead of them. The framework cannot detect it; this is where it is caught.
-# Argument: the module file.
+#
+# Arguments: the module file, then the steps its Enable takes: scope (publishing CurrentScope),
+# patch, subscribe and reconcile. With none listed, all four are required. A step that is not listed
+# must not be taken either, so a module cannot grow an acquisition this check does not order. The
+# list has to keep the order above, each step at most once: the order is the framework contract's,
+# and a caller cannot make the check accept another one.
 require_enable_acquires_in_order() {
   local module="$1"
+  local -a canonical=(scope patch subscribe reconcile)
+  local -a steps
+  local -A pattern=(
+    [scope]="CurrentScope = scope;"
+    [patch]="scope\\.PatchAll\\("
+    [subscribe]="scope\\.Subscribe<"
+    [reconcile]="Reconcile[A-Za-z]*\\("
+  )
+  local -A doing=(
+    [scope]="publish CurrentScope"
+    [patch]="apply its patches"
+    [subscribe]="subscribe"
+    [reconcile]="reconcile the scene"
+  )
+  local -A listed=()
+  local -A found=()
+  local step
+  local index
+  local previous=-1
+  local i
   local body
-  local scope_line
-  local patch_line
-  local subscribe_line
-  local reconcile_line
+  local wanted=""
+  local missing=""
+  local prior=""
+  local prior_line
+  local step_line
   local last
 
-  body="$(extract_block "$module" "public void Enable\\(ModuleScope scope\\)")"
+  shift
+  if (($# == 0)); then
+    steps=("${canonical[@]}")
+  else
+    steps=("$@")
+  fi
+
+  for step in "${steps[@]}"; do
+    index=-1
+    for i in "${!canonical[@]}"; do
+      if [[ "${canonical[$i]}" == "$step" ]]; then
+        index=$i
+      fi
+    done
+
+    if ((index <= previous)); then
+      fail "invalid step sequence \"${steps[*]}\" for the Enable check on $module: the steps have to be taken from \"${canonical[*]}\" in that order, each at most once, because that is the acquisition order the framework contract fixes (R4.3); the check was not run"
+      return
+    fi
+
+    previous=$index
+    listed[$step]=1
+    wanted+="${wanted:+, then }${doing[$step]}"
+  done
+
+  # Comments are removed first: prose that names a step must neither satisfy nor trip a check.
+  body="$(extract_block "$module" "public void Enable\\(ModuleScope scope\\)" | sed -e 's://.*::')"
   if [[ -z "$body" ]]; then
     fail "$module must define Enable(ModuleScope)"
     return
   fi
 
-  scope_line="$(printf '%s\n' "$body" | first_match_line "CurrentScope = scope;")"
-  patch_line="$(printf '%s\n' "$body" | first_match_line "scope\\.PatchAll\\(")"
-  subscribe_line="$(printf '%s\n' "$body" | first_match_line "scope\\.Subscribe<")"
-  reconcile_line="$(printf '%s\n' "$body" | first_match_line "Reconcile[A-Za-z]*\\(")"
+  for step in "${canonical[@]}"; do
+    found[$step]="$(printf '%s\n' "$body" | first_match_line "${pattern[$step]}")"
+    if lookup_failed "${found[$step]}"; then
+      fail "could not search the acquisition order of Enable in $module; the check was not run"
+      return
+    fi
+  done
 
-  if lookup_failed "$scope_line" "$patch_line" "$subscribe_line" "$reconcile_line"; then
-    fail "could not search the acquisition order of Enable in $module; the check was not run"
+  for step in "${steps[@]}"; do
+    if [[ -z "${found[$step]}" ]]; then
+      missing+="${missing:+; }${doing[$step]}"
+    fi
+  done
+
+  if [[ -n "$missing" ]]; then
+    fail "Enable in $module must $wanted, and it does not: missing $missing"
     return
   fi
 
-  if [[ -z "$scope_line" || -z "$patch_line" || -z "$subscribe_line" || -z "$reconcile_line" ]]; then
-    fail "Enable in $module must publish the scope, apply its patches, subscribe and then reconcile the scene"
-    return
-  fi
+  for step in "${canonical[@]}"; do
+    if [[ -z "${listed[$step]:-}" && -n "${found[$step]}" ]]; then
+      fail "Enable in $module must not ${doing[$step]}: the steps it was declared to take are \"${steps[*]}\", and a step this check was not told about escapes the order it enforces (R4.3)"
+    fi
+  done
 
-  if ((scope_line >= patch_line)); then
-    fail "Enable in $module must publish CurrentScope before it acquires anything (MAJOR-4): a component created while the activation runs needs an owner already"
-  fi
-
-  if ((patch_line >= subscribe_line)); then
-    fail "Enable in $module must apply its patches before it subscribes (R4.3): the scope registers one patch removal at the first PatchAll, and a subscription taken first has its removal run after the patches come off"
-  fi
-
-  if ((subscribe_line >= reconcile_line)); then
-    fail "Enable in $module must subscribe before it reconciles the scene (R4.3 / R4.2): a producer installed after the scan misses everything that appears in between"
-  fi
+  for step in "${steps[@]}"; do
+    if [[ -n "$prior" ]]; then
+      prior_line="${found[$prior]}"
+      step_line="${found[$step]}"
+      if ((prior_line >= step_line)); then
+        case "$prior:$step" in
+          scope:*)
+            fail "Enable in $module must publish CurrentScope before it acquires anything (MAJOR-4): a component created while the activation runs needs an owner already"
+            ;;
+          patch:subscribe)
+            fail "Enable in $module must apply its patches before it subscribes (R4.3): the scope registers one patch removal at the first PatchAll, and a subscription taken first has its removal run after the patches come off"
+            ;;
+          patch:reconcile)
+            fail "Enable in $module must apply its patches before it reconciles the scene (R4.3): the scope registers one patch removal at the first PatchAll, and a component attached first has its removal run after the patches come off"
+            ;;
+          *)
+            fail "Enable in $module must subscribe before it reconciles the scene (R4.3 / R4.2): a producer installed after the scan misses everything that appears in between"
+            ;;
+        esac
+      fi
+    fi
+    prior="$step"
+  done
 
   last="$(
     printf '%s\n' "$body" | awk '
@@ -1444,11 +1562,18 @@ require_enable_acquires_in_order() {
   fi
 }
 
-# Argument: the module file.
+# Arguments: the module file, then --no-scope for a module that attaches no component and so has no
+# attach scope to close and no generation to reset.
 require_disable_lowers_the_flag_first() {
   local module="$1"
+  local option="${2:-}"
   local body
   local first
+
+  if [[ -n "$option" && "$option" != "--no-scope" ]]; then
+    fail "unknown option \"$option\" for the Disable check on $module; the check was not run"
+    return
+  fi
 
   body="$(extract_block "$module" "public void Disable\\(ModuleScope scope\\)")"
   if [[ -z "$body" ]]; then
@@ -1468,6 +1593,10 @@ require_disable_lowers_the_flag_first() {
 
   if [[ "$first" != "Active = false;" ]]; then
     fail "the first statement of Disable in $module must be \"Active = false;\" (R1.5): every hot path has to be shut before anything is dismantled; found \"$first\""
+  fi
+
+  if [[ "$option" == "--no-scope" ]]; then
+    return
   fi
 
   if ! printf '%s\n' "$body" | rg -q "CurrentScope = null;"; then
@@ -1656,14 +1785,22 @@ require_the_config_is_replaced_atomically() {
     "$migration_file must not write the config path directly: write a temporary file and swap it in with File.Replace"
 }
 
-# R9.1 / R9.2: a migrated module needs its own toggle strings. The shared ones still say
-# "Reboot Required" and are still correct for the seven modules that have not moved.
+# R9.1 / R9.2: every migrated module uses its own toggle strings, and none of the shared restart
+# ones. Those still say "Reboot Required" and are still correct for the modules that have not
+# moved, and wrong for one that has.
 require_the_runtime_toggle_strings_exist() {
   local language_file
   local key
+  local module_dir
   local config
 
-  for config in "$pickup_config" "$processing_config" "$mapping_config"; do
+  for module_dir in "${migrated_module_dirs[@]}"; do
+    config="$module_dir/Config.cs"
+    if [[ ! -r "$config" ]]; then
+      fail "cannot read $config; the toggle string check was not run"
+      continue
+    fi
+
     require_source_pattern \
       "$config" \
       "@config_common_disable_module_runtime_name" \
@@ -1672,6 +1809,14 @@ require_the_runtime_toggle_strings_exist() {
       "$config" \
       "@config_common_disable_module_runtime_description" \
       "$config must use the runtime toggle description (R9.1)"
+    reject_source_pattern \
+      "$config" \
+      "\"@config_common_disable_module_name\"" \
+      "$config must not use the toggle name that says a restart is required (R9.1): the module applies the change while the game runs"
+    reject_source_pattern \
+      "$config" \
+      "\"@config_common_disable_module_description\"" \
+      "$config must not use the toggle description that says a restart is required (R9.1): the module applies the change while the game runs"
   done
 
   for language_file in Automatics/Languages/en_us.json Automatics/Languages/ja_jp.json; do
@@ -1688,7 +1833,7 @@ require_the_runtime_toggle_strings_exist() {
       require_source_pattern \
         "$language_file" \
         "\"$key\"" \
-        "$language_file must define $key (R9.2): the two key sets have to stay in step, and the seven unmigrated modules still use the restart wording"
+        "$language_file must define $key (R9.2): the two key sets have to stay in step, and the unmigrated modules still use the restart wording"
     done
   done
 }
@@ -1933,11 +2078,13 @@ last_statement() {
   '
 }
 
-# The method names of the gated entry points, as an alternation.
-processing_entry_method_names() {
+# The method names of a table of gated entry points, as an alternation. Argument: the name of the
+# table.
+entry_method_names() {
+  local -n _names_table="$1"
   local entry
 
-  for entry in "${processing_entries[@]}"; do
+  for entry in "${_names_table[@]}"; do
     entry="${entry%%|*}"
     printf '%s\n' "${entry#*.}"
   done | sort -u | paste -sd '|' -
@@ -1997,11 +2144,19 @@ processing_cleanup_extras=(
   'ConnectionEffects@@(^|[^A-Za-z0-9_.])_lastContext *= *default *;@@drop its memoized context'
 )
 
-# R4.3 / R1.6: the module owns patches and two hook subscriptions and nothing else. The scope
-# registers its one patch removal at the first PatchAll and tears down in reverse, so patching
-# first is what puts the patch removal last. Active is raised last and lowered first, so no entry
-# point sees the module as running while it is half built or half dismantled (R1.5).
-require_processing_enable_and_disable_shape() {
+# R4.3 / R1.6: a module that attaches no component owns its patches, if it has any, and exactly
+# the listed hook subscriptions, and nothing else. The scope registers its one patch removal at the
+# first PatchAll and tears down in reverse, so patching first is what puts the patch removal last.
+# Active is raised last and lowered first, once each, so no entry point sees the module as running
+# while it is half built or half dismantled (R1.5).
+# Arguments: the module file, the name the messages give the module, --patches when the module
+# applies patches, then the hooks it subscribes (OnPlayerAwake, OnPlayerUpdate, ...).
+require_module_enable_and_disable_shape() {
+  local module="$1"
+  local label="$2"
+  local patches=0
+  local -a hooks
+  local names=""
   local body
   local patch_line
   local subscribe_line
@@ -2014,9 +2169,25 @@ require_processing_enable_and_disable_shape() {
   local raised
   local lowered
 
-  body="$(method_body "$processing_module" "public void Enable\\(ModuleScope scope\\)")"
+  shift 2
+  if [[ "${1:-}" == "--patches" ]]; then
+    patches=1
+    shift
+  fi
+  hooks=("$@")
+
+  if ((${#hooks[@]} == 0)); then
+    fail "no hook was named for the $label Enable; the check on its subscriptions was not run"
+    return
+  fi
+
+  for hook in "${hooks[@]}"; do
+    names+="${names:+, }Hooks.$hook"
+  done
+
+  body="$(method_body "$module" "public void Enable\\(ModuleScope scope\\)")"
   if [[ -z "$body" ]]; then
-    fail "the processing module must define Enable(ModuleScope)"
+    fail "the $label module must define Enable(ModuleScope)"
     return
   fi
 
@@ -2025,56 +2196,64 @@ require_processing_enable_and_disable_shape() {
   subscriptions="$(printf '%s\n' "$body" | count_hits 'scope *\. *Subscribe *<')"
 
   if lookup_failed "$patch_line" "$subscribe_line" "$subscriptions"; then
-    fail "could not search the acquisition order of the processing Enable; the check was not run"
+    fail "could not search the acquisition order of the $label Enable; the check was not run"
     return
   fi
 
-  if [[ -z "$patch_line" || -z "$subscribe_line" ]]; then
-    fail "the processing Enable must apply its patches and subscribe through the scope"
-  elif ((patch_line >= subscribe_line)); then
-    fail "the processing Enable must apply its patches before it subscribes (R4.3): the scope registers one patch removal at the first PatchAll, and a subscription taken first has its removal run after the patches come off"
+  if ((patches)); then
+    if [[ -z "$patch_line" || -z "$subscribe_line" ]]; then
+      fail "the $label Enable must apply its patches and subscribe through the scope"
+    elif ((patch_line >= subscribe_line)); then
+      fail "the $label Enable must apply its patches before it subscribes (R4.3): the scope registers one patch removal at the first PatchAll, and a subscription taken first has its removal run after the patches come off"
+    fi
   fi
 
-  if ((subscriptions != 2)); then
-    fail "the processing Enable must subscribe exactly the player awake and player update hooks through the scope: found $subscriptions scope.Subscribe call(s), expected 2"
+  if ((subscriptions != ${#hooks[@]})); then
+    fail "the $label Enable must subscribe exactly $names through the scope: found $subscriptions scope.Subscribe call(s), expected ${#hooks[@]}"
   fi
 
-  for hook in "OnPlayerAwake" "OnPlayerUpdate"; do
+  for hook in "${hooks[@]}"; do
     hooked="$(printf '%s\n' "$body" | count_hits "h *=> *Hooks *\\. *$hook *\\+= *h([^A-Za-z0-9_]|\$)")"
     if lookup_failed "$hooked"; then
-      fail "could not search the processing Enable for its $hook subscription; the check was not run"
+      fail "could not search the $label Enable for its $hook subscription; the check was not run"
       continue
     fi
 
     if ((hooked != 1)); then
-      fail "the processing Enable must subscribe Hooks.$hook exactly once through the scope: found $hooked; a hook subscribed twice runs twice per call, and a missing one never runs"
+      fail "the $label Enable must subscribe Hooks.$hook exactly once through the scope: found $hooked; a hook subscribed twice runs twice per call, and a missing one never runs"
     fi
   done
 
   last="$(printf '%s\n' "$body" | last_statement)"
   if [[ "$last" != "Active=true;" ]]; then
-    fail "the last statement of the processing Enable must be \"Active = true;\" (R1.3 / R1.5): anything after it runs with the module already advertising itself as running; found \"$last\""
+    fail "the last statement of the $label Enable must be \"Active = true;\" (R1.3 / R1.5): anything after it runs with the module already advertising itself as running; found \"$last\""
   fi
 
-  stripped="$(strip_code "$processing_module")"
+  stripped="$(strip_code "$module")"
   raised="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Active *= *true *;')"
   lowered="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Active *= *false *;')"
   if lookup_failed "$raised" "$lowered"; then
-    fail "could not count the assignments of Active in the processing module; the check was not run"
+    fail "could not count the assignments of Active in the $label module; the check was not run"
   elif ((raised != 1 || lowered != 1)); then
-    fail "the processing module must raise Active exactly once, as the last statement of Enable, and lower it exactly once, as the first statement of Disable (R1.5): found $raised raise(s) and $lowered lowering(s)"
+    fail "the $label module must raise Active exactly once, as the last statement of Enable, and lower it exactly once, as the first statement of Disable (R1.5): found $raised raise(s) and $lowered lowering(s)"
   fi
 
-  body="$(method_body "$processing_module" "public void Disable\\(ModuleScope scope\\)")"
+  body="$(method_body "$module" "public void Disable\\(ModuleScope scope\\)")"
   if [[ -z "$body" ]]; then
-    fail "the processing module must define Disable(ModuleScope)"
+    fail "the $label module must define Disable(ModuleScope)"
     return
   fi
 
   first="$(printf '%s\n' "$body" | first_statement)"
   if [[ "$first" != "Active=false;" ]]; then
-    fail "the first statement of the processing Disable must be \"Active = false;\" (R1.5): every entry point has to be shut before anything is dismantled; found \"$first\""
+    fail "the first statement of the $label Disable must be \"Active = false;\" (R1.5): every entry point has to be shut before anything is dismantled; found \"$first\""
   fi
+}
+
+# Automatic Processing owns patches and two hook subscriptions and nothing else.
+require_processing_enable_and_disable_shape() {
+  require_module_enable_and_disable_shape "$processing_module" processing --patches \
+    OnPlayerAwake OnPlayerUpdate
 }
 
 # R6.1 / R6.2: everything the module keeps between calls - the container cache, the smelter
@@ -2190,40 +2369,61 @@ require_processing_session_is_reset() {
   done
 }
 
-# The per-frame hook draws the connection effect. It can still be reached after the module
-# stopped - a removal that failed, or an invocation list fetched before the removal - so it opens
-# with its own gate.
-require_processing_player_update_is_gated() {
+# R1.5a: a hook handler can still be reached after the module stopped - a removal that failed, or
+# an invocation list fetched before the removal - so it opens with its own gate, and nothing it
+# does runs before that. Arguments: the module file, then the declaration of each handler.
+require_hook_handlers_open_with_the_gate() {
+  local module="$1"
+  local declaration
   local body
   local first
 
-  body="$(method_body "$processing_module" "private static void OnPlayerUpdate\\(")"
-  if [[ -z "$body" ]]; then
-    fail "the processing module must define OnPlayerUpdate"
+  shift
+  if (($# == 0)); then
+    fail "no hook handler was named for $module; the check that the handlers open with the gate was not run"
     return
   fi
 
-  first="$(printf '%s\n' "$body" | first_statement)"
-  if [[ "$first" != "if(!Running)return;" ]]; then
-    fail "OnPlayerUpdate must open with \"if (!Running) return;\" (R1.5a): it is reachable after the module stopped and would keep drawing the connection effect; found \"$first\""
-  fi
+  for declaration in "$@"; do
+    body="$(method_body "$module" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "$module must define ${declaration//\\/}"
+      continue
+    fi
+
+    first="$(printf '%s\n' "$body" | first_statement)"
+    if [[ "$first" != "if(!Running)return;" ]]; then
+      fail "${declaration//\\/} in $module must open with \"if (!Running) return;\" (R1.5a): it is reachable after the module stopped, and whatever comes before the gate still acts; found \"$first\""
+    fi
+  done
 }
 
-# This module attaches no component, so it has no generation, no attach scope, no discovery gate
-# and no activation scan. Growing one of them means it started creating things the scope has to
-# own, and that needs the component checks written for the pickup module applied to it first.
-require_processing_has_no_component_machinery() {
+# The processing per-frame hook draws the connection effect.
+require_processing_player_update_is_gated() {
+  require_hook_handlers_open_with_the_gate "$processing_module" "private static void OnPlayerUpdate\\("
+}
+
+# A module that attaches no component has no generation, no attach scope, no discovery gate and no
+# activation scan. Growing one of them means it started creating things the scope has to own, and
+# that needs the component checks written for the pickup module applied to it first. Argument: the
+# module file.
+require_module_has_no_component_machinery() {
+  local module="$1"
   local found
 
-  found="$(strip_code "$processing_module" | count_hits '(^|[^A-Za-z0-9_])(Generation|CurrentScope|Discovering|FindObjectsByType)([^A-Za-z0-9_]|$)')"
+  found="$(strip_code "$module" | count_hits '(^|[^A-Za-z0-9_])(Generation|CurrentScope|Discovering|FindObjectsByType)([^A-Za-z0-9_]|$)')"
   if lookup_failed "$found"; then
-    fail "could not search $processing_module; the check was not run"
+    fail "could not search $module; the check was not run"
     return
   fi
 
   if ((found != 0)); then
-    fail "the processing module must not carry component machinery (a generation, an attach scope, a discovery gate or a scene scan): it attaches nothing, and a module that starts to needs the component checks extended to it first"
+    fail "$module must not carry component machinery (a generation, an attach scope, a discovery gate or a scene scan): it attaches nothing, and a module that starts to needs the component checks extended to it first"
   fi
+}
+
+require_processing_has_no_component_machinery() {
+  require_module_has_no_component_machinery "$processing_module"
 }
 
 # R1.5a: the gates live in the entry points, not in the patch methods, because the transpilers
@@ -2298,18 +2498,27 @@ require_processing_patches_reach_only_gated_entries() {
   fi
 }
 
-# R1.5a / R8.11: each entry point moves items, and the claim, the removal, the store and the RPC
-# inside it all call into code that is not ours - a synchronous callback or another mod's patch
-# there can change the setting, and so raise the stop request, before the outer call returns. So
-# the stop request is checked exactly once, as the first statement, and never again: a check
-# after an item left its container would strand it, while a transfer that was accepted is
-# delivered once and the next call sees the stop. Every read of the module state outside
-# Module.cs therefore has to be one of these gates, and the state may not be imported under
+# R1.5a / R8.11: each entry point in a table moves items, and what it calls to do so - a claim, a
+# removal, a store, an RPC, an inventory change - is code that is not ours: a synchronous callback
+# or another mod's patch there can change the setting, and so raise the stop request, before the
+# outer call returns. So the stop request is checked exactly once, as the first statement, and
+# never again: a check after an item left where it was would strand it, while a transfer that was
+# accepted is delivered once and the next call sees the stop. Every read of the module state
+# outside Module.cs therefore has to be one of these gates, and the state may not be imported under
 # another name that these patterns would not see.
 #
 # What this does not check is that Running means the right thing - `Running => true` passes - or
 # that an accepted transfer really completes. Both need the game.
-require_processing_entries_open_with_the_gate() {
+#
+# Arguments: the name of the entry table (fields separated by |: qualified name, file, declaration
+# pattern, the exact statement it has to open with), the module's directory, its Module.cs, and the
+# number of entries the table has to hold. An empty table fails: it would check nothing.
+require_item_entries_open_with_the_gate() {
+  local -n _gate_table="$1"
+  local table="$1"
+  local module_dir="$2"
+  local module_file="$3"
+  local expected_count="$4"
   local entry
   local qualified
   local file
@@ -2324,11 +2533,16 @@ require_processing_entries_open_with_the_gate() {
   local stripped
   local entry_file
 
-  if ((${#processing_entries[@]} != 15)); then
-    fail "the processing module must list exactly its 15 audited side-effect entry points (R1.5a): found ${#processing_entries[@]}; adding or removing one needs the list and this count changed deliberately"
+  if ((${#_gate_table[@]} == 0)); then
+    fail "found no entry point in $table, so the stop-boundary checks on $module_dir could not be run"
+    return
   fi
 
-  for entry in "${processing_entries[@]}"; do
+  if ((${#_gate_table[@]} != expected_count)); then
+    fail "$module_dir must list exactly its $expected_count audited side-effect entry points in $table (R1.5a): found ${#_gate_table[@]}; adding or removing one needs the list and this count changed deliberately"
+  fi
+
+  for entry in "${_gate_table[@]}"; do
     IFS='|' read -r qualified file declaration gate <<<"$entry"
     body="$(method_body "$file" "$declaration")"
     if [[ -z "$body" ]]; then
@@ -2341,31 +2555,31 @@ require_processing_entries_open_with_the_gate() {
       fail "$qualified must open with \"$gate\" (R1.5a): its first statement is where the stop request is checked, anything before it still runs after a stop, and the returned value is what the game falls back to; found \"$first\""
     fi
 
-    gates="$(printf '%s\n' "$body" | count_hits "$processing_running_read")"
+    gates="$(printf '%s\n' "$body" | count_hits "$module_running_read")"
     if lookup_failed "$gates"; then
       fail "could not count the gates in $qualified; the check was not run"
       continue
     fi
 
     if ((gates != 1)); then
-      fail "$qualified must check Module.Running exactly once (R8.11): a second check - even one at the head of a loop - can run after an item already left its container and strand it; found $gates"
+      fail "$qualified must check Module.Running exactly once (R8.11): a second check - even one at the head of a loop - can run after an item already left where it was and strand it; found $gates"
     fi
   done
 
   # Every file of the module but the one that defines the state. A read in a helper, in a patch
   # method or in any other file is invisible to the per-entry checks, and would let a call made
   # between a removal and its delivery look at the stop request after all.
-  for file in "$processing_dir"/*.cs; do
-    if [[ "$file" == "$processing_module" ]]; then
+  for file in "$module_dir"/*.cs; do
+    if [[ "$file" == "$module_file" ]]; then
       continue
     fi
 
     stripped="$(strip_code "$file")"
-    gates="$(printf '%s\n' "$stripped" | count_hits "$processing_running_read")"
-    direct="$(printf '%s\n' "$stripped" | count_hits "$processing_raw_state_read")"
-    imports="$(printf '%s\n' "$stripped" | count_hits "$processing_module_import")"
+    gates="$(printf '%s\n' "$stripped" | count_hits "$module_running_read")"
+    direct="$(printf '%s\n' "$stripped" | count_hits "$module_raw_state_read")"
+    imports="$(printf '%s\n' "$stripped" | count_hits "$module_import")"
     listed=0
-    for entry in "${processing_entries[@]}"; do
+    for entry in "${_gate_table[@]}"; do
       IFS='|' read -r _ entry_file _ _ <<<"$entry"
       if [[ "$entry_file" == "$file" ]]; then
         listed=$((listed + 1))
@@ -2391,11 +2605,23 @@ require_processing_entries_open_with_the_gate() {
   done
 }
 
+# Automatic Processing lists 15 entry points, each moving items between a container and a station.
+require_processing_entries_open_with_the_gate() {
+  require_item_entries_open_with_the_gate processing_entries "$processing_dir" "$processing_module" 15
+}
+
 # R8.11: the rest of the same rule. Nothing after the first change an entry point makes may look
 # at the module state, and no entry point calls another gated one anywhere in its body - a call
 # after the first change, or at the head of a loop whose previous pass already moved an item,
 # would check the stop request between a removal and its delivery.
-require_processing_entries_never_recheck_after_a_change() {
+#
+# Arguments: the name of the entry table, the ERE of the changes its entry points make, then every
+# helper file whose code runs between an entry point's gate and its delivery and so may not read
+# the module state at all. An empty table fails: it would check nothing.
+require_item_entries_never_recheck_after_a_change() {
+  local -n _recheck_table="$1"
+  local table="$1"
+  local changes="$2"
   local entry
   local qualified
   local file
@@ -2406,11 +2632,18 @@ require_processing_entries_never_recheck_after_a_change() {
   local late_reads
   local nested_calls
   local names
-  local globals_reads
+  local helper
+  local helper_reads
 
-  names="$(processing_entry_method_names)"
+  shift 2
+  if ((${#_recheck_table[@]} == 0)); then
+    fail "found no entry point in $table, so the check on what follows each first change could not be run"
+    return
+  fi
 
-  for entry in "${processing_entries[@]}"; do
+  names="$(entry_method_names "$table")"
+
+  for entry in "${_recheck_table[@]}"; do
     IFS='|' read -r qualified file declaration _ <<<"$entry"
     body="$(method_body "$file" "$declaration")"
     if [[ -z "$body" ]]; then
@@ -2419,7 +2652,7 @@ require_processing_entries_never_recheck_after_a_change() {
     fi
 
     gate_line="$(printf '%s\n' "$body" | first_hit 'if *\( *! *Module *\. *Running *\) *return')"
-    change_line="$(printf '%s\n' "$body" | first_hit "$processing_changes")"
+    change_line="$(printf '%s\n' "$body" | first_hit "$changes")"
     # Line 1 is the declaration, which names the entry point itself.
     nested_calls="$(printf '%s\n' "$body" | count_hits_after 1 "(^|[^A-Za-z0-9_])($names) *\\(")"
 
@@ -2437,14 +2670,14 @@ require_processing_entries_never_recheck_after_a_change() {
       fail "$qualified must check the stop request before its first change (R1.5a): the first change is where an item is committed to the transfer"
     fi
 
-    late_reads="$(printf '%s\n' "$body" | count_hits_after "$change_line" "$processing_module_read")"
+    late_reads="$(printf '%s\n' "$body" | count_hits_after "$change_line" "$module_read")"
     if lookup_failed "$late_reads"; then
       fail "could not search $qualified after its first change; the check was not run"
       continue
     fi
 
     if ((late_reads != 0)); then
-      fail "$qualified must not read the module state after its first change (R8.11): a stop seen there strands an item that already left its container"
+      fail "$qualified must not read the module state after its first change (R8.11): a stop seen there strands an item that already left where it was"
     fi
 
     if ((nested_calls != 0)); then
@@ -2452,15 +2685,28 @@ require_processing_entries_never_recheck_after_a_change() {
     fi
   done
 
-  globals_reads="$(strip_code "$processing_globals" | count_hits "$processing_module_read")"
-  if lookup_failed "$globals_reads"; then
-    fail "could not search $processing_globals; the check was not run"
-    return
-  fi
+  for helper in "$@"; do
+    if [[ ! -r "$helper" ]]; then
+      fail "cannot read $helper; the check that it does not read the module state was not run"
+      continue
+    fi
 
-  if ((globals_reads != 0)); then
-    fail "$processing_globals must not read the module state (R8.11): its claim, removal and store helpers run between an entry point's gate and its delivery"
-  fi
+    helper_reads="$(strip_code "$helper" | count_hits "$module_read")"
+    if lookup_failed "$helper_reads"; then
+      fail "could not search $helper; the check was not run"
+      continue
+    fi
+
+    if ((helper_reads != 0)); then
+      fail "$helper must not read the module state (R8.11): what it does runs between an entry point's gate and its delivery"
+    fi
+  done
+}
+
+# The claim, removal and store helpers of Automatic Processing live in Globals.cs.
+require_processing_entries_never_recheck_after_a_change() {
+  require_item_entries_never_recheck_after_a_change processing_entries "$processing_changes" \
+    "$processing_globals"
 }
 
 # AC-S11 (ownership): an entry point changes a station only while this peer owns it, so two peers
@@ -2877,6 +3123,7 @@ require_ownership_is_a_per_frame_question
 require_the_frame_hooks_check_live
 require_shared_buffers_are_cleared_on_disable
 require_migrated_modules_bind_unconditionally
+require_migrated_modules_read_no_start_up_flag
 require_unmigrated_modules_keep_their_early_return
 require_event_wiring_goes_through_the_scope "Hooks\\.[A-Za-z]+" "hook subscriptions"
 require_event_wiring_goes_through_the_scope "OnCacheAdded" "cache-added subscriptions"
@@ -2919,6 +3166,18 @@ require_mapping_destroy_callbacks_are_added_once
 require_mapping_icons_are_registered_once_per_minimap
 require_mapping_disable_keeps_the_pin_rule
 require_console_commands_never_write_a_setting
+
+# Automatic Storage: one subscription, no patch, no component, and one entry point that moves
+# items. StoragePlanner and Config run inside a storage pass, between its gate and its last
+# transfer.
+require_enable_acquires_in_order "$storage_module" subscribe
+require_disable_lowers_the_flag_first "$storage_module" --no-scope
+require_module_enable_and_disable_shape "$storage_module" storage OnPlayerUpdate
+require_module_has_no_component_machinery "$storage_module"
+require_hook_handlers_open_with_the_gate "$storage_module" "private static void OnPlayerUpdate\\("
+require_item_entries_open_with_the_gate storage_entries "$storage_dir" "$storage_module" 1
+require_item_entries_never_recheck_after_a_change storage_entries "$storage_changes" \
+  "$storage_dir/StoragePlanner.cs" "$storage_config"
 
 if ((failures > 0)); then
   exit 1

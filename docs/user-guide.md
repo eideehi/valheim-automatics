@@ -26,9 +26,9 @@ or accepted value range.
 
 Automatics is split into feature modules. Each module has a `Disable Module`
 option, and most modules also have a separate on/off option for the feature
-behavior. Automatic pickup, automatic processing and automatic mapping apply that
-option while the game is running; every other module still needs a restart, and
-says so in the option name.
+behavior. Automatic pickup, automatic processing, automatic mapping and automatic
+storage apply that option while the game is running; every other module still
+needs a restart, and says so in the option name.
 
 ## Common configuration concepts
 
@@ -61,12 +61,16 @@ off.
 | Automatic pickup | `Disable Module` | While the game is running. No restart. |
 | Automatic processing | `Disable Module` | While the game is running. No restart. |
 | Automatic mapping | `Disable Module` | While the game is running. No restart. |
+| Automatic storage | `Disable Module` | While the game is running. No restart. |
 | Every other module | `Disable Module (Reboot Required)` | After the game is restarted. |
 
-When you turn automatic pickup, automatic processing or automatic mapping off,
-it stops starting new automatic actions, such as pickups, item transfers and pin
-updates, right away, and lets an action that is already in progress finish. The
-switch itself completes over the next few frames, when the module's patches and
+When you turn automatic pickup, automatic processing, automatic mapping or
+automatic storage off, it stops starting new automatic actions, such as pickups,
+item transfers, pin updates and storage passes, right away, and lets an action
+that is already in progress finish. For automatic storage, `Store Items` does
+nothing from then on, and a storage pass that has already started still moves
+every item it selected. The switch itself completes over the next few frames,
+when the module's patches and
 hooks are removed, along with the components automatic pickup adds to players
 and items and those automatic mapping adds to fish, birds, ships, rocks and
 flora. Turning any of them back on also completes over the next few frames, and
@@ -433,6 +437,15 @@ names. Plain entries use case-insensitive partial matching. Prefix an entry with
 
 Automatic storage checks the same container access rules used by Valheim for
 private chests, guard stones, and containers already in use.
+
+Its `Disable Module` option takes effect without a restart. See
+[Module disable options](#module-disable-options).
+
+If you had automatic storage disabled, the first start of this version writes
+all of its settings to the configuration file. Earlier versions wrote only the
+`Disable Module` entry while the module was disabled. The module stays disabled.
+Values you changed before you disabled it are kept if they are still in the
+file, and they apply once you turn the module back on in game.
 
 ## Automatic pickup
 
