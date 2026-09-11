@@ -16,7 +16,10 @@ namespace Automatics.AutomaticFarming
         [HarmonyPatch(typeof(Container), "GetHoverText")]
         private static void Container_GetHoverText_Postfix(Container __instance, ref string __result)
         {
-            if (Config.ModuleDisabled) return;
+            // Reachable after the module stopped: in the frames between the stop request and the
+            // teardown, and for the rest of the session on a Harmony build that cannot remove
+            // patches. Returning here leaves the game's hover text as it is.
+            if (!Module.Running) return;
             if (!Config.EnableAutomaticFarming) return;
 
             var keyBound = Config.DesignateContainerKey.MainKey != KeyCode.None;

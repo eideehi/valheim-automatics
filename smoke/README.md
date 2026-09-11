@@ -491,6 +491,52 @@ component to every loaded animal, inactive ones included. While the module is on
 between cycles, a hungry animal near food may eat as it normally would; the check
 itself moves no item.
 
+#### `automatics_smoke_lifecycle farming`
+
+`farming` uses the descriptor-driven runner for `automatic_farming / module`. It
+takes an enabled module through three off → on cycles, spawns nothing, harvests,
+plants and designates nothing, changes no Farming or Pickup setting and restores
+the module setting afterwards.
+
+While Automatic Farming is off, Automatic Pickup collects the crops Farming would
+have harvested and replanted, and nothing replants them. So before anything is
+written, and again immediately before every re-enable, the runner requires a
+local player and refuses to run while Automatic Pickup is running and any crop in
+`Allow Farming Crop`, or any growing plant (which can ripen while the check
+runs), is within `automatic_pickup_range` + 1 m of you. If the initial check
+fails, nothing is written and every check SKIPs; a SKIP for this reason is not a
+pass, so move and run it again. If a later check fails, that cycle and the
+remaining on-side checks SKIP without the re-enable write, and the restoration
+puts the original enabled setting back.
+
+Stand 10 to 30 m from a field of grown crops, outside both Pickup's and Farming's
+range but close enough that the field stays loaded: the claim checks need at least
+one crop Farming claims, and SKIP as inconclusive without one.
+
+In addition to the runner's state, patch and error checks, the Farming descriptor
+checks:
+
+| Check | Asserts |
+|---|---|
+| `farming_session_state_captured` | Immediately before each disable request, without waiting a frame, the claimed crops and the farming timers are counted, and the sapling lookup is built if no farming pass built it yet (a read of the loaded prefabs; nothing in the world changes) |
+| `farming_off_stopped_at_request` | In the frame of the disable request the module remains applied but no longer running, which is what its two player hooks, its hover postfix and its crop claim open with |
+| `farming_claims_released_at_request` | In that same frame, no loaded crop is claimed any more, so Automatic Pickup collects them from then on; SKIP when no crop was claimed before the request |
+| `farming_off_probes_as_expected` | The three Farming hook handlers are gone, each Farming-owned handler's own occurrence in its hook is zero, and the number of containers with a farming role is unchanged |
+| `farming_claims_released_while_off` | While off, no loaded crop is claimed; SKIP when none was claimed before the request |
+| `farming_timers_cleared` | A non-empty farming timer table observed immediately before disabling is empty while off; SKIP when it was already empty |
+| `farming_sapling_map_cleared` | The sapling lookup built before disabling is dropped while off |
+| `farming_on_patches_applied` | The patches under Farming's Harmony id exactly match the `Container.GetHoverText` postfix of `Automatics.AutomaticFarming.Patches` |
+| `farming_on_probes_at_baseline` | All three handlers are restored, each Farming-owned handler's own occurrence is back at one, and the number of containers with a farming role is still the same |
+| `farming_claims_restored` | The positive control: a crop is claimed again once the module is back on; SKIP when none was claimed before the request |
+| `farming_interval_timer_resumed` | When farming runs on an interval, its hook takes up its timer again within 30 frames of the enable; SKIP when farming runs on a key or is turned off |
+
+Turning the module off stops new farming passes, container designation and the
+hover line immediately, and a pass already accepted by a player hook finishes: a
+crop it harvested is replanted in the same call. The patch and subscriptions are
+removed over the next few frames, and container roles stay on their containers.
+While the module is on between cycles, farming may harvest and replant within its
+range as it normally would; the check itself moves no item.
+
 ### Processing smoke command
 
 `automatics_smoke_processing` takes one subcommand: `rpc`, `toggle` or `config`

@@ -41,13 +41,13 @@ migrated_module_dirs=(
   "Automatics/AutomaticDoor"
   "Automatics/AutomaticMining"
   "Automatics/AutomaticFeeding"
+  "Automatics/AutomaticFarming"
 )
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
 # removing it before the module is migrated hands non-activation guards to code this slice
 # does not verify (R5.1a).
 unmigrated_module_configs=(
-  "Automatics/AutomaticFarming/Config.cs"
   "Automatics/AutomaticRepair/Config.cs"
 )
 
@@ -229,6 +229,43 @@ feeding_config_entries=(
   'need_get_close_to_eat_the_feed|config *\. *Bind *\( *"need_get_close_to_eat_the_feed" *, *false *\)'
   'allow_to_feed_from_container|config *\. *Bind *\( *"allow_to_feed_from_container" *, *AnimalType *\. *Tamed *\)'
   'allow_to_feed_from_player|config *\. *Bind *\( *"allow_to_feed_from_player" *, *AnimalType *\. *None *\)'
+)
+
+farming_dir="Automatics/AutomaticFarming"
+farming_config="$farming_dir/Config.cs"
+farming_module="$farming_dir/Module.cs"
+farming_patches="$farming_dir/Patches.cs"
+farming_core="$farming_dir/AutomaticFarming.cs"
+farming_planting="$farming_dir/CropPlanting.cs"
+farming_seed_pool="$farming_dir/SeedPool.cs"
+farming_containers="$farming_dir/FarmingContainers.cs"
+farming_roles="$farming_dir/ContainerRole.cs"
+farming_smoke="smoke/Automatics.SmokeTest/LifecycleSmokeModules.cs"
+
+# The Automatic Farming entry points outside Module.cs, in the form of processing_entries: the
+# container hover postfix, which only appends a line to the game's text, and the crop claim
+# Automatic Pickup asks before it collects a crop, whose false is what Pickup does without Farming.
+# The other two gates are the player hook handlers in Module.cs, the only places a farming pass is
+# accepted. They open with the bare Running and are checked by
+# require_hook_handlers_open_with_the_gate, as the Storage handler is.
+farming_entries=(
+  "Patches.Container_GetHoverText_Postfix|$farming_patches|private static void Container_GetHoverText_Postfix\\(|if (!Module.Running) return;"
+  "AutomaticFarming.ClaimsCrop|$farming_core|public static bool ClaimsCrop\\(Player player, Pickable pickable\\)|if (!Module.Running) return false;"
+)
+
+# Every bind in Automatic Farming, in its persisted order, defaults included.
+farming_config_entries=(
+  'module|config *\. *Bind *\( *"module" *, *AutomaticsModule *\. *Disabled'
+  'enable_automatic_farming|config *\. *Bind *\( *"enable_automatic_farming" *, *true *\)'
+  'farming_interval|config *\. *Bind *\( *"farming_interval" *, *1\.5f *, *\( *0\.1f *, *4f *\) *\)'
+  'farming_range|config *\. *Bind *\( *"farming_range" *, *8 *, *\( *1 *, *64 *\) *\)'
+  'allow_farming_crop|config *\. *BindValheimObjectList *\( *"allow_farming_crop" *, *ValheimObject *\. *Flora *\)'
+  'seed_reserve|config *\. *Bind *\( *"seed_reserve" *, *10 *, *\( *0 *, *999 *\) *\)'
+  'seed_source|config *\. *Bind *\( *"seed_source" *, *SeedSource *\. *Inventory *\)'
+  'enable_proactive_sowing|config *\. *Bind *\( *"enable_proactive_sowing" *, *true *\)'
+  'sowing_spacing_factor|config *\. *Bind *\( *"sowing_spacing_factor" *, *1f *, *\( *0\.5f *, *4f *\) *\)'
+  'farming_key|config *\. *Bind *\( *"farming_key" *, *new KeyboardShortcut *\( *\) *\)'
+  'designate_container_key|config *\. *Bind *\( *"designate_container_key" *, *new KeyboardShortcut *\( *\) *\)'
 )
 
 # The Automatic Processing patterns are POSIX EREs matched against a stream in which every run
@@ -4444,6 +4481,537 @@ require_feeding_smoke_descriptor() {
     "the lifecycle smoke must not read or change the user's Feeding settings"
 }
 
+# ---------------------------------------------------------------------------------------
+# Automatic Farming: one patch class, three named hook subscriptions and no component. A farming
+# pass harvests crops into the inventory or designated containers, spends seeds and places
+# saplings; it is accepted only at the two player-hook gates and then finishes. Automatic Pickup's
+# crop claim reads the same predicate, so the two modules hand the crops over at the stop request.
+# ---------------------------------------------------------------------------------------
+
+# The registration contract, the three state fields and the activation, each spelled out once in
+# code, and no subscription anywhere but the three in Enable.
+require_farming_state_and_registration() {
+  local file
+  local found
+
+  require_source_pattern "$farming_module" 'internal sealed class Module *: *IAutomaticsModule' \
+    "the Farming module must implement IAutomaticsModule"
+  require_source_pattern "$farming_module" 'public string Name *=> *"automatic-farming" *;' \
+    "the Farming module registry name must remain automatic-farming, the Harmony id its patch has always been applied under"
+  require_source_pattern "$farming_module" 'public string ConfigSection *=> *"automatic_farming" *;' \
+    "the Farming module config section must remain automatic_farming"
+  require_source_pattern "$farming_module" 'public bool SupportsRuntimeToggle *=> *true *;' \
+    "the Farming module must declare runtime toggle support"
+  require_source_pattern "$farming_module" '\[AutomaticsInitializer\(9\)\]' \
+    "the Farming module initializer order must remain 9"
+  require_single_code_match "$farming_module" 'internal static bool Active *;' \
+    "Farming Active must be declared exactly once, as a plain static field"
+  require_single_code_match "$farming_module" 'internal static bool StopRequested *;' \
+    "Farming StopRequested must be declared exactly once, as a plain static field"
+  require_single_code_match "$farming_module" \
+    'internal static bool Running *=> *Active *&& *!StopRequested *;' \
+    "Farming Running must be exactly Active && !StopRequested"
+
+  require_exact_method_body "$farming_module" 'public void SetStopRequested\(bool value\)' \
+    'publicvoidSetStopRequested(boolvalue){StopRequested=value;}' \
+    "Farming SetStopRequested must do nothing but assign the requested value"
+  require_exact_method_body "$farming_module" 'public void BindConfig\(\)' \
+    'publicvoidBindConfig(){Config.Initialize();}' \
+    "Farming BindConfig must do nothing but bind the settings"
+  require_exact_method_body "$farming_module" 'private static void Initialize\(\)' \
+    'privatestaticvoidInitialize(){ModuleRegistry.Register(Instance);}' \
+    "the Farming initializer must only register Module.Instance"
+  require_exact_method_body "$farming_module" 'public void Enable\(ModuleScope scope\)' \
+    'publicvoidEnable(ModuleScopescope){scope.PatchAll(typeof(Patches));scope.Subscribe<Action<Player,ZNetView>>(h=>Hooks.OnPlayerAwake+=h,h=>Hooks.OnPlayerAwake-=h,OnPlayerAwake);scope.Subscribe<Action<Player,bool>>(h=>Hooks.OnPlayerUpdate+=h,h=>Hooks.OnPlayerUpdate-=h,OnPlayerUpdate);scope.Subscribe<Action<Player,float>>(h=>Hooks.OnPlayerFixedUpdate+=h,h=>Hooks.OnPlayerFixedUpdate-=h,OnPlayerFixedUpdate);Active=true;}' \
+    "Farming Enable must only apply the patch class, subscribe the three named player hooks and raise Active last (R4.3): it runs without a gate, so anything else it did - a farming pass, a designation - would act before the module advertises itself as running"
+
+  # The three subscriptions are the only ones: each is a Subscribe call with an add and a remove
+  # of the hook, all inside the Enable pinned above. One made anywhere else is never removed.
+  for file in "$farming_dir"/*.cs; do
+    found="$(strip_code "$file" | count_hits '(^|[^A-Za-z0-9_])(Subscribe *<|Hooks *\.)')"
+    if lookup_failed "$found"; then
+      fail "could not search $file for hook subscriptions; the check was not run"
+    elif [[ "$file" == "$farming_module" ]] && ((found != 9)); then
+      fail "$file must subscribe only in Enable: three Subscribe calls, each with an add and a remove of its hook, are 9 occurrences of Subscribe< or Hooks.; found $found"
+    elif [[ "$file" != "$farming_module" ]] && ((found != 0)); then
+      fail "$file must not subscribe to a hook or name Hooks: Automatic Farming owns only the three subscriptions in Module.Enable, and one made here is never removed by the teardown; found $found"
+    fi
+  done
+}
+
+# R8.11: a farming pass checks the stop request once, at its hook gate, and never again. Module.cs
+# names each state field only where the lifecycle needs it; the files a pass runs through read no
+# module state apart from the two listed gates in AutomaticFarming.cs and Patches.cs; and no file
+# of the module reaches a gated entry point from inside a pass - neither a hook handler nor the crop
+# claim, whose gate is a stop check of its own. Calls and method groups count alike. The shared
+# harvest and container helpers a pass runs through know nothing of the module.
+require_farming_never_rechecks_after_a_change() {
+  local stripped
+  local found
+  local row
+  local rest
+  local word
+  local expected
+  local where
+  local method
+  local file
+  local reads
+  local claims
+  local note
+
+  stripped="$(strip_code "$farming_module")"
+  for row in \
+    'Running@@3@@its declaration and the gates of the two hook handlers' \
+    'Active@@4@@its declaration, the Running predicate, the raise in Enable and the lowering in Disable' \
+    'StopRequested@@3@@its declaration, the Running predicate and SetStopRequested'; do
+    word="${row%%@@*}"
+    rest="${row#*@@}"
+    expected="${rest%%@@*}"
+    where="${rest#*@@}"
+    found="$(printf '%s\n' "$stripped" | count_hits "(^|[^A-Za-z0-9_])$word([^A-Za-z0-9_]|\$)")"
+    if lookup_failed "$found"; then
+      fail "could not search $farming_module for $word; the check on where the Farming state is read was not run"
+    elif ((found != expected)); then
+      fail "$farming_module may name $word only in $where (R8.11): a read anywhere else is a stop check no gate list knows about, and one after a hook gate can leave a harvested spot unplanted; found $found occurrence(s), expected $expected"
+    fi
+  done
+
+  for method in OnPlayerUpdate OnPlayerFixedUpdate; do
+    found="$(printf '%s\n' "$stripped" | count_hits "(^|[^A-Za-z0-9_])$method *\\(")"
+    if lookup_failed "$found"; then
+      fail "could not search $farming_module for calls to $method; the nested-entry check was not run"
+    elif ((found != 1)); then
+      fail "Farming.$method must only occur as its declaration and never be called (R8.11): a call checks the stop request again from inside a pass; found $found occurrence(s)"
+    fi
+  done
+
+  # file@@reads of Module.@@occurrences of ClaimsCrop
+  for row in \
+    "$farming_module@@0@@0" \
+    "$farming_patches@@1@@0" \
+    "$farming_core@@1@@3" \
+    "$farming_planting@@0@@0" \
+    "$farming_seed_pool@@0@@0" \
+    "$farming_containers@@0@@0" \
+    "$farming_roles@@0@@0" \
+    "$farming_config@@0@@0"; do
+    file="${row%%@@*}"
+    rest="${row#*@@}"
+    expected="${rest%%@@*}"
+    stripped="$(strip_code "$file")"
+    reads="$(printf '%s\n' "$stripped" | count_hits "$module_read")"
+    claims="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])ClaimsCrop([^A-Za-z0-9_]|$)')"
+    if lookup_failed "$reads" "$claims"; then
+      fail "could not search $file for module state reads and crop claims; the check was not run"
+      continue
+    fi
+
+    if ((reads != expected)); then
+      note="no read of Module."
+      if ((expected == 1)); then
+        note="exactly one read of Module., the gate of its listed entry point"
+      fi
+      fail "$file must hold $note (R8.11): its code runs inside a farming pass, between the hook gate and the pass's last change, or reads state no gate list knows about; found $reads"
+    fi
+
+    expected="${rest#*@@}"
+    if ((claims != expected)); then
+      note="must not name ClaimsCrop"
+      if ((expected == 3)); then
+        note="must name ClaimsCrop exactly three times, its two declarations and the forwarding call of ClaimsCrop(Pickable),"
+      fi
+      fail "$file $note (R8.11): the claim opens with its own stop check, so calling it, or passing it on as a method group, from inside a farming pass checks the stop request again after a harvest that still has to be replanted; found $claims occurrence(s)"
+    fi
+  done
+
+  found="$(strip_code "$farming_core" | count_hits '(^|[^A-Za-z0-9_])public static bool ClaimsCrop *\(')"
+  if lookup_failed "$found"; then
+    fail "could not search $farming_core for the ClaimsCrop declarations; the check was not run"
+  elif ((found != 2)); then
+    fail "$farming_core must declare exactly the two ClaimsCrop overloads, so that its occurrence count leaves no room for a call: found $found declaration(s)"
+  fi
+
+  for file in Automatics/Valheim/PickableHarvester.cs Automatics/Valheim/ContainerAccess.cs; do
+    found="$(strip_code "$file" | count_hits '(^|[^A-Za-z0-9_])(AutomaticFarming|Module *\.)')"
+    if lookup_failed "$found"; then
+      fail "could not search $file; the check that it knows nothing of the module state was not run"
+    elif ((found != 0)); then
+      fail "$file must not name AutomaticFarming or read a module state (R8.11): Automatic Pickup, Processing and Storage share it, and a farming pass runs through it between its hook gate and its last change; found $found"
+    fi
+  done
+}
+
+# Who may start what. A farming pass (TryFarming) is started only behind the two hook gates, a
+# container designation (TryDesignateContainer, then TryCycleRole) only behind the update gate, and
+# nothing else in the mod or the smoke names them, as a call or as a method group: a call from the
+# bookkeeping, Enable or the smoke harvests, plants or rewrites a role without the gate. The crop
+# claim is asked by Automatic Pickup alone outside the Farming files (the smoke may read it). The
+# file list is taken with its exit status, for the reason given at the Mining call-site count.
+require_farming_call_sites() {
+  local files
+  local list_status=0
+  local file
+  local stripped
+  local found
+  local name
+  local body
+  local row
+  local rest
+  local claims=0
+  local -A total=([TryFarming]=0 [TryDesignateContainer]=0 [TryCycleRole]=0)
+  local -A declared=([TryFarming]=0 [TryDesignateContainer]=0 [TryCycleRole]=0)
+  local -A declaration=(
+    [TryFarming]='public static void TryFarming *\('
+    [TryDesignateContainer]='private static void TryDesignateContainer *\('
+    [TryCycleRole]='public static bool TryCycleRole *\('
+  )
+  local -A inside=([TryFarming]=0 [TryDesignateContainer]=0 [TryCycleRole]=0)
+  local -A calls=([TryFarming]=2 [TryDesignateContainer]=1 [TryCycleRole]=1)
+  local -A where=(
+    [TryFarming]='one qualified call in each of Module.OnPlayerUpdate and Module.OnPlayerFixedUpdate'
+    [TryDesignateContainer]='one call in Module.OnPlayerUpdate'
+    [TryCycleRole]='one qualified call in Module.TryDesignateContainer'
+  )
+
+  files="$(rg --files Automatics smoke -g '*.cs')" || list_status=$?
+  if ((list_status != 0)) || [[ -z "$files" ]]; then
+    fail "could not list the C# files under Automatics and smoke (rg exit $list_status); the Farming call-site check was not run"
+    return
+  fi
+
+  while IFS= read -r file; do
+    [[ "$file" == Automatics/Libraries/* ]] && continue
+    stripped="$(strip_code "$file")"
+    for name in TryFarming TryDesignateContainer TryCycleRole; do
+      found="$(printf '%s\n' "$stripped" | count_hits "(^|[^A-Za-z0-9_])$name([^A-Za-z0-9_]|\$)")"
+      if lookup_failed "$found"; then
+        fail "could not search $file for $name; the Farming call-site check was not run"
+        return
+      fi
+      total[$name]=$((total[$name] + found))
+
+      found="$(printf '%s\n' "$stripped" | count_hits "(^|[^A-Za-z0-9_])${declaration[$name]}")"
+      if lookup_failed "$found"; then
+        fail "could not distinguish the $name declaration in $file; the Farming call-site check was not run"
+        return
+      fi
+      declared[$name]=$((declared[$name] + found))
+    done
+
+    if [[ "$file" == Automatics/* && "$file" != "$farming_dir"/* ]]; then
+      found="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])ClaimsCrop([^A-Za-z0-9_]|$)')"
+      if lookup_failed "$found"; then
+        fail "could not search $file for ClaimsCrop; the Farming call-site check was not run"
+        return
+      fi
+      claims=$((claims + found))
+    fi
+  done <<<"$files"
+
+  for row in \
+    'TryFarming@@private static void OnPlayerUpdate\(@@AutomaticFarming *\. *TryFarming *\(' \
+    'TryFarming@@private static void OnPlayerFixedUpdate\(@@AutomaticFarming *\. *TryFarming *\(' \
+    'TryDesignateContainer@@private static void OnPlayerUpdate\(@@(^|[^A-Za-z0-9_.])TryDesignateContainer *\(' \
+    'TryCycleRole@@private static void TryDesignateContainer\(@@ContainerRoles *\. *TryCycleRole *\('; do
+    name="${row%%@@*}"
+    rest="${row#*@@}"
+    body="$(method_body "$farming_module" "${rest%%@@*}")"
+    found="$(printf '%s\n' "$body" | count_hits "${rest#*@@}")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the callers of $name; the Farming call-site check was not run"
+      return
+    fi
+    # Each expected body holds exactly one call: a total of two TryFarming calls could otherwise
+    # sit both in the key handler and leave the interval handler without one.
+    if ((found != 1)); then
+      fail "$name must be called exactly once in ${rest%%@@*}, not $found time(s) (R8.11): each hook handler takes its own farming pass, and the total alone cannot tell two calls in one handler from one in each"
+    fi
+    inside[$name]=$((inside[$name] + found))
+  done
+
+  for name in TryFarming TryDesignateContainer TryCycleRole; do
+    if ((declared[$name] != 1 || total[$name] - declared[$name] != calls[$name] || inside[$name] != calls[$name])); then
+      fail "$name must be declared once and otherwise named only by ${where[$name]}, across Automatics (excluding Libraries) and smoke (R8.11): a call or method group anywhere else acts without the hook gate; found ${declared[$name]} declaration(s), $((total[$name] - declared[$name])) other occurrence(s), ${inside[$name]} in the expected bodies"
+    fi
+  done
+
+  if ((claims != 1)); then
+    fail "ClaimsCrop must be named exactly once in Automatics outside the Farming module and its libraries, by Automatic Pickup's periodic pickup (R7.5): any other caller would act on a crop Farming claims, or leave one Farming no longer harvests; found $claims"
+  fi
+}
+
+# R6.1 / R6.2: what a disable and a new world session drop, pinned to whole bodies because each of
+# these runs without a gate: the interval timers, the sapling lookup and the colliders the last
+# grow-space check left behind. Module.cs itself writes no ZDO and claims nothing: a container's
+# role changes only in ContainerRoles.TryCycleRole, behind the update gate, and a disable keeps it.
+require_farming_session_is_reset() {
+  local found
+
+  require_exact_method_body "$farming_module" 'public void Disable\(ModuleScope scope\)' \
+    'publicvoidDisable(ModuleScopescope){Active=false;ResetSession();CropPlanting.ClearCaches();}' \
+    "Farming Disable must only lower Active, reset the session and drop the planting caches (R6.1): the scope removes the patch and the subscriptions, no item is held to put back, and the container roles are the user's"
+  require_exact_method_body "$farming_module" 'private static void ResetSession\(\)' \
+    'privatestaticvoidResetSession(){FarmingTimers.Clear();}' \
+    "Farming ResetSession must clear FarmingTimers and do nothing else (R6.1 / R6.2): a timer left there carries into the next activation and runs its first interval pass early"
+  require_exact_method_body "$farming_module" 'private static void OnPlayerAwake\(' \
+    'privatestaticvoidOnPlayerAwake(Playerplayer,ZNetViewzNetView){ResetSession();}' \
+    "Farming OnPlayerAwake must do nothing but reset the session (R6.2): it runs without a gate, so anything else it did would act after a stop"
+  require_exact_method_body "$farming_planting" 'internal static void ClearCaches\(\)' \
+    'internalstaticvoidClearCaches(){_saplingByCrop=null;Array.Clear(ColliderBuffer,0,ColliderBuffer.Length);}' \
+    "CropPlanting.ClearCaches must drop the sapling lookup and clear the collider buffer, and do nothing else (R6.1)"
+
+  found="$(strip_code "$farming_module" | count_hits '(^|[^A-Za-z0-9_])ClaimOwnership *\(|\. *Set *\(')"
+  if lookup_failed "$found"; then
+    fail "could not search $farming_module for ZDO writes; the check was not run"
+  elif ((found != 0)); then
+    fail "$farming_module must not write a ZDO or claim ownership itself: a container role is changed only by ContainerRoles.TryCycleRole after its access checks, and a disable leaves every role as the user set it; found $found"
+  fi
+
+  require_source_pattern "$farming_module" 'internal static int FarmingTimerCount *=> *FarmingTimers *\. *Count *;' \
+    "the Farming timer smoke probe must expose only FarmingTimers.Count"
+  require_source_pattern "$farming_planting" 'internal static bool SaplingMapBuilt *=> *_saplingByCrop *!= *null *;' \
+    "the Farming sapling-lookup smoke probe must expose only whether the lookup is built"
+}
+
+# R7.5: Automatic Pickup leaves a crop to Farming only while Farming is running. The claim it asks
+# opens with the Running gate (see farming_entries); the overload without a player only forwards to
+# it; no Farming file reads Active, which keeps acting between the stop request and the teardown;
+# and Pickup asks the claim once, from its periodic crop pickup (who else may ask it is counted
+# with the call sites).
+require_farming_crop_claim_contract() {
+  local file
+  local found
+
+  require_exact_method_body "$farming_core" 'public static bool ClaimsCrop\(Pickable pickable\)' \
+    'publicstaticboolClaimsCrop(Pickablepickable){returnClaimsCrop(Player.m_localPlayer,pickable);}' \
+    "AutomaticFarming.ClaimsCrop(Pickable) must only forward to ClaimsCrop(Player, Pickable) for the local player (R7.5): the gate is there, and this overload carries none of its own"
+  # The claim decides which crops periodic pickup leaves to Farming. Pinned whole, so a body that
+  # kept the gate but no longer claimed (or claimed everything) cannot pass: the static checks and
+  # the smoke's claim checks would both stay quiet, since the smoke skips when no crop is claimed.
+  # strip_code blanks the "seed" tag literal to "".
+  require_exact_method_body "$farming_core" 'public static bool ClaimsCrop\(Player player, Pickable pickable\)' \
+    'publicstaticboolClaimsCrop(Playerplayer,Pickablepickable){if(!Module.Running)returnfalse;if(!pickable)returnfalse;if(!Config.EnableAutomaticFarming)returnfalse;if(!TryGetCropIdentifier(pickable,outvaridentifier))returnfalse;if(Config.SeedSource==SeedSource.Inventory)returntrue;if(player==null)returnfalse;varcontainers=FarmingContainers.Resolve(player);if(!containers.HasAnchors)returnfalse;if(containers.OwnedStorage.Count==0&&containers.OwnedCultivation.Count==0&&containers.OwnedSeedHarvest.Count==0)returnfalse;varposition=pickable.transform.position;varrange=Config.FarmingRange;if(!TryNearestAnchorDistance(containers,position,range,out_))returnfalse;varisSeed=ValheimObject.Flora.HasTag(identifier,"");returncontainers.StorageNear(position,range).Count>0||containers.MatchingPlantingNear(isSeed,position,range).Count>0;}' \
+    "AutomaticFarming.ClaimsCrop(Player, Pickable) must keep its audited decision (R7.5): which crops Automatic Pickup leaves to Farming follows from it, and a claim that stopped matching, or matched everything, would leave crops unharvested or take them from Farming"
+
+  for file in "$farming_dir"/*.cs; do
+    found="$(strip_code "$file" | count_hits '(^|[^A-Za-z0-9_])Module *\. *Active([^A-Za-z0-9_]|$)')"
+    if lookup_failed "$found"; then
+      fail "could not search $file for Module.Active; the check was not run"
+    elif ((found != 0)); then
+      fail "$file must not read Module.Active (R7.5 / R1.5a): between the stop request and the teardown Active is still true while Farming harvests nothing, and a crop claimed on it is left to nobody; found $found"
+    fi
+  done
+
+  require_single_code_match "$pickup_component" 'AutomaticFarming *\. *AutomaticFarming *\. *ClaimsCrop *\(' \
+    "Automatic Pickup must ask AutomaticFarming.ClaimsCrop exactly once, from its periodic crop pickup (R7.5)"
+
+  found="$(strip_code "$farming_patches" | count_hits '\[ *HarmonyPatch *\( *typeof *\(')"
+  if lookup_failed "$found"; then
+    fail "could not count the Farming patch targets; the check was not run"
+  elif ((found != 1)); then
+    fail "the Farming patch class must patch exactly its one audited target, Container.GetHoverText: found $found"
+  fi
+}
+
+# The steps of one method, in the order given: each has to be found in the form given, and each
+# after the one before it. Arguments: the file, the declaration pattern, the name the messages give
+# the method, then one "what|pattern" row per step.
+require_farming_steps_in_order() {
+  local file="$1"
+  local declaration="$2"
+  local label="$3"
+  local body
+  local row
+  local what
+  local pattern
+  local line
+  local previous=0
+  local previous_what=""
+
+  shift 3
+  body="$(method_body "$file" "$declaration")"
+  if [[ -z "$body" ]]; then
+    fail "cannot find $label in $file; the check on the order of its access checks and changes was not run"
+    return
+  fi
+
+  for row in "$@"; do
+    what="${row%%|*}"
+    pattern="${row#*|}"
+    line="$(printf '%s\n' "$body" | first_hit "$pattern")"
+    if lookup_failed "$line"; then
+      fail "could not search $label for $what; the check on the order of its access checks and changes was not run"
+      return
+    fi
+    if [[ -z "$line" ]]; then
+      fail "$label must contain $what, in the guard form this check reads (AC-S11): without it, what follows changes a container or the world unchecked"
+      return
+    fi
+    if ((line <= previous)); then
+      fail "$label must come to $what only after $previous_what (AC-S11): a change made first is made without the check that guards it"
+    fi
+    previous=$line
+    previous_what="$what"
+  done
+}
+
+# AC-S11: every change a farming pass or a designation makes to a container or the world comes after
+# the checks that allow it. A container's role is written only after the access check, the claim and
+# the owner check; a sapling is placed only where the player may build, and seeds are spent only
+# after it is placed; a crop is harvested only by its owner, and replanted only after the harvest;
+# and seeds leave a container only after it is claimed. Harvesting has no ward check, as in the game.
+require_farming_checks_access_before_changes() {
+  local body
+  local first
+
+  require_farming_steps_in_order "$farming_roles" 'public static bool TryCycleRole\(' \
+    "ContainerRoles.TryCycleRole" \
+    'the access check (a failed ContainerAccess.CanUseContainer returns false)|if *\( *! *ContainerAccess *\. *CanUseContainer *\( *player *, *container *\) *\) *return false *;' \
+    'the claim (a failed ContainerAccess.TryClaimContainer returns false)|if *\( *! *ContainerAccess *\. *TryClaimContainer *\( *container *\) *\) *return false *;' \
+    'the owner check (a container this peer does not own returns false)|if *\( *! *nview *\. *IsOwner *\( *\) *\) *return false *;' \
+    'the role write (ZDO Set)|GetZDO *\( *\) *\. *Set *\('
+  require_farming_steps_in_order "$farming_planting" \
+    'public static bool TryPlant\(Player player, Piece sapling, Plant plant' "CropPlanting.TryPlant" \
+    'the ward check (a failed PrivateArea.CheckAccess returns)|if *\( *! *PrivateArea *\. *CheckAccess *\( *pos *, *0f *, *false *\) *\)' \
+    'the placement (PlacePiece)|player *\. *PlacePiece *\(' \
+    'the seed consumption (ConsumeSeeds)|(^|[^A-Za-z0-9_])ConsumeSeeds *\('
+  require_farming_steps_in_order "$farming_core" 'private static void HarvestAndReplant\(' \
+    "AutomaticFarming.HarvestAndReplant" \
+    'the crop owner check (a crop this peer does not own returns)|if *\( *! *zNetView *\. *IsOwner *\( *\) *\) *return *;' \
+    'the harvest (PickableHarvester)|PickableHarvester *\. *Harvest(ToContainers)? *\(' \
+    'the replant (Replant)|(^|[^A-Za-z0-9_])Replant *\('
+
+  body="$(method_body "$farming_seed_pool" 'private int RemoveFromContainer\(')"
+  first="$(printf '%s\n' "$body" | first_statement)"
+  if [[ "$first" != 'if(!ContainerAccess.TryPrepareContainerMutation(_player,container))return0;' ]]; then
+    fail "SeedPool.RemoveFromContainer must open with \"if (!ContainerAccess.TryPrepareContainerMutation(_player, container)) return 0;\" (AC-S11): seeds leave only a container this peer has claimed and may use now; found \"$first\""
+  fi
+}
+
+# R5.1 / R5.2 and R1.5: every entry is bound, in its persisted order and with its default, and
+# nothing in the module reads the setting as a flag.
+require_farming_config_contract() {
+  local body
+  local stripped
+  local row
+  local key
+  local pattern
+  local line
+  local previous=0
+  local file
+
+  if ((${#farming_config_entries[@]} != 11)); then
+    fail "the Farming config table must name exactly its eleven persisted entries: found ${#farming_config_entries[@]}"
+  fi
+
+  stripped="$(strip_code "$farming_config" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - 'public static void Initialize\(\)')"
+  if [[ -z "$body" ]]; then
+    fail "the Farming config initializer could not be extracted; its bind contract was not checked"
+    return
+  fi
+
+  for row in "${farming_config_entries[@]}"; do
+    IFS='|' read -r key pattern <<<"$row"
+    line="$(printf '%s\n' "$body" | first_match_line "$pattern")"
+    if lookup_failed "$line"; then
+      fail "could not search the Farming config for $key; its bind check was not run"
+    elif [[ -z "$line" ]]; then
+      fail "Farming config must bind $key with its audited default and constraints"
+    elif ((line <= previous)); then
+      fail "Farming config must keep its eleven entries in persisted order; $key is out of order"
+    else
+      previous=$line
+    fi
+  done
+
+  require_source_pattern "$farming_config" \
+    'public static ConfigEntry<AutomaticsModule> ModuleEntry *=> *_module *;' \
+    "Farming Config.ModuleEntry must publicly expose the module toggle"
+
+  for file in "$farming_dir"/*.cs; do
+    reject_source_pattern "$file" '_module\s*\.\s*Value' \
+      "$file must not read the module setting's value (R1.5): the registry follows the setting, and the entry points read Module.Running"
+    reject_source_pattern "$file" 'ModuleEntry\s*\.\s*Value' \
+      "$file must not read the module setting's value (R1.5): the registry follows the setting, and the entry points read Module.Running"
+  done
+}
+
+require_farming_smoke_descriptor() {
+  local body
+  local found
+  local stripped
+  local row
+  local pattern
+  local message
+
+  stripped="$(strip_code "$farming_smoke" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - 'private static ModuleDescriptor DescribeFarming\(\)')"
+  if [[ -z "$body" ]]; then
+    fail "the lifecycle smoke must define a Farming descriptor; its probes could not be checked"
+    return
+  fi
+
+  for row in \
+    'Argument *= *"farming"@@the Farming descriptor must be reached by the argument farming' \
+    'Module *= *FarmingModule *\. *Instance@@the Farming descriptor must use the registered Farming module' \
+    'Active *= *\(\) *=> *FarmingModule *\. *Active *,@@the Farming descriptor must read the Farming applied state' \
+    'Running *= *\(\) *=> *FarmingModule *\. *Running *,@@the Farming descriptor must read the Farming Running predicate' \
+    'PatchTypes *= *new\[\] *\{ *typeof *\( *FarmingPatches *\) *\}@@the Farming descriptor must declare its one patch type' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerAwake" *, *\(\) *=> *Hooks *\. *OnPlayerAwake *, *1 *\)@@the Farming descriptor must see its OnPlayerAwake handler go and come back' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerUpdate" *, *\(\) *=> *Hooks *\. *OnPlayerUpdate *, *1 *\)@@the Farming descriptor must see its OnPlayerUpdate handler go and come back' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerFixedUpdate" *, *\(\) *=> *Hooks *\. *OnPlayerFixedUpdate *, *1 *\)@@the Farming descriptor must see its OnPlayerFixedUpdate handler go and come back' \
+    'Probe *\. *Counter *\( *"farming.OnPlayerAwake.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerAwake *, *typeof *\( *FarmingModule *\) *, *"OnPlayerAwake" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Farming descriptor must pin its own OnPlayerAwake handler to exactly one' \
+    'Probe *\. *Counter *\( *"farming.OnPlayerUpdate.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerUpdate *, *typeof *\( *FarmingModule *\) *, *"OnPlayerUpdate" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Farming descriptor must pin its own OnPlayerUpdate handler to exactly one' \
+    'Probe *\. *Counter *\( *"farming.OnPlayerFixedUpdate.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerFixedUpdate *, *typeof *\( *FarmingModule *\) *, *"OnPlayerFixedUpdate" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Farming descriptor must pin its own OnPlayerFixedUpdate handler to exactly one' \
+    'Probe *\. *Counter *\( *"farming.designated_containers" *, *CountDesignatedContainers *, *OffExpectation *\. *BelowBaseline *, *0 *\)@@the Farming descriptor must hold the number of containers with a farming role at its baseline' \
+    'Precondition *= *FarmingPrecondition@@the Farming descriptor must use its crop-protecting precondition' \
+    'new ExtraCheck *\( *"session_state_captured" *, *Phase *\. *BeforeRequest@@the Farming descriptor must record the claims, timers and sapling lookup just before every disable' \
+    'claimedBeforeDisable *= *CountClaimedCrops *\( *\) *;@@the Farming descriptor must count the claimed crops before every disable' \
+    'timersBeforeDisable *= *FarmingModule *\. *FarmingTimerCount *;@@the Farming descriptor must count the farming timers before every disable' \
+    'saplingMapBeforeDisable *= *FarmingPlanting *\. *SaplingMapBuilt *;@@the Farming descriptor must record the sapling lookup before every disable' \
+    'new ExtraCheck *\( *"claims_released_at_request" *, *Phase *\. *AtRequest@@the Farming descriptor must see the crop claim let go in the frame of the request' \
+    'new ExtraCheck *\( *"claims_released_while_off" *, *Phase *\. *WhileOff@@the Farming descriptor must see no crop claimed while off' \
+    'new ExtraCheck *\( *"timers_cleared" *, *Phase *\. *WhileOff@@the Farming descriptor must check timer cleanup while off' \
+    'new ExtraCheck *\( *"sapling_map_cleared" *, *Phase *\. *WhileOff@@the Farming descriptor must check the sapling lookup is dropped while off' \
+    'new ExtraCheck *\( *"claims_restored" *, *Phase *\. *AfterOn@@the Farming descriptor must see the crop claim come back after every enable' \
+    'new ExtraCheck *\( *"interval_timer_resumed" *, *Phase *\. *AfterOn *, *IntervalTimerResumed *\)@@the Farming descriptor must see the interval hook take up its timer after every enable'; do
+    pattern="${row%%@@*}"
+    message="${row#*@@}"
+    found="$(printf '%s\n' "$body" | count_hits "$pattern")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the Farming lifecycle descriptor; the check behind '$message' was not run"
+    elif ((found != 1)); then
+      fail "$message exactly once: found $found"
+    fi
+  done
+
+  require_exact_method_body "$farming_smoke" 'private static string FarmingPrecondition\(\)' \
+    'privatestaticstringFarmingPrecondition(){varplayer=Player.m_localPlayer;if(!player)return"";if(!PickupModule.Running||!HasCropOrPlantInPickupReach(player))returnnull;return"";}' \
+    "FarmingPrecondition must remain the audited decision: run only when Automatic Pickup is not running or reaches no crop and no growing plant"
+  require_exact_method_body "$farming_smoke" 'private static bool HasCropOrPlantInPickupReach\(Player player\)' \
+    'privatestaticboolHasCropOrPlantInPickupReach(Playerplayer){varreach=PickupConfig.AutomaticPickupRange+1f;varorigin=player.transform.position;foreach(varpickableinPickableCache.GetAllInstance()){if(!pickable||!IsFarmingCrop(pickable))continue;if(Vector3.Distance(origin,pickable.transform.position)<=reach)returntrue;}foreach(varplantinObject.FindObjectsByType<Plant>(FindObjectsInactive.Include,FindObjectsSortMode.None)){if(!plant)continue;if(Vector3.Distance(origin,plant.transform.position)<=reach)returntrue;}returnfalse;}' \
+    "HasCropOrPlantInPickupReach must remain the audited scan: every crop Farming would claim, whether or not it runs, and every growing plant, within Automatic Pickup's range + 1 m"
+  require_exact_method_body "$farming_smoke" 'private static bool IsFarmingCrop\(Pickable pickable\)' \
+    'privatestaticboolIsFarmingCrop(Pickablepickable){returnValheimObject.Flora.GetIdentify(Objects.GetName(pickable),outvaridentifier)&&FarmingConfig.AllowFarmingCrops.Contains(identifier);}' \
+    "IsFarmingCrop must remain the crop rule of AutomaticFarming.TryGetCropIdentifier"
+  require_exact_method_body "$farming_core" 'private static bool TryGetCropIdentifier\(' \
+    'privatestaticboolTryGetCropIdentifier(Pickablepickable,outstringidentifier){varname=Objects.GetName(pickable);returnValheimObject.Flora.GetIdentify(name,outidentifier)&&Config.AllowFarmingCrops.Contains(identifier);}' \
+    "AutomaticFarming.TryGetCropIdentifier changed: the lifecycle smoke's IsFarmingCrop mirrors it to decide which crops Automatic Pickup must not reach, so change both together"
+  require_exact_method_body "$farming_smoke" 'private static bool FarmsOnAnInterval\(\)' \
+    'privatestaticboolFarmsOnAnInterval(){returnFarmingConfig.EnableAutomaticFarming&&FarmingConfig.FarmingInterval>=0.1f&&FarmingConfig.FarmingKey.MainKey==KeyCode.None;}' \
+    "FarmsOnAnInterval must remain the guards with which Module.OnPlayerFixedUpdate decides whether it keeps a timer"
+  require_exact_method_body "$farming_smoke" 'private static int CountClaimedCrops\(\)' \
+    'privatestaticintCountClaimedCrops(){varplayer=Player.m_localPlayer;varclaimed=0;foreach(varpickableinPickableCache.GetAllInstance())if(pickable&&FarmingClaims.ClaimsCrop(player,pickable))claimed++;returnclaimed;}' \
+    "CountClaimedCrops must count, and only count, the loaded crops Farming claims for the local player"
+  require_exact_method_body "$farming_smoke" 'private static int CountDesignatedContainers\(\)' \
+    'privatestaticintCountDesignatedContainers(){vardesignated=0;foreach(varcontainerinContainerCache.GetAllInstance())if(container&&FarmingRoles.GetRole(container)!=FarmingRole.None)designated++;returndesignated;}' \
+    "CountDesignatedContainers must count, and only count, the loaded containers with a farming role"
+  reject_source_pattern "$farming_smoke" \
+    '(FarmingConfig|PickupConfig)\s*\.\s*(ModuleEntry|[A-Za-z_]+\s*=[^=])' \
+    "the lifecycle smoke must not change the user's Farming or Pickup settings, or touch their module toggles"
+}
+
 require_enable_acquires_in_order "$door_module" scope patch subscribe reconcile
 require_disable_lowers_the_flag_first "$door_module"
 require_attach_paths_recheck_the_effective_state "$door_module" \
@@ -4488,6 +5056,26 @@ require_feeding_component_ownership
 require_feeding_gate_free_bodies_are_fixed
 require_feeding_config_contract
 require_feeding_smoke_descriptor
+
+# Automatic Farming: one patch class, three named hook subscriptions and no component. A farming
+# pass is accepted only at its two player-hook gates; the hover postfix and the crop claim
+# Automatic Pickup asks are the other two gates.
+require_enable_acquires_in_order "$farming_module" patch subscribe
+require_disable_lowers_the_flag_first "$farming_module" --no-scope
+require_module_enable_and_disable_shape "$farming_module" farming --patches \
+  OnPlayerAwake OnPlayerUpdate OnPlayerFixedUpdate
+require_module_has_no_component_machinery "$farming_module"
+require_hook_handlers_open_with_the_gate "$farming_module" \
+  "private static void OnPlayerUpdate\\(" "private static void OnPlayerFixedUpdate\\("
+require_item_entries_open_with_the_gate farming_entries "$farming_dir" "$farming_module" 2
+require_farming_state_and_registration
+require_farming_never_rechecks_after_a_change
+require_farming_call_sites
+require_farming_session_is_reset
+require_farming_crop_claim_contract
+require_farming_checks_access_before_changes
+require_farming_config_contract
+require_farming_smoke_descriptor
 
 # Automatic Storage: one subscription, no patch, no component, and one entry point that moves
 # items. StoragePlanner and Config run inside a storage pass, between its gate and its last

@@ -1389,8 +1389,8 @@ Interacting with pickable objects using this key makes it possible to pick up th
 - Default value:
 
 ## [ #11 Automatic Farming ] / [automatic_farming]
-### Disable Module (Reboot Required) / [module]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+### Disable Module / [module]
+You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled

@@ -27,9 +27,9 @@ or accepted value range.
 Automatics is split into feature modules. Each module has a `Disable Module`
 option, and most modules also have a separate on/off option for the feature
 behavior. Automatic door, automatic pickup, automatic processing, automatic
-mapping, automatic mining, automatic feeding and automatic storage apply that
-option while the game is running; every other module still needs a restart, and
-says so in the option name.
+mapping, automatic mining, automatic feeding, automatic farming and automatic
+storage apply that option while the game is running; every other module still
+needs a restart, and says so in the option name.
 
 ## Common configuration concepts
 
@@ -65,20 +65,23 @@ off.
 | Automatic mapping | `Disable Module` | While the game is running. No restart. |
 | Automatic mining | `Disable Module` | While the game is running. No restart. |
 | Automatic feeding | `Disable Module` | While the game is running. No restart. |
+| Automatic farming | `Disable Module` | While the game is running. No restart. |
 | Automatic storage | `Disable Module` | While the game is running. No restart. |
-| Automatic farming and repair | `Disable Module (Reboot Required)` | After the game is restarted. |
+| Automatic repair | `Disable Module (Reboot Required)` | After the game is restarted. |
 
 When you turn automatic door, automatic pickup, automatic processing, automatic
-mapping, automatic mining, automatic feeding or automatic storage off, it stops
-starting new automatic actions, such as door movement, pickups, item transfers,
-pin updates, mining passes, feeding and storage passes, right away, and lets an
-action that is already in progress finish. For automatic
+mapping, automatic mining, automatic feeding, automatic farming or automatic
+storage off, it stops starting new automatic actions, such as door movement,
+pickups, item transfers, pin updates, mining passes, feeding, harvests,
+replanting and sowing, and storage passes, right away, and lets an action that is
+already in progress finish. For automatic
 storage, `Store Items` does nothing from then on, and a storage pass that has
 already started still moves every item it selected. For automatic mining, a
 pass that has already started completes all of its selected hits, including
 damage, pickaxe durability, noise and skill updates. For automatic feeding, an
 animal that has already taken a feed item out of a container or your inventory
-still eats it. The switch itself completes
+still eats it. For automatic farming, a pass that has already started replants
+every crop it harvested. The switch itself completes
 over the next few frames, when the module's patches and hooks are removed, along
 with the components automatic door adds to doors, automatic pickup adds to
 players and items, automatic mapping adds to fish, birds, ships, rocks and flora,
@@ -614,9 +617,14 @@ harvesting and replanting still use the full `Farming Range`.
 
 While Automatic farming is active, Automatic pickup stops periodically collecting
 the crops in `Allow Farming Crop` so farming can harvest and replant them.
-Disabling the Automatic Farming module or turning off `Automatic Farming`
-restores normal periodic pickup of those crops. The targeted `Pickup All Nearby`
-shortcut still picks up those crops regardless of this.
+Turning the Automatic Farming module off, or turning off `Automatic Farming`,
+returns those crops to periodic pickup right away; crops Automatic pickup
+collects while farming is off are not replanted. Container roles are kept while
+the module is off and apply again when you turn it back on. The targeted
+`Pickup All Nearby` shortcut still picks up those crops regardless of this.
+
+Its `Disable Module` option takes effect without a restart. See
+[Module disable options](#module-disable-options).
 
 ## Console commands
 

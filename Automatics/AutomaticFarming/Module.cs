@@ -1,57 +1,153 @@
-﻿using System.Collections.Generic;
-using HarmonyLib;
+﻿using System;
+using System.Collections.Generic;
+using BepInEx.Configuration;
 using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticFarming
 {
-    internal static class Module
+    /// <summary>
+    ///     Automatic Farming on the module lifecycle. A scope owns its container hover patch and its
+    ///     three player hook subscriptions, so turning the module off removes them instead of
+    ///     leaving them installed. It attaches no component to anything in the scene, so an
+    ///     activation has nothing to reconcile: crops, cultivated ground and designated containers
+    ///     are looked up again on the next farming pass (R4.2).
+    /// </summary>
+    internal sealed class Module : IAutomaticsModule
     {
-        // True only while this module is effectively running, i.e. Initialize() reached
-        // its last statement, so the hooks and patches below are wired up and the rest of
-        // Config is bound. A `module = Enabled` setting is not enough on its own: the
-        // initializer can early-return on a disabled module, or throw and be swallowed by
-        // Automatics.InitializeModules, leaving the setting Enabled with nothing running.
-        // Automatic Pickup reads this through AutomaticFarming.ClaimsCrop to avoid leaving
-        // a crop for a module that will never harvest it (R7.5).
-        //
-        // When this module is migrated to the module lifecycle framework the meaning stays
-        // exactly the same and only the mutability changes: Enable(scope) sets it true as
-        // its last statement and Disable(scope) clears it as its first, instead of the
-        // one-way assignment at the end of Initialize().
+        public static readonly Module Instance = new Module();
+
+        /// <summary>
+        ///     The applied state: true only between the last statement of <see cref="Enable" />
+        ///     and the first statement of <see cref="Disable" />.
+        /// </summary>
         internal static bool Active;
 
+        /// <summary>
+        ///     The stop request (R1.5a). The registry raises it in the frame the user asked for the
+        ///     change, several frames before the pump dismantles anything, and lowers it again if
+        ///     the request is withdrawn before the pump runs.
+        /// </summary>
+        internal static bool StopRequested;
+
+        /// <summary>
+        ///     The one predicate this module's entry points read, never the config value (R1.5).
+        ///     Four methods check it, each as its first statement: the two player hook handlers,
+        ///     which can still be called after their subscriptions are gone, the container hover
+        ///     postfix, and <see cref="AutomaticFarming.ClaimsCrop(Player, Pickable)" />, which
+        ///     Automatic Pickup asks before it collects a crop. A farming pass is accepted only at
+        ///     the two hook gates and then finishes (R8.11): it harvests a crop into the inventory
+        ///     or a container, spends seeds and places the sapling, and each of those calls into
+        ///     code that is not ours, where a synchronous callback or another mod's patch can raise
+        ///     the stop request before the pass returns. A second check there would leave a
+        ///     harvested spot unplanted, so there is none, and nothing a pass reaches calls an
+        ///     entry point. The next call sees the stop and does nothing. Pickup's claim reads the
+        ///     same predicate, so it lets go of the crops in the frame farming stops taking them
+        ///     (R7.5).
+        /// </summary>
+        internal static bool Running => Active && !StopRequested;
+
         private static readonly Dictionary<long, float> FarmingTimers;
+
+        /// <summary>The number of interval timers held, for the lifecycle smoke check.</summary>
+        internal static int FarmingTimerCount => FarmingTimers.Count;
 
         static Module()
         {
             FarmingTimers = new Dictionary<long, float>();
         }
 
-        private static void Cleanup()
+        private Module()
         {
-            FarmingTimers.Clear();
+        }
+
+        public string Name => "automatic-farming";
+        public string ConfigSection => "automatic_farming";
+        public bool SupportsRuntimeToggle => true;
+        public ConfigEntry<AutomaticsModule> ModuleToggle => Config.ModuleEntry;
+
+        public void SetStopRequested(bool value)
+        {
+            StopRequested = value;
+        }
+
+        public void BindConfig()
+        {
+            Config.Initialize();
+        }
+
+        /// <summary>
+        ///     Acquisition order is the caller's half of the framework contract (R4.3): the patch,
+        ///     then the subscriptions. The scope registers its single patch removal at the first
+        ///     <c>PatchAll</c> and tears down in reverse, so acquiring in this order is what puts the
+        ///     patch removal last (R1.6). There is no third step, because this module creates no
+        ///     components.
+        /// </summary>
+        public void Enable(ModuleScope scope)
+        {
+            // 1. Patches.
+            scope.PatchAll(typeof(Patches));
+
+            // 2. Subscriptions. Named methods, never lambdas: the delegate that is removed has to be
+            //    the delegate that was added.
+            scope.Subscribe<Action<Player, ZNetView>>(
+                h => Hooks.OnPlayerAwake += h,
+                h => Hooks.OnPlayerAwake -= h,
+                OnPlayerAwake);
+            scope.Subscribe<Action<Player, bool>>(
+                h => Hooks.OnPlayerUpdate += h,
+                h => Hooks.OnPlayerUpdate -= h,
+                OnPlayerUpdate);
+            scope.Subscribe<Action<Player, float>>(
+                h => Hooks.OnPlayerFixedUpdate += h,
+                h => Hooks.OnPlayerFixedUpdate -= h,
+                OnPlayerFixedUpdate);
+
+            Active = true;
+        }
+
+        /// <summary>
+        ///     Lowers the applied state first, so every entry point is shut before anything is taken
+        ///     apart, then drops the module's session state (R6.1): the interval timers and the
+        ///     sapling lookup. No item is held between calls, so there is nothing to put back, and
+        ///     the container roles stay on their containers for the next activation. What the scope
+        ///     owns - the patch and the subscriptions - is removed by
+        ///     <see cref="ModuleScope.Dispose" />, not here.
+        /// </summary>
+        public void Disable(ModuleScope scope)
+        {
+            Active = false;
+            ResetSession();
+            CropPlanting.ClearCaches();
         }
 
         [AutomaticsInitializer(9)]
         private static void Initialize()
         {
-            Config.Initialize();
-            if (Config.ModuleDisabled) return;
+            ModuleRegistry.Register(Instance);
+        }
 
-            Hooks.OnPlayerAwake += (player, zNetView) => { Cleanup(); };
-            Hooks.OnPlayerUpdate += OnPlayerUpdate;
-            Hooks.OnPlayerFixedUpdate += OnPlayerFixedUpdate;
-            Harmony.CreateAndPatchAll(typeof(Patches),
-                Automatics.GetHarmonyId("automatic-farming"));
+        /// <summary>
+        ///     A new player means a new world session, which is where this module has always dropped
+        ///     its timers (R6.2). Deliberately not gated on <see cref="Running" />: it only empties
+        ///     bookkeeping and has no effect on the game, so reaching it after a stop is harmless.
+        /// </summary>
+        private static void OnPlayerAwake(Player player, ZNetView zNetView)
+        {
+            ResetSession();
+        }
 
-            // Last statement on purpose: everything the module needs is wired up above, so
-            // nothing observes Active as true while initialization is still in progress.
-            Active = true;
+        private static void ResetSession()
+        {
+            FarmingTimers.Clear();
         }
 
         private static void OnPlayerUpdate(Player player, bool takeInput)
         {
+            // Reachable after the module stopped: a removal that failed, or an invocation list a
+            // caller fetched before the removal, can still call a handler that is no longer
+            // subscribed.
+            if (!Running) return;
             if (!Config.EnableAutomaticFarming) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
@@ -99,6 +195,8 @@ namespace Automatics.AutomaticFarming
 
         private static void OnPlayerFixedUpdate(Player player, float delta)
         {
+            // Reachable after the module stopped, for the same reason as OnPlayerUpdate.
+            if (!Running) return;
             if (!Config.EnableAutomaticFarming) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (Config.FarmingInterval < 0.1f) return;

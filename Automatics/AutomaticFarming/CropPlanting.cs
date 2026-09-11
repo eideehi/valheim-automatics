@@ -51,6 +51,21 @@ namespace Automatics.AutomaticFarming
         private static int RoofMask => RoofMaskLazy.Value;
         private static int GroundMask => GroundMaskLazy.Value;
 
+        /// <summary>True once the sapling lookup has been built, for the lifecycle smoke check.</summary>
+        internal static bool SaplingMapBuilt => _saplingByCrop != null;
+
+        /// <summary>
+        /// Drops the session caches when the module is turned off (R6.1): the sapling lookup,
+        /// which the first farming pass after the next activation builds again from the prefabs
+        /// loaded then, and the colliders the last grow-space check left in the shared buffer,
+        /// so no scene object stays reachable from here while the module is off.
+        /// </summary>
+        internal static void ClearCaches()
+        {
+            _saplingByCrop = null;
+            Array.Clear(ColliderBuffer, 0, ColliderBuffer.Length);
+        }
+
         /// <summary>
         /// Looks up the sapling whose grown crop matches <paramref name="cropIdentifier"/>
         /// (a <see cref="ValheimObject.Flora"/> identifier).

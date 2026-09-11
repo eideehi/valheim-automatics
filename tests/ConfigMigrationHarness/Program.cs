@@ -64,6 +64,9 @@ namespace Automatics
             Run("user values inside automatic_feeding survive migration", FeedingInnerValuesSurviveMigration);
             Run("1.2.0 automatic_feeding renames keep a disabled module disabled", OldFeedingKeysMigrateUnderADisabledModule);
             Run("a current disabled automatic_feeding config is left byte for byte", CurrentDisabledFeedingConfigIsLeftUntouched);
+            Run("a 1.7.0 config without the defaults marker keeps automatic_farming Enabled and gains the marker", EnabledFarmingModuleSurvivesMigration);
+            Run("a 1.7.0 config without the defaults marker keeps automatic_farming Disabled, once", DisabledFarmingModuleSurvivesMigration);
+            Run("user values inside a disabled automatic_farming survive migration", FarmingInnerValuesSurviveMigration);
             Run("a 1.7.0 config without the defaults marker keeps automatic_storage Disabled and gains the marker", DisabledStorageModuleStaysDisabled);
             Run("user values inside a disabled automatic_storage survive migration", StorageInnerValuesSurviveMigration);
             Run("a config from before module entries existed gets every module Enabled", ConfigFromBeforeModuleEntriesGetsEveryModuleEnabled);
@@ -695,6 +698,68 @@ namespace Automatics
             var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
             if (migrated != expected)
                 throw new Exception($"A current config must not be rewritten. Expected:\n{expected}\nGot:\n{migrated}");
+        }
+
+        // Automatic Farming binds its inner settings unconditionally from this change on, so a
+        // user who had turned it off gets the whole section written back on the next start. What
+        // the migrator meets is a 1.7.0 file without the defaults marker: it adds the marker and
+        // the module entries the file lacks, and has to carry the farming module value and every
+        // inner value over as they are, because whatever survives here is what the bind picks up
+        // and what applies once the module is turned on.
+        private static void EnabledFarmingModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_farming]",
+                "module = Enabled");
+
+            AssertEqual(1, CountOccurrences(migrated, "[automatic_farming]"), "The farming section should appear once.");
+            AssertModule(migrated, "automatic_farming", "Enabled");
+            AssertMarker(migrated);
+        }
+
+        private static void DisabledFarmingModuleSurvivesMigration()
+        {
+            // The setting is the user's, and no part of this mod is allowed to write it back
+            // (R1.3b). A migration that turned Disabled into Enabled would re-enable a module the
+            // user switched off, and one that added a second entry would leave BepInEx to pick one.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_farming]",
+                "module = Disabled");
+
+            AssertEqual(1, CountOccurrences(migrated, "[automatic_farming]"), "The farming section should appear once.");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The farming module value should be carried over once.");
+            AssertModule(migrated, "automatic_farming", "Disabled");
+            AssertMarker(migrated);
+        }
+
+        private static void FarmingInnerValuesSurviveMigration()
+        {
+            // Entries a disabled module now binds, one of each shape: a range, an enum, an object
+            // list, a float and a key. Their stored values have to survive, or the bind that
+            // follows re-creates them at their defaults and silently discards what the user set.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_farming]",
+                "module = Disabled",
+                "farming_range = 32",
+                "seed_source = Containers",
+                "allow_farming_crop = Carrot, Turnip",
+                "sowing_spacing_factor = 2",
+                "designate_container_key = G");
+
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The farming module value should be carried over once.");
+            AssertModule(migrated, "automatic_farming", "Disabled");
+            AssertMarker(migrated);
+            AssertContains(migrated, "farming_range = 32");
+            AssertContains(migrated, "seed_source = Containers");
+            AssertContains(migrated, "allow_farming_crop = Carrot, Turnip");
+            AssertContains(migrated, "sowing_spacing_factor = 2");
+            AssertContains(migrated, "designate_container_key = G");
         }
 
         // Automatic Storage binds its inner settings unconditionally from this change on, so a

@@ -32,10 +32,12 @@ namespace Automatics.AutomaticFarming
         /// (module effectively running, feature on, and the crop is allowlisted).
         /// Automatic Pickup queries this to skip crops that farming will harvest and
         /// replant, so the answer has to track whether farming is actually running rather
-        /// than what the module setting says: a crop claimed for a module that never
-        /// initialized would be skipped by pickup and harvested by nobody (R7.5). The
-        /// <see cref="Module.Active"/> short-circuit also keeps this cross-module call
-        /// safe before this module's configuration is bound.
+        /// than what the module setting says: a crop claimed for a module that is not
+        /// running would be skipped by pickup and harvested by nobody (R7.5). The answer
+        /// starts from <see cref="Module.Running"/>, the predicate the farming hooks open
+        /// with, so from the moment a stop is requested pickup collects these crops again,
+        /// in the same frame farming stops harvesting them. A crop farming harvested just
+        /// before is already marked picked by then, so neither module takes it twice.
         /// </summary>
         public static bool ClaimsCrop(Pickable pickable)
         {
@@ -44,8 +46,8 @@ namespace Automatics.AutomaticFarming
 
         public static bool ClaimsCrop(Player player, Pickable pickable)
         {
+            if (!Module.Running) return false;
             if (!pickable) return false;
-            if (!Module.Active) return false;
             if (!Config.EnableAutomaticFarming) return false;
 
             if (!TryGetCropIdentifier(pickable, out var identifier)) return false;

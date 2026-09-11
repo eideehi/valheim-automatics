@@ -12,6 +12,13 @@ using Object = UnityEngine.Object;
 using DoorComponent = Automatics.AutomaticDoor.AutomaticDoor;
 using DoorModule = Automatics.AutomaticDoor.Module;
 using DoorPatches = Automatics.AutomaticDoor.Patches;
+using FarmingClaims = Automatics.AutomaticFarming.AutomaticFarming;
+using FarmingConfig = Automatics.AutomaticFarming.Config;
+using FarmingModule = Automatics.AutomaticFarming.Module;
+using FarmingPatches = Automatics.AutomaticFarming.Patches;
+using FarmingPlanting = Automatics.AutomaticFarming.CropPlanting;
+using FarmingRole = Automatics.AutomaticFarming.ContainerRole;
+using FarmingRoles = Automatics.AutomaticFarming.ContainerRoles;
 using FeedingComponent = Automatics.AutomaticFeeding.AutomaticFeeding;
 using FeedingModule = Automatics.AutomaticFeeding.Module;
 using FeedingPatches = Automatics.AutomaticFeeding.Patches;
@@ -19,6 +26,8 @@ using MiningComponent = Automatics.AutomaticMining.AutomaticMining;
 using MiningConfig = Automatics.AutomaticMining.Config;
 using MiningModule = Automatics.AutomaticMining.Module;
 using MiningPatches = Automatics.AutomaticMining.Patches;
+using PickupConfig = Automatics.AutomaticPickup.Config;
+using PickupModule = Automatics.AutomaticPickup.Module;
 using StorageModule = Automatics.AutomaticStorage.Module;
 
 namespace Automatics.SmokeTest
@@ -50,6 +59,7 @@ namespace Automatics.SmokeTest
             new Dictionary<string, Func<ModuleDescriptor>>(StringComparer.Ordinal)
             {
                 ["door"] = DescribeDoor,
+                ["farming"] = DescribeFarming,
                 ["feeding"] = DescribeFeeding,
                 ["mining"] = DescribeMining,
                 ["storage"] = DescribeStorage
@@ -192,6 +202,243 @@ namespace Automatics.SmokeTest
             }
 
             return states;
+        }
+
+        // How many frames the check waits, after an enable, for the farming interval hook to take up
+        // its timer again.
+        private const int FarmingTimerFrames = 30;
+
+        // Automatic Farming owns one patch and three hook subscriptions and attaches no component.
+        // Automatic Pickup asks its crop claim before it collects a crop, so the claim has to let go
+        // at the disable request and come back after the enable. The check harvests, plants and
+        // designates nothing and changes no Farming or Pickup setting; its precondition keeps it
+        // from running where Automatic Pickup could collect, while farming is off, a crop farming
+        // would have replanted.
+        private static ModuleDescriptor DescribeFarming()
+        {
+            var claimedBeforeDisable = -1;
+            var timersBeforeDisable = -1;
+            var saplingMapBeforeDisable = false;
+            return new ModuleDescriptor
+            {
+                Argument = "farming",
+                Module = FarmingModule.Instance,
+                Active = () => FarmingModule.Active,
+                Running = () => FarmingModule.Running,
+                PatchTypes = new[] { typeof(FarmingPatches) },
+                Probes = new[]
+                {
+                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
+                    Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
+                    Probe.Counter("farming.OnPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(FarmingModule), "OnPlayerAwake"),
+                        OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("farming.OnPlayerUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(FarmingModule), "OnPlayerUpdate"),
+                        OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("farming.OnPlayerFixedUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(FarmingModule),
+                            "OnPlayerFixedUpdate"),
+                        OffExpectation.Zero, 0, () => 1),
+                    // Container roles are the user's and live on the containers: a disable neither
+                    // clears nor rewrites them, so the count stays where it was throughout.
+                    Probe.Counter("farming.designated_containers", CountDesignatedContainers,
+                        OffExpectation.BelowBaseline, 0)
+                },
+                Precondition = FarmingPrecondition,
+                Extras = new[]
+                {
+                    // Just before the disable is written. The sapling lookup is built here when no
+                    // farming pass has built it yet - a read of the loaded prefabs that changes
+                    // nothing in the world - so that its release can be seen in every cycle.
+                    new ExtraCheck("session_state_captured", Phase.BeforeRequest,
+                        (record, cycle) =>
+                        {
+                            FarmingPlanting.TryResolveSapling(string.Empty, out _);
+                            claimedBeforeDisable = CountClaimedCrops();
+                            timersBeforeDisable = FarmingModule.FarmingTimerCount;
+                            saplingMapBeforeDisable = FarmingPlanting.SaplingMapBuilt;
+                            var name = record.Check("session_state_captured");
+                            record.Cycle(name, cycle, saplingMapBeforeDisable,
+                                $"recorded {claimedBeforeDisable} claimed crop(s), {timersBeforeDisable} farming timer(s) and a built sapling lookup before disabling",
+                                "the sapling lookup could not be built before disabling");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    // In the frame of the request, not at the teardown frames later: from then on
+                    // farming harvests nothing, and a crop it still claimed would be left to nobody.
+                    new ExtraCheck("claims_released_at_request", Phase.AtRequest,
+                        (record, cycle) =>
+                        {
+                            RecordClaimsReleased(record, cycle, "claims_released_at_request",
+                                claimedBeforeDisable, "right after the disable request");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("claims_released_while_off", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            RecordClaimsReleased(record, cycle, "claims_released_while_off",
+                                claimedBeforeDisable, "while the module is off");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("timers_cleared", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            var count = FarmingModule.FarmingTimerCount;
+                            var name = record.Check("timers_cleared");
+                            if (timersBeforeDisable <= 0)
+                                record.CycleSkip(name, cycle,
+                                    "the farming timer table was empty before disabling, so its cleanup could not be observed");
+                            else
+                                record.Cycle(name, cycle, count == 0,
+                                    $"the {timersBeforeDisable} farming timer(s) present before disabling were cleared",
+                                    $"the farming timer table had {timersBeforeDisable} entry or entries before disabling and holds {count} while off");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("sapling_map_cleared", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            var name = record.Check("sapling_map_cleared");
+                            if (!saplingMapBeforeDisable)
+                                record.CycleSkip(name, cycle,
+                                    "the sapling lookup was not built before disabling, so its release could not be observed");
+                            else
+                                record.Cycle(name, cycle, !FarmingPlanting.SaplingMapBuilt,
+                                    "the sapling lookup built before disabling was dropped",
+                                    "the sapling lookup is still built while the module is off (R6.1)");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    // The positive control for the two release checks: the claim comes back once
+                    // the module is on again. It needs a claimed crop loaded out of Pickup's reach.
+                    new ExtraCheck("claims_restored", Phase.AfterOn,
+                        (record, cycle) =>
+                        {
+                            var name = record.Check("claims_restored");
+                            if (claimedBeforeDisable <= 0)
+                            {
+                                record.CycleSkip(name, cycle,
+                                    "no crop Automatic Farming claims was loaded before disabling, so the positive control could not be observed");
+                            }
+                            else
+                            {
+                                var now = CountClaimedCrops();
+                                record.Cycle(name, cycle, now > 0,
+                                    $"{now} crop(s) are claimed again once the module is back on ({claimedBeforeDisable} before disabling)",
+                                    $"no crop is claimed once the module is back on, where {claimedBeforeDisable} were before disabling (R7.5)");
+                            }
+
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("interval_timer_resumed", Phase.AfterOn, IntervalTimerResumed)
+                }
+            };
+        }
+
+        private static void RecordClaimsReleased(CycleRecorder record, int cycle, string suffix, int before,
+            string when)
+        {
+            var name = record.Check(suffix);
+            if (before <= 0)
+            {
+                record.CycleSkip(name, cycle,
+                    "no crop Automatic Farming claims was loaded before disabling, so the release could not be observed");
+                return;
+            }
+
+            var now = CountClaimedCrops();
+            record.Cycle(name, cycle, now == 0,
+                $"{when} none of the {before} crop(s) claimed before disabling is claimed",
+                $"{when} {now} crop(s) are still claimed, so Automatic Pickup leaves them to a module that no longer harvests (R1.5a / R7.5)");
+        }
+
+        // The interval hook takes up its timer again on its first physics step after the enable.
+        // Waiting for that here also leaves the next cycle's disable a timer to clear: the enable
+        // is seen in the frame it lands in, before any physics step has run the hook.
+        private static IEnumerator IntervalTimerResumed(CycleRecorder record, int cycle)
+        {
+            var name = record.Check("interval_timer_resumed");
+            if (!FarmsOnAnInterval())
+            {
+                record.CycleSkip(name, cycle,
+                    "farming runs on a key or is turned off in the settings, so it keeps no interval timer");
+                yield break;
+            }
+
+            for (var frame = 0; frame < FarmingTimerFrames && FarmingModule.FarmingTimerCount == 0; frame++)
+                yield return null;
+
+            var count = FarmingModule.FarmingTimerCount;
+            record.Cycle(name, cycle, count > 0,
+                $"the interval hook took up its timer again ({count} held)",
+                $"the interval hook took up no timer within {FarmingTimerFrames} frames of the enable");
+        }
+
+        private static string FarmingPrecondition()
+        {
+            var player = Player.m_localPlayer;
+            if (!player) return "there is no local player";
+
+            if (!PickupModule.Running || !HasCropOrPlantInPickupReach(player)) return null;
+
+            return "Automatic Pickup is running and a crop Automatic Farming harvests, or a growing plant, is within its range + 1 m; stand farther from your fields and run the check again";
+        }
+
+        // Every crop farming would claim, whether or not farming runs right now - the check asks
+        // again before each enable, while it is off - and every growing plant, which can ripen into
+        // such a crop while the check runs.
+        private static bool HasCropOrPlantInPickupReach(Player player)
+        {
+            var reach = PickupConfig.AutomaticPickupRange + 1f;
+            var origin = player.transform.position;
+            foreach (var pickable in PickableCache.GetAllInstance())
+            {
+                if (!pickable || !IsFarmingCrop(pickable)) continue;
+                if (Vector3.Distance(origin, pickable.transform.position) <= reach) return true;
+            }
+
+            foreach (var plant in Object.FindObjectsByType<Plant>(FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                if (!plant) continue;
+                if (Vector3.Distance(origin, plant.transform.position) <= reach) return true;
+            }
+
+            return false;
+        }
+
+        // The crop rule of AutomaticFarming.TryGetCropIdentifier, which the claim starts from.
+        private static bool IsFarmingCrop(Pickable pickable)
+        {
+            return ValheimObject.Flora.GetIdentify(Objects.GetName(pickable), out var identifier) &&
+                   FarmingConfig.AllowFarmingCrops.Contains(identifier);
+        }
+
+        // The guards of Module.OnPlayerFixedUpdate that decide whether it keeps a timer at all.
+        private static bool FarmsOnAnInterval()
+        {
+            return FarmingConfig.EnableAutomaticFarming && FarmingConfig.FarmingInterval >= 0.1f &&
+                   FarmingConfig.FarmingKey.MainKey == KeyCode.None;
+        }
+
+        private static int CountClaimedCrops()
+        {
+            var player = Player.m_localPlayer;
+            var claimed = 0;
+            foreach (var pickable in PickableCache.GetAllInstance())
+                if (pickable && FarmingClaims.ClaimsCrop(player, pickable))
+                    claimed++;
+
+            return claimed;
+        }
+
+        private static int CountDesignatedContainers()
+        {
+            var designated = 0;
+            foreach (var container in ContainerCache.GetAllInstance())
+                if (container && FarmingRoles.GetRole(container) != FarmingRole.None)
+                    designated++;
+
+            return designated;
         }
 
         // Automatic Feeding owns one patch and one component on every Tameable with a ZDO, and no

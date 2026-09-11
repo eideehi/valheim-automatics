@@ -20,11 +20,13 @@ namespace Automatics.AutomaticFarming
         private static ConfigEntry<KeyboardShortcut> _farmingKey;
         private static ConfigEntry<KeyboardShortcut> _designateContainerKey;
 
-        // Null-safe so the dynamic pickup-exclusion guard can query the module
-        // state even before this module's initializer runs or when it is disabled
-        // (the remaining entries are only bound while the module is enabled).
-        public static bool ModuleDisabled =>
-            _module == null || _module.Value == AutomaticsModule.Disabled;
+        /// <summary>
+        ///     The toggle the module registry follows. It is exposed so the registry can read the
+        ///     user's choice and subscribe to its changes; nothing writes it back (R1.3b), and no
+        ///     hot path reads it either - those read the applied state on <see cref="Module" />
+        ///     instead (R1.5).
+        /// </summary>
+        public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
 
         public static bool EnableAutomaticFarming => _enableAutomaticFarming.Value;
         public static float FarmingInterval => _farmingInterval.Value;
@@ -44,11 +46,9 @@ namespace Automatics.AutomaticFarming
             config.ChangeSection(Section);
             _module = config.Bind("module", AutomaticsModule.Disabled, initializer: x =>
             {
-                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
-                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_runtime_name");
+                x.Description = Automatics.L10N.Translate("@config_common_disable_module_runtime_description");
             });
-
-            if (_module.Value == AutomaticsModule.Disabled) return;
 
             _enableAutomaticFarming = config.Bind("enable_automatic_farming", true);
             _farmingInterval = config.Bind("farming_interval", 1.5f, (0.1f, 4f));
