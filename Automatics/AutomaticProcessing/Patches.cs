@@ -23,43 +23,43 @@ namespace Automatics.AutomaticProcessing
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(CookingStation), "UpdateFuel")]
         public static IEnumerable<CodeInstruction> CookingStation_UpdateFuel_Transpiler(
-            IEnumerable<CodeInstruction> instructions)
+            IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
             /*
+             *   float fuel = this.GetFuel();
+             *   ...
              *   if (fuel < 0.0)
              *     fuel = 0.0f;
              * + fuel = CookingStationProcess.Refuel(this, this.m_nview, fuel);
              *   this.SetFuel(fuel);
              */
-            // Local 1 is `fuel` (float). CookingStation.UpdateFuel declares
-            // `.locals init ([0] float32, [1] float32)` in 1.0.7: slot 0 is the
-            // per-frame fuel burn (dt / m_secPerFuel), slot 1 is the value read
-            // from GetFuel and handed to SetFuel. ADR-0001 asks for the local to
-            // be resolved by type, but System.Single is not unique here, so
-            // GetSingleLocalIndex would throw on a method it can never resolve.
-            // Instead the slot is pinned by the match itself: the anchor below
-            // requires Ldloc_1 to be the value flowing into SetFuel, so a layout
-            // change breaks the match and ThrowIfInvalid reports it at patch
-            // time rather than emitting IL that reads the wrong local.
-            return new CodeMatcher(instructions)
-                .MatchStartForward(
-                    new CodeMatch(OpCodes.Ldarg_0),
-                    new CodeMatch(OpCodes.Ldloc_1),
-                    new CodeMatch(OpCodes.Call,
-                        AccessTools.Method(typeof(CookingStation), "SetFuel")))
-                .ThrowIfInvalid(
-                    "CookingStation.UpdateFuel: the SetFuel call taking local 1 (fuel) was not found")
-                .Advance(1)
-                .Insert(
+            // The fuel local and the injection point are derived, and every check on them is made,
+            // by TranspilerLocals.DeriveOvenFuel. Whatever it cannot resolve ends the patch there,
+            // at patch time.
+            var codes = instructions.ToList();
+            var oven = TranspilerLocals.DeriveOvenFuel(original, ToIl(codes),
+                AccessTools.Method(typeof(CookingStation), "GetFuel"),
+                AccessTools.Method(typeof(CookingStation), "SetFuel"));
+
+            Automatics.Logger.Debug(() => $"CookingStation.UpdateFuel locals: fuel={oven.Fuel}");
+
+            // RefuelAt is right behind the ldarg.0 that starts SetFuel's arguments, because that
+            // ldarg.0 is a branch target: the jump over the `fuel = 0` clamp lands on it, and would
+            // skip anything inserted in front of it. So that ldarg.0 is Refuel's first argument,
+            // the block below pushes the other two, and it ends with a fresh ldarg.0 for SetFuel.
+            TranspilerLocals.InsertBackToFront(codes,
+                new TranspilerLocals.Insertion<CodeInstruction>(oven.RefuelAt, new[]
+                {
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldfld,
                         AccessTools.Field(typeof(CookingStation), "m_nview")),
-                    new CodeInstruction(OpCodes.Ldloc_1),
+                    ToCode(TranspilerLocals.LoadLocal(oven.Fuel)),
                     new CodeInstruction(OpCodes.Call,
                         AccessTools.Method(typeof(CookingStationProcess), "Refuel")),
-                    new CodeInstruction(OpCodes.Stloc_1),
-                    new CodeInstruction(OpCodes.Ldarg_0))
-                .InstructionEnumeration();
+                    ToCode(TranspilerLocals.StoreLocal(oven.Fuel)),
+                    new CodeInstruction(OpCodes.Ldarg_0)
+                }));
+            return codes;
         }
 
         /// <summary>
@@ -90,6 +90,21 @@ namespace Automatics.AutomaticProcessing
                     $"found {indexes.Count}");
 
             return indexes[0];
+        }
+
+        /// <summary>
+        ///     The transpiler's instructions as opcode and operand pairs, for
+        ///     <see cref="TranspilerLocals" /> to match against. Positions are shared with the list
+        ///     the transpiler edits.
+        /// </summary>
+        private static List<TranspilerLocals.IlInstruction> ToIl(IEnumerable<CodeInstruction> codes)
+        {
+            return codes.Select(x => new TranspilerLocals.IlInstruction(x.opcode, x.operand)).ToList();
+        }
+
+        private static CodeInstruction ToCode(TranspilerLocals.IlInstruction instruction)
+        {
+            return new CodeInstruction(instruction.OpCode, instruction.Operand);
         }
 
         [HarmonyTranspiler]
@@ -204,61 +219,46 @@ namespace Automatics.AutomaticProcessing
              * +   fuel = SmelterProcess.QuickRefuel(this, this.m_nview, accumulator, fuel);
              *     string queuedOre = this.GetQueuedOre();
              * +   queuedOre = SmelterProcess.QuickCraft(this, this.m_nview, accumulator, queuedOre);
+             *     ...
+             *   }
              */
-            // Smelter.UpdateSmelter declares in 1.0.7:
-            //   [0] float64  deltaTime
-            //   [1] float32  accumulator
-            //   [2] float32  windmill power output
-            //   [3] float32  fuel
-            //   [4] string   queuedOre
-            //   [5..7] float32  scratch (num2, num3, bakeTimer)
-            // Only `queuedOre` has a type that is unique among those locals, so
-            // it is the only one ADR-0001's by-type resolution can handle here.
-            // The two float locals stay pinned by their anchors instead:
-            // `fuel` is required to be the destination of the store that follows
-            // GetFuel, and a layout change therefore breaks the match and is
-            // reported by ThrowIfInvalid at patch time. `accumulator` (local 1)
-            // has no such anchor and remains a hardcoded slot; see F2/ADR-0001.
-            var queuedOreIndex = GetSingleLocalIndex(original, typeof(string));
+            // The three locals and both injection points are derived, and every check on them is
+            // made, by TranspilerLocals.DeriveSmelterLoop. Whatever it cannot resolve ends the
+            // patch there, at patch time.
+            var codes = instructions.ToList();
+            var loop = TranspilerLocals.DeriveSmelterLoop(original, ToIl(codes),
+                AccessTools.Method(typeof(Smelter), "GetFuel"),
+                AccessTools.Method(typeof(Smelter), "GetQueuedOre"));
 
-            return new CodeMatcher(instructions)
-                .MatchEndForward(
-                    new CodeMatch(OpCodes.Ldarg_0),
-                    new CodeMatch(OpCodes.Call,
-                        AccessTools.Method(typeof(Smelter), "GetFuel")),
-                    new CodeMatch(OpCodes.Stloc_3))
-                .ThrowIfInvalid(
-                    "Smelter.UpdateSmelter: the GetFuel call storing into local 3 (fuel) was not found")
-                .Advance(1)
-                .Insert(
+            Automatics.Logger.Debug(() =>
+                $"Smelter.UpdateSmelter locals: accumulator={loop.Accumulator}, fuel={loop.Fuel}, queuedOre={loop.QueuedOre}");
+
+            TranspilerLocals.InsertBackToFront(codes,
+                new TranspilerLocals.Insertion<CodeInstruction>(loop.QuickRefuelAt, new[]
+                {
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldfld,
                         AccessTools.Field(typeof(Smelter), "m_nview")),
-                    new CodeInstruction(OpCodes.Ldloc_1),
-                    new CodeInstruction(OpCodes.Ldloc_3),
+                    ToCode(TranspilerLocals.LoadLocal(loop.Accumulator)),
+                    ToCode(TranspilerLocals.LoadLocal(loop.Fuel)),
                     new CodeInstruction(OpCodes.Call,
                         AccessTools.Method(typeof(SmelterProcess), "QuickRefuel")),
-                    new CodeInstruction(OpCodes.Stloc_3))
-                .MatchEndForward(
-                    new CodeMatch(OpCodes.Ldarg_0),
-                    new CodeMatch(OpCodes.Call,
-                        AccessTools.Method(typeof(Smelter), "GetQueuedOre")),
-                    new CodeMatch(x => x.IsStloc()))
-                .ThrowIfInvalid(
-                    "Smelter.UpdateSmelter: the GetQueuedOre call storing into a local was not found")
-                .Advance(1)
-                .Insert(
+                    ToCode(TranspilerLocals.StoreLocal(loop.Fuel))
+                }),
+                new TranspilerLocals.Insertion<CodeInstruction>(loop.QuickCraftAt, new[]
+                {
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldfld,
                         AccessTools.Field(typeof(Smelter), "m_nview")),
-                    new CodeInstruction(OpCodes.Ldloc_1),
-                    new CodeInstruction(OpCodes.Ldloc_S, queuedOreIndex),
+                    ToCode(TranspilerLocals.LoadLocal(loop.Accumulator)),
+                    ToCode(TranspilerLocals.LoadLocal(loop.QueuedOre)),
                     new CodeInstruction(OpCodes.Call,
                         AccessTools.Method(typeof(SmelterProcess), "QuickCraft")),
-                    new CodeInstruction(OpCodes.Stloc_S, queuedOreIndex))
-                .InstructionEnumeration();
+                    ToCode(TranspilerLocals.StoreLocal(loop.QueuedOre))
+                }));
+            return codes;
         }
 
         [HarmonyPostfix]
