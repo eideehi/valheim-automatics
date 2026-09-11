@@ -23,6 +23,11 @@ namespace Automatics
             Run("F-B: a disabled automatic_pickup module survives migration", DisabledPickupModuleSurvivesMigration);
             Run("F-C: user values inside automatic_pickup survive migration", PickupInnerValuesSurviveMigration);
             Run("F-D: a missing config file migrates without doing anything", MissingConfigFileMigratesToNothing);
+            Run("P-A: an enabled automatic_processing module survives migration", EnabledProcessingModuleSurvivesMigration);
+            Run("P-B: a disabled automatic_processing module survives migration", DisabledProcessingModuleSurvivesMigration);
+            Run("P-C: user values inside automatic_processing survive migration", ProcessingInnerValuesSurviveMigration);
+            Run("P-D: 1.2.0 automatic_processing renames keep a disabled module disabled", OldProcessingKeysMigrateUnderADisabledModule);
+            Run("P-E: a current config with automatic_processing disabled is left untouched", CurrentDisabledProcessingConfigIsLeftUntouched);
 
             return _failures == 0 ? 0 : 1;
         }
@@ -161,6 +166,114 @@ namespace Automatics
             // than throw or invent one; BepInEx creates the file when the entries are bound.
             if (!MigrateWithoutAConfigFile())
                 throw new Exception("The migrator must not create a config file that was not there.");
+        }
+
+        // Automatic Processing binds its inner settings unconditionally from this change on, so
+        // a user who had turned the module off gets the whole section written back on the next
+        // start. The migrator runs before that bind: it has to keep the module value the user
+        // chose and every inner value already in the file, because whatever survives here is
+        // what the bind picks up and what applies once the module is turned on. As with the
+        // pickup fixtures, the rewriting ones carry an older automatic_mapping section so the
+        // migrator really rewrites the file.
+        private static void EnabledProcessingModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_processing]",
+                "module = Enabled");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "[automatic_processing]");
+            AssertEqual(1, CountOccurrences(migrated, "module = Enabled"), "The processing module value should be carried over once.");
+            AssertDoesNotContain(migrated, "module = Disabled");
+        }
+
+        private static void DisabledProcessingModuleSurvivesMigration()
+        {
+            // The setting is the user's, and no part of this mod is allowed to write it back
+            // (R1.3b). A migration that turned Disabled into Enabled would re-enable a module the
+            // user switched off.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_processing]",
+                "module = Disabled");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "[automatic_processing]");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The processing module value should be carried over once.");
+            AssertDoesNotContain(migrated, "module = Enabled");
+        }
+
+        private static void ProcessingInnerValuesSurviveMigration()
+        {
+            // Entries a disabled module now binds, one of each shape: a per-station range, a
+            // per-station process set, a per-station count and the colour string. Their stored
+            // values have to survive, or the bind that follows re-creates them at their defaults
+            // and silently discards what the user set.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "allow_pinning_monster = Boar",
+                "[automatic_processing]",
+                "module = Disabled",
+                "container_search_range_by_piece_smelter = 16",
+                "allow_processing_by_piece_smelter = Refuel",
+                "piece_smelter_fuel_count_of_suppress_processing = 5",
+                "storage_connection_effect_color = #FF0000");
+
+            AssertContains(migrated, "Morgen");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The processing module value should be carried over once.");
+            AssertContains(migrated, "container_search_range_by_piece_smelter = 16");
+            AssertContains(migrated, "allow_processing_by_piece_smelter = Refuel");
+            AssertContains(migrated, "piece_smelter_fuel_count_of_suppress_processing = 5");
+            AssertContains(migrated, "storage_connection_effect_color = #FF0000");
+        }
+
+        private static void OldProcessingKeysMigrateUnderADisabledModule()
+        {
+            // A 1.2.0 file still carries the old key names and the old "All" value. The renames
+            // and the value replacement apply to the whole section whatever the module value is,
+            // which is what makes the renamed values the ones a later enable uses. What they must
+            // not touch is the module value itself.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.2.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_processing]",
+                "module = Disabled",
+                "smelter_allow_automatic_processing = All",
+                "smelter_fuel_count_that_suppress_automatic_process = 20");
+
+            AssertContains(migrated, "allow_processing_by_smelter = Craft, Refuel, Store");
+            AssertContains(migrated, "smelter_fuel_count_of_suppress_processing = 20");
+            AssertDoesNotContain(migrated, "smelter_allow_automatic_processing");
+            AssertDoesNotContain(migrated, "_that_suppress_automatic_process");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The processing module value should be carried over once.");
+            AssertDoesNotContain(migrated, "module = Enabled");
+        }
+
+        private static void CurrentDisabledProcessingConfigIsLeftUntouched()
+        {
+            // A file already written by 1.7.0 needs no migration, and a disabled module is not a
+            // reason to rewrite it: the file has to come back byte for byte.
+            var lines = new[]
+            {
+                "## Settings file was created by plugin Automatics v1.7.0",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_processing]",
+                "module = Disabled"
+            };
+
+            var migrated = Migrate(lines);
+            var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
+            if (migrated != expected)
+                throw new Exception($"A current config must not be rewritten. Expected:\n{expected}\nGot:\n{migrated}");
         }
 
         private static void RegexMigrationsPreserveCapturedProcessingSuffixes()

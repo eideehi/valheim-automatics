@@ -9,6 +9,7 @@ namespace Automatics.AutomaticProcessing
         [UsedImplicitly]
         public static void Refuel(Fireplace fire, Piece piece, ZNetView zNetView)
         {
+            if (!Module.Running) return;
             if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
             if (fire.m_infiniteFuel) return;

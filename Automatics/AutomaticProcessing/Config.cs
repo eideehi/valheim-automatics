@@ -29,7 +29,14 @@ namespace Automatics.AutomaticProcessing
         private static Dictionary<string, ConfigEntry<bool>> _storeOnlyIfProductExists;
         private static Dictionary<string, ConfigEntry<int>> _numberOfItemsToStopCharge;
 
-        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
+        /// <summary>
+        ///     The toggle the module registry follows. It is exposed so the registry can read the
+        ///     user's choice and subscribe to its changes; nothing writes it back (R1.3b), and no
+        ///     hot path reads it either - those read the applied state on <see cref="Module" />
+        ///     instead (R1.5).
+        /// </summary>
+        public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
+
         public static bool EnableAutomaticProcessing => _enableAutomaticProcessing.Value;
         public static Color StorageConnectionEffectColor
         {
@@ -119,12 +126,19 @@ namespace Automatics.AutomaticProcessing
             config.ChangeSection(Section);
             _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
             {
-                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
-                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+                x.DispName =
+                    Automatics.L10N.Translate("@config_common_disable_module_runtime_name");
+                x.Description =
+                    Automatics.L10N.Translate("@config_common_disable_module_runtime_description");
             });
 
-            if (_module.Value == AutomaticsModule.Disabled) return;
-
+            // Bound unconditionally (R5.1). The module can be turned on while the game runs, so
+            // the settings it needs have to exist whether it starts on or off; the early return
+            // that used to sit here left them null and made a runtime enable impossible. Nothing
+            // below has a side effect beyond the bind itself - this section has no
+            // SettingChanged bridge - so binding a disabled module costs nothing but the lines
+            // it writes to the config file. Those lines also pick up any value the user set
+            // before turning the module off, and that value applies as soon as it is turned on.
             _enableAutomaticProcessing = config.Bind("enable_automatic_processing", true);
             _storageConnectionEffectColor = config.Bind("storage_connection_effect_color",
                 "#4FA9FF", initializer: x =>

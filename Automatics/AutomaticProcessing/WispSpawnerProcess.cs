@@ -8,6 +8,7 @@ namespace Automatics.AutomaticProcessing
         [UsedImplicitly]
         public static bool Store(WispSpawner wispSpawner, ZNetView zNetView)
         {
+            if (!Module.Running) return false;
             if (!Config.EnableAutomaticProcessing) return false;
             if (!Objects.HasValidOwnership(zNetView)) return false;
 

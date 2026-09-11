@@ -104,7 +104,7 @@ the commands cannot prove that something is their own, they leave it.
 
 - Only one smoke command runs at a time. Starting one while another is still
   running is refused with `... was not started: <reason>`.
-- A run hands back what it owes — the Automatic Pickup setting and any test
+- A run hands back what it owes — a module setting it changed and any test
   object it spawned — when it completes or throws (each command's body runs
   inside a guard that does this either way), and when the smoke plugin is
   disabled or destroyed or the game quits (the plugin's `OnDisable` /
@@ -115,11 +115,12 @@ the commands cannot prove that something is their own, they leave it.
   written, say — is kept and tried again at the next of those moments, and a new
   run is refused while it stands.
 - If the game itself stops mid-run (a crash or a killed process), nothing can
-  run. Before the lifecycle command changes the setting it records the change in
+  run. Before the lifecycle command or `automatics_smoke_processing toggle`
+  changes a module setting it records the change in
   `BepInEx/config/AutomaticsSmoke/lifecycle-toggle-restore.txt`, and it does not
   change the setting if that record cannot be written. At the next start the
-  smoke plugin logs one warning naming the setting, its value before the check,
-  the value the check set and when, and then deletes the record. It never
+  smoke plugin logs one warning naming the command, the setting, its value before
+  the check, the value the check set and when, and then deletes the record. It never
   changes the setting from that record: check it and set it yourself.
 - Test objects that live longer than one frame are marked non-persistent, so the
   world save never contains them even if the game is saved mid-run.
@@ -262,6 +263,9 @@ A failing check names what it saw, for example:
 
 ### Processing smoke command
 
+`automatics_smoke_processing` takes one subcommand: `rpc`, `toggle` or `config`
+(the last two are described after `rpc`). Each is one smoke run.
+
 `automatics_smoke_processing rpc` checks that Automatic Processing keeps every
 item when it moves one from a chest into a station. Processing does that by
 removing the item from the chest and invoking the station's intake RPC —
@@ -391,6 +395,101 @@ Safety, on top of the rules above:
   and reported. If a left object cannot be made part of the save, the warning
   says it will vanish when the world is saved or unloaded, so take your items
   out first. While a removal is still outstanding, a new smoke run is refused.
+
+#### `automatics_smoke_processing toggle`
+
+Takes `automatic_processing / module` from `Enabled` through one off → on round
+trip by writing the setting, the way a user does, and makes sure it ends at its
+starting value. It runs only when the module is `Enabled`. It changes no other
+setting.
+
+| Check | Asserts |
+|---|---|
+| `processing_toggle_initial_state_settled` | The registry state matches the setting before anything is changed |
+| `processing_toggle_off_state_disabled` | The registry reports `Disabled` after the disable request |
+| `processing_toggle_off_patches_removed` | No patch is left under Processing's Harmony id (SKIP when runtime patch removal is unavailable) |
+| `processing_toggle_on_state_enabled` | The registry reports `Enabled` after the enable request |
+| `processing_toggle_on_patches_applied` | The patches under Processing's Harmony id are exactly the (target, patch method) pairs `Automatics.AutomaticProcessing.Patches` declares (13 on 11 methods, 4 of them transpilers) |
+| `processing_toggle_on_quickrefuel_acts` | Within 10 s of the enable, the game's own `Smelter.UpdateSmelter` calls the injected `SmelterProcess.QuickRefuel` for a test smelter, and it refuels it from the test chest |
+| `processing_toggle_restored_initial_state` | The setting is back at its starting value and the registry reports the matching state |
+| `processing_toggle_no_errors_logged` | No error or exception was logged while the check ran |
+
+The test smelter and its chest are placed while the module is off, under the
+same rules as `rpc`: where to stand, what is SKIPped, the exact ledger, the
+per-frame check that Processing finds only the test chest, and the removal.
+Placement and isolation are both checked before the module is turned back on,
+so its first update of the smelter can find only the test chest. If any of that
+fails, whatever was placed is removed at once, before the enable. The per-frame
+check runs on every frame the smelter stands, including the frames of the enable
+wait and the last watched frame. When it finds another container, the smelter's
+check is NOT-RUN and the test objects go through the keep rules at once. The
+chest gets `fuel_count_of_suppress_processing` + 3 of the smelter's fuel and
+nothing else. On the test smelter only, `m_maxFuel` is held at 1, so the
+ordinary refuel stays out and only the injected `QuickRefuel` can refuel it. Its
+catch-up time is set to 5 s, since `QuickRefuel` acts only while the smelter's
+update is catching up. A postfix under the smoke plugin's own Harmony id counts
+the calls to `SmelterProcess.QuickRefuel` for the test smelter. It patches the
+mod's method, never a game method, and it is removed at the end. A direct call
+made before the enable, which returns at once, checks that the postfix counts
+at all.
+
+The log check watches everything Unity logs as an error or exception while the
+check runs. To show that it sees the log, it logs one deliberate entry as it
+starts, `InvalidOperationException: AutomaticsObserverProbe-toggle: a deliberate
+test entry …`. That line is expected in `LogOutput.log` and is not an error.
+
+Safety:
+
+- The setting goes through the same session as `automatics_smoke_lifecycle`. The
+  change is recorded before it is made, and only one smoke command runs at a
+  time. The setting is put back only while it still holds the value the check
+  wrote. If you change it while the check runs, the run stops and your value is
+  kept. A restore that could not be made blocks the next run until it is done.
+  BepInEx saves `BepInEx/config/net.eidee.valheim.automatics.cfg` on each
+  change.
+- The check only ever pauses Automatic Processing, never turns it on for you.
+  If `automatic_processing / module` is not `Enabled` when it starts, every check
+  SKIPs and nothing is written. Turning Processing on for the check would let it
+  act on your own stations, and no watch can stop that in the frame one of them
+  loads. Turn it on yourself if you want this check, then run it again.
+- The check's observer patch is removed only once `UnpatchSelf` succeeds. If
+  removing it fails, a warning says so, the removal is kept as an obligation and
+  retried at the next hand-back, and a new smoke run is refused meanwhile.
+
+A passing run looks like this:
+
+```text
+[Automatics Smoke] automatics_smoke_processing toggle started: automatic_processing/module is turned off and on again through its setting, a test smelter is watched while it is on, and the setting is restored
+[Automatics Smoke] automatics_smoke_processing toggle: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] PASS processing_toggle_initial_state_settled
+[Automatics Smoke] PASS processing_toggle_off_state_disabled
+[Automatics Smoke] PASS processing_toggle_off_patches_removed: no patch is left under "net.eidee.valheim.automatics.automatic-processing"
+[Automatics Smoke] PASS processing_toggle_on_state_enabled
+[Automatics Smoke] PASS processing_toggle_on_patches_applied: 13 patches on 11 methods (4 transpilers) under "net.eidee.valheim.automatics.automatic-processing", exactly the pairs Automatics.AutomaticProcessing.Patches declares
+[Automatics Smoke] PASS processing_toggle_on_quickrefuel_acts: 0.8 s after the enable, the game's own Smelter.UpdateSmelter called the injected SmelterProcess.QuickRefuel for the test smelter (1 call(s)) and it moved Coal from the test chest into the smelter's fuel; the ledger held on every frame (chest 3 + smelter fuel 1 = 4 put in)
+[Automatics Smoke] PASS processing_toggle_restored_initial_state: automatic_processing/module is already back at Enabled
+[Automatics Smoke] PASS processing_toggle_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
+[Automatics Smoke] Summary: total=8 passed=8 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+```
+
+The Harmony id, the timing and the item name depend on your build and language.
+
+#### `automatics_smoke_processing config`
+
+Reads the live config file and compares its `[automatic_processing]` section
+with the entries Automatic Processing binds. It is read-only: it writes neither
+the file nor any setting.
+
+| Check | Asserts |
+|---|---|
+| `processing_config_section_matches_bound_entries` | The section's keys are exactly the bound entries, 160 in this build, with none written twice; it reports the section's line count |
+| `processing_config_module_line_matches_setting` | The file's `module` line equals the setting's current value |
+
+```text
+[Automatics Smoke] PASS processing_config_section_matches_bound_entries: [automatic_processing] in net.eidee.valheim.automatics.cfg has 160 keys, the same as the 160 entries Automatic Processing binds (650 lines in the section)
+[Automatics Smoke] PASS processing_config_module_line_matches_setting: automatic_processing/module = Enabled in net.eidee.valheim.automatics.cfg, the same as the setting
+[Automatics Smoke] Summary: total=2 passed=2 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+```
 
 ## Remove
 

@@ -813,8 +813,11 @@ namespace Automatics.SmokeTest
             var player = Player.m_localPlayer;
             if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
 
-            if (global::Automatics.AutomaticProcessing.Config.ModuleDisabled)
-                return CheckResult.Skip("automatic_processing module disabled");
+            // The applied state, not the setting: SmelterProcess.QuickRefuel passes its input
+            // through untouched while the module is not running.
+            if (ModuleRegistry.GetState(global::Automatics.AutomaticProcessing.Module.Instance.Name) !=
+                ModuleState.Enabled || !global::Automatics.AutomaticProcessing.Module.Running)
+                return CheckResult.Skip("automatic_processing module is not running");
             if (!global::Automatics.AutomaticProcessing.Config.EnableAutomaticProcessing)
                 return CheckResult.Skip("enable_automatic_processing is off");
             if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(Smelter, Process.Refuel))

@@ -26,8 +26,9 @@ or accepted value range.
 
 Automatics is split into feature modules. Each module has a `Disable Module`
 option, and most modules also have a separate on/off option for the feature
-behavior. Automatic pickup applies that option while the game is running; every
-other module still needs a restart, and says so in the option name.
+behavior. Automatic pickup and automatic processing apply that option while the
+game is running; every other module still needs a restart, and says so in the
+option name.
 
 ## Common configuration concepts
 
@@ -41,15 +42,19 @@ Automatics to patch or run that feature at all.
 
 | Module | Entry | When the change takes effect |
 | --- | --- | --- |
-| Automatic pickup | `Disable Module` | Immediately. No restart. |
+| Automatic pickup | `Disable Module` | While the game is running. No restart. |
+| Automatic processing | `Disable Module` | While the game is running. No restart. |
 | Every other module | `Disable Module (Reboot Required)` | After the game is restarted. |
 
-Automatic pickup stops producing effects as soon as you change the option, and
-its patches, hooks, and components are removed a frame later. Turning it back on
-also takes effect immediately, including for objects that appeared while it was
-off. If the Automatics log reports that this Harmony build cannot remove patches
-at runtime, turning the module off only stops it and the patches stay applied
-until you restart the game.
+When you turn automatic pickup or automatic processing off, it stops starting
+new automatic actions, such as pickups and item transfers, right away, and lets
+an action that is already in progress finish. The switch itself completes over
+the next few frames, when the module's patches and hooks are removed, along with
+the components automatic pickup adds to players and items. Turning either one
+back on also completes over the next few frames, and it then also works on
+objects that appeared while it was off. If the Automatics log reports that this
+Harmony build cannot remove patches at runtime, turning one of these modules off
+only stops it and the patches stay applied until you restart the game.
 
 Feature-specific enable options, such as `Automatic Door` or `Automatic
 Mapping`, only turn the feature behavior on or off while the module stays
@@ -205,6 +210,16 @@ Automatic processing uses nearby allowed containers to operate supported pieces.
 Depending on the piece, Automatics can supply materials, add fuel, store
 products, or charge consumable items such as Ballista ammo.
 
+Its `Disable Module` option takes effect without a restart. See
+[Module disable options](#module-disable-options).
+
+If you had automatic processing disabled, the first start of this version writes
+all of its settings, about 160 entries, to the configuration file. Earlier
+versions wrote only the `Disable Module` entry while the module was disabled.
+The module stays disabled. Values you changed before you disabled it are kept if
+they are still in the file, and they apply once you turn the module back on in
+game.
+
 Process types:
 
 | Process | Meaning |
@@ -266,6 +281,12 @@ Supported pieces:
 The connection effect appears when you hover a processor that Automatics can
 identify for source processing and that processor has a positive container
 search range.
+
+In multiplayer, each processing piece follows the settings of the player whose
+game currently owns it. Turning automatic processing off in your game stops it
+for the pieces your game owns; pieces owned by another player keep being
+processed with that player's settings. Dedicated servers are not supported, and
+automatic processing is not guaranteed to work on one.
 
 ## Automatic feeding
 
@@ -376,8 +397,8 @@ private chests, guard stones, and containers already in use.
 
 Automatic pickup collects nearby items for the local player.
 
-This is the one module whose `Disable Module` option takes effect without a
-restart. See [Module disable options](#module-disable-options).
+Its `Disable Module` option takes effect without a restart. See
+[Module disable options](#module-disable-options).
 
 Modes:
 

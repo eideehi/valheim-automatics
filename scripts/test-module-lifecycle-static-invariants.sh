@@ -12,9 +12,14 @@
 # distinguishes "no match" from "could not search", and a missing or unreadable file stops
 # the script rather than quietly satisfying every reject_source_pattern in it.
 #
+# The Automatic Processing checks read code with comments and literals blanked over a
+# whitespace-collapsed stream, yet they still only see what is spelled out, so a state read, a
+# change or a gated call made through a delegate, a method group, a stored ZDO or inventory
+# reference, or a helper their patterns do not name still passes them.
+#
 # Two halves: the framework itself, and the modules that have been migrated onto it. The
 # migrated list below is explicit and grows by one line per migration, because "check every
-# module" would fail for the eight that still follow the start-up-only path on purpose
+# module" would fail for the seven that still follow the start-up-only path on purpose
 # (R5.1a).
 #
 set -euo pipefail
@@ -29,7 +34,7 @@ root_patches_file="Automatics/Patches.cs"
 
 # Modules migrated to the runtime lifecycle. One line per migration; everything else keeps
 # the start-up-only path and its early return, and checking it here would be wrong.
-migrated_module_dirs=("Automatics/AutomaticPickup")
+migrated_module_dirs=("Automatics/AutomaticPickup" "Automatics/AutomaticProcessing")
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
 # removing it before the module is migrated hands non-activation guards to code this slice
@@ -40,7 +45,6 @@ unmigrated_module_configs=(
   "Automatics/AutomaticFeeding/Config.cs"
   "Automatics/AutomaticMapping/Config.cs"
   "Automatics/AutomaticMining/Config.cs"
-  "Automatics/AutomaticProcessing/Config.cs"
   "Automatics/AutomaticRepair/Config.cs"
   "Automatics/AutomaticStorage/Config.cs"
 )
@@ -50,6 +54,58 @@ pickup_module="Automatics/AutomaticPickup/Module.cs"
 pickup_patches="Automatics/AutomaticPickup/Patches.cs"
 pickup_component="Automatics/AutomaticPickup/AutomaticPickup.cs"
 pickup_globals="Automatics/AutomaticPickup/Globals.cs"
+
+processing_dir="Automatics/AutomaticProcessing"
+processing_config="$processing_dir/Config.cs"
+processing_module="$processing_dir/Module.cs"
+processing_patches="$processing_dir/Patches.cs"
+processing_globals="$processing_dir/Globals.cs"
+
+# Every Automatic Processing method with a side effect on the game, one per line:
+# qualified name | file | declaration pattern | the exact statement it has to open with.
+# Each moves items between a container and a station, so where it checks the stop request
+# decides whether an item can be lost; see require_processing_entries_open_with_the_gate. The
+# statement fixes the pass-through value too, because a wrong one is not harmless: a Store
+# prefix whose gate returned true would suppress the game's own output and lose the product.
+processing_entries=(
+  "BeehiveProcess.Store|$processing_dir/BeehiveProcess.cs|public static bool Store\\(Beehive |if (!Module.Running) return false;"
+  "SapCollectorProcess.Store|$processing_dir/SapCollectorProcess.cs|public static bool Store\\(SapCollector |if (!Module.Running) return false;"
+  "WispSpawnerProcess.Store|$processing_dir/WispSpawnerProcess.cs|public static bool Store\\(WispSpawner |if (!Module.Running) return false;"
+  "FireplaceProcess.Refuel|$processing_dir/FireplaceProcess.cs|public static void Refuel\\(Fireplace |if (!Module.Running) return;"
+  "SmelterProcess.QuickCraft|$processing_dir/SmelterProcess.cs|public static string QuickCraft\\(|if (!Module.Running) return ore;"
+  "SmelterProcess.Craft|$processing_dir/SmelterProcess.cs|public static void Craft\\(Smelter |if (!Module.Running) return;"
+  "SmelterProcess.QuickRefuel|$processing_dir/SmelterProcess.cs|public static float QuickRefuel\\(|if (!Module.Running) return fuel;"
+  "SmelterProcess.Refuel|$processing_dir/SmelterProcess.cs|public static void Refuel\\(Smelter |if (!Module.Running) return;"
+  "SmelterProcess.Store|$processing_dir/SmelterProcess.cs|public static bool Store\\(Smelter |if (!Module.Running) return false;"
+  "CookingStationProcess.Craft|$processing_dir/CookingStationProcess.cs|public static void Craft\\(CookingStation |if (!Module.Running) return;"
+  "CookingStationProcess.Refuel|$processing_dir/CookingStationProcess.cs|public static float Refuel\\(CookingStation |if (!Module.Running) return fuel;"
+  "CookingStationProcess.Store|$processing_dir/CookingStationProcess.cs|public static bool Store\\(CookingStation |if (!Module.Running) return false;"
+  "FermenterProcess.Craft|$processing_dir/FermenterProcess.cs|public static void Craft\\(Fermenter |if (!Module.Running) return;"
+  "FermenterProcess.Store|$processing_dir/FermenterProcess.cs|public static void Store\\(Fermenter |if (!Module.Running) return;"
+  "TurretProcess.Charge|$processing_dir/TurretProcess.cs|public static void Charge\\(Turret |if (!Module.Running) return;"
+)
+
+# The Automatic Processing patterns are POSIX EREs matched against a stream in which every run
+# of whitespace, line breaks included, is a single space (see strip_code and find_all below).
+#
+# The operations that change a container, a station or the world. The first of them in an entry
+# point is where an item is committed to the transfer. A reflective call counts as one because
+# the name it invokes is a string the checks do not read. A change made through a helper this
+# list does not name stays invisible until it is added here.
+processing_changes='(^|[^A-Za-z0-9_])(TryTakeMaterial|TryClaimContainer|TryRemoveItem|AddItemAndGetCountDelta|InvokeRPC|Instantiate|ClaimOwnership) *\(|GetZDO *\( *\) *\. *Set *\(|Reflections *\. *InvokeMethod *(<[^>]*>)? *\(|\. *(Add|Remove)Item *\('
+
+# What a patch method may not do itself: the changes above, and any use of the helpers that make
+# them.
+processing_patch_changes='(^|[^A-Za-z0-9_])(InvokeRPC|QueueOre|Instantiate|ClaimOwnership|TryTakeMaterial|TryClaimContainer|TryRemoveItem|AddItemAndGetCountDelta) *\(|(^|[^A-Za-z0-9_])(Logics|Reflections|Inventories|ContainerAccess) *\.|GetZDO *\( *\) *\. *Set *\(|\. *(Add|Remove)Item *\('
+
+# Reads of the module state: the gate predicate, the two flags behind it, and any member at all.
+processing_running_read='(^|[^A-Za-z0-9_])Module *\. *Running([^A-Za-z0-9_]|$)'
+processing_raw_state_read='(^|[^A-Za-z0-9_])Module *\. *(Active|StopRequested)([^A-Za-z0-9_]|$)'
+processing_module_read='(^|[^A-Za-z0-9_])Module *\.'
+
+# The module brought in under another name, which would let its state be read without spelling
+# Module. at all.
+processing_module_import='(^|[^A-Za-z0-9_])using +static +([A-Za-z0-9_.:]*[.:])?Module *;|(^|[^A-Za-z0-9_])using +[A-Za-z_][A-Za-z0-9_]* *= *([A-Za-z0-9_.:]*[.:])?Module *;'
 
 # Identifiers that are followed by an argument list but are not calls.
 keywords="if|for|foreach|while|switch|catch|using|lock|return|new|do|fixed|sizeof|typeof|nameof"
@@ -222,6 +278,7 @@ for source_file in \
   "$machine_file" "$plugin_file" "$root_patches_file" \
   "$pickup_config" "$pickup_module" "$pickup_patches" \
   "$pickup_component" "$pickup_globals" \
+  "$processing_config" "$processing_module" "$processing_patches" "$processing_globals" \
   "${unmigrated_module_configs[@]}"; do
   if [[ ! -r "$source_file" ]]; then
     fail "cannot read $source_file; none of the checks below would mean anything"
@@ -231,6 +288,13 @@ done
 for module_dir in "${migrated_module_dirs[@]}"; do
   if [[ ! -d "$module_dir" ]]; then
     fail "cannot read $module_dir; none of the checks below would mean anything"
+  fi
+done
+
+for processing_entry in "${processing_entries[@]}"; do
+  IFS='|' read -r _ processing_entry_file _ _ <<<"$processing_entry"
+  if [[ ! -r "$processing_entry_file" ]]; then
+    fail "cannot read $processing_entry_file; none of the checks below would mean anything"
   fi
 done
 
@@ -1433,26 +1497,33 @@ require_no_warning_suppressions() {
 # R5.5 / AC-S7: this slice does not change the default. A module that starts Disabled for
 # everyone is a separate decision, taken after the framework has been demonstrated in game.
 require_the_default_is_unchanged() {
-  require_source_pattern \
-    "$pickup_config" \
-    "config\\.Bind\\(\"module\", AutomaticsModule\\.Enabled" \
-    "the module default must stay Enabled in this slice (R5.5 / AC-S7): changing it needs the runtime toggle demonstrated first"
+  local config
+
+  for config in "$pickup_config" "$processing_config"; do
+    require_source_pattern \
+      "$config" \
+      "config\\.Bind\\(\"module\", AutomaticsModule\\.Enabled" \
+      "$config must keep the module default Enabled in this slice (R5.5 / AC-S7): changing it needs the runtime toggle demonstrated first"
+  done
 }
 
 # R9.1 / R9.2: a migrated module needs its own toggle strings. The shared ones still say
-# "Reboot Required" and are still correct for the eight modules that have not moved.
+# "Reboot Required" and are still correct for the seven modules that have not moved.
 require_the_runtime_toggle_strings_exist() {
   local language_file
   local key
+  local config
 
-  require_source_pattern \
-    "$pickup_config" \
-    "@config_common_disable_module_runtime_name" \
-    "the migrated module must use the runtime toggle name, not the one that says a restart is required (R9.1)"
-  require_source_pattern \
-    "$pickup_config" \
-    "@config_common_disable_module_runtime_description" \
-    "the migrated module must use the runtime toggle description (R9.1)"
+  for config in "$pickup_config" "$processing_config"; do
+    require_source_pattern \
+      "$config" \
+      "@config_common_disable_module_runtime_name" \
+      "$config must use the runtime toggle name, not the one that says a restart is required (R9.1)"
+    require_source_pattern \
+      "$config" \
+      "@config_common_disable_module_runtime_description" \
+      "$config must use the runtime toggle description (R9.1)"
+  done
 
   for language_file in Automatics/Languages/en_us.json Automatics/Languages/ja_jp.json; do
     if [[ ! -r "$language_file" ]]; then
@@ -1468,8 +1539,898 @@ require_the_runtime_toggle_strings_exist() {
       require_source_pattern \
         "$language_file" \
         "\"$key\"" \
-        "$language_file must define $key (R9.2): the two key sets have to stay in step, and the eight unmigrated modules still use the restart wording"
+        "$language_file must define $key (R9.2): the two key sets have to stay in step, and the seven unmigrated modules still use the restart wording"
     done
+  done
+}
+
+# ---------------------------------------------------------------------------------------
+# Automatic Processing: a migrated module that moves items between containers and stations.
+#
+# Every check below reads the source through strip_code - comments removed, the contents of
+# string, verbatim string and char literals blanked, every line kept - and matches POSIX EREs
+# over a stream in which every run of whitespace, line breaks included, is a single space: ` *`
+# stands for any whitespace, and a leading `(^|[^A-Za-z0-9_])` for a word boundary. A line break
+# inside `Module.Running`, inside a call or before its argument list therefore moves nothing
+# past a check, prose never trips or satisfies one, and hits are still reported against the
+# lines of the real file.
+# ---------------------------------------------------------------------------------------
+
+# The file with its // and /* */ comments removed and the contents of its string, verbatim
+# string and char literals blanked, every line kept so that line numbers still point into the
+# real file. Pass a second argument to keep the literal contents, for the one check that has to
+# read a method name written as a string.
+strip_code() {
+  STRIP_KEEP_STRINGS="${2:-}" awk '
+    BEGIN { sq = sprintf("%c", 39); dq = "\""; keep = (ENVIRON["STRIP_KEEP_STRINGS"] != "") }
+    {
+      line = $0
+      out = ""
+      n = length(line)
+      i = 1
+      while (i <= n) {
+        c = substr(line, i, 1)
+        two = substr(line, i, 2)
+        if (state == "block") {
+          if (two == "*/") { state = ""; i += 2 } else { i++ }
+          continue
+        }
+        if (state == "verbatim") {
+          if (two == dq dq) { if (keep) out = out two; i += 2; continue }
+          if (c == dq) { out = out dq; state = ""; i++; continue }
+          if (keep) out = out c
+          i++
+          continue
+        }
+        if (state == "string" || state == "char") {
+          if (c == "\\") { if (keep) out = out two; i += 2; continue }
+          if ((state == "string" && c == dq) || (state == "char" && c == sq)) { out = out c; state = ""; i++; continue }
+          if (keep) out = out c
+          i++
+          continue
+        }
+        if (two == "//") break
+        if (two == "/*") { state = "block"; i += 2; continue }
+        if (two == "@" dq) { out = out dq; state = "verbatim"; i += 2; continue }
+        if (substr(line, i, 3) == "$@" dq || substr(line, i, 3) == "@$" dq) { out = out dq; state = "verbatim"; i += 3; continue }
+        if (c == dq) { out = out dq; state = "string"; i++; continue }
+        if (c == sq) { out = out sq; state = "char"; i++; continue }
+        out = out c
+        i++
+      }
+      if (state == "string" || state == "char") state = ""
+      print out
+    }
+  ' "$1"
+}
+
+# Prints "LINE<TAB>TEXT" for every match of the ERE in the text on stdin, searched as one stream
+# in which every run of whitespace, line breaks included, is a single space. LINE is the line
+# of the text where the match starts. Prints ERROR when the search could not run.
+find_all() {
+  local pattern="$1"
+  local status=0
+  local out=""
+
+  out="$(FIND_PATTERN="$pattern" awk '
+    {
+      line = $0
+      gsub(/[ \t\r]+/, " ", line)
+      start[NR] = length(stream) + 1
+      stream = stream line " "
+    }
+    END {
+      pattern = ENVIRON["FIND_PATTERN"]
+      offset = 0
+      rest = stream
+      while (rest != "" && match(rest, pattern)) {
+        at = offset + RSTART
+        text = substr(rest, RSTART, RLENGTH)
+        if (text ~ /^[^A-Za-z0-9_.]/) { text = substr(text, 2); at++ }
+        found = 1
+        for (k = 1; k <= NR; k++) {
+          if (start[k] > at) break
+          found = k
+        }
+        gsub(/ +/, " ", text)
+        printf "%d\t%s\n", found, text
+        step = RSTART + RLENGTH - 1
+        if (step < 1) step = 1
+        offset += step
+        rest = substr(rest, step + 1)
+      }
+    }
+  ')" || status=$?
+
+  if ((status != 0)); then
+    printf 'ERROR\n'
+  elif [[ -n "$out" ]]; then
+    printf '%s\n' "$out"
+  fi
+}
+
+# Exit status 0 when the ERE matches the text on stdin (as find_all sees it), 1 when it does
+# not, 2 when the search could not run.
+has_match() {
+  local hits
+
+  hits="$(find_all "$1")"
+  if [[ "$hits" == "ERROR" ]]; then
+    return 2
+  elif [[ -n "$hits" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# The line of the first match in the text on stdin, nothing when there is none, ERROR when the
+# search could not run.
+first_hit() {
+  local hits
+  local first
+
+  hits="$(find_all "$1")"
+  if [[ "$hits" == "ERROR" ]]; then
+    printf 'ERROR\n'
+    return
+  fi
+  if [[ -z "$hits" ]]; then
+    return
+  fi
+
+  first="${hits%%$'\n'*}"
+  printf '%s\n' "${first%%$'\t'*}"
+}
+
+# The number of matches in the text on stdin whose line is greater than the first argument, or
+# ERROR. Pass 0 to count every match.
+count_hits_after() {
+  local after="$1"
+  local hits
+  local line
+  local text
+  local count=0
+
+  hits="$(find_all "$2")"
+  if [[ "$hits" == "ERROR" ]]; then
+    printf 'ERROR\n'
+    return
+  fi
+
+  if [[ -n "$hits" ]]; then
+    while IFS=$'\t' read -r line text; do
+      if ((line > after)); then
+        count=$((count + 1))
+      fi
+    done <<<"$hits"
+  fi
+
+  printf '%s\n' "$count"
+}
+
+count_hits() {
+  count_hits_after 0 "$1"
+}
+
+# The text of every match in the text on stdin with its whitespace removed, one per line, or
+# ERROR, which no expected set contains.
+hit_texts() {
+  local hits
+  local line
+  local text
+
+  hits="$(find_all "$1")"
+  if [[ "$hits" == "ERROR" ]]; then
+    printf 'ERROR\n'
+    return
+  fi
+
+  if [[ -n "$hits" ]]; then
+    while IFS=$'\t' read -r line text; do
+      text="${text//[[:space:]]/}"
+      printf '%s\n' "${text#.}"
+    done <<<"$hits"
+  fi
+}
+
+# One method, read through strip_code: from its declaration to the brace that closes it. The
+# stripped text is captured before it is piped: extract_block stops reading at the closing
+# brace, and a strip_code still writing into that closed pipe would take the whole script down
+# under pipefail with no message at all.
+method_body() {
+  local stripped
+
+  stripped="$(strip_code "$1")"
+  printf '%s\n' "$stripped" | extract_block - "$2"
+}
+
+# The first statement of a block with all whitespace removed: what follows the opening brace up
+# to and including the first ';', or up to the first '{' when a block statement comes first.
+# Without whitespace, a statement may be wrapped over lines but not changed.
+first_statement() {
+  awk '
+    { stream = stream $0 "\n" }
+    END {
+      gsub(/[ \t\r\n]+/, "", stream)
+      i = index(stream, "{")
+      if (i == 0) exit
+      rest = substr(stream, i + 1)
+      semi = index(rest, ";")
+      brace = index(rest, "{")
+      if (semi == 0 && brace == 0) exit
+      if (brace > 0 && (semi == 0 || brace < semi)) print substr(rest, 1, brace)
+      else print substr(rest, 1, semi)
+    }
+  '
+}
+
+# The last statement of a block with all whitespace removed, or a marker no expected statement
+# matches when the block does not end in a simple statement.
+last_statement() {
+  awk '
+    { stream = stream $0 "\n" }
+    END {
+      gsub(/[ \t\r\n]+/, "", stream)
+      sub(/}$/, "", stream)
+      if (substr(stream, length(stream), 1) != ";") { print "<not a simple statement>"; exit }
+      body = substr(stream, 1, length(stream) - 1)
+      cut = 0
+      for (k = length(body); k > 0; k--) {
+        ch = substr(body, k, 1)
+        if (ch == ";" || ch == "{" || ch == "}") { cut = k; break }
+      }
+      print substr(body, cut + 1) ";"
+    }
+  '
+}
+
+# The method names of the gated entry points, as an alternation.
+processing_entry_method_names() {
+  local entry
+
+  for entry in "${processing_entries[@]}"; do
+    entry="${entry%%|*}"
+    printf '%s\n' "${entry#*.}"
+  done | sort -u | paste -sd '|' -
+}
+
+# The static state a file declares, read from strip_code output on stdin: one "collection NAME"
+# per static collection (readonly or not) and one "timer NAME" per static float field that is
+# neither const nor readonly. ERROR when a search could not run.
+processing_static_state() {
+  local source
+  local hits
+  local line
+  local text
+
+  source="$(cat)"
+
+  hits="$(printf '%s\n' "$source" | find_all 'static +(readonly +)?(HashSet|Dictionary|List|Queue|Stack|SortedSet|SortedDictionary) *<[^;={}]*> *[A-Za-z_][A-Za-z0-9_]* *[;=]')"
+  if [[ "$hits" == "ERROR" ]]; then
+    printf 'ERROR\n'
+    return
+  fi
+  if [[ -n "$hits" ]]; then
+    while IFS=$'\t' read -r line text; do
+      text="${text%[;=]}"
+      text="${text%"${text##*[![:space:]]}"}"
+      printf 'collection %s\n' "${text##* }"
+    done <<<"$hits"
+  fi
+
+  hits="$(printf '%s\n' "$source" | find_all 'static +float +[A-Za-z_][A-Za-z0-9_]* *[;=]')"
+  if [[ "$hits" == "ERROR" ]]; then
+    printf 'ERROR\n'
+    return
+  fi
+  if [[ -n "$hits" ]]; then
+    while IFS=$'\t' read -r line text; do
+      text="${text%[;=]}"
+      text="${text%"${text##*[![:space:]]}"}"
+      printf 'timer %s\n' "${text##* }"
+    done <<<"$hits"
+  fi
+}
+
+# The owners of the module's session state, and what each one's Cleanup has to do beyond the
+# collections and timers its file declares (fields separated by @@: owner, pattern, duty).
+processing_cleanup_owners=(
+  "Logics|$processing_globals"
+  "SmelterProcess|$processing_dir/SmelterProcess.cs"
+  "TurretProcess|$processing_dir/TurretProcess.cs"
+  "ConnectionEffects|$processing_dir/ConnectionEffects.cs"
+)
+processing_cleanup_extras=(
+  'ConnectionEffects@@(^|[^A-Za-z0-9_])RemoveHelper *\(@@destroy every helper object it created'
+  'ConnectionEffects@@(^|[^A-Za-z0-9_.])_currentProcessorId *= *0 *;@@forget the processor it was showing'
+  'ConnectionEffects@@(^|[^A-Za-z0-9_.])_lastHovering *= *null *;@@drop the object it resolved last'
+  'ConnectionEffects@@(^|[^A-Za-z0-9_.])_lastContextValid *= *false *;@@invalidate its memoized context'
+  'ConnectionEffects@@(^|[^A-Za-z0-9_.])_lastContext *= *default *;@@drop its memoized context'
+)
+
+# R4.3 / R1.6: the module owns patches and two hook subscriptions and nothing else. The scope
+# registers its one patch removal at the first PatchAll and tears down in reverse, so patching
+# first is what puts the patch removal last. Active is raised last and lowered first, so no entry
+# point sees the module as running while it is half built or half dismantled (R1.5).
+require_processing_enable_and_disable_shape() {
+  local body
+  local patch_line
+  local subscribe_line
+  local subscriptions
+  local hook
+  local hooked
+  local last
+  local first
+  local stripped
+  local raised
+  local lowered
+
+  body="$(method_body "$processing_module" "public void Enable\\(ModuleScope scope\\)")"
+  if [[ -z "$body" ]]; then
+    fail "the processing module must define Enable(ModuleScope)"
+    return
+  fi
+
+  patch_line="$(printf '%s\n' "$body" | first_hit 'scope *\. *PatchAll *\(')"
+  subscribe_line="$(printf '%s\n' "$body" | first_hit 'scope *\. *Subscribe *<')"
+  subscriptions="$(printf '%s\n' "$body" | count_hits 'scope *\. *Subscribe *<')"
+
+  if lookup_failed "$patch_line" "$subscribe_line" "$subscriptions"; then
+    fail "could not search the acquisition order of the processing Enable; the check was not run"
+    return
+  fi
+
+  if [[ -z "$patch_line" || -z "$subscribe_line" ]]; then
+    fail "the processing Enable must apply its patches and subscribe through the scope"
+  elif ((patch_line >= subscribe_line)); then
+    fail "the processing Enable must apply its patches before it subscribes (R4.3): the scope registers one patch removal at the first PatchAll, and a subscription taken first has its removal run after the patches come off"
+  fi
+
+  if ((subscriptions != 2)); then
+    fail "the processing Enable must subscribe exactly the player awake and player update hooks through the scope: found $subscriptions scope.Subscribe call(s), expected 2"
+  fi
+
+  for hook in "OnPlayerAwake" "OnPlayerUpdate"; do
+    hooked="$(printf '%s\n' "$body" | count_hits "h *=> *Hooks *\\. *$hook *\\+= *h([^A-Za-z0-9_]|\$)")"
+    if lookup_failed "$hooked"; then
+      fail "could not search the processing Enable for its $hook subscription; the check was not run"
+      continue
+    fi
+
+    if ((hooked != 1)); then
+      fail "the processing Enable must subscribe Hooks.$hook exactly once through the scope: found $hooked; a hook subscribed twice runs twice per call, and a missing one never runs"
+    fi
+  done
+
+  last="$(printf '%s\n' "$body" | last_statement)"
+  if [[ "$last" != "Active=true;" ]]; then
+    fail "the last statement of the processing Enable must be \"Active = true;\" (R1.3 / R1.5): anything after it runs with the module already advertising itself as running; found \"$last\""
+  fi
+
+  stripped="$(strip_code "$processing_module")"
+  raised="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Active *= *true *;')"
+  lowered="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Active *= *false *;')"
+  if lookup_failed "$raised" "$lowered"; then
+    fail "could not count the assignments of Active in the processing module; the check was not run"
+  elif ((raised != 1 || lowered != 1)); then
+    fail "the processing module must raise Active exactly once, as the last statement of Enable, and lower it exactly once, as the first statement of Disable (R1.5): found $raised raise(s) and $lowered lowering(s)"
+  fi
+
+  body="$(method_body "$processing_module" "public void Disable\\(ModuleScope scope\\)")"
+  if [[ -z "$body" ]]; then
+    fail "the processing module must define Disable(ModuleScope)"
+    return
+  fi
+
+  first="$(printf '%s\n' "$body" | first_statement)"
+  if [[ "$first" != "Active=false;" ]]; then
+    fail "the first statement of the processing Disable must be \"Active = false;\" (R1.5): every entry point has to be shut before anything is dismantled; found \"$first\""
+  fi
+}
+
+# R6.1 / R6.2: everything the module keeps between calls - the container cache, the smelter
+# throttles and their reset times, the turret timers and the connection-effect objects - is
+# cleared in one place, and that place runs both on a disable and on a new world session. That a
+# Cleanup is called proves nothing if its body was emptied, so each owner's Cleanup must itself
+# clear every static collection and reset every static float timer its file declares, plus the
+# connection-effect state that is neither.
+require_processing_session_is_reset() {
+  local body
+  local cleanup
+  local caller
+  local status
+  local row
+  local owner
+  local file
+  local fields
+  local kind
+  local name
+  local pattern
+  local duty
+  local rest
+
+  body="$(method_body "$processing_module" "internal static void ResetSession\\(\\)")"
+  if [[ -z "$body" ]]; then
+    fail "the processing module must define ResetSession() (R6.1)"
+    return
+  fi
+
+  for cleanup in "Logics" "SmelterProcess" "TurretProcess" "ConnectionEffects"; do
+    status=0
+    printf '%s\n' "$body" | has_match "(^|[^A-Za-z0-9_])$cleanup *\\. *Cleanup *\\( *\\) *;" || status=$?
+    case "$status" in
+      0) ;;
+      1) fail "ResetSession must clear $cleanup (R6.1): state left there outlives the disable and the next activation starts from it" ;;
+      *) fail "could not search ResetSession for $cleanup.Cleanup(); the check was not run" ;;
+    esac
+  done
+
+  for caller in "private static void OnPlayerAwake\\(" "public void Disable\\(ModuleScope scope\\)"; do
+    body="$(method_body "$processing_module" "$caller")"
+    if [[ -z "$body" ]]; then
+      fail "the processing module must define ${caller//\\/}"
+      continue
+    fi
+
+    status=0
+    printf '%s\n' "$body" | has_match '(^|[^A-Za-z0-9_])ResetSession *\( *\) *;' || status=$?
+    case "$status" in
+      0) ;;
+      1) fail "${caller//\\/} must call ResetSession() (R6.1 / R6.2): a disable and a new world session both have to start from empty state" ;;
+      *) fail "could not search ${caller//\\/} for ResetSession(); the check was not run" ;;
+    esac
+  done
+
+  for row in "${processing_cleanup_owners[@]}"; do
+    IFS='|' read -r owner file <<<"$row"
+    body="$(method_body "$file" "public static void Cleanup\\(\\)")"
+    if [[ -z "$body" ]]; then
+      fail "$owner must define Cleanup() in $file (R6.1)"
+      continue
+    fi
+
+    fields="$(strip_code "$file" | processing_static_state)"
+    if [[ "$fields" == *ERROR* ]]; then
+      fail "could not search $file for its static state; the check on $owner.Cleanup was not run"
+      continue
+    fi
+    if [[ -z "$fields" ]]; then
+      fail "found no static collection or timer in $file, so the check on $owner.Cleanup would check nothing"
+      continue
+    fi
+
+    while read -r kind name; do
+      if [[ "$kind" == "collection" ]]; then
+        pattern="(^|[^A-Za-z0-9_.])$name *\\. *Clear *\\( *\\) *;"
+        duty="clear $name"
+      else
+        pattern="(^|[^A-Za-z0-9_.])$name *= *0(\\.0)?f? *;"
+        duty="reset $name"
+      fi
+
+      status=0
+      printf '%s\n' "$body" | has_match "$pattern" || status=$?
+      case "$status" in
+        0) ;;
+        1) fail "$owner.Cleanup must $duty (R6.1): a Cleanup that is still called but no longer does this lets the state outlive the disable and the session" ;;
+        *) fail "could not search $owner.Cleanup; the check on $name was not run" ;;
+      esac
+    done <<<"$fields"
+  done
+
+  for row in "${processing_cleanup_extras[@]}"; do
+    owner="${row%%@@*}"
+    rest="${row#*@@}"
+    pattern="${rest%%@@*}"
+    duty="${rest#*@@}"
+    file=""
+    for cleanup in "${processing_cleanup_owners[@]}"; do
+      if [[ "${cleanup%%|*}" == "$owner" ]]; then
+        file="${cleanup#*|}"
+      fi
+    done
+
+    body="$(method_body "$file" "public static void Cleanup\\(\\)")"
+    status=0
+    printf '%s\n' "$body" | has_match "$pattern" || status=$?
+    case "$status" in
+      0) ;;
+      1) fail "$owner.Cleanup must $duty (R6.1): a Cleanup that is still called but no longer does this lets the state outlive the disable and the session" ;;
+      *) fail "could not search $owner.Cleanup; the check that it must $duty was not run" ;;
+    esac
+  done
+}
+
+# The per-frame hook draws the connection effect. It can still be reached after the module
+# stopped - a removal that failed, or an invocation list fetched before the removal - so it opens
+# with its own gate.
+require_processing_player_update_is_gated() {
+  local body
+  local first
+
+  body="$(method_body "$processing_module" "private static void OnPlayerUpdate\\(")"
+  if [[ -z "$body" ]]; then
+    fail "the processing module must define OnPlayerUpdate"
+    return
+  fi
+
+  first="$(printf '%s\n' "$body" | first_statement)"
+  if [[ "$first" != "if(!Running)return;" ]]; then
+    fail "OnPlayerUpdate must open with \"if (!Running) return;\" (R1.5a): it is reachable after the module stopped and would keep drawing the connection effect; found \"$first\""
+  fi
+}
+
+# This module attaches no component, so it has no generation, no attach scope, no discovery gate
+# and no activation scan. Growing one of them means it started creating things the scope has to
+# own, and that needs the component checks written for the pickup module applied to it first.
+require_processing_has_no_component_machinery() {
+  local found
+
+  found="$(strip_code "$processing_module" | count_hits '(^|[^A-Za-z0-9_])(Generation|CurrentScope|Discovering|FindObjectsByType)([^A-Za-z0-9_]|$)')"
+  if lookup_failed "$found"; then
+    fail "could not search $processing_module; the check was not run"
+    return
+  fi
+
+  if ((found != 0)); then
+    fail "the processing module must not carry component machinery (a generation, an attach scope, a discovery gate or a scene scan): it attaches nothing, and a module that starts to needs the component checks extended to it first"
+  fi
+}
+
+# R1.5a: the gates live in the entry points, not in the patch methods, because the transpilers
+# inject calls that run outside any patch method. That only holds if every patch reaches nothing
+# but a gated entry point and makes no change of its own. TurretProcess.ClearTimer is the one
+# exception: it forgets a timer and has no effect on the game. Every way of naming a callee
+# counts - a direct call from a prefix or postfix, the typeof/name pair and the "Type:Name" string
+# a transpiler resolves, and nameof - and none may be satisfied by a comment.
+require_processing_patches_reach_only_gated_entries() {
+  local stripped
+  local literal
+  local targets
+  local found
+  local expected
+  local entry
+  local hits
+  local line
+  local text
+
+  stripped="$(strip_code "$processing_patches")"
+  literal="$(strip_code "$processing_patches" keep-strings)"
+
+  targets="$(printf '%s\n' "$stripped" | count_hits '\[ *HarmonyPatch *\( *typeof *\(')"
+  if lookup_failed "$targets"; then
+    fail "could not count the processing patch targets; the check was not run"
+    return
+  fi
+
+  if ((targets != 13)); then
+    fail "the processing module must patch exactly the 13 audited targets: found $targets; adding or removing one needs the liveness audit of specification 1.4 re-run and the gated entry points reviewed"
+  fi
+
+  found="$(
+    {
+      printf '%s\n' "$stripped" |
+        hit_texts '(^|[^A-Za-z0-9_])[A-Z][A-Za-z0-9_]*Process *\. *[A-Za-z_][A-Za-z0-9_]* *\(' |
+        sed -e 's/($//'
+      printf '%s\n' "$stripped" |
+        hit_texts 'nameof *\( *[A-Z][A-Za-z0-9_]*Process *\. *[A-Za-z_][A-Za-z0-9_]* *\)' |
+        sed -e 's/^nameof(//' -e 's/)$//'
+      printf '%s\n' "$literal" |
+        hit_texts 'typeof *\( *[A-Z][A-Za-z0-9_]*Process *\) *, *"[A-Za-z_][A-Za-z0-9_]*"' |
+        sed -E 's/^typeof\(([A-Za-z0-9_]+)\),"([A-Za-z0-9_]+)"$/\1.\2/'
+      printf '%s\n' "$literal" |
+        hit_texts '"[A-Z][A-Za-z0-9_]*Process *: *[A-Za-z_][A-Za-z0-9_]*"' |
+        sed -E 's/^"([A-Za-z0-9_]+):([A-Za-z0-9_]+)"$/\1.\2/'
+    } | sort -u
+  )"
+  expected="$(
+    {
+      for entry in "${processing_entries[@]}"; do
+        printf '%s\n' "${entry%%|*}"
+      done
+      printf 'TurretProcess.ClearTimer\n'
+    } | sort -u
+  )"
+
+  if [[ "$found" != "$expected" ]]; then
+    fail "the processing patches must reach exactly the gated entry points and TurretProcess.ClearTimer (R1.5a): anything else acts without checking the stop request; expected: ${expected//$'\n'/ }; found: ${found//$'\n'/ }"
+  fi
+
+  hits="$(printf '%s\n' "$stripped" | find_all "$processing_patch_changes")"
+  if [[ "$hits" == "ERROR" ]]; then
+    fail "could not search the processing patches for changes of their own; the check was not run"
+    return
+  fi
+
+  if [[ -n "$hits" ]]; then
+    while IFS=$'\t' read -r line text; do
+      fail "the processing patches must not change a container, a station or the world themselves (R1.5a): only the gated entry points may, and a change made in a patch method skips the stop request ($processing_patches:$line: $text)"
+    done <<<"$hits"
+  fi
+}
+
+# R1.5a / R8.11: each entry point moves items, and the claim, the removal, the store and the RPC
+# inside it all call into code that is not ours - a synchronous callback or another mod's patch
+# there can change the setting, and so raise the stop request, before the outer call returns. So
+# the stop request is checked exactly once, as the first statement, and never again: a check
+# after an item left its container would strand it, while a transfer that was accepted is
+# delivered once and the next call sees the stop. Every read of the module state outside
+# Module.cs therefore has to be one of these gates, and the state may not be imported under
+# another name that these patterns would not see.
+#
+# What this does not check is that Running means the right thing - `Running => true` passes - or
+# that an accepted transfer really completes. Both need the game.
+require_processing_entries_open_with_the_gate() {
+  local entry
+  local qualified
+  local file
+  local declaration
+  local gate
+  local body
+  local first
+  local gates
+  local listed
+  local direct
+  local imports
+  local stripped
+  local entry_file
+
+  if ((${#processing_entries[@]} != 15)); then
+    fail "the processing module must list exactly its 15 audited side-effect entry points (R1.5a): found ${#processing_entries[@]}; adding or removing one needs the list and this count changed deliberately"
+  fi
+
+  for entry in "${processing_entries[@]}"; do
+    IFS='|' read -r qualified file declaration gate <<<"$entry"
+    body="$(method_body "$file" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "cannot find $qualified in $file; the stop-boundary checks on it were not run"
+      continue
+    fi
+
+    first="$(printf '%s\n' "$body" | first_statement)"
+    if [[ "$first" != "${gate//[[:space:]]/}" ]]; then
+      fail "$qualified must open with \"$gate\" (R1.5a): its first statement is where the stop request is checked, anything before it still runs after a stop, and the returned value is what the game falls back to; found \"$first\""
+    fi
+
+    gates="$(printf '%s\n' "$body" | count_hits "$processing_running_read")"
+    if lookup_failed "$gates"; then
+      fail "could not count the gates in $qualified; the check was not run"
+      continue
+    fi
+
+    if ((gates != 1)); then
+      fail "$qualified must check Module.Running exactly once (R8.11): a second check - even one at the head of a loop - can run after an item already left its container and strand it; found $gates"
+    fi
+  done
+
+  # Every file of the module but the one that defines the state. A read in a helper, in a patch
+  # method or in any other file is invisible to the per-entry checks, and would let a call made
+  # between a removal and its delivery look at the stop request after all.
+  for file in "$processing_dir"/*.cs; do
+    if [[ "$file" == "$processing_module" ]]; then
+      continue
+    fi
+
+    stripped="$(strip_code "$file")"
+    gates="$(printf '%s\n' "$stripped" | count_hits "$processing_running_read")"
+    direct="$(printf '%s\n' "$stripped" | count_hits "$processing_raw_state_read")"
+    imports="$(printf '%s\n' "$stripped" | count_hits "$processing_module_import")"
+    listed=0
+    for entry in "${processing_entries[@]}"; do
+      IFS='|' read -r _ entry_file _ _ <<<"$entry"
+      if [[ "$entry_file" == "$file" ]]; then
+        listed=$((listed + 1))
+      fi
+    done
+
+    if lookup_failed "$gates" "$direct" "$imports"; then
+      fail "could not search $file for module state reads; the check was not run"
+      continue
+    fi
+
+    if ((direct != 0)); then
+      fail "$file must read Module.Running, never Module.Active or Module.StopRequested (R1.5a): Active alone keeps acting between the stop request and the teardown"
+    fi
+
+    if ((imports != 0)); then
+      fail "$file must not import the module under another name (R1.5a): with a using static or an alias, a read of its state no longer spells Module. and every check on where the state is read would miss it"
+    fi
+
+    if ((gates != listed)); then
+      fail "$file must read Module.Running only in the gates of its listed entry points (R8.11): $listed listed, $gates reads; a read in a helper, a patch method or an unlisted method escapes the checks on where the stop request may be looked at"
+    fi
+  done
+}
+
+# R8.11: the rest of the same rule. Nothing after the first change an entry point makes may look
+# at the module state, and no entry point calls another gated one anywhere in its body - a call
+# after the first change, or at the head of a loop whose previous pass already moved an item,
+# would check the stop request between a removal and its delivery.
+require_processing_entries_never_recheck_after_a_change() {
+  local entry
+  local qualified
+  local file
+  local declaration
+  local body
+  local gate_line
+  local change_line
+  local late_reads
+  local nested_calls
+  local names
+  local globals_reads
+
+  names="$(processing_entry_method_names)"
+
+  for entry in "${processing_entries[@]}"; do
+    IFS='|' read -r qualified file declaration _ <<<"$entry"
+    body="$(method_body "$file" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "cannot find $qualified in $file; the check on what follows its first change was not run"
+      continue
+    fi
+
+    gate_line="$(printf '%s\n' "$body" | first_hit 'if *\( *! *Module *\. *Running *\) *return')"
+    change_line="$(printf '%s\n' "$body" | first_hit "$processing_changes")"
+    # Line 1 is the declaration, which names the entry point itself.
+    nested_calls="$(printf '%s\n' "$body" | count_hits_after 1 "(^|[^A-Za-z0-9_])($names) *\\(")"
+
+    if lookup_failed "$gate_line" "$change_line" "$nested_calls"; then
+      fail "could not search $qualified; the check on what follows its first change was not run"
+      continue
+    fi
+
+    if [[ -z "$change_line" ]]; then
+      fail "$qualified makes no change this check recognises: either it is not a side-effect entry point, or its change goes through a helper the list of changes does not name yet"
+      continue
+    fi
+
+    if [[ -z "$gate_line" ]] || ((gate_line >= change_line)); then
+      fail "$qualified must check the stop request before its first change (R1.5a): the first change is where an item is committed to the transfer"
+    fi
+
+    late_reads="$(printf '%s\n' "$body" | count_hits_after "$change_line" "$processing_module_read")"
+    if lookup_failed "$late_reads"; then
+      fail "could not search $qualified after its first change; the check was not run"
+      continue
+    fi
+
+    if ((late_reads != 0)); then
+      fail "$qualified must not read the module state after its first change (R8.11): a stop seen there strands an item that already left its container"
+    fi
+
+    if ((nested_calls != 0)); then
+      fail "$qualified must not call a gated entry point (R8.11): that call checks the stop request again, and after a removal it can strand the item between the removal and its delivery"
+    fi
+  done
+
+  globals_reads="$(strip_code "$processing_globals" | count_hits "$processing_module_read")"
+  if lookup_failed "$globals_reads"; then
+    fail "could not search $processing_globals; the check was not run"
+    return
+  fi
+
+  if ((globals_reads != 0)); then
+    fail "$processing_globals must not read the module state (R8.11): its claim, removal and store helpers run between an entry point's gate and its delivery"
+  fi
+}
+
+# AC-S11 (ownership): an entry point changes a station only while this peer owns it, so two peers
+# never process the same station at once. The ownership check has to come before the first
+# change, and in its guard form - a check whose result is thrown away confirms nothing. Ownership
+# moving in the middle of a call is the game's ownership model, and not something this looks at.
+require_processing_entries_check_ownership_first() {
+  local entry
+  local qualified
+  local file
+  local declaration
+  local body
+  local owner_line
+  local change_line
+
+  for entry in "${processing_entries[@]}"; do
+    IFS='|' read -r qualified file declaration _ <<<"$entry"
+    body="$(method_body "$file" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "cannot find $qualified in $file; the ownership check on it was not run"
+      continue
+    fi
+
+    owner_line="$(printf '%s\n' "$body" | first_hit 'if *\( *! *Objects *\. *HasValidOwnership *\(')"
+    change_line="$(printf '%s\n' "$body" | first_hit "$processing_changes")"
+
+    if lookup_failed "$owner_line" "$change_line"; then
+      fail "could not search $qualified for its ownership check; the check was not run"
+      continue
+    fi
+
+    if [[ -z "$owner_line" || -z "$change_line" ]] || ((owner_line >= change_line)); then
+      fail "$qualified must confirm that this peer owns the station before its first change (AC-S11): without it two peers can process the same station at once"
+    fi
+  done
+}
+
+# AC-S11 (containers): a container is changed only after it was claimed through the access-checked
+# path. The claim takes ownership, so two peers do not change it at once, and with a local player
+# it enforces wards, private and group chests, and containers in use; the containers offered to
+# an entry point are filtered by the same rules. An entry point either claims the container itself
+# before it removes or stores, or removes through TryTakeMaterial, which claims first. Changing an
+# inventory directly would skip both, so an entry point file never does.
+require_processing_containers_are_claimed_first() {
+  local entry
+  local qualified
+  local file
+  local declaration
+  local body
+  local claim_line
+  local take_line
+  local change_line
+  local direct
+  local status
+
+  for entry in "${processing_entries[@]}"; do
+    IFS='|' read -r qualified file declaration _ <<<"$entry"
+    body="$(method_body "$file" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "cannot find $qualified in $file; the container check on it was not run"
+      continue
+    fi
+
+    claim_line="$(printf '%s\n' "$body" | first_hit '(^|[^A-Za-z0-9_])TryClaimContainer *\(')"
+    take_line="$(printf '%s\n' "$body" | first_hit '(^|[^A-Za-z0-9_])TryTakeMaterial *\(')"
+    change_line="$(printf '%s\n' "$body" | first_hit '(^|[^A-Za-z0-9_])(TryRemoveItem|AddItemAndGetCountDelta) *\(')"
+
+    if lookup_failed "$claim_line" "$take_line" "$change_line"; then
+      fail "could not search $qualified for its container claim; the check was not run"
+      continue
+    fi
+
+    if [[ -z "$claim_line" && -z "$take_line" ]]; then
+      fail "$qualified must reach its containers through TryClaimContainer or TryTakeMaterial (AC-S11): those are the paths that claim a container and apply its access rules"
+      continue
+    fi
+
+    if [[ -n "$change_line" ]] && { [[ -z "$claim_line" ]] || ((claim_line >= change_line)); }; then
+      fail "$qualified must claim a container before it removes from or stores into it (AC-S11): the claim is what takes ownership and applies the ward and private-chest rules"
+    fi
+  done
+
+  body="$(method_body "$processing_globals" "public static bool TryTakeMaterial\\(")"
+  claim_line="$(printf '%s\n' "$body" | first_hit '(^|[^A-Za-z0-9_])TryClaimContainer *\(')"
+  change_line="$(printf '%s\n' "$body" | first_hit '(^|[^A-Za-z0-9_])TryRemoveItem *\(')"
+  if lookup_failed "$claim_line" "$change_line"; then
+    fail "could not search Logics.TryTakeMaterial; the check was not run"
+  elif [[ -z "$claim_line" || -z "$change_line" ]] || ((claim_line >= change_line)); then
+    fail "Logics.TryTakeMaterial must claim a container before it removes from it (AC-S11): every Craft entry point relies on it for the claim"
+  fi
+
+  body="$(method_body "$processing_globals" "public static bool TryClaimContainer\\(")"
+  status=0
+  printf '%s\n' "$body" | has_match 'ContainerAccess *\. *TryPrepareContainerMutationServerAware *\(' || status=$?
+  case "$status" in
+    0) ;;
+    1) fail "Logics.TryClaimContainer must claim through ContainerAccess.TryPrepareContainerMutationServerAware (AC-S11): that is what applies the ward, private-chest and in-use rules when there is a local player" ;;
+    *) fail "could not search Logics.TryClaimContainer; the check was not run" ;;
+  esac
+
+  body="$(method_body "$processing_globals" "> GetNearbyContainers\\(")"
+  status=0
+  printf '%s\n' "$body" | has_match 'ContainerAccess *\. *CanUseContainer *\( *player *, *x *\)' || status=$?
+  case "$status" in
+    0) ;;
+    1) fail "Logics.GetNearbyContainers must offer only containers the local player may use, through ContainerAccess.CanUseContainer(player, x) (AC-S11)" ;;
+    *) fail "could not search Logics.GetNearbyContainers; the check was not run" ;;
+  esac
+
+  for file in "$processing_dir"/*Process.cs; do
+    direct="$(strip_code "$file" | count_hits '\. *(RemoveItem|AddItem) *\(')"
+    if lookup_failed "$direct"; then
+      fail "could not search $file for direct inventory changes; the check was not run"
+      continue
+    fi
+
+    if ((direct != 0)); then
+      fail "$file must change inventories only through the Logics helpers (AC-S11): a direct RemoveItem or AddItem skips the claim and its access rules"
+    fi
   done
 }
 
@@ -1511,6 +2472,16 @@ require_reconciliation_enumerates_the_scene
 require_no_warning_suppressions
 require_the_default_is_unchanged
 require_the_runtime_toggle_strings_exist
+
+require_processing_enable_and_disable_shape
+require_processing_session_is_reset
+require_processing_player_update_is_gated
+require_processing_has_no_component_machinery
+require_processing_patches_reach_only_gated_entries
+require_processing_entries_open_with_the_gate
+require_processing_entries_never_recheck_after_a_change
+require_processing_entries_check_ownership_first
+require_processing_containers_are_claimed_first
 
 if ((failures > 0)); then
   exit 1

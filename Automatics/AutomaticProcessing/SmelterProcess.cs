@@ -48,12 +48,20 @@ namespace Automatics.AutomaticProcessing
             FirstQuickRefuel.Clear();
             SkipCraft.Clear();
             SkipRefuel.Clear();
+
+            // The reset times go with the sets they pace, or the first pass after a disable or a
+            // new session would inherit the previous one's cadence.
+            _lastQuickCraftReset = 0f;
+            _lastQuickRefuelReset = 0f;
+            _lastCraftReset = 0f;
+            _lastRefuelReset = 0f;
         }
 
         [UsedImplicitly]
         public static string QuickCraft(Smelter smelter, ZNetView zNetView, float loopCount,
             string ore)
         {
+            if (!Module.Running) return ore;
             if (loopCount < 1f) return ore;
             if (!string.IsNullOrEmpty(ore)) return ore;
             if (!Config.EnableAutomaticProcessing) return ore;
@@ -154,6 +162,7 @@ namespace Automatics.AutomaticProcessing
         [UsedImplicitly]
         public static void Craft(Smelter smelter, ZNetView zNetView)
         {
+            if (!Module.Running) return;
             if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 
@@ -261,6 +270,7 @@ namespace Automatics.AutomaticProcessing
         public static float QuickRefuel(Smelter smelter, ZNetView zNetView, float loopCount,
             float fuel)
         {
+            if (!Module.Running) return fuel;
             if (loopCount < 1f) return fuel;
             if (fuel > 0f) return fuel;
             if (!Config.EnableAutomaticProcessing) return fuel;
@@ -323,6 +333,7 @@ namespace Automatics.AutomaticProcessing
         [UsedImplicitly]
         public static void Refuel(Smelter smelter, ZNetView zNetView)
         {
+            if (!Module.Running) return;
             if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 
@@ -372,6 +383,7 @@ namespace Automatics.AutomaticProcessing
 
         public static bool Store(Smelter smelter, string ore, int stack)
         {
+            if (!Module.Running) return false;
             if (!Config.EnableAutomaticProcessing) return false;
             if (!Objects.HasValidOwnership(smelter, out var zNetView)) return false;
 

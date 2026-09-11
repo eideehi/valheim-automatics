@@ -15,6 +15,7 @@ using PickupModule = Automatics.AutomaticPickup.Module;
 using Process = Automatics.AutomaticProcessing.Process;
 using ProcessingConfig = Automatics.AutomaticProcessing.Config;
 using ProcessingLogics = Automatics.AutomaticProcessing.Logics;
+using ProcessingModule = Automatics.AutomaticProcessing.Module;
 using Processor = Automatics.AutomaticProcessing.Processor;
 using SmelterProcess = Automatics.AutomaticProcessing.SmelterProcess;
 
@@ -38,10 +39,15 @@ namespace Automatics.SmokeTest
     // ZRoutedRpc.InvokeRoutedRPC handles a call to its own peer inline, so the ledger already
     // has to balance on the frame of the call. The run changes no setting.
     //
+    // toggle and config are in ProcessingSmokeToggle.cs: one round trip of
+    // automatic_processing/module through its real setting, and a read-only look at the
+    // automatic_processing section of the live .cfg.
+    //
     // Safety follows the asymmetric rule of the other smoke commands (smoke/README.md): only
     // objects this command spawned are changed, test items go only into its own chest, and
-    // whatever it cannot prove is its own is left where it is and reported.
-    internal static class ProcessingSmokeCommand
+    // whatever it cannot prove is its own is left where it is and reported. The one setting
+    // it writes, automatic_processing/module (toggle only), is SmokeSession's to hand back.
+    internal static partial class ProcessingSmokeCommand
     {
         private const string CommandName = "automatics_smoke_processing";
 
@@ -66,7 +72,9 @@ namespace Automatics.SmokeTest
             Subcommands = new Dictionary<string, Func<Terminal, int, string, IEnumerator>>(
                 StringComparer.Ordinal)
             {
-                { "rpc", RunRpc }
+                { "rpc", RunRpc },
+                { "toggle", RunToggle },
+                { "config", RunConfig }
             };
 
         private static MonoBehaviour _host;
@@ -129,53 +137,65 @@ namespace Automatics.SmokeTest
 
         private static IEnumerator RunRpc(Terminal context, int runId, string runner)
         {
-            var run = new RpcRun(runId, runner,
+            return RunBench(context, runner, () => new RpcRun(runId, runner,
                 line => Emit(context, LogLevel.Info, line),
-                line => Emit(context, LogLevel.Warning, line));
+                line => Emit(context, LogLevel.Warning, line)));
+        }
 
+        // Drives one run: its steps, then its finishing steps whether or not the steps
+        // completed, then its hand-back, then its report. The run is built here, inside the
+        // session's guard, so a run that cannot even be built still releases the lock.
+        private static IEnumerator RunBench(Terminal context, string runner, Func<BenchRun> create)
+        {
+            BenchRun run = null;
             try
             {
-                // A yield cannot sit inside a try that has a catch, so each step is taken
-                // inside one and the yield happens outside it.
-                var steps = run.Execute();
-                while (true)
+                run = create();
+                foreach (var phase in new Func<IEnumerator>[] { run.Execute, run.Finish })
                 {
-                    object current = null;
-                    bool more;
-                    try
+                    // A yield cannot sit inside a try that has a catch, so each step is taken
+                    // inside one and the yield happens outside it.
+                    var steps = phase();
+                    while (true)
                     {
-                        more = steps.MoveNext();
-                        if (more) current = steps.Current;
-                    }
-                    catch (Exception e)
-                    {
-                        run.Stopped(e);
-                        more = false;
-                    }
+                        object current = null;
+                        bool more;
+                        try
+                        {
+                            more = steps.MoveNext();
+                            if (more) current = steps.Current;
+                        }
+                        catch (Exception e)
+                        {
+                            run.Stopped(e);
+                            more = false;
+                        }
 
-                    if (!more) break;
-                    yield return current;
+                        if (!more) break;
+                        yield return current;
+                    }
                 }
             }
             finally
             {
                 // Reached when the body completes or throws. When the plugin stops the
                 // coroutine instead, SmokeSession runs the same hand-back.
-                run.HandBack(runner + " ended");
+                run?.HandBack(runner + " ended");
             }
 
             Report(context, run.Results);
         }
 
-        // Whether Automatic Processing is running. This is the one place that decides it:
-        // this build reads the module setting and enable_automatic_processing, and the other
-        // Processing settings are not bound while the module is disabled, so the module
-        // setting is read first.
+        // Whether Automatic Processing is running. This is the one place that decides it, and
+        // it reads the applied state, not the setting: the registry's state for the module and
+        // Module.Running, which every Processing entry point checks first, then
+        // enable_automatic_processing.
         private static bool ProcessingRunning(out string reason)
         {
             reason = null;
-            if (ProcessingConfig.ModuleDisabled)
-                reason = "automatic_processing module disabled";
+            var state = ModuleRegistry.GetState(ProcessingModule.Instance.Name);
+            if (state != ModuleState.Enabled || !ProcessingModule.Running)
+                reason = $"automatic_processing is not running (the module registry reports {state})";
             else if (!ProcessingConfig.EnableAutomaticProcessing)
                 reason = "enable_automatic_processing is off";
             return reason == null;
@@ -227,9 +247,425 @@ namespace Automatics.SmokeTest
             if (context) context.AddString(line);
         }
 
+        // -- What the subcommands that place test objects share ----------------------------
+
+        // One run that places test stations and a chest: the rules for where they may stand,
+        // what must be true around them, and their hand-back. Each subcommand adds its steps.
+        private abstract class BenchRun
+        {
+            // The Container's m_name (the GameObject is piece_chest_wood); the token the mod's
+            // own container data matches.
+            protected const string ChestObjectName = "$piece_chestwood";
+
+            protected readonly int _runId;
+            protected readonly string _runner;
+            protected readonly Action<string> _info;
+            protected readonly Action<string> _warn;
+            protected readonly List<StationBench> _stations;
+
+            protected BenchSet _benches;
+            protected Func<string, bool> _sessionHandBack;
+
+            protected BenchRun(int runId, string runner, Action<string> info, Action<string> warn,
+                List<StationBench> stations)
+            {
+                _runId = runId;
+                _runner = runner;
+                _info = info;
+                _warn = warn;
+                _stations = stations;
+            }
+
+            public virtual IReadOnlyList<CheckResult> Results =>
+                _stations.Select(x => x.Result ?? CheckResult.Fail(x.CheckName,
+                    "the run ended before this check reached a result")).ToList();
+
+            protected List<StationBench> Active => _stations.Where(x => x.Result == null).ToList();
+
+            public abstract IEnumerator Execute();
+
+            // Steps that run after Execute, whether it completed or threw; they may span frames.
+            public virtual IEnumerator Finish()
+            {
+                yield break;
+            }
+
+            public virtual void Stopped(Exception e)
+            {
+                FailRemaining($"the run stopped on {e.GetType().Name}: {e.Message}");
+            }
+
+            public virtual void HandBack(string reason)
+            {
+                ReleaseBenches(reason);
+            }
+
+            // Hands the test objects back through the keep rules; a run may do it before it ends.
+            protected void ReleaseBenches(string reason)
+            {
+                if (_benches != null && _benches.HandBack(reason))
+                    SmokeSession.ReleaseHandBack(_sessionHandBack);
+            }
+
+            protected bool CheckEnvironment(Player player)
+            {
+                var reason = EnvironmentProblem(player, true);
+                if (reason == null) return true;
+                SkipRemaining(reason);
+                return false;
+            }
+
+            // Null when the world allows the run; requireRunning also asks for Automatic
+            // Processing to be running.
+            protected static string EnvironmentProblem(Player player, bool requireRunning)
+            {
+                string reason = null;
+                if (ZNetScene.instance == null || !player)
+                    reason = "no world is loaded (ZNetScene or the local player is missing)";
+                else if (ZNet.instance == null || !ZNet.instance.IsServer() ||
+                         ZNet.instance.GetPeerConnections() > 0)
+                    reason = "it runs only in a single-player world you host, with nobody else connected";
+                else if (ObjectDB.instance == null || ObjectDB.instance.m_items.Count == 0)
+                    reason = "ObjectDB is not ready";
+                else if (requireRunning && !ProcessingRunning(out var notRunning))
+                    reason = notRunning;
+                return reason;
+            }
+
+            protected bool FindChestPrefab(out GameObject prefab)
+            {
+                if (!FindPrefab<Container>(ChestObjectName, out prefab))
+                {
+                    SkipRemaining($"{ChestObjectName} prefab not found");
+                    return false;
+                }
+
+                if (!ContainerAccess.IsAllowed(prefab.GetComponent<Container>(),
+                        ProcessingConfig.AllowContainer))
+                {
+                    SkipRemaining(
+                        $"the wood chest ({ChestObjectName}) is not in automatic_processing allow_container");
+                    return false;
+                }
+
+                return true;
+            }
+
+            protected void ResolveStations()
+            {
+                foreach (var station in _stations)
+                    if (!station.FindPrefab())
+                        station.Skip($"{station.ObjectName} prefab not found");
+                    else if (!ProcessingLogics.IsAllowProcessing(station.ObjectName,
+                                 station.RequiredProcess))
+                        station.Skip(
+                            $"allow_processing_by_{station.ObjectName.Substring(1)} does not include {station.RequiredProcess}");
+                    else if (!station.CanPrepare(out var reason))
+                        station.Skip(reason);
+            }
+
+            // Every station shares the chest, and each takes by display name whatever any of its
+            // conversions accepts, and its fuel. A material is therefore only usable when no
+            // other test station would take it, it is not the station's own fuel, and no test
+            // station takes the product either; each station gets the first of its own
+            // conversions that meets that.
+            protected void ChooseItems()
+            {
+                var stations = Active;
+                var takenByAny = new HashSet<string>(stations.SelectMany(x => x.TakenNames()));
+                var used = new HashSet<string>();
+                foreach (var station in stations)
+                {
+                    var takenByOthers = new HashSet<string>(stations.Where(x => x != station)
+                        .SelectMany(x => x.TakenNames()));
+                    foreach (var conversion in station.Conversions())
+                    {
+                        var material = conversion.MaterialName;
+                        var product = conversion.ProductName;
+                        if (material == product || material == station.FuelName) continue;
+                        if (takenByOthers.Contains(material) || takenByAny.Contains(product)) continue;
+                        if (used.Contains(material) || used.Contains(product)) continue;
+
+                        station.Choose(conversion);
+                        used.Add(material);
+                        used.Add(product);
+                        break;
+                    }
+
+                    if (station.Chosen == null)
+                        station.Skip(
+                            $"none of the {station.Label}'s conversions has a material that no other test station takes and a product that no test station takes, so its items cannot be kept apart in the shared chest");
+                }
+            }
+
+            // The chest goes ahead of the player, the stations beside and beyond it, so every
+            // test object is at least the chosen distance away. That distance clears Automatic
+            // Pickup's reach whenever the module may be running.
+            protected bool PlanLayout(Player player, out Vector3 chestPosition, out float distance)
+            {
+                chestPosition = default;
+                distance = NearestPlacement;
+
+                var pickupState = ModuleRegistry.GetState(PickupModule.Instance.Name);
+                if (pickupState != ModuleState.Disabled)
+                {
+                    var reach = PickupConfig.AutomaticPickupRange + RangeMargin;
+                    distance = Mathf.Max(distance, reach + 1f);
+                    if (distance > FarthestPlacement)
+                    {
+                        SkipRemaining(
+                            $"Automatic Pickup is {pickupState} with automatic_pickup_range {PickupConfig.AutomaticPickupRange:0.#} m, so the test stations would have to stand more than {reach:0.#} m from you, beyond the {FarthestPlacement:0} m this check places them; it does not run where Automatic Pickup could reach what a station drops");
+                        return false;
+                    }
+                }
+
+                var origin = player.transform.position;
+                var forward = player.transform.forward;
+                forward.y = 0f;
+                if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
+                forward.Normalize();
+                var right = Vector3.Cross(Vector3.up, forward);
+
+                // The stations share the chest's height, so each stays StationOffset from it on
+                // any slope.
+                chestPosition = Grounded(origin + forward * distance, origin.y);
+                var directions = new[] { right, -right, forward };
+                for (var i = 0; i < _stations.Count; i++)
+                    _stations[i].Position =
+                        chestPosition + directions[i % directions.Length] * StationOffset;
+                return true;
+            }
+
+            protected bool CheckSurroundings(Vector3 chestPosition, float distance)
+            {
+                var stations = Active;
+                var conflicts = FindConflicts(chestPosition, stations);
+                if (conflicts.Count == 0) return true;
+
+                const int listed = 8;
+                _warn(
+                    $"[Automatics Smoke] {_runner}: not the check's own, and within reach of where its test objects go: {string.Join("; ", conflicts.Take(listed))}{(conflicts.Count > listed ? $"; and {conflicts.Count - listed} more" : "")}");
+
+                // Any processing station's container range counts, not only the test stations':
+                // a station of the user's reaches the test chest from its own range.
+                var clearance = distance + StationOffset + RangeMargin +
+                                Processor.GetAllInstance()
+                                    .Max(x => ProcessingConfig.ContainerSearchRange(x.name));
+                SkipRemaining(
+                    $"{conflicts.Count} container(s) or processing station(s) that are not the check's own are within reach of where its test objects go (the first: {conflicts[0]}); stand where nothing of yours is within about {Mathf.CeilToInt(clearance)} m of you and run it again");
+                return false;
+            }
+
+            // Containers the check did not spawn within a test station's container reach, and
+            // processing stations it did not spawn whose own container reach includes the
+            // test chest. Measured at the planned positions, before anything is spawned.
+            protected static List<string> FindConflicts(Vector3 chestPosition,
+                List<StationBench> stations)
+            {
+                var conflicts = new List<string>();
+
+                var containers = new HashSet<Container>(Object.FindObjectsByType<Container>(
+                    FindObjectsInactive.Include, FindObjectsSortMode.None));
+                foreach (var container in ContainerCache.GetAllInstance())
+                    if (container)
+                        containers.Add(container);
+
+                foreach (var container in containers)
+                {
+                    if (!container) continue;
+                    var position = container.transform.position;
+                    foreach (var station in stations)
+                    {
+                        var distance = Vector3.Distance(position, station.Position);
+                        if (distance > ProcessingConfig.ContainerSearchRange(station.ObjectName) +
+                            RangeMargin)
+                            continue;
+
+                        conflicts.Add(
+                            $"{DisplayName(Objects.GetName(container))} at {Where(position)}, {distance:0.0} m from where the test {station.Label} goes");
+                        break;
+                    }
+                }
+
+                var processors = new HashSet<string>(Processor.GetAllInstance().Select(x => x.name));
+                foreach (var component in FindStations())
+                {
+                    if (!component) continue;
+                    var name = Objects.GetName(component);
+                    if (!processors.Contains(name)) continue;
+
+                    var position = component.transform.position;
+                    var distance = Vector3.Distance(position, chestPosition);
+                    if (distance > ProcessingConfig.ContainerSearchRange(name) + RangeMargin)
+                        continue;
+
+                    conflicts.Add(
+                        $"{DisplayName(name)} at {Where(position)}, whose container range reaches where the test chest goes ({distance:0.0} m)");
+                }
+
+                return conflicts;
+            }
+
+            protected static IEnumerable<Component> FindStations()
+            {
+                return Find<Smelter>().Concat(Find<CookingStation>()).Concat(Find<Fermenter>())
+                    .Concat(Find<Fireplace>()).Concat(Find<Beehive>()).Concat(Find<SapCollector>())
+                    .Concat(Find<WispSpawner>()).Concat(Find<Turret>());
+            }
+
+            protected static IEnumerable<Component> Find<T>() where T : Component
+            {
+                return Object.FindObjectsByType<T>(FindObjectsInactive.Include,
+                    FindObjectsSortMode.None).Cast<Component>();
+            }
+
+            // What Processing itself finds for each spawned station has to be the test chest
+            // and nothing else. Anything more would let a test station take from, or store
+            // into, a container that is not the check's, so the whole run stops here, in the
+            // frame of the spawn, and the test objects are handed back before any station has
+            // run an update.
+            protected bool CheckSources()
+            {
+                ProcessingLogics.Cleanup();
+                SmelterProcess.Cleanup();
+
+                foreach (var station in Active)
+                {
+                    var position = station.Go.transform.position;
+                    var sources = ProcessingLogics.GetNearbyContainers(station.ObjectName, position)
+                        .Select(x => x.container)
+                        .ToList();
+                    var others = sources.Where(x => x != _benches.Chest).ToList();
+                    if (others.Count > 0)
+                    {
+                        SkipRemaining(
+                            $"Automatic Processing finds {others.Count} container(s) besides the test chest for the test {station.Label} (the first: {DisplayName(Objects.GetName(others[0]))} at {Where(others[0].transform.position)}); run it away from other containers");
+                        return false;
+                    }
+
+                    if (!sources.Contains(_benches.Chest))
+                        station.Skip(
+                            $"Automatic Processing does not find the test chest for the test {station.Label} (container_search_range_by_{station.ObjectName.Substring(1)} is {ProcessingConfig.ContainerSearchRange(station.ObjectName)} m and the chest is {Vector3.Distance(position, _benches.Chest.transform.position):0.0} m away; a ward or the chest's access rules can also hide it)");
+                }
+
+                return Active.Count > 0;
+            }
+
+            protected bool StillWatching(int frame)
+            {
+                if (!SmokeSession.IsCurrent(_runId))
+                {
+                    SkipRemaining("inconclusive: the run was abandoned (the smoke plugin is shutting down)");
+                    return false;
+                }
+
+                if (ZNetScene.instance == null || !Player.m_localPlayer)
+                {
+                    SkipRemaining(
+                        "inconclusive: the world was unloaded or the local player went away (died or logged out) while the stations were watched");
+                    return false;
+                }
+
+                if (_benches.ChestAlive) return true;
+
+                FailRemaining(
+                    $"the test chest disappeared at frame {frame} while the stations were watched{_benches.NewDropsNear(Active)}");
+                return false;
+            }
+
+            protected void SkipRemaining(string message)
+            {
+                foreach (var station in Active) station.Skip(message);
+            }
+
+            protected void FailRemaining(string message)
+            {
+                foreach (var station in Active) station.Fail(message);
+            }
+
+            protected void NotRunRemaining(string message)
+            {
+                foreach (var station in Active) station.NotRun(message);
+            }
+
+            // Processing searches for containers again every second (Logics.GetNearbyContainers),
+            // so one that comes into reach while the stations are watched - a cart, a ship, a chest
+            // just built - could become a station's source or target. Processing's own search is
+            // repeated on every frame; anything but the test chest ends the run, and the test
+            // objects then go through the hand-back's keep rules.
+            protected bool StillIsolated(int frame)
+            {
+                foreach (var station in Active)
+                {
+                    if (!station.Go) continue;
+
+                    var other = ProcessingLogics
+                        .GetNearbyContainers(station.ObjectName, station.Go.transform.position)
+                        .Select(x => x.container)
+                        .FirstOrDefault(x => x != _benches.Chest);
+                    if (!other) continue;
+
+                    NotRunRemaining(
+                        $"at frame {frame} Automatic Processing found {DisplayName(Objects.GetName(other))} at {Where(other.transform.position)} within reach of the test {station.Label}, so the check stopped; move away from other containers and run it again");
+                    return false;
+                }
+
+                return true;
+            }
+
+            // Terrain height under the point, unless it is far from the player's own height
+            // (a cave, a dungeon, a building), in which case the player's height is used.
+            protected static Vector3 Grounded(Vector3 point, float playerHeight)
+            {
+                var ground = ZoneSystem.instance != null
+                    ? ZoneSystem.instance.GetGroundHeight(point)
+                    : playerHeight;
+                point.y = Mathf.Abs(ground - playerHeight) <= 2f ? ground : playerHeight;
+                return point;
+            }
+
+            // Adds the material through the vanilla Inventory.AddItem(GameObject, int), which
+            // caps one call at a stack, and returns how many arrived.
+            protected static int SeedChest(Inventory inventory, GameObject prefab, string itemName,
+                int amount)
+            {
+                var before = inventory.CountItems(itemName, -1, false);
+                for (var call = 0; call < amount; call++)
+                {
+                    var missing = amount - (inventory.CountItems(itemName, -1, false) - before);
+                    if (missing <= 0 || !inventory.AddItem(prefab, missing)) break;
+                }
+
+                return inventory.CountItems(itemName, -1, false) - before;
+            }
+
+            // Places the chest and the stations, having registered their hand-back with the
+            // session first, so a run cut short at any point still has them handed back.
+            protected bool PlaceBenches(GameObject chestPrefab, Vector3 chestPosition, float distance)
+            {
+                _benches = new BenchSet(_runner, _warn, _stations);
+                _sessionHandBack = _benches.HandBack;
+                SmokeSession.TrackHandBack(_sessionHandBack);
+
+                if (!_benches.PlaceChest(chestPrefab, chestPosition, out var chestProblem))
+                {
+                    SkipRemaining(chestProblem);
+                    return false;
+                }
+
+                foreach (var station in Active)
+                    if (!_benches.PlaceStation(station, out var stationProblem))
+                        station.Skip(stationProblem);
+
+                _info(
+                    $"[Automatics Smoke] {_runner}: the test chest is at {Where(chestPosition)}, {distance:0.0} m ahead of you, with the test stations {StationOffset:0.0} m from it");
+                return Active.Count > 0;
+            }
+        }
+
         // -- The rpc subcommand ------------------------------------------------------------
 
-        private sealed class RpcRun
+        private sealed class RpcRun : BenchRun
         {
             private const int ObservedFrames = 30;
 
@@ -237,40 +673,17 @@ namespace Automatics.SmokeTest
             // and the station's own update can take more while it is watched.
             private const int MaterialSurplus = 3;
 
-            // The Container's m_name (the GameObject is piece_chest_wood); the token the mod's
-            // own container data matches.
-            private const string ChestObjectName = "$piece_chestwood";
-
-            private readonly int _runId;
-            private readonly string _runner;
-            private readonly Action<string> _info;
-            private readonly Action<string> _warn;
-            private readonly List<StationBench> _stations;
-
-            private BenchSet _benches;
-            private Func<string, bool> _sessionHandBack;
-
             public RpcRun(int runId, string runner, Action<string> info, Action<string> warn)
-            {
-                _runId = runId;
-                _runner = runner;
-                _info = info;
-                _warn = warn;
-                _stations = new List<StationBench>
+                : base(runId, runner, info, warn, new List<StationBench>
                 {
                     new SmelterBench(),
                     new OvenBench(),
                     new FermenterBench()
-                };
+                })
+            {
             }
 
-            public IReadOnlyList<CheckResult> Results =>
-                _stations.Select(x => x.Result ?? CheckResult.Fail(x.CheckName,
-                    "the run ended before this check reached a result")).ToList();
-
-            private List<StationBench> Active => _stations.Where(x => x.Result == null).ToList();
-
-            public IEnumerator Execute()
+            public override IEnumerator Execute()
             {
                 _info(
                     $"[Automatics Smoke] {_runner} started: it places a chest, a smelter, a stone oven and a fermenter ahead of you, drives each station's intake once from the chest, watches them for {ObservedFrames} frames and removes them; no setting is changed");
@@ -323,253 +736,6 @@ namespace Automatics.SmokeTest
                 Evaluate();
             }
 
-            public void Stopped(Exception e)
-            {
-                FailRemaining($"the run stopped on {e.GetType().Name}: {e.Message}");
-            }
-
-            public void HandBack(string reason)
-            {
-                if (_benches != null && _benches.HandBack(reason))
-                    SmokeSession.ReleaseHandBack(_sessionHandBack);
-            }
-
-            private bool CheckEnvironment(Player player)
-            {
-                string reason = null;
-                if (ZNetScene.instance == null || !player)
-                    reason = "no world is loaded (ZNetScene or the local player is missing)";
-                else if (ZNet.instance == null || !ZNet.instance.IsServer() ||
-                         ZNet.instance.GetPeerConnections() > 0)
-                    reason = "it runs only in a single-player world you host, with nobody else connected";
-                else if (ObjectDB.instance == null || ObjectDB.instance.m_items.Count == 0)
-                    reason = "ObjectDB is not ready";
-                else if (!ProcessingRunning(out var notRunning))
-                    reason = notRunning;
-
-                if (reason == null) return true;
-                SkipRemaining(reason);
-                return false;
-            }
-
-            private bool FindChestPrefab(out GameObject prefab)
-            {
-                if (!FindPrefab<Container>(ChestObjectName, out prefab))
-                {
-                    SkipRemaining($"{ChestObjectName} prefab not found");
-                    return false;
-                }
-
-                if (!ContainerAccess.IsAllowed(prefab.GetComponent<Container>(),
-                        ProcessingConfig.AllowContainer))
-                {
-                    SkipRemaining(
-                        $"the wood chest ({ChestObjectName}) is not in automatic_processing allow_container");
-                    return false;
-                }
-
-                return true;
-            }
-
-            private void ResolveStations()
-            {
-                foreach (var station in _stations)
-                    if (!station.FindPrefab())
-                        station.Skip($"{station.ObjectName} prefab not found");
-                    else if (!ProcessingLogics.IsAllowProcessing(station.ObjectName, Process.Craft))
-                        station.Skip(
-                            $"allow_processing_by_{station.ObjectName.Substring(1)} does not include Craft");
-                    else if (!station.CanPrepare(out var reason))
-                        station.Skip(reason);
-            }
-
-            // Every station shares the chest, and each takes by display name whatever any of its
-            // conversions accepts, and its fuel. A material is therefore only usable when no
-            // other test station would take it, it is not the station's own fuel, and no test
-            // station takes the product either; each station gets the first of its own
-            // conversions that meets that.
-            private void ChooseItems()
-            {
-                var stations = Active;
-                var takenByAny = new HashSet<string>(stations.SelectMany(x => x.TakenNames()));
-                var used = new HashSet<string>();
-                foreach (var station in stations)
-                {
-                    var takenByOthers = new HashSet<string>(stations.Where(x => x != station)
-                        .SelectMany(x => x.TakenNames()));
-                    foreach (var conversion in station.Conversions())
-                    {
-                        var material = conversion.MaterialName;
-                        var product = conversion.ProductName;
-                        if (material == product || material == station.FuelName) continue;
-                        if (takenByOthers.Contains(material) || takenByAny.Contains(product)) continue;
-                        if (used.Contains(material) || used.Contains(product)) continue;
-
-                        station.Choose(conversion);
-                        used.Add(material);
-                        used.Add(product);
-                        break;
-                    }
-
-                    if (station.Chosen == null)
-                        station.Skip(
-                            $"none of the {station.Label}'s conversions has a material that no other test station takes and a product that no test station takes, so its items cannot be kept apart in the shared chest");
-                }
-            }
-
-            // The chest goes ahead of the player, the stations beside and beyond it, so every
-            // test object is at least the chosen distance away. That distance clears Automatic
-            // Pickup's reach whenever the module may be running.
-            private bool PlanLayout(Player player, out Vector3 chestPosition, out float distance)
-            {
-                chestPosition = default;
-                distance = NearestPlacement;
-
-                var pickupState = ModuleRegistry.GetState(PickupModule.Instance.Name);
-                if (pickupState != ModuleState.Disabled)
-                {
-                    var reach = PickupConfig.AutomaticPickupRange + RangeMargin;
-                    distance = Mathf.Max(distance, reach + 1f);
-                    if (distance > FarthestPlacement)
-                    {
-                        SkipRemaining(
-                            $"Automatic Pickup is {pickupState} with automatic_pickup_range {PickupConfig.AutomaticPickupRange:0.#} m, so the test stations would have to stand more than {reach:0.#} m from you, beyond the {FarthestPlacement:0} m this check places them; it does not run where Automatic Pickup could reach what a station drops");
-                        return false;
-                    }
-                }
-
-                var origin = player.transform.position;
-                var forward = player.transform.forward;
-                forward.y = 0f;
-                if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
-                forward.Normalize();
-                var right = Vector3.Cross(Vector3.up, forward);
-
-                // The stations share the chest's height, so each stays StationOffset from it on
-                // any slope.
-                chestPosition = Grounded(origin + forward * distance, origin.y);
-                var directions = new[] { right, -right, forward };
-                for (var i = 0; i < _stations.Count; i++)
-                    _stations[i].Position =
-                        chestPosition + directions[i % directions.Length] * StationOffset;
-                return true;
-            }
-
-            private bool CheckSurroundings(Vector3 chestPosition, float distance)
-            {
-                var stations = Active;
-                var conflicts = FindConflicts(chestPosition, stations);
-                if (conflicts.Count == 0) return true;
-
-                const int listed = 8;
-                _warn(
-                    $"[Automatics Smoke] {_runner}: not the check's own, and within reach of where its test objects go: {string.Join("; ", conflicts.Take(listed))}{(conflicts.Count > listed ? $"; and {conflicts.Count - listed} more" : "")}");
-
-                // Any processing station's container range counts, not only the test stations':
-                // a station of the user's reaches the test chest from its own range.
-                var clearance = distance + StationOffset + RangeMargin +
-                                Processor.GetAllInstance()
-                                    .Max(x => ProcessingConfig.ContainerSearchRange(x.name));
-                SkipRemaining(
-                    $"{conflicts.Count} container(s) or processing station(s) that are not the check's own are within reach of where its test objects go (the first: {conflicts[0]}); stand where nothing of yours is within about {Mathf.CeilToInt(clearance)} m of you and run it again");
-                return false;
-            }
-
-            // Containers the check did not spawn within a test station's container reach, and
-            // processing stations it did not spawn whose own container reach includes the
-            // test chest. Measured at the planned positions, before anything is spawned.
-            private static List<string> FindConflicts(Vector3 chestPosition,
-                List<StationBench> stations)
-            {
-                var conflicts = new List<string>();
-
-                var containers = new HashSet<Container>(Object.FindObjectsByType<Container>(
-                    FindObjectsInactive.Include, FindObjectsSortMode.None));
-                foreach (var container in ContainerCache.GetAllInstance())
-                    if (container)
-                        containers.Add(container);
-
-                foreach (var container in containers)
-                {
-                    if (!container) continue;
-                    var position = container.transform.position;
-                    foreach (var station in stations)
-                    {
-                        var distance = Vector3.Distance(position, station.Position);
-                        if (distance > ProcessingConfig.ContainerSearchRange(station.ObjectName) +
-                            RangeMargin)
-                            continue;
-
-                        conflicts.Add(
-                            $"{DisplayName(Objects.GetName(container))} at {Where(position)}, {distance:0.0} m from where the test {station.Label} goes");
-                        break;
-                    }
-                }
-
-                var processors = new HashSet<string>(Processor.GetAllInstance().Select(x => x.name));
-                foreach (var component in FindStations())
-                {
-                    if (!component) continue;
-                    var name = Objects.GetName(component);
-                    if (!processors.Contains(name)) continue;
-
-                    var position = component.transform.position;
-                    var distance = Vector3.Distance(position, chestPosition);
-                    if (distance > ProcessingConfig.ContainerSearchRange(name) + RangeMargin)
-                        continue;
-
-                    conflicts.Add(
-                        $"{DisplayName(name)} at {Where(position)}, whose container range reaches where the test chest goes ({distance:0.0} m)");
-                }
-
-                return conflicts;
-            }
-
-            private static IEnumerable<Component> FindStations()
-            {
-                return Find<Smelter>().Concat(Find<CookingStation>()).Concat(Find<Fermenter>())
-                    .Concat(Find<Fireplace>()).Concat(Find<Beehive>()).Concat(Find<SapCollector>())
-                    .Concat(Find<WispSpawner>()).Concat(Find<Turret>());
-            }
-
-            private static IEnumerable<Component> Find<T>() where T : Component
-            {
-                return Object.FindObjectsByType<T>(FindObjectsInactive.Include,
-                    FindObjectsSortMode.None).Cast<Component>();
-            }
-
-            // What Processing itself finds for each spawned station has to be the test chest
-            // and nothing else. Anything more would let a test station take from, or store
-            // into, a container that is not the check's, so the whole run stops here, in the
-            // frame of the spawn, and the test objects are handed back before any station has
-            // run an update.
-            private bool CheckSources()
-            {
-                ProcessingLogics.Cleanup();
-                SmelterProcess.Cleanup();
-
-                foreach (var station in Active)
-                {
-                    var position = station.Go.transform.position;
-                    var sources = ProcessingLogics.GetNearbyContainers(station.ObjectName, position)
-                        .Select(x => x.container)
-                        .ToList();
-                    var others = sources.Where(x => x != _benches.Chest).ToList();
-                    if (others.Count > 0)
-                    {
-                        SkipRemaining(
-                            $"Automatic Processing finds {others.Count} container(s) besides the test chest for the test {station.Label} (the first: {DisplayName(Objects.GetName(others[0]))} at {Where(others[0].transform.position)}); run it away from other containers");
-                        return false;
-                    }
-
-                    if (!sources.Contains(_benches.Chest))
-                        station.Skip(
-                            $"Automatic Processing does not find the test chest for the test {station.Label} (container_search_range_by_{station.ObjectName.Substring(1)} is {ProcessingConfig.ContainerSearchRange(station.ObjectName)} m and the chest is {Vector3.Distance(position, _benches.Chest.transform.position):0.0} m away; a ward or the chest's access rules can also hide it)");
-                }
-
-                return Active.Count > 0;
-            }
-
             private void Seed()
             {
                 foreach (var station in Active)
@@ -614,28 +780,6 @@ namespace Automatics.SmokeTest
                 }
             }
 
-            private bool StillWatching(int frame)
-            {
-                if (!SmokeSession.IsCurrent(_runId))
-                {
-                    SkipRemaining("inconclusive: the run was abandoned (the smoke plugin is shutting down)");
-                    return false;
-                }
-
-                if (ZNetScene.instance == null || !Player.m_localPlayer)
-                {
-                    SkipRemaining(
-                        "inconclusive: the world was unloaded or the local player went away (died or logged out) while the stations were watched");
-                    return false;
-                }
-
-                if (_benches.ChestAlive) return true;
-
-                FailRemaining(
-                    $"the test chest disappeared at frame {frame} while the stations were watched{_benches.NewDropsNear(Active)}");
-                return false;
-            }
-
             // A balanced ledger is not enough on its own: a copy of a test item on the ground
             // would leave it balanced, and so would a call that moved two items at once. On the
             // frame of the direct call no station has run an update of its own, so whatever
@@ -662,72 +806,6 @@ namespace Automatics.SmokeTest
                         station.NotRun(
                             $"the entry returned without taking anything on both attempts, and nothing reached the {station.Label} within {ObservedFrames} frames (the chest still holds {station.Last?.Chest} of the {station.Seeded} put in; {station.Diagnose()})");
                 }
-            }
-
-            private void SkipRemaining(string message)
-            {
-                foreach (var station in Active) station.Skip(message);
-            }
-
-            private void FailRemaining(string message)
-            {
-                foreach (var station in Active) station.Fail(message);
-            }
-
-            private void NotRunRemaining(string message)
-            {
-                foreach (var station in Active) station.NotRun(message);
-            }
-
-            // Processing searches for containers again every second (Logics.GetNearbyContainers),
-            // so one that comes into reach while the stations are watched - a cart, a ship, a chest
-            // just built - could become a station's source or target. Processing's own search is
-            // repeated on every frame; anything but the test chest ends the run, and the test
-            // objects then go through the hand-back's keep rules.
-            private bool StillIsolated(int frame)
-            {
-                foreach (var station in Active)
-                {
-                    if (!station.Go) continue;
-
-                    var other = ProcessingLogics
-                        .GetNearbyContainers(station.ObjectName, station.Go.transform.position)
-                        .Select(x => x.container)
-                        .FirstOrDefault(x => x != _benches.Chest);
-                    if (!other) continue;
-
-                    NotRunRemaining(
-                        $"at frame {frame} Automatic Processing found {DisplayName(Objects.GetName(other))} at {Where(other.transform.position)} within reach of the test {station.Label}, so the check stopped; move away from other containers and run it again");
-                    return false;
-                }
-
-                return true;
-            }
-
-            // Terrain height under the point, unless it is far from the player's own height
-            // (a cave, a dungeon, a building), in which case the player's height is used.
-            private static Vector3 Grounded(Vector3 point, float playerHeight)
-            {
-                var ground = ZoneSystem.instance != null
-                    ? ZoneSystem.instance.GetGroundHeight(point)
-                    : playerHeight;
-                point.y = Mathf.Abs(ground - playerHeight) <= 2f ? ground : playerHeight;
-                return point;
-            }
-
-            // Adds the material through the vanilla Inventory.AddItem(GameObject, int), which
-            // caps one call at a stack, and returns how many arrived.
-            private static int SeedChest(Inventory inventory, GameObject prefab, string itemName,
-                int amount)
-            {
-                var before = inventory.CountItems(itemName, -1, false);
-                for (var call = 0; call < amount; call++)
-                {
-                    var missing = amount - (inventory.CountItems(itemName, -1, false) - before);
-                    if (missing <= 0 || !inventory.AddItem(prefab, missing)) break;
-                }
-
-                return inventory.CountItems(itemName, -1, false) - before;
             }
         }
 
@@ -1131,7 +1209,7 @@ namespace Automatics.SmokeTest
             public string MaterialName => Chosen.MaterialName;
             public string ProductName => Chosen.ProductName;
             protected string MaterialPrefabName => Chosen.From.gameObject.name;
-            protected string ProductPrefabName => Chosen.To.gameObject.name;
+            protected string ProductPrefabName => Chosen.To ? Chosen.To.gameObject.name : null;
 
             public int Seeded { get; set; }
             public bool DirectCallTook { get; set; }
@@ -1143,6 +1221,9 @@ namespace Automatics.SmokeTest
 
             protected abstract Type ComponentType { get; }
             public abstract string FuelName { get; }
+
+            // The kind of processing the settings have to allow for the entry under test.
+            public virtual Process RequiredProcess => Process.Craft;
 
             public void Skip(string message) => Settle(CheckResult.Skip(CheckName, message));
             public void Fail(string message) => Settle(CheckResult.Fail(CheckName, message));
@@ -1222,7 +1303,7 @@ namespace Automatics.SmokeTest
 
                 var content = ReadContent();
                 var produced = Mathf.Max(1, Chosen.Produced);
-                var productItems = chest.CountItems(ProductName, -1, false);
+                var productItems = CountProducts(chest);
                 var sample = new LedgerSample(frame, chest.CountItems(MaterialName, -1, false),
                     content.Material, content.Products + productItems / produced,
                     productItems % produced, content.Foreign, content.ForeignDetail);
@@ -1235,6 +1316,12 @@ namespace Automatics.SmokeTest
                 Last = sample;
             }
 
+            // Product items in the chest; a station whose material turns into nothing has none.
+            private int CountProducts(Inventory chest)
+            {
+                return ProductName == null ? 0 : chest.CountItems(ProductName, -1, false);
+            }
+
             // Exactly what was put in, counted in material: the chest's material, its products as
             // whole batches (a partial batch does not balance), and what the station holds, with
             // nothing foreign in the station. A ceiling would let a foreign item stand in for a
@@ -1245,7 +1332,7 @@ namespace Automatics.SmokeTest
                 if (chest == null) return Seeded == 0 && content.Material + content.Products == 0;
 
                 var produced = Mathf.Max(1, Chosen.Produced);
-                var products = chest.CountItems(ProductName, -1, false);
+                var products = CountProducts(chest);
                 return products % produced == 0 &&
                        chest.CountItems(MaterialName, -1, false) + products / produced +
                        content.Material + content.Products == Seeded;
@@ -1257,7 +1344,7 @@ namespace Automatics.SmokeTest
                     return $"the chest cannot be read, {Label} {content.Material} + products {content.Products}, {Seeded} put in";
 
                 var produced = Mathf.Max(1, Chosen.Produced);
-                var products = chest.CountItems(ProductName, -1, false);
+                var products = CountProducts(chest);
                 return
                     $"chest {chest.CountItems(MaterialName, -1, false)} + {Label} {content.Material} + products {products / produced + content.Products}{(products % produced != 0 ? $" and {products % produced} loose product item(s)" : "")}, {Seeded} put in";
             }
@@ -1655,7 +1742,8 @@ namespace Automatics.SmokeTest
             public int Produced { get; }
 
             public string MaterialName => From.m_itemData.m_shared.m_name;
-            public string ProductName => To.m_itemData.m_shared.m_name;
+            // Null when the material turns into nothing, as fuel does.
+            public string ProductName => To ? To.m_itemData.m_shared.m_name : null;
         }
 
         // What a station holds in its ZDO: the run's material, what it already turned into

@@ -23,6 +23,7 @@ namespace Automatics.AutomaticProcessing
 
         public static void Craft(Fermenter fermenter, ZNetView zNetView)
         {
+            if (!Module.Running) return;
             if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 
@@ -93,6 +94,7 @@ namespace Automatics.AutomaticProcessing
 
         public static void Store(Fermenter fermenter, ZNetView zNetView)
         {
+            if (!Module.Running) return;
             if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 

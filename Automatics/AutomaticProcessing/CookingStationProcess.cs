@@ -21,6 +21,7 @@ namespace Automatics.AutomaticProcessing
 
         public static void Craft(CookingStation cookingStation, ZNetView zNetView)
         {
+            if (!Module.Running) return;
             if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 
@@ -119,6 +120,7 @@ namespace Automatics.AutomaticProcessing
         [UsedImplicitly]
         public static float Refuel(CookingStation cookingStation, ZNetView zNetView, float fuel)
         {
+            if (!Module.Running) return fuel;
             if (!Config.EnableAutomaticProcessing) return fuel;
             if (!Objects.HasValidOwnership(zNetView)) return fuel;
             if (fuel > cookingStation.m_maxFuel - 1f) return fuel;
@@ -157,6 +159,7 @@ namespace Automatics.AutomaticProcessing
         public static bool Store(CookingStation cookingStation, ZNetView zNetView, int slot,
             CookingStation.ItemConversion conversion)
         {
+            if (!Module.Running) return false;
             if (!Config.EnableAutomaticProcessing) return false;
             if (!Objects.HasValidOwnership(zNetView)) return false;
 

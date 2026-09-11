@@ -13,7 +13,7 @@ using Object = UnityEngine.Object;
 namespace Automatics.SmokeTest
 {
     // What the smoke console commands share: one run at a time, and what a run owes the
-    // user's game - the Automatic Pickup setting, spawned test objects - until it is handed
+    // user's game - a module setting it changed, spawned test objects - until it is handed
     // back. HandBack does that:
     //   - when a command's body completes or throws (Guard; Unity stops a coroutine that
     //     throws without running its iterator's finally, so the body cannot do it itself);
@@ -30,8 +30,13 @@ namespace Automatics.SmokeTest
     // could not be discharged is kept rather than dropped.
     internal static class SmokeSession
     {
-        private const string ToggleName = "automatic_pickup/module";
+        // Named after the first command that used it. It is kept for every module toggle, so a
+        // record the lifecycle command left behind is still found.
         private const string MarkerFile = "lifecycle-toggle-restore.txt";
+
+        // A record that names no command was written by the lifecycle command, the only one
+        // that wrote records before they carried the command's name.
+        private const string DefaultMarkerCommand = "automatics_smoke_lifecycle";
 
         private static readonly ManualLogSource Log =
             BepInEx.Logging.Logger.CreateLogSource("Automatics Smoke Session");
@@ -81,7 +86,7 @@ namespace Automatics.SmokeTest
                 HandBack("before a new smoke run");
                 if (_toggle != null)
                     refusal =
-                        $"an earlier run could not put {ToggleName} back (see the warning in the log); set it yourself, then run the command again";
+                        $"an earlier run could not put {_toggle.Name} back (see the warning in the log); set it yourself, then run the command again";
                 else if (PendingHandBacks.Count > 0)
                     refusal =
                         "an earlier run could not remove its test objects yet (see the warning in the log); run the command again later, or restart the game";
@@ -222,16 +227,24 @@ namespace Automatics.SmokeTest
             }
         }
 
-        // -- The Automatic Pickup module toggle ----------------------------------------
+        // -- A module toggle ---------------------------------------------------------------
 
         // Starts watching the toggle for writes that are not the check's own. Any such write
-        // - the settings UI, a config reload - means the user has taken the setting back.
+        // - the settings UI, a config reload - means the user has taken the setting back. The
+        // setting is named after its own definition, "section/key": for Automatic Pickup that is
+        // automatic_pickup/module, and for Automatic Processing automatic_processing/module.
         public static bool BeginToggle(int runId, ConfigEntry<AutomaticsModule> entry, out string refusal)
         {
             refusal = IsCurrent(runId) && _toggle == null ? null : "the run does not own the setting";
             if (refusal != null) return false;
 
-            _toggle = new ToggleRestoration { Entry = entry, Original = entry.Value };
+            _toggle = new ToggleRestoration
+            {
+                Entry = entry,
+                Original = entry.Value,
+                Name = $"{entry.Definition.Section}/{entry.Definition.Key}",
+                Command = _runner
+            };
             entry.SettingChanged += OnToggleChanged;
             return true;
         }
@@ -245,9 +258,9 @@ namespace Automatics.SmokeTest
             if (_toggle == null || !IsCurrent(runId))
                 refusal = "the run no longer owns the setting";
             else if (_toggle.EditedByUser)
-                refusal = $"{ToggleName} was changed outside the check";
-            else if (!WriteMarker(_toggle.Original, value, out var failure))
-                refusal = $"the record of the change could not be written ({failure}), so {ToggleName} was not changed";
+                refusal = $"{_toggle.Name} was changed outside the check";
+            else if (!WriteMarker(_toggle, value, out var failure))
+                refusal = $"the record of the change could not be written ({failure}), so {_toggle.Name} was not changed";
 
             if (refusal != null) return false;
 
@@ -256,7 +269,7 @@ namespace Automatics.SmokeTest
             return true;
         }
 
-        // The lifecycle check's own restore. The lock and TryBegin mean a current run's
+        // The toggling check's own restore. The lock and TryBegin mean a current run's
         // obligation is its own; a run that is no longer current leaves the setting to
         // whichever trigger handed it back.
         public static ToggleOutcome RestoreToggle(int runId, out string detail)
@@ -284,26 +297,26 @@ namespace Automatics.SmokeTest
                 {
                     outcome = ToggleOutcome.LeftForUser;
                     detail =
-                        $"{ToggleName} was changed outside the check and is now {current}; it was left as it is instead of being put back to {toggle.Original}";
+                        $"{toggle.Name} was changed outside the check and is now {current}; it was left as it is instead of being put back to {toggle.Original}";
                 }
                 else if (toggle.Written && current == toggle.Original)
                 {
                     outcome = ToggleOutcome.AlreadyOriginal;
-                    detail = $"{ToggleName} is already back at {toggle.Original}";
+                    detail = $"{toggle.Name} is already back at {toggle.Original}";
                 }
                 else if (toggle.Written)
                 {
                     Assign(toggle, toggle.Original);
                     outcome = toggle.EditedByUser ? ToggleOutcome.LeftForUser : ToggleOutcome.Restored;
                     detail = toggle.EditedByUser
-                        ? $"{ToggleName} was changed outside the check while it was being put back and is now {toggle.Entry.Value}; it was left as it is"
-                        : $"{ToggleName} was put back from {current} to {toggle.Original}";
+                        ? $"{toggle.Name} was changed outside the check while it was being put back and is now {toggle.Entry.Value}; it was left as it is"
+                        : $"{toggle.Name} was put back from {current} to {toggle.Original}";
                 }
             }
             catch (Exception e)
             {
                 detail =
-                    $"{ToggleName} could not be put back to {toggle.Original} ({e.GetType().Name}: {e.Message}); the restoration is kept and tried again at the next opportunity";
+                    $"{toggle.Name} could not be put back to {toggle.Original} ({e.GetType().Name}: {e.Message}); the restoration is kept and tried again at the next opportunity";
                 return ToggleOutcome.Failed;
             }
 
@@ -379,8 +392,11 @@ namespace Automatics.SmokeTest
                 // The warning still goes out, with whatever could be read.
             }
 
+            var command = values.TryGetValue("command", out var recorded) && !string.IsNullOrEmpty(recorded)
+                ? recorded
+                : DefaultMarkerCommand;
             Log.LogWarning(
-                $"[Automatics Smoke] an automatics_smoke_lifecycle run did not finish (the game stopped while it ran). At {Read(values, "at")} it changed {Read(values, "setting")} from {Read(values, "original")} to {Read(values, "written")}. It was not changed back: check that setting and set it to what you want.");
+                $"[Automatics Smoke] an {command} run did not finish (the game stopped while it ran). At {Read(values, "at")} it changed {Read(values, "setting")} from {Read(values, "original")} to {Read(values, "written")}. It was not changed back: check that setting and set it to what you want.");
 
             // A deletion that fails only means this warning appears again at the next start.
             DeleteMarker();
@@ -393,7 +409,7 @@ namespace Automatics.SmokeTest
 
         // Written in place: a crash in the middle of it leaves a partial record, which only
         // makes the warning less specific, since the record is never acted on.
-        private static bool WriteMarker(AutomaticsModule original, AutomaticsModule written,
+        private static bool WriteMarker(ToggleRestoration toggle, AutomaticsModule written,
             out string failure)
         {
             failure = null;
@@ -403,10 +419,11 @@ namespace Automatics.SmokeTest
                 Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
                 File.WriteAllLines(path, new[]
                 {
-                    "setting=" + ToggleName,
-                    "original=" + original,
+                    "setting=" + toggle.Name,
+                    "original=" + toggle.Original,
                     "written=" + written,
-                    "at=" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)
+                    "at=" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture),
+                    "command=" + toggle.Command
                 });
             }
             catch (Exception e)
@@ -447,6 +464,8 @@ namespace Automatics.SmokeTest
         private sealed class ToggleRestoration
         {
             public ConfigEntry<AutomaticsModule> Entry;
+            public string Name;
+            public string Command;
             public AutomaticsModule Original;
             public bool Written;
             public AutomaticsModule LastWritten;

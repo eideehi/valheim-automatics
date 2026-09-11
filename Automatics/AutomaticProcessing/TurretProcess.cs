@@ -82,6 +82,7 @@ namespace Automatics.AutomaticProcessing
 
         public static void Charge(Turret turret, ZNetView zNetView, float delta)
         {
+            if (!Module.Running) return;
             if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 
