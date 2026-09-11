@@ -72,6 +72,17 @@ namespace Automatics
                 x.ReadOnly = true;
             });
 
+            // ConfigMigration writes this entry before any bind; see DefaultsRevision there.
+            Instance.Bind(ConfigMigration.DefaultsRevisionSection, ConfigMigration.DefaultsRevisionKey,
+                ConfigMigration.DefaultsRevision, initializer: x =>
+                {
+                    x.Browsable = false;
+                    x.ReadOnly = true;
+                    x.Description =
+                        "The revision of the default values this file has been brought to. " +
+                        "Automatics writes this entry; do not change it.";
+                });
+
             Instance.ChangeSection("system");
             _logEnabled = Instance.Bind("enable_logging", false);
             _allowedLogLevel = Instance.Bind("log_level_to_allow_logging",

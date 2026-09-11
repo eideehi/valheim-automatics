@@ -129,6 +129,8 @@ namespace Automatics
                     "turned off can only be soft gated, and their patches stay applied until " +
                     "the game is restarted.");
 
+            // Before anything binds an entry: the migrator tells a new install from an existing
+            // one by whether the config file exists, and the first bind creates the file.
             ConfigMigration.Migration(Plugin.Config);
 
             ValheimObject.Initialize(GetAllResourcePath("Data"));

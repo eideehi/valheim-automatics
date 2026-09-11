@@ -1,5 +1,7 @@
 # Configurations
 
+Every module is off on a new install; turn on the ones you want by setting their `Disable Module` entry to `Enabled`. An existing configuration file keeps each module on or off as it was. Only the default of `Disable Module` changed: the settings inside each module keep their defaults.
+
 ## [ #1 System ] / [system]
 ### Logging / [enable_logging]
 Specify whether to enable log output. System initialization logs for Automatics are always output regardless of the value of this option.
@@ -73,7 +75,7 @@ Any container can be added. Identifier: a unique string that does not overlap wi
 ### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Door / [enable_automatic_door]
@@ -125,7 +127,7 @@ Specify a shortcut key to enable/disable the automatic door.
 ### Disable Module / [module]
 You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Mapping / [enable_automatic_mapping]
@@ -258,7 +260,7 @@ Specify whether to output automatic mapping performance metrics to the BepInEx l
 ### Disable Module / [module]
 You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Processing / [enable_automatic_processing]
@@ -1184,7 +1186,7 @@ When the number of items stored in the container is about to become less than th
 ### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Feeding / [enable_automatic_feeding]
@@ -1221,7 +1223,7 @@ Specify the types of animals allowed to feed from the player inventory.
 ### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Repair / [enable_automatic_repair]
@@ -1262,7 +1264,7 @@ Specify where the message is displayed when a piece is repaired.
 ### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Mining / [enable_automatic_mining]
@@ -1311,7 +1313,7 @@ Specify a shortcut key to attempt mining. If a valid shortcut key is assigned to
 ### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Storage / [enable_automatic_storage]
@@ -1366,7 +1368,7 @@ Specify where the message is displayed after items are stored.
 ### Disable Module / [module]
 You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Pickup Range / [automatic_pickup_range]
@@ -1390,7 +1392,7 @@ Interacting with pickable objects using this key makes it possible to pick up th
 ### Disable Module (Reboot Required) / [module]
 You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
 
-- Default value: Enabled
+- Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Farming / [enable_automatic_farming]

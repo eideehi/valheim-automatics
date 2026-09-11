@@ -40,6 +40,22 @@ to edit Automatics options in game.
 Each feature section has a module disable entry. Use it when you do not want
 Automatics to patch or run that feature at all.
 
+A new install starts with every module turned off. Turn on the modules you want
+by setting each section's `Disable Module` option to `Enabled`; the settings
+inside each module keep their usual defaults, so turning the module on is
+normally all you need. For modules that need a restart, their other options
+appear after you turn the module on and restart.
+
+An existing configuration file keeps each module on or off as it was: a module
+you turned off stays off. If the file comes from an older version and has no
+`Disable Module` entry for a module, or one whose value Automatics cannot read,
+that module is turned on, as it would have been before this change. Automatics
+does this once, and records it in the hidden `defaults_revision` entry of the
+file. If it cannot write the file, it logs a warning naming the modules that
+stay off for that session, and tries again at the next start. If you delete the
+configuration file, the next start is a new install, with every module turned
+off.
+
 | Module | Entry | When the change takes effect |
 | --- | --- | --- |
 | Automatic pickup | `Disable Module` | While the game is running. No restart. |

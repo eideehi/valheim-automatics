@@ -11,11 +11,41 @@ namespace BepInEx.Configuration
             ConfigFilePath = configFilePath;
         }
 
+        // How many of the next Reload calls throw, as BepInEx's does when it cannot read the file.
+        public static int ReloadFailures;
+
         public string ConfigFilePath { get; }
 
         public void Reload()
         {
+            if (ReloadFailures <= 0) return;
+
+            ReloadFailures--;
+            throw new System.IO.IOException("The config file could not be read.");
         }
+    }
+
+    // Mirrors BepInEx 5.4.23.5 TomlTypeConverter for the conversion the migrator asks for: an enum
+    // goes through Enum.Parse(type, value, ignoreCase: true), and no other type is converted here.
+    public static class TomlTypeConverter
+    {
+        public static object ConvertToValue(string value, Type valueType)
+        {
+            if (valueType.IsEnum)
+                return Enum.Parse(valueType, value, true);
+
+            throw new InvalidOperationException("Cannot convert to type " + valueType.Name);
+        }
+    }
+}
+
+namespace Automatics
+{
+    // Mirrors the enum in Automatics/Config.cs, whose order gives Enabled = 0 and Disabled = 1.
+    public enum AutomaticsModule
+    {
+        Enabled,
+        Disabled
     }
 }
 

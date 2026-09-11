@@ -124,7 +124,7 @@ namespace Automatics.AutomaticProcessing
         {
             var config = global::Automatics.Config.Instance;
             config.ChangeSection(Section);
-            _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
+            _module = config.Bind("module", AutomaticsModule.Disabled, initializer: x =>
             {
                 x.DispName =
                     Automatics.L10N.Translate("@config_common_disable_module_runtime_name");

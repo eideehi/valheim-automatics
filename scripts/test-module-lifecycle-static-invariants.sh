@@ -1548,17 +1548,112 @@ require_no_warning_suppressions() {
   done
 }
 
-# R5.5 / AC-S7: this slice does not change the default. A module that starts Disabled for
-# everyone is a separate decision, taken after the framework has been demonstrated in game.
-require_the_default_is_unchanged() {
+migration_file="Automatics/ConfigMigration.cs"
+plugin_config_file="Automatics/Config.cs"
+
+# The Config.cs of every module, found on disk rather than listed, so that a module added later
+# is checked too. The callers insist on nine.
+module_config_files() {
+  find Automatics -mindepth 2 -maxdepth 2 -path 'Automatics/Automatic*/Config.cs' -type f | sort
+}
+
+# A new install starts with every module off: each module binds its `module` entry with the
+# default Disabled. An existing config keeps a module on through the value the migrator writes
+# into the file, never through the default.
+require_every_module_starts_disabled() {
+  local -a configs
   local config
 
-  for config in "$pickup_config" "$processing_config" "$mapping_config"; do
+  mapfile -t configs < <(module_config_files)
+  if ((${#configs[@]} != 9)); then
+    fail "expected the Config.cs of nine modules under Automatics/Automatic*/, found ${#configs[@]}: a module added or removed also changes ConfigMigration.ModuleSections and this count"
+  fi
+
+  for config in "${configs[@]}"; do
     require_source_pattern \
       "$config" \
-      "config\\.Bind\\(\"module\", AutomaticsModule\\.Enabled" \
-      "$config must keep the module default Enabled in this slice (R5.5 / AC-S7): changing it needs the runtime toggle demonstrated first"
+      "config\\.Bind\\(\"module\", AutomaticsModule\\.Disabled," \
+      "$config must bind its module entry with the default Disabled: a new install starts with every module off"
+    reject_source_pattern \
+      "$config" \
+      "Bind\\(\"module\", AutomaticsModule\\.Enabled" \
+      "$config must not bind its module entry with the default Enabled: an existing config keeps a module on through the value the migrator writes, not through the default"
   done
+}
+
+# A config file written before that default keeps each module as it was: the migrator writes
+# Enabled for every module entry such a file lacks. A module missing from the migrator's list
+# would be turned off by the update for those users, so the list has to name every section.
+require_the_migrator_keeps_every_module_running() {
+  local -a configs
+  local config
+  local section
+  local list
+
+  list="$(extract_block "$migration_file" 'ModuleSections =')"
+  if [[ -z "$list" ]]; then
+    fail "could not find ModuleSections in $migration_file; the check that the migrator keeps every module running was not run"
+    return
+  fi
+
+  mapfile -t configs < <(module_config_files)
+  if ((${#configs[@]} != 9)); then
+    fail "expected the Config.cs of nine modules under Automatics/Automatic*/, found ${#configs[@]}; the migrator's list was checked against those only"
+  fi
+
+  for config in "${configs[@]}"; do
+    section="$(sed -n -E 's/^[[:space:]]*private const string Section = "([a-z_]+)";.*$/\1/p' "$config" || true)"
+    if [[ -z "$section" ]]; then
+      fail "could not read the section name of $config; the check that the migrator keeps that module running was not run"
+      continue
+    fi
+
+    if ! grep -Fq "\"$section\"" <<<"$list"; then
+      fail "$migration_file must list \"$section\" in ModuleSections ($config): without it, updating turns that module off for a config written before the Disabled default"
+    fi
+  done
+}
+
+# The marker that tells the migrator a file already has the Disabled defaults is bound, so it
+# is written with a description, and hidden, because it is bookkeeping and not a setting. The
+# migrator has to run before anything binds: the first bind writes the defaults and the marker
+# into an existing file, and the migrator would then find the marker and keep no module running.
+require_the_defaults_marker_is_hidden_and_read_first() {
+  local status=0
+  local migrate_line
+  local first_config_line
+  local first_runtime_line
+
+  rg -U -q "Bind\\(ConfigMigration\\.DefaultsRevisionSection, ConfigMigration\\.DefaultsRevisionKey,\\s*ConfigMigration\\.DefaultsRevision, initializer: x =>\\s*\\{[^}]*x\\.Browsable = false;" "$plugin_config_file" || status=$?
+  case "$status" in
+    0) ;;
+    1) fail "$plugin_config_file must bind the defaults marker (ConfigMigration.DefaultsRevisionKey) with Browsable = false: it is bookkeeping, and ConfigurationManager must not show it" ;;
+    *) fail "could not search $plugin_config_file (rg exit $status); the check that the defaults marker is hidden was not run" ;;
+  esac
+
+  migrate_line="$(first_match_line 'ConfigMigration\.Migration\(Plugin\.Config\)' <"$plugin_file")"
+  first_config_line="$(first_match_line 'Plugin\.Config\b' <"$plugin_file")"
+  first_runtime_line="$(first_match_line '^\s*InitializeRuntime\(' <"$plugin_file")"
+  if lookup_failed "$migrate_line" "$first_config_line" "$first_runtime_line" ||
+    [[ -z "$migrate_line" || -z "$first_config_line" || -z "$first_runtime_line" ]]; then
+    fail "could not find the migration call, the first use of Plugin.Config or the InitializeRuntime call in $plugin_file; the check that the migrator runs before the first bind was not run"
+  elif ((migrate_line != first_config_line || migrate_line > first_runtime_line)); then
+    fail "$plugin_file must call ConfigMigration.Migration(Plugin.Config) before anything else uses Plugin.Config and before InitializeRuntime binds the entries: the first bind writes the defaults and the marker into the file, and the migrator then keeps no module running"
+  fi
+}
+
+# The migrator writes the config only through a temporary file that File.Replace swaps in, so an
+# interrupted write leaves the old file or the new one. A direct write to the config path could
+# leave the marker without the module entries it vouches for, or lose settings.
+require_the_config_is_replaced_atomically() {
+  require_source_pattern \
+    "$migration_file" \
+    "File\\.Replace\\(temp, path, null\\)" \
+    "$migration_file must swap the config in with File.Replace(temp, path, null): an interrupted direct write can leave a part of the file"
+  reject_source_pattern \
+    "$migration_file" \
+    "(File\\.(WriteAllText|WriteAllLines|WriteAllBytes|AppendAllText|AppendAllLines|OpenWrite|Create)|new (StreamWriter|FileStream))\\(\\s*path\\b" \
+    "$migration_file must not write the config path directly: write a temporary file and swap it in with File.Replace"
 }
 
 # R9.1 / R9.2: a migrated module needs its own toggle strings. The shared ones still say
@@ -2802,7 +2897,10 @@ require_disable_lowers_the_flag_first "$pickup_module"
 require_disable_lowers_the_flag_first "$mapping_module"
 require_reconciliation_enumerates_the_scene
 require_no_warning_suppressions
-require_the_default_is_unchanged
+require_every_module_starts_disabled
+require_the_migrator_keeps_every_module_running
+require_the_defaults_marker_is_hidden_and_read_first
+require_the_config_is_replaced_atomically
 require_the_runtime_toggle_strings_exist
 
 require_processing_enable_and_disable_shape
