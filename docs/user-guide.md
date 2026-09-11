@@ -62,20 +62,25 @@ off.
 | Automatic pickup | `Disable Module` | While the game is running. No restart. |
 | Automatic processing | `Disable Module` | While the game is running. No restart. |
 | Automatic mapping | `Disable Module` | While the game is running. No restart. |
+| Automatic mining | `Disable Module` | While the game is running. No restart. |
 | Automatic storage | `Disable Module` | While the game is running. No restart. |
-| Every other module | `Disable Module (Reboot Required)` | After the game is restarted. |
+| Automatic farming, feeding and repair | `Disable Module (Reboot Required)` | After the game is restarted. |
 
 When you turn automatic door, automatic pickup, automatic processing, automatic
-mapping or automatic storage off, it stops starting new automatic actions, such
-as door movement, pickups, item transfers, pin updates and storage passes, right
-away, and lets an action that is already in progress finish. For automatic
+mapping, automatic mining or automatic storage off, it stops starting new
+automatic actions, such as door movement, pickups, item transfers, pin updates,
+mining passes and storage passes, right away, and lets an action that is already
+in progress finish. For automatic
 storage, `Store Items` does nothing from then on, and a storage pass that has
-already started still moves every item it selected. The switch itself completes
+already started still moves every item it selected. For automatic mining, a
+pass that has already started completes all of its selected hits, including
+damage, pickaxe durability, noise and skill updates. The switch itself completes
 over the next few frames, when the module's patches and hooks are removed, along
 with the components automatic door adds to doors, automatic pickup adds to
-players and items, and automatic mapping adds to fish, birds, ships, rocks and
-flora. Turning any of them back on also completes over the next few frames, and
-it then also works on objects that appeared while it was off. If the Automatics
+players and items, automatic mapping adds to fish, birds, ships, rocks and flora,
+and automatic mining adds to destructible mineral objects. Turning any of them
+back on also completes over the next few frames, and it then also works on
+objects that appeared while it was off. If the Automatics
 log reports that this Harmony build cannot remove patches at runtime, turning one
 of these modules off only stops it and the patches stay applied until you
 restart the game.
@@ -401,6 +406,14 @@ are shown.
 
 Automatic mining damages the nearest allowed mineral around the player by using
 a usable pickaxe.
+
+Its `Disable Module` option takes effect without a restart. Turning it off stops
+new mining immediately and lets a mining pass already in progress finish all of
+its selected hits. The module's patches, hooks and mineral components are
+removed over the next few frames. Turning it back on also completes over the
+next few frames and discovers eligible mineral objects that appeared while it
+was off. The settings below remain available while the module is off, ready for
+the next enable.
 
 Key settings:
 

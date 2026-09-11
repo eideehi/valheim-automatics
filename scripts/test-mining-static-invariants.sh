@@ -13,10 +13,14 @@ fail() {
 require_source_pattern() {
   local pattern="$1"
   local message="$2"
+  local status=0
 
-  if ! rg -q "$pattern" "$source_file"; then
-    fail "$message"
-  fi
+  rg -q "$pattern" "$source_file" || status=$?
+  case "$status" in
+    0) ;;
+    1) fail "$message" ;;
+    *) fail "could not search $source_file (rg exit $status); the check behind this was not run: $message" ;;
+  esac
 }
 
 require_source_count_at_least() {
@@ -24,21 +28,67 @@ require_source_count_at_least() {
   local minimum="$2"
   local message="$3"
   local count
+  local status=0
 
-  count="$(rg -c "$pattern" "$source_file" || true)"
-  if ((count < minimum)); then
-    fail "$message"
-  fi
+  count="$(rg -c "$pattern" "$source_file")" || status=$?
+  case "$status" in
+    0)
+      if ((count < minimum)); then fail "$message"; fi
+      ;;
+    1) fail "$message" ;;
+    *) fail "could not search $source_file (rg exit $status); the check behind this was not run: $message" ;;
+  esac
 }
 
 reject_source_pattern() {
   local pattern="$1"
   local message="$2"
+  local status=0
 
-  if rg -q "$pattern" "$source_file"; then
-    fail "$message"
-  fi
+  rg -q "$pattern" "$source_file" || status=$?
+  case "$status" in
+    0) fail "$message" ;;
+    1) ;;
+    *) fail "could not search $source_file (rg exit $status); the check behind this was not run: $message" ;;
+  esac
 }
+
+first_match_line() {
+  local pattern="$1"
+  local status=0
+  local out=""
+
+  out="$(rg -n "$pattern")" || status=$?
+  case "$status" in
+    0) printf '%s\n' "$out" | head -1 | cut -d: -f1 ;;
+    1) ;;
+    *) printf 'ERROR\n' ;;
+  esac
+}
+
+extract_block() {
+  local start_pattern="$1"
+
+  EXTRACT_BLOCK_START="$start_pattern" awk '
+    BEGIN { start = ENVIRON["EXTRACT_BLOCK_START"] }
+    !started && $0 ~ start { started = 1 }
+    !started { next }
+    {
+      line = $0
+      opens = gsub(/{/, "{")
+      closes = gsub(/}/, "}")
+      depth += opens - closes
+      if (!opened && opens > 0) opened = 1
+      print line
+      if (opened && depth <= 0) exit
+    }
+  ' "$source_file"
+}
+
+if [[ ! -r "$source_file" ]]; then
+  fail "cannot read $source_file; none of the mining checks below would mean anything"
+  exit 1
+fi
 
 reject_source_pattern \
   "\\.IsOwner\\(\\)" \
@@ -92,6 +142,17 @@ require_source_pattern \
 reject_source_pattern \
   "m_durability -= [A-Za-z_.]*m_useDurabilityDrain;" \
   "mining must not subtract the raw durability drain: vanilla scales it by Game.m_durabilityRate"
+
+mining_body="$(extract_block "private static bool Mining\\(Player player, ItemDrop")"
+damage_line="$(printf '%s\n' "$mining_body" | first_match_line 'parent\.Damage\(CreateHitData')"
+use_line="$(printf '%s\n' "$mining_body" | first_match_line 'UsePickaxe\(player, pickaxe\)')"
+success_line="$(printf '%s\n' "$mining_body" | first_match_line 'mined = true')"
+if [[ -z "$mining_body" || -z "$damage_line" || -z "$use_line" || -z "$success_line" ||
+      "$damage_line" == "ERROR" || "$use_line" == "ERROR" || "$success_line" == "ERROR" ]]; then
+  fail "could not locate Damage, UsePickaxe and the success flag in the mining hit loop; their ordering check was not run"
+elif ((damage_line >= use_line || use_line >= success_line)); then
+  fail "each mining hit must apply Damage, then UsePickaxe, then mark the candidate mined"
+fi
 
 if ((failures > 0)); then
   exit 1

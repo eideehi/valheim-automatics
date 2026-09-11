@@ -9,7 +9,7 @@ Automatics is a mod that automates the tedious tasks of life in Valheim. Most of
 
 ## Features
 
-> **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Disable Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping and Automatic Storage switch on and off immediately; the others need a restart of the game. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
+> **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Disable Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining and Automatic Storage switch on and off immediately; the others need a restart of the game. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
 
 For feature-by-feature usage, see [docs/user-guide.md](docs/user-guide.md).
 

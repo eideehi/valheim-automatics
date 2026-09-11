@@ -56,6 +56,9 @@ namespace Automatics
             Run("M-A: an enabled automatic_mapping module survives migration", EnabledMappingModuleSurvivesMigration);
             Run("M-B: a disabled automatic_mapping module survives migration", DisabledMappingModuleSurvivesMigration);
             Run("M-C: user values inside automatic_mapping survive migration", MappingInnerValuesSurviveMigration);
+            Run("an enabled automatic_mining module survives migration", EnabledMiningModuleSurvivesMigration);
+            Run("a disabled automatic_mining module survives migration", DisabledMiningModuleSurvivesMigration);
+            Run("user values inside automatic_mining survive migration", MiningInnerValuesSurviveMigration);
             Run("a 1.7.0 config without the defaults marker keeps automatic_storage Disabled and gains the marker", DisabledStorageModuleStaysDisabled);
             Run("user values inside a disabled automatic_storage survive migration", StorageInnerValuesSurviveMigration);
             Run("a config from before module entries existed gets every module Enabled", ConfigFromBeforeModuleEntriesGetsEveryModuleEnabled);
@@ -517,6 +520,71 @@ namespace Automatics
                 .Single(line => line.StartsWith("allow_pinning_monster = ", StringComparison.Ordinal));
             AssertContains(monsters, "Boar");
             AssertContains(monsters, "Morgen");
+        }
+
+        // Automatic Mining now binds its inner settings even while the module is disabled. Its
+        // mineral allowlist is also rewritten by the 1.6.0 migration, so the rewrite must retain
+        // the user's module choice and every inner value while appending FlametalDeposit.
+        private static void EnabledMiningModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mining]",
+                "module = Enabled",
+                "allow_mining_mineral = CopperDeposit");
+
+            AssertModule(migrated, "automatic_mining", "Enabled");
+            AssertContains(migrated, "FlametalDeposit");
+        }
+
+        private static void DisabledMiningModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mining]",
+                "module = Disabled",
+                "allow_mining_mineral = CopperDeposit");
+
+            AssertModule(migrated, "automatic_mining", "Disabled");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"),
+                "The mining module value should be carried over once.");
+            AssertContains(migrated, "FlametalDeposit");
+        }
+
+        private static void MiningInnerValuesSurviveMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mining]",
+                "module = Disabled",
+                "enable_automatic_mining = false",
+                "mining_interval = 2.5",
+                "mining_range = 17",
+                "allow_mining_mineral = CopperDeposit",
+                "need_to_equip_pickaxe = false",
+                "allow_mining_underground_minerals = false",
+                "need_to_equip_wishbone_for_mining_underground_minerals = false",
+                "mining_key = LeftAlt");
+
+            AssertModule(migrated, "automatic_mining", "Disabled");
+            AssertContains(migrated, "enable_automatic_mining = false");
+            AssertContains(migrated, "mining_interval = 2.5");
+            AssertContains(migrated, "mining_range = 17");
+            AssertContains(migrated, "need_to_equip_pickaxe = false");
+            AssertContains(migrated, "allow_mining_underground_minerals = false");
+            AssertContains(migrated,
+                "need_to_equip_wishbone_for_mining_underground_minerals = false");
+            AssertContains(migrated, "mining_key = LeftAlt");
+
+            var minerals = migrated
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+                .Single(line => line.StartsWith("allow_mining_mineral = ",
+                    StringComparison.Ordinal));
+            AssertContains(minerals, "CopperDeposit");
+            AssertContains(minerals, "FlametalDeposit");
         }
 
         // Automatic Storage binds its inner settings unconditionally from this change on, so a

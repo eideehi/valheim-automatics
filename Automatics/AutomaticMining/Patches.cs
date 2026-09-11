@@ -12,7 +12,7 @@ namespace Automatics.AutomaticMining
         private static void Destructible_Awake_Postfix(Destructible __instance, ZNetView ___m_nview)
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<AutomaticMining>();
+                Module.AttachMineral(__instance.gameObject);
         }
 
         [HarmonyPostfix]
@@ -20,7 +20,7 @@ namespace Automatics.AutomaticMining
         private static void MineRock_Start_Postfix(MineRock __instance, ZNetView ___m_nview)
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<AutomaticMining>();
+                Module.AttachMineral(__instance.gameObject);
         }
 
         [HarmonyPostfix]
@@ -28,7 +28,7 @@ namespace Automatics.AutomaticMining
         private static void MineRock5_Awake_Postfix(MineRock5 __instance, ZNetView ___m_nview)
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<AutomaticMining>();
+                Module.AttachMineral(__instance.gameObject);
         }
     }
 }

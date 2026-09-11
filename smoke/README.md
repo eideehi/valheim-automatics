@@ -199,9 +199,9 @@ safe.
 
 `automatics_smoke_lifecycle` (no arguments) exercises the runtime module
 lifecycle on Automatic Pickup; with the argument `mapping` it exercises Automatic
-Mapping instead, and with `door` or `storage` it exercises Automatic Door or
-Automatic Storage through the module runner the migrated modules share (described
-after this one). Run it from the
+Mapping instead, and with `door`, `mining` or `storage` it exercises Automatic
+Door, Automatic Mining or Automatic Storage through the module runner the migrated
+modules share (described after this one). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
 through off → on → off:
@@ -421,6 +421,47 @@ Turning the module off starts no new opening or closing, allows an operation alr
 in progress to finish, and completes the switch over the next few frames. It does
 not close any Door or call a Door API. Turning it back on reconciles eligible Doors
 that appeared or remained inactive while it was off.
+
+#### `automatics_smoke_lifecycle mining`
+
+`mining` uses the descriptor-driven runner for `automatic_mining / module`. It
+takes an enabled module through three off → on cycles, spawns nothing, changes no
+Mining setting and restores the module setting afterwards.
+
+Before anything is written, and again immediately before every re-enable, the runner
+requires a local player and a condition in which normal automatic mining cannot
+start during an on interval: either the player has no usable pickaxe (none equipped
+when `Need To Equip Pickaxe For Mining` is on, or none in the inventory when it is
+off), or no eligible allowed mineral is within the product's full candidate radius
+(`Mining Range`, or 32 when it is 0, plus the 24 meter root-pivot margin and 2
+meters of smoke-test clearance). This scan does not depend on the scoped component,
+which is absent while the module is off. If the initial check
+fails, nothing is written and every check SKIPs. If a later check fails, that cycle
+and the remaining on-side checks SKIP without the normal re-enable write, and the
+existing restoration path puts the original enabled setting back. It never changes
+the inner Mining settings for you. Do not move or equip a pickaxe while the command
+is running.
+
+In addition to the runner's state, patch and error checks, the Mining descriptor
+checks:
+
+| Check | Asserts |
+|---|---|
+| `mining_timer_state_captured` | The timer count immediately before each disable request was recorded without changing it |
+| `mining_off_stopped_at_request` | In the frame of the disable request the module remains applied but starts no new mining pass |
+| `mining_off_probes_as_expected` | The three Mining hook handlers and every `AutomaticMining` component are gone, `AllInstance.Count` is zero, and each Mining-owned handler's own occurrence in its hook is zero |
+| `mining_timers_cleared` | A non-empty `MiningTimers` table observed immediately before disabling is empty while the module is off; if it was already empty, cleanup was not observable and the check SKIPs |
+| `mining_on_patches_applied` | The patches under Mining's Harmony id exactly match `Automatics.AutomaticMining.Patches` |
+| `mining_on_probes_at_baseline` | All three handlers are restored, every currently eligible unique `Destructible`, `MineRock` and `MineRock5` GameObject with a ZDO has one component, and `AllInstance.Count` matches the active components rather than a stale baseline |
+| `mining_components_current_generation` | Every eligible mineral object, including inactive objects, has an `AutomaticMining` component stamped with the current activation generation |
+
+Turning the module off stops new mining immediately and lets a mining pass already
+accepted by a player hook finish its selected hits, including damage and pickaxe
+bookkeeping. The patches, subscriptions and components are removed over the next
+few frames. Turning it back on also completes over the next few frames and scans
+loaded inactive objects as well as active ones. Under the required stationary,
+no-pickaxe conditions, the check does not strike a mineral, change tool durability
+or create a drop.
 
 ### Processing smoke command
 

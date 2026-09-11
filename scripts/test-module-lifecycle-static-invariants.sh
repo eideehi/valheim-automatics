@@ -39,6 +39,7 @@ migrated_module_dirs=(
   "Automatics/AutomaticMapping"
   "Automatics/AutomaticStorage"
   "Automatics/AutomaticDoor"
+  "Automatics/AutomaticMining"
 )
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
@@ -47,7 +48,6 @@ migrated_module_dirs=(
 unmigrated_module_configs=(
   "Automatics/AutomaticFarming/Config.cs"
   "Automatics/AutomaticFeeding/Config.cs"
-  "Automatics/AutomaticMining/Config.cs"
   "Automatics/AutomaticRepair/Config.cs"
 )
 
@@ -162,6 +162,34 @@ door_callbacks=(
   "AutomaticDoor.Awake|$door_component|private void Awake\\(|_door = GetComponent<Door>();"
   "AutomaticDoor.OnScopeDetaching|$door_component|public void OnScopeDetaching\\(|Unregister();"
   "AutomaticDoor.OnDestroy|$door_component|private void OnDestroy\\(|Unregister();"
+)
+
+mining_dir="Automatics/AutomaticMining"
+mining_config="$mining_dir/Config.cs"
+mining_module="$mining_dir/Module.cs"
+mining_patches="$mining_dir/Patches.cs"
+mining_component="$mining_dir/AutomaticMining.cs"
+mining_smoke="smoke/Automatics.SmokeTest/LifecycleSmokeModules.cs"
+
+# The two player hooks are the only boundaries at which a mining pass may observe a stop.
+# OnPlayerAwake only clears timers, and AttachMineral is discovery rather than a world effect.
+mining_entries=(
+  "Module.OnPlayerUpdate|$mining_module|private static void OnPlayerUpdate\\(|if (!Module.Running) return;"
+  "Module.OnPlayerFixedUpdate|$mining_module|private static void OnPlayerFixedUpdate\\(|if (!Module.Running) return;"
+)
+
+# Every bind in Automatic Mining, in its persisted order. The patterns include the defaults so
+# an edit cannot silently change what a new install gets while leaving the key in place.
+mining_config_entries=(
+  'module|config *\. *Bind *\( *"module" *, *AutomaticsModule *\. *Disabled'
+  'enable_automatic_mining|config *\. *Bind *\( *"enable_automatic_mining" *, *true *\)'
+  'mining_interval|config *\. *Bind *\( *"mining_interval" *, *1\.5f *, *\( *0\.1f *, *4f *\) *\)'
+  'mining_range|config *\. *Bind *\( *"mining_range" *, *3 *, *\( *0 *, *32 *\) *\)'
+  'allow_mining_mineral|config *\. *BindValheimObjectList *\( *"allow_mining_mineral" *, *ValheimObject *\. *Mineral *\)'
+  'need_to_equip_pickaxe|config *\. *Bind *\( *"need_to_equip_pickaxe" *, *true *\)'
+  'allow_mining_underground_minerals|config *\. *Bind *\( *"allow_mining_underground_minerals" *, *true *\)'
+  'need_to_equip_wishbone_for_mining_underground_minerals|config *\. *Bind *\( *"need_to_equip_wishbone_for_mining_underground_minerals" *, *true *\)'
+  'mining_key|config *\. *Bind *\( *"mining_key" *, *new KeyboardShortcut *\( *\) *\)'
 )
 
 # The Automatic Processing patterns are POSIX EREs matched against a stream in which every run
@@ -368,6 +396,7 @@ for source_file in \
   "$storage_config" "$storage_module" \
   "$door_config" "$door_module" "$door_patches" "$door_component" \
   "$door_smoke" "$door_world_smoke" "$door_startup_smoke" \
+  "$mining_config" "$mining_module" "$mining_patches" "$mining_component" "$mining_smoke" \
   "${unmigrated_module_configs[@]}"; do
   if [[ ! -r "$source_file" ]]; then
     fail "cannot read $source_file; none of the checks below would mean anything"
@@ -405,6 +434,13 @@ for door_row in "${door_entries[@]}" "${door_callbacks[@]}"; do
   IFS='|' read -r _ door_row_file _ _ <<<"$door_row"
   if [[ ! -r "$door_row_file" ]]; then
     fail "cannot read $door_row_file; none of the Door checks below would mean anything"
+  fi
+done
+
+for mining_entry in "${mining_entries[@]}"; do
+  IFS='|' read -r _ mining_entry_file _ _ <<<"$mining_entry"
+  if [[ ! -r "$mining_entry_file" ]]; then
+    fail "cannot read $mining_entry_file; none of the Mining checks below would mean anything"
   fi
 done
 
@@ -2077,6 +2113,43 @@ method_body() {
   printf '%s\n' "$stripped" | extract_block - "$2"
 }
 
+# A method whose whole gate-free body is safety-relevant, compared after comments, literals and
+# whitespace have been removed. The caller supplies the complete audited implementation.
+require_exact_method_body() {
+  local file="$1"
+  local declaration="$2"
+  local expected="$3"
+  local message="$4"
+  local body
+  local compact
+
+  body="$(method_body "$file" "$declaration")"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != "$expected" ]]; then
+    fail "$message"
+  fi
+}
+
+# Component methods named like Unity messages are engine entry points even when they are not in
+# the six-name set older checks knew about. Awake is deliberately outside the pattern; the only
+# On* messages these scoped components may declare are their two audited teardown callbacks.
+require_component_declares_only_allowed_unity_messages() {
+  local file="$1"
+  local label="$2"
+  local stripped
+  local found
+  local allowed
+
+  stripped="$(strip_code "$file")"
+  found="$(printf '%s\n' "$stripped" | count_hits '(void|IEnumerator) *(On[A-Z][A-Za-z0-9_]*|Update|FixedUpdate|LateUpdate|Start|Reset|OnValidate) *\(')"
+  allowed="$(printf '%s\n' "$stripped" | count_hits '(void|IEnumerator) *(OnDestroy|OnScopeDetaching) *\(')"
+  if lookup_failed "$found" "$allowed"; then
+    fail "could not search $file; the Unity message allowlist check was not run"
+  elif ((found != allowed)); then
+    fail "$label may declare only Awake, OnDestroy and OnScopeDetaching as Unity message-shaped methods; found $found candidate(s), of which $allowed are allowed"
+  fi
+}
+
 # The first statement of a block with all whitespace removed: what follows the opening brace up
 # to and including the first ';', or up to the first '{' when a block statement comes first.
 # Without whitespace, a statement may be wrapped over lines but not changed.
@@ -3317,7 +3390,6 @@ require_door_acquisition_and_component_ownership() {
 require_door_cleanup_is_non_destructive() {
   local body
   local compact
-  local found
 
   body="$(method_body "$door_module" "public void Disable\\(ModuleScope scope\\)")"
   compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
@@ -3330,6 +3402,10 @@ require_door_cleanup_is_non_destructive() {
   if [[ "$compact" != 'privatestaticvoidResetState(){_openTimer=0f;_closeTimer=0f;PlayerMotionStates.Clear();ActivePlayerStateKeys.Clear();PlayerStateKeysBuffer.Clear();}' ]]; then
     fail "Door ResetState must reset both timers and clear all three player-motion collections, and do nothing else"
   fi
+
+  require_exact_method_body "$door_component" 'private void Awake\(\)' \
+    'privatevoidAwake(){_door=GetComponent<Door>();_transform=transform;Objects.GetZNetView(_door,out_zNetView);_allowAutomaticDoorDirty=true;AllInstance.Add(this);}' \
+    "AutomaticDoor.Awake must only acquire its borrowed references, mark its allow-state dirty and register the component"
 
   body="$(method_body "$door_component" "private void Unregister\\(\\)")"
   compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
@@ -3373,20 +3449,7 @@ require_door_cleanup_is_non_destructive() {
     fail "AutomaticDoor.MarkAllowAutomaticDoorDirty must do nothing but mark every registered instance dirty; it must never touch a door"
   fi
 
-  # Awake and OnDestroy are the component's only Unity message methods (5.1); any of the
-  # others is a gate-free entry the table above does not audit. Read over the
-  # comment/literal-stripped, whitespace-collapsed stream rather than raw source lines: a
-  # declaration split across lines after its return type (`private void\n    OnDisable()`)
-  # shares no line with the method name, so a per-line search would not see it. The (void|
-  # IEnumerator) anchor keeps a longer name that merely ends or starts with one of the six
-  # (UpdateAutomaticDoor, StartCoroutine) from matching, since neither has one of the six
-  # names directly preceded by a return-type keyword or directly followed by "(".
-  found="$(strip_code "$door_component" | count_hits '(void|IEnumerator) *(OnDisable|OnEnable|Update|FixedUpdate|LateUpdate|Start) *\(')"
-  if lookup_failed "$found"; then
-    fail "could not search $door_component; the Unity message method check was not run"
-  elif ((found != 0)); then
-    fail "AutomaticDoor must not declare OnDisable, OnEnable, Update, FixedUpdate, LateUpdate or Start; Awake and OnDestroy are its only Unity message methods"
-  fi
+  require_component_declares_only_allowed_unity_messages "$door_component" AutomaticDoor
 }
 
 require_door_access_checks_precede_opening() {
@@ -3532,6 +3595,341 @@ require_door_existing_smokes_follow_runtime_state() {
   fi
 }
 
+require_mining_state_and_registration() {
+  local body
+  local compact
+
+  require_source_pattern "$mining_module" 'internal sealed class Module *: *IAutomaticsModule' \
+    "the Mining module must implement IAutomaticsModule"
+  require_source_pattern "$mining_module" 'public string Name *=> *"automatic-mining" *;' \
+    "the Mining module registry name must remain automatic-mining"
+  require_source_pattern "$mining_module" 'public string ConfigSection *=> *"automatic_mining" *;' \
+    "the Mining module config section must remain automatic_mining"
+  require_source_pattern "$mining_module" 'public bool SupportsRuntimeToggle *=> *true *;' \
+    "the Mining module must declare runtime toggle support"
+  require_source_pattern "$mining_module" '\[AutomaticsInitializer\(6\)\]' \
+    "the Mining module initializer order must remain 6"
+
+  require_source_pattern "$mining_module" \
+    'internal static bool Running *=> *Active *&& *!StopRequested *;' \
+    "Mining Running must be exactly Active && !StopRequested"
+  require_source_pattern "$mining_module" \
+    'internal static bool Discovering *=> *Active *&& *CurrentScope *!= *null *;' \
+    "Mining Discovering must be exactly Active && CurrentScope != null"
+
+  body="$(method_body "$mining_module" 'public void SetStopRequested\(bool value\)')"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'publicvoidSetStopRequested(boolvalue){StopRequested=value;}' ]]; then
+    fail "Mining SetStopRequested must do nothing but assign the requested value"
+  fi
+
+  body="$(method_body "$mining_module" 'private static void Initialize\(\)')"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatestaticvoidInitialize(){ModuleRegistry.Register(Instance);}' ]]; then
+    fail "the Mining initializer must only register Module.Instance"
+  fi
+}
+
+require_mining_entries_and_attach_paths() {
+  local body
+  local stripped
+  local found
+  local file
+  local total=0
+  local declarations=0
+  local inside=0
+
+  require_item_entries_open_with_the_gate mining_entries "$mining_dir" "$mining_module" 2
+  require_item_entries_never_recheck_after_a_change mining_entries \
+    'AutomaticMining *\. *TryMining *\(' "$mining_component" "$mining_config"
+
+  stripped="$(strip_code "$mining_module")"
+  found="$(printf '%s\n' "$stripped" | count_hits "$module_running_read")"
+  if lookup_failed "$found"; then
+    fail "could not search the Mining module for its Running reads; the check was not run"
+  elif ((found != 2)); then
+    fail "Mining must read Module.Running only at its two player-hook entry gates: found $found read(s)"
+  fi
+
+  for method in OnPlayerUpdate OnPlayerFixedUpdate; do
+    found="$(printf '%s\n' "$stripped" | count_hits "(^|[^A-Za-z0-9_])$method *\\(")"
+    if lookup_failed "$found"; then
+      fail "could not search the Mining module for calls to $method; the nested-entry check was not run"
+    elif ((found != 1)); then
+      fail "Mining.$method must only occur as its declaration and must not be called as a nested gated entry: found $found occurrence(s)"
+    fi
+  done
+
+  found="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])Discovering([^A-Za-z0-9_]|$)')"
+  if lookup_failed "$found"; then
+    fail "could not search the Mining module for Discovering reads; the check was not run"
+  elif ((found != 2)); then
+    fail "Mining Discovering must occur only in its predicate and AttachMineral gate: found $found occurrence(s)"
+  fi
+
+  # The file list is taken with its exit status: rg reports an unreadable directory on stderr,
+  # still prints the files it could reach and exits 2, and a partial list read through a
+  # process substitution would count every reachable call and pass.
+  local files
+  local list_status=0
+  files="$(rg --files Automatics smoke -g '*.cs')" || list_status=$?
+  if ((list_status != 0)) || [[ -z "$files" ]]; then
+    fail "could not list the C# files under Automatics and smoke (rg exit $list_status); the Mining call-site check was not run"
+    return
+  fi
+
+  while IFS= read -r file; do
+    [[ "$file" == Automatics/Libraries/* ]] && continue
+    stripped="$(strip_code "$file")"
+    found="$(printf '%s\n' "$stripped" | count_hits '(^|[^A-Za-z0-9_])TryMining *\(')"
+    if lookup_failed "$found"; then
+      fail "could not search $file for TryMining; the Mining call-site check was not run"
+      return
+    fi
+    total=$((total + found))
+
+    found="$(printf '%s\n' "$stripped" | count_hits 'public *static *void *TryMining *\(')"
+    if lookup_failed "$found"; then
+      fail "could not distinguish the TryMining declaration in $file; the Mining call-site check was not run"
+      return
+    fi
+    declarations=$((declarations + found))
+  done <<<"$files"
+
+  for method in OnPlayerUpdate OnPlayerFixedUpdate; do
+    body="$(method_body "$mining_module" "private static void $method\\(")"
+    found="$(printf '%s\n' "$body" | count_hits 'AutomaticMining *\. *TryMining *\(')"
+    if lookup_failed "$found"; then
+      fail "could not inspect Mining.$method for its TryMining call; the call-site check was not run"
+      return
+    fi
+    inside=$((inside + found))
+  done
+
+  if ((declarations != 1 || total - declarations != 2 || inside != 2)); then
+    fail "TryMining must have exactly two calls across Automatics (excluding Libraries) and smoke, both qualified calls inside Module.OnPlayerUpdate and Module.OnPlayerFixedUpdate; found $((total - declarations)) call(s), $declarations declaration(s), and $inside call(s) in those two bodies"
+  fi
+}
+
+require_mining_component_ownership() {
+  local body
+  local found
+  local type
+
+  body="$(method_body "$mining_module" 'private static void ReconcileMinerals\(ModuleScope scope\)')"
+  if [[ -z "$body" ]]; then
+    fail "the Mining module must define ReconcileMinerals; its activation scan could not be checked"
+    return
+  fi
+
+  for type in Destructible MineRock MineRock5; do
+    found="$(printf '%s\n' "$body" | count_hits "FindObjectsByType *< *$type *> *\\( *FindObjectsInactive *\\. *Include *, *FindObjectsSortMode *\\. *None *\\)")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the Mining activation scan for $type; the check was not run"
+    elif ((found != 1)); then
+      fail "ReconcileMinerals must enumerate inactive $type objects exactly once: found $found"
+    fi
+  done
+
+  for pattern in 'Objects *\. *GetZNetView *\(' 'GetZDO *\( *\) *== *null' \
+    'scope *\. *Attach *< *AutomaticMining *> *\('; do
+    found="$(printf '%s\n' "$body" | count_hits "$pattern")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the Mining activation scan; the ZDO and scope ownership check was not run"
+    elif ((found != 3)); then
+      fail "ReconcileMinerals must validate and attach each of its three target types through the supplied scope; pattern '$pattern' occurred $found time(s)"
+    fi
+  done
+
+  body="$(method_body "$mining_module" 'internal static void AttachMineral\(GameObject target\)')"
+  found="$(printf '%s\n' "$body" | count_hits 'CurrentScope *\. *TryAttach *< *AutomaticMining *> *\(')"
+  if lookup_failed "$found"; then
+    fail "could not inspect the Mining runtime attach path; the check was not run"
+  elif ((found != 1)); then
+    fail "AttachMineral must attach through CurrentScope.TryAttach exactly once: found $found"
+  fi
+
+  found="$(strip_code "$mining_patches" | count_hits 'Module *\. *AttachMineral *\(')"
+  if lookup_failed "$found"; then
+    fail "could not inspect the Mining postfix routing; the check was not run"
+  elif ((found != 3)); then
+    fail "the three Mining postfixes must each route through Module.AttachMineral: found $found route(s)"
+  fi
+
+  require_source_pattern "$mining_component" \
+    'class AutomaticMining *: *MonoBehaviour *, *IScopedComponent' \
+    "AutomaticMining must implement IScopedComponent so its activation scope can stamp and detach it"
+  require_source_pattern "$mining_component" 'public int ScopeGeneration *\{ *get *; *set *; *\}' \
+    "AutomaticMining must expose its scope generation stamp"
+}
+
+require_mining_gate_free_bodies_are_fixed() {
+  require_exact_method_body "$mining_component" 'private void Awake\(\)' \
+    'privatevoidAwake(){_component=GetDestructibleComponent();if(!_component)thrownewException("");if(!Objects.GetZNetView(_component,out_zNetView))thrownewException("");AllInstance.Add(this);}' \
+    "AutomaticMining.Awake must only acquire its destructible and ZNetView references and register the component"
+
+  require_exact_method_body "$mining_patches" 'private static void Destructible_Awake_Postfix\(' \
+    'privatestaticvoidDestructible_Awake_Postfix(Destructible__instance,ZNetView___m_nview){if(___m_nview&&___m_nview.GetZDO()!=null)Module.AttachMineral(__instance.gameObject);}' \
+    "the Destructible Mining postfix must only attach a networked mineral through Module.AttachMineral"
+  require_exact_method_body "$mining_patches" 'private static void MineRock_Start_Postfix\(' \
+    'privatestaticvoidMineRock_Start_Postfix(MineRock__instance,ZNetView___m_nview){if(___m_nview&&___m_nview.GetZDO()!=null)Module.AttachMineral(__instance.gameObject);}' \
+    "the MineRock Mining postfix must only attach a networked mineral through Module.AttachMineral"
+  require_exact_method_body "$mining_patches" 'private static void MineRock5_Awake_Postfix\(' \
+    'privatestaticvoidMineRock5_Awake_Postfix(MineRock5__instance,ZNetView___m_nview){if(___m_nview&&___m_nview.GetZDO()!=null)Module.AttachMineral(__instance.gameObject);}' \
+    "the MineRock5 Mining postfix must only attach a networked mineral through Module.AttachMineral"
+
+  require_exact_method_body "$mining_module" 'internal static void AttachMineral\(GameObject target\)' \
+    'internalstaticvoidAttachMineral(GameObjecttarget){if(!Discovering)return;CurrentScope.TryAttach<AutomaticMining>(target,out_);}' \
+    "Mining AttachMineral must only recheck discovery state and attach through the current scope"
+  require_exact_method_body "$mining_module" 'private static void ReconcileMinerals\(ModuleScope scope\)' \
+    'privatestaticvoidReconcileMinerals(ModuleScopescope){foreach(vardestructibleinUnityEngine.Object.FindObjectsByType<Destructible>(FindObjectsInactive.Include,FindObjectsSortMode.None)){if(!Objects.GetZNetView(destructible,outvarzNetView))continue;if(zNetView.GetZDO()==null)continue;scope.Attach<AutomaticMining>(destructible.gameObject);}foreach(varmineRockinUnityEngine.Object.FindObjectsByType<MineRock>(FindObjectsInactive.Include,FindObjectsSortMode.None)){if(!Objects.GetZNetView(mineRock,outvarzNetView))continue;if(zNetView.GetZDO()==null)continue;scope.Attach<AutomaticMining>(mineRock.gameObject);}foreach(varmineRock5inUnityEngine.Object.FindObjectsByType<MineRock5>(FindObjectsInactive.Include,FindObjectsSortMode.None)){if(!Objects.GetZNetView(mineRock5,outvarzNetView))continue;if(zNetView.GetZDO()==null)continue;scope.Attach<AutomaticMining>(mineRock5.gameObject);}}' \
+    "Mining ReconcileMinerals must remain the audited networked-object scan and must not start mining"
+}
+
+require_mining_cleanup_contract() {
+  local body
+  local compact
+
+  body="$(method_body "$mining_module" 'public void Disable\(ModuleScope scope\)')"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'publicvoidDisable(ModuleScopescope){Active=false;Generation=0;CurrentScope=null;Cleanup();}' ]]; then
+    fail "Mining Disable must only lower Active, clear generation and scope, then clear its timers"
+  fi
+
+  body="$(method_body "$mining_module" 'private static void Cleanup\(\)')"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatestaticvoidCleanup(){MiningTimers.Clear();}' ]]; then
+    fail "Mining Cleanup must only clear MiningTimers"
+  fi
+
+  body="$(method_body "$mining_module" 'private static void OnPlayerAwake\(')"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatestaticvoidOnPlayerAwake(Playerplayer,ZNetViewnview){Cleanup();}' ]]; then
+    fail "Mining OnPlayerAwake must do nothing but clear session timers"
+  fi
+
+  body="$(method_body "$mining_component" 'private void Unregister\(\)')"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatevoidUnregister(){AllInstance.Remove(this);_component=null;_zNetView=null;}' ]]; then
+    fail "AutomaticMining.Unregister must only remove its registration and borrowed references"
+  fi
+
+  body="$(method_body "$mining_component" 'public void OnScopeDetaching\(\)')"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'publicvoidOnScopeDetaching(){Unregister();}' ]]; then
+    fail "AutomaticMining.OnScopeDetaching must do nothing but unregister"
+  fi
+
+  body="$(method_body "$mining_component" 'private void OnDestroy\(\)')"
+  compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
+  if [[ "$compact" != 'privatevoidOnDestroy(){Unregister();}' ]]; then
+    fail "AutomaticMining.OnDestroy must do nothing but unregister"
+  fi
+
+  require_source_pattern "$mining_module" 'internal static int MiningTimerCount *=> *MiningTimers *\. *Count *;' \
+    "the Mining timer smoke probe must expose only MiningTimers.Count"
+  require_source_pattern "$mining_component" 'internal static int AllInstanceCount *=> *AllInstance *\. *Count *;' \
+    "the Mining component smoke probe must expose only AllInstance.Count"
+
+  require_component_declares_only_allowed_unity_messages "$mining_component" AutomaticMining
+}
+
+require_mining_config_contract() {
+  local body
+  local stripped
+  local row
+  local key
+  local pattern
+  local line
+  local previous=0
+
+  if ((${#mining_config_entries[@]} != 9)); then
+    fail "the Mining config table must name exactly its nine persisted entries: found ${#mining_config_entries[@]}"
+  fi
+
+  stripped="$(strip_code "$mining_config" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - 'public static void Initialize\(\)')"
+  if [[ -z "$body" ]]; then
+    fail "the Mining config initializer could not be extracted; its bind contract was not checked"
+    return
+  fi
+
+  for row in "${mining_config_entries[@]}"; do
+    IFS='|' read -r key pattern <<<"$row"
+    line="$(printf '%s\n' "$body" | first_match_line "$pattern")"
+    if lookup_failed "$line"; then
+      fail "could not search the Mining config for $key; its bind check was not run"
+    elif [[ -z "$line" ]]; then
+      fail "Mining config must bind $key with its audited default and constraints"
+    elif ((line <= previous)); then
+      fail "Mining config must keep its nine entries in persisted order; $key is out of order"
+    else
+      previous=$line
+    fi
+  done
+
+  require_source_pattern "$mining_config" \
+    'public static ConfigEntry<AutomaticsModule> ModuleEntry *=> *_module *;' \
+    "Mining Config.ModuleEntry must publicly expose the module toggle"
+}
+
+require_mining_smoke_descriptor() {
+  local body
+  local found
+  local stripped
+
+  stripped="$(strip_code "$mining_smoke" keep)"
+  body="$(printf '%s\n' "$stripped" | extract_block - 'private static ModuleDescriptor DescribeMining\(\)')"
+  if [[ -z "$body" ]]; then
+    fail "the lifecycle smoke must define a Mining descriptor; its probes could not be checked"
+    return
+  fi
+
+  for row in \
+    'Module *= *MiningModule *\. *Instance@@the Mining descriptor must use the registered Mining module' \
+    'PatchTypes *= *new\[\] *\{ *typeof *\( *MiningPatches *\) *\}@@the Mining descriptor must declare its one patch type' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerAwake"[^;]*, *1 *\)@@the Mining descriptor must probe its OnPlayerAwake handler total' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerUpdate"[^;]*, *1 *\)@@the Mining descriptor must probe its OnPlayerUpdate handler total' \
+    'Probe *\. *Handlers *\( *"Hooks.OnPlayerFixedUpdate"[^;]*, *1 *\)@@the Mining descriptor must probe its OnPlayerFixedUpdate handler total' \
+    'Probe *\. *Counter *\( *"mining.OnPlayerAwake.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerAwake *, *typeof *\( *MiningModule *\) *, *"OnPlayerAwake" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Mining descriptor must pin its own OnPlayerAwake handler to exactly one' \
+    'Probe *\. *Counter *\( *"mining.OnPlayerUpdate.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerUpdate *, *typeof *\( *MiningModule *\) *, *"OnPlayerUpdate" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Mining descriptor must pin its own OnPlayerUpdate handler to exactly one' \
+    'Probe *\. *Counter *\( *"mining.OnPlayerFixedUpdate.handler" *, *\(\) *=> *CountHandlersOf *\( *Hooks *\. *OnPlayerFixedUpdate *, *typeof *\( *MiningModule *\) *, *"OnPlayerFixedUpdate" *\) *, *OffExpectation *\. *Zero *, *0 *, *\(\) *=> *1 *\)@@the Mining descriptor must pin its own OnPlayerFixedUpdate handler to exactly one' \
+    'Probe *\. *Components *< *MiningComponent *> *\( *CountEligibleMinerals *\)@@the Mining descriptor must compare components with the current eligible target count' \
+    'Probe *\. *Counter *\( *"AllInstance.Count"[^;]*CountActiveMiningComponents *\)@@the Mining descriptor must compare AllInstance with active components' \
+    'Precondition *= *MiningPrecondition@@the Mining descriptor must use its non-mutating safety precondition' \
+    'new ExtraCheck *\( *"timers_cleared" *, *Phase *\. *WhileOff@@the Mining descriptor must check timer cleanup only while off' \
+    'new ExtraCheck *\( *"components_current_generation" *, *Phase *\. *AfterOn@@the Mining descriptor must verify component generations after every enable'; do
+    local pattern="${row%%@@*}"
+    local message="${row#*@@}"
+    found="$(printf '%s\n' "$body" | count_hits "$pattern")"
+    if lookup_failed "$found"; then
+      fail "could not inspect the Mining lifecycle descriptor; the check behind '$message' was not run"
+    elif ((found != 1)); then
+      fail "$message exactly once: found $found"
+    fi
+  done
+
+  require_source_pattern "$mining_smoke" \
+    'if *\( *!HasUsablePickaxe *\( *player *\) *\|\| *!HasNearbyAllowedMineral *\( *player *\) *\) *return null *;' \
+    "the Mining smoke precondition must allow the run when there is no usable pickaxe or no nearby allowed mineral"
+  require_source_pattern "$mining_smoke" \
+    'var range *= *\( *MiningConfig *\. *MiningRange *> *0 *\? *MiningConfig *\. *MiningRange *: *32 *\) *\+ *24f? *\+ *2f? *;' \
+    "the Mining smoke safety radius must use the product candidate fallback and include its 24 metre root-pivot margin"
+
+  require_exact_method_body "$mining_smoke" 'private static string MiningPrecondition\(\)' \
+    'privatestaticstringMiningPrecondition(){varplayer=Player.m_localPlayer;if(!player)return"";if(!HasUsablePickaxe(player)||!HasNearbyAllowedMineral(player))returnnull;return"";}' \
+    "MiningPrecondition must remain the audited non-mutating safety decision"
+  require_exact_method_body "$mining_smoke" 'private static bool HasUsablePickaxe\(Player player\)' \
+    'privatestaticboolHasUsablePickaxe(Playerplayer){varitems=MiningConfig.NeedToEquipPickaxe?player.GetInventory().GetEquippedItems():player.GetInventory().GetAllItems();returnitems.Any(x=>x!=null&&x.m_durability>0f&&x.m_shared.m_skillType==Skills.SkillType.Pickaxes);}' \
+    "HasUsablePickaxe must honor NeedToEquipPickaxe and require a durable pickaxe"
+  require_exact_method_body "$mining_smoke" 'private static bool HasNearbyAllowedMineral\(Player player\)' \
+    'privatestaticboolHasNearbyAllowedMineral(Playerplayer){varrange=(MiningConfig.MiningRange>0?MiningConfig.MiningRange:32)+24f+2f;varorigin=player.transform.position;foreach(varmineralinEligibleMinerals()){if(!mineral||!mineral.activeInHierarchy)continue;vardestructible=mineral.GetComponent<IDestructible>()asComponent;if(!destructible)continue;if(!ValheimObject.Mineral.GetIdentify(Objects.GetName(destructible),outvaridentifier))continue;if(!MiningConfig.AllowMiningMinerals.Contains(identifier))continue;if(Vector3.Distance(origin,mineral.transform.position)<=range)returntrue;}returnfalse;}' \
+    "HasNearbyAllowedMineral must remain the audited allowed-mineral scan over the full product candidate radius"
+  reject_source_pattern "$mining_smoke" \
+    'MiningConfig *\. *(EnableAutomaticMining|ModuleEntry) *=' \
+    "the Mining lifecycle smoke must not change the user's Mining settings"
+}
+
 require_enable_acquires_in_order "$door_module" scope patch subscribe reconcile
 require_disable_lowers_the_flag_first "$door_module"
 require_attach_paths_recheck_the_effective_state "$door_module" \
@@ -3545,6 +3943,22 @@ require_door_access_checks_precede_opening
 require_door_registration_contract
 require_door_smoke_descriptor
 require_door_existing_smokes_follow_runtime_state
+
+# Automatic Mining: one patch class, three named hook subscriptions, three discovery targets and
+# one scoped component. A mining pass is accepted only at its two player-hook gates.
+require_enable_acquires_in_order "$mining_module" scope patch subscribe reconcile
+require_disable_lowers_the_flag_first "$mining_module"
+require_attach_paths_recheck_the_effective_state "$mining_module" \
+  "internal static void AttachMineral"
+require_module_enable_and_disable_shape "$mining_module" mining --patches \
+  OnPlayerAwake OnPlayerUpdate OnPlayerFixedUpdate
+require_mining_state_and_registration
+require_mining_entries_and_attach_paths
+require_mining_component_ownership
+require_mining_gate_free_bodies_are_fixed
+require_mining_cleanup_contract
+require_mining_config_contract
+require_mining_smoke_descriptor
 
 # Automatic Storage: one subscription, no patch, no component, and one entry point that moves
 # items. StoragePlanner and Config run inside a storage pass, between its gate and its last

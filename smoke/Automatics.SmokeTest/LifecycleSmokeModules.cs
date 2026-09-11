@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Automatics.Valheim;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -11,6 +12,10 @@ using Object = UnityEngine.Object;
 using DoorComponent = Automatics.AutomaticDoor.AutomaticDoor;
 using DoorModule = Automatics.AutomaticDoor.Module;
 using DoorPatches = Automatics.AutomaticDoor.Patches;
+using MiningComponent = Automatics.AutomaticMining.AutomaticMining;
+using MiningConfig = Automatics.AutomaticMining.Config;
+using MiningModule = Automatics.AutomaticMining.Module;
+using MiningPatches = Automatics.AutomaticMining.Patches;
 using StorageModule = Automatics.AutomaticStorage.Module;
 
 namespace Automatics.SmokeTest
@@ -42,6 +47,7 @@ namespace Automatics.SmokeTest
             new Dictionary<string, Func<ModuleDescriptor>>(StringComparer.Ordinal)
             {
                 ["door"] = DescribeDoor,
+                ["mining"] = DescribeMining,
                 ["storage"] = DescribeStorage
             };
 
@@ -182,6 +188,153 @@ namespace Automatics.SmokeTest
             }
 
             return states;
+        }
+
+        // Automatic Mining owns one patch, three hook subscriptions and one component on every
+        // supported destructible with a ZDO. The precondition keeps normal mining from firing in
+        // an on interval without changing any of the user's inner settings.
+        private static ModuleDescriptor DescribeMining()
+        {
+            var timerCountBeforeDisable = -1;
+            return new ModuleDescriptor
+            {
+                Argument = "mining",
+                Module = MiningModule.Instance,
+                Active = () => MiningModule.Active,
+                Running = () => MiningModule.Running,
+                PatchTypes = new[] { typeof(MiningPatches) },
+                Probes = new[]
+                {
+                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
+                    Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
+                    Probe.Counter("mining.OnPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(MiningModule),
+                            "OnPlayerAwake"), OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("mining.OnPlayerUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(MiningModule),
+                            "OnPlayerUpdate"), OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("mining.OnPlayerFixedUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(MiningModule),
+                            "OnPlayerFixedUpdate"), OffExpectation.Zero, 0, () => 1),
+                    Probe.Components<MiningComponent>(CountEligibleMinerals),
+                    Probe.Counter("AllInstance.Count", () => MiningComponent.AllInstanceCount,
+                        OffExpectation.Zero, 0, CountActiveMiningComponents)
+                },
+                Precondition = MiningPrecondition,
+                Extras = new[]
+                {
+                    new ExtraCheck("timer_state_captured", Phase.BeforeRequest,
+                        (record, cycle) =>
+                        {
+                            timerCountBeforeDisable = MiningModule.MiningTimerCount;
+                            var name = record.Check("timer_state_captured");
+                            record.Cycle(name, cycle, timerCountBeforeDisable >= 0,
+                                $"recorded {timerCountBeforeDisable} mining timer(s) before disabling",
+                                "the mining timer table could not be read before disabling");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("timers_cleared", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            var count = MiningModule.MiningTimerCount;
+                            var name = record.Check("timers_cleared");
+                            if (timerCountBeforeDisable == 0)
+                                record.CycleSkip(name, cycle,
+                                    "the mining timer table was already empty before disabling, so cleanup could not be observed");
+                            else
+                                record.Cycle(name, cycle, timerCountBeforeDisable > 0 && count == 0,
+                                    $"the {timerCountBeforeDisable} mining timer(s) present before disabling were cleared",
+                                    $"the mining timer table had {timerCountBeforeDisable} entry or entries before disabling and holds {count} while off");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("components_current_generation", Phase.AfterOn,
+                        (record, cycle) =>
+                        {
+                            var minerals = EligibleMinerals();
+                            var generation = MiningModule.Generation;
+                            var attached = minerals.Count(x =>
+                            {
+                                var component = x.GetComponent<MiningComponent>();
+                                return component && component.ScopeGeneration == generation;
+                            });
+                            var name = record.Check("components_current_generation");
+                            record.Cycle(name, cycle, minerals.Length > 0 && attached == minerals.Length,
+                                $"all {attached} eligible mineral object(s) carry the current generation {generation}",
+                                $"{attached} of {minerals.Length} eligible mineral object(s) carry the current generation {generation}");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        })
+                }
+            };
+        }
+
+        private static GameObject[] EligibleMinerals()
+        {
+            var eligible = new HashSet<GameObject>();
+            AddNetworked(eligible, Object.FindObjectsByType<Destructible>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None));
+            AddNetworked(eligible, Object.FindObjectsByType<MineRock>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None));
+            AddNetworked(eligible, Object.FindObjectsByType<MineRock5>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None));
+            return eligible.ToArray();
+        }
+
+        private static void AddNetworked<T>(ISet<GameObject> eligible, IEnumerable<T> targets)
+            where T : Component
+        {
+            foreach (var target in targets)
+                if (Objects.GetZNetView(target, out var zNetView) && zNetView.GetZDO() != null)
+                    eligible.Add(target.gameObject);
+        }
+
+        private static int CountEligibleMinerals()
+        {
+            return EligibleMinerals().Length;
+        }
+
+        private static int CountActiveMiningComponents()
+        {
+            return Object.FindObjectsByType<MiningComponent>(
+                    FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Count(x => x && x.gameObject.activeInHierarchy);
+        }
+
+        private static string MiningPrecondition()
+        {
+            var player = Player.m_localPlayer;
+            if (!player) return "there is no local player";
+
+            if (!HasUsablePickaxe(player) || !HasNearbyAllowedMineral(player)) return null;
+
+            return "unequip or remove the pickaxe, or move away from rocks and run the check again";
+        }
+
+        private static bool HasUsablePickaxe(Player player)
+        {
+            var items = MiningConfig.NeedToEquipPickaxe
+                ? player.GetInventory().GetEquippedItems()
+                : player.GetInventory().GetAllItems();
+            return items.Any(x => x != null && x.m_durability > 0f &&
+                                  x.m_shared.m_skillType == Skills.SkillType.Pickaxes);
+        }
+
+        private static bool HasNearbyAllowedMineral(Player player)
+        {
+            var range = (MiningConfig.MiningRange > 0 ? MiningConfig.MiningRange : 32) + 24f + 2f;
+            var origin = player.transform.position;
+            foreach (var mineral in EligibleMinerals())
+            {
+                if (!mineral || !mineral.activeInHierarchy) continue;
+                var destructible = mineral.GetComponent<IDestructible>() as Component;
+                if (!destructible) continue;
+                if (!ValheimObject.Mineral.GetIdentify(Objects.GetName(destructible), out var identifier))
+                    continue;
+                if (!MiningConfig.AllowMiningMinerals.Contains(identifier)) continue;
+                if (Vector3.Distance(origin, mineral.transform.position) <= range) return true;
+            }
+
+            return false;
         }
 
         // Automatic Storage moves items only when its key is pressed, and the check never presses
@@ -836,6 +989,14 @@ namespace Automatics.SmokeTest
             {
                 _proceed = false;
 
+                var precondition = _descriptor.Precondition?.Invoke();
+                if (precondition != null)
+                {
+                    SkipOnChecks(cycle,
+                        $"the safety precondition changed before re-enabling: {precondition}; Enabled was not written and this and the remaining on-side checks were skipped");
+                    yield break;
+                }
+
                 if (!Write(AutomaticsModule.Enabled, _onState, cycle)) yield break;
                 var wait = Await(ModuleState.Enabled, true, true);
                 while (wait.MoveNext()) yield return wait.Current;
@@ -862,6 +1023,13 @@ namespace Automatics.SmokeTest
                 while (extras.MoveNext()) yield return extras.Current;
 
                 _proceed = true;
+            }
+
+            private void SkipOnChecks(int cycle, string reason)
+            {
+                foreach (var name in new[] { _onState, _onRunning, _onPatches, _onProbes }
+                             .Concat(ExtraNames(Phase.AfterOn)))
+                    _record.CycleSkip(name, cycle, reason);
             }
 
             // The patches under the module's Harmony id have to be exactly the ones its patch
@@ -953,9 +1121,11 @@ namespace Automatics.SmokeTest
                         target = eligible;
                     }
 
-                    var showsNothing = target.HasValue
-                        ? target.Value == 0
-                        : probe.NeedsNonZeroBaseline && before == 0;
+                    var showsNothing = whileOff
+                        ? (target.HasValue || probe.NeedsNonZeroBaseline) && before == 0
+                        : target.HasValue
+                            ? target.Value == 0
+                            : probe.NeedsNonZeroBaseline && before == 0;
 
                     int expected;
                     string expectation;

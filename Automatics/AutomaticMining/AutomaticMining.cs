@@ -8,7 +8,7 @@ using UnityEngine;
 namespace Automatics.AutomaticMining
 {
     [DisallowMultipleComponent]
-    public class AutomaticMining : MonoBehaviour
+    public class AutomaticMining : MonoBehaviour, IScopedComponent
     {
         private static readonly IList<AutomaticMining> AllInstance;
         private static readonly RaycastHit[] RaycastHitBuffer;
@@ -16,6 +16,9 @@ namespace Automatics.AutomaticMining
 
         private Component _component;
         private ZNetView _zNetView;
+
+        internal static int AllInstanceCount => AllInstance.Count;
+        public int ScopeGeneration { get; set; }
 
         static AutomaticMining()
         {
@@ -40,6 +43,16 @@ namespace Automatics.AutomaticMining
         }
 
         private void OnDestroy()
+        {
+            Unregister();
+        }
+
+        public void OnScopeDetaching()
+        {
+            Unregister();
+        }
+
+        private void Unregister()
         {
             AllInstance.Remove(this);
 
