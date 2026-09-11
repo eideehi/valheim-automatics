@@ -415,10 +415,13 @@ namespace Automatics
         }
 
         /// <summary>
-        ///     Reports the applied state through the log, which always works, and through the
-        ///     toggle's own description, which depends on ConfigurationManager being installed
-        ///     and on it re-reading the description after a rebuild (unverified until the game
-        ///     runs).
+        ///     Reports the applied state through the log and through the toggle's own
+        ///     description, which depends on ConfigurationManager being installed and on it
+        ///     re-reading the description after a rebuild (unverified until the game runs).
+        ///     A transition into <see cref="ModuleState.Faulted" /> is logged at Warning, every
+        ///     other one at Info. A fault can be reached without any exception - an activation
+        ///     that runs out of deferrals - and the default log filter drops Info, so logging it
+        ///     there would leave no trace of it at all.
         /// </summary>
         private static void PublishState(Entry entry)
         {
@@ -428,9 +431,14 @@ namespace Automatics
             entry.PublishedState = state;
 
             var fault = entry.Machine.LastFault;
-            LogInfo(state == ModuleState.Faulted && !string.IsNullOrEmpty(fault)
+            var message = state == ModuleState.Faulted && !string.IsNullOrEmpty(fault)
                 ? $"Module {entry.Name} is now {state}: {fault}"
-                : $"Module {entry.Name} is now {state}");
+                : $"Module {entry.Name} is now {state}";
+
+            if (state == ModuleState.Faulted)
+                LogWarning(message);
+            else
+                LogInfo(message);
 
             UpdateToggleDescription(entry);
             ConfigurationManagerBridge.Refresh();
@@ -452,7 +460,12 @@ namespace Automatics
                 if (entry.BaseDescription == null)
                     entry.BaseDescription = current == null ? "" : current.Description;
 
-                var text = $"{entry.BaseDescription}\n{DescribeState(entry)}";
+                // A healthy module has no state line. Appending an empty one would leave a
+                // trailing newline, which BepInEx writes to the .cfg as an empty "## " line.
+                var stateLine = DescribeState(entry);
+                var text = string.IsNullOrEmpty(stateLine)
+                    ? entry.BaseDescription
+                    : $"{entry.BaseDescription}\n{stateLine}";
                 var tags = current?.Tags ?? Array.Empty<object>();
 
                 // ConfigurationManager reads the attribute copy when one is attached, so both
