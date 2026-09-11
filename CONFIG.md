@@ -122,8 +122,8 @@ Specify a shortcut key to enable/disable the automatic door.
 - Default value:
 
 ## [ #4 Automatic Mapping ] / [automatic_mapping]
-### Disable Module (Reboot Required) / [module]
-You can disable this feature completely to avoid adding logic you don't need. (Game must be restart for reflect this option)
+### Disable Module / [module]
+You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
 
 - Default value: Enabled
 - Acceptable values: Enabled, Disabled

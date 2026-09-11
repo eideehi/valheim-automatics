@@ -319,6 +319,7 @@
     "@command_printobjects_message_result_defined": "\"$1\" ($2) [Already defined as an $3]\n  Pos: $4 [Distance: $5]\n  Identifier: $6",
     "@command_printobjects_message_result_more": "In addition to this, found $1 types of objects that can be treated as $2.",
     "@command_printobjects_message_result_empty": "No $1 matching the criteria were found.",
+    "@command_printobjects_message_mapping_not_running": "Automatic Mapping is not running: fish, birds and ships are missing from this list, and nothing listed is pinned. This command does not turn Automatic Mapping on.",
     "@command_printobjects_error_player_unavailable": "The local player is not available yet.",
     "@command_printobjects_error_world_unavailable": "The world location data is not available yet.",
     "@command_removemappins_usage": "Usage: removemappins (OPTIONS...)",

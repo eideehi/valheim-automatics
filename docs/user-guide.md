@@ -26,9 +26,9 @@ or accepted value range.
 
 Automatics is split into feature modules. Each module has a `Disable Module`
 option, and most modules also have a separate on/off option for the feature
-behavior. Automatic pickup and automatic processing apply that option while the
-game is running; every other module still needs a restart, and says so in the
-option name.
+behavior. Automatic pickup, automatic processing and automatic mapping apply that
+option while the game is running; every other module still needs a restart, and
+says so in the option name.
 
 ## Common configuration concepts
 
@@ -44,17 +44,31 @@ Automatics to patch or run that feature at all.
 | --- | --- | --- |
 | Automatic pickup | `Disable Module` | While the game is running. No restart. |
 | Automatic processing | `Disable Module` | While the game is running. No restart. |
+| Automatic mapping | `Disable Module` | While the game is running. No restart. |
 | Every other module | `Disable Module (Reboot Required)` | After the game is restarted. |
 
-When you turn automatic pickup or automatic processing off, it stops starting
-new automatic actions, such as pickups and item transfers, right away, and lets
-an action that is already in progress finish. The switch itself completes over
-the next few frames, when the module's patches and hooks are removed, along with
-the components automatic pickup adds to players and items. Turning either one
-back on also completes over the next few frames, and it then also works on
-objects that appeared while it was off. If the Automatics log reports that this
-Harmony build cannot remove patches at runtime, turning one of these modules off
-only stops it and the patches stay applied until you restart the game.
+When you turn automatic pickup, automatic processing or automatic mapping off,
+it stops starting new automatic actions, such as pickups, item transfers and pin
+updates, right away, and lets an action that is already in progress finish. The
+switch itself completes over the next few frames, when the module's patches and
+hooks are removed, along with the components automatic pickup adds to players
+and items and those automatic mapping adds to fish, birds, ships, rocks and
+flora. Turning any of them back on also completes over the next few frames, and
+it then also works on objects that appeared while it was off. If the Automatics
+log reports that this Harmony build cannot remove patches at runtime, turning one
+of these modules off only stops it and the patches stay applied until you
+restart the game.
+
+Turning automatic mapping off removes the pins it added that are not saved, such
+as the pins of creatures and, unless `Save Static Object Pins` is on, of static
+objects. Saved pins stay on the map: vehicle and portal pins, static object pins
+saved by `Save Static Object Pins`, pins you saved by clicking them, your own
+pins, and pins shared by other players. A vehicle pin is first moved to where its
+vehicle is. While automatic mapping is off it adds, moves, hides and removes no
+pin, so `Hide Unexplored Automatic Mapping Pins` does not apply either. When you
+turn it back on, it recognises the saved pins it added and adds the other pins
+again as their objects come into range. A vehicle that moved more than 8 meters
+while the module was off can get a second pin; delete the old one.
 
 Feature-specific enable options, such as `Automatic Door` or `Automatic
 Mapping`, only turn the feature behavior on or off while the module stays
@@ -137,6 +151,17 @@ definitions with `User-defined Door` in the `General` section.
 
 Automatic mapping adds map pins for nearby configured targets. It handles moving
 targets, static objects, locations, portals, and map navigation.
+
+Its `Disable Module` option takes effect without a restart. See
+[Module disable options](#module-disable-options), which also describes what
+happens to its pins.
+
+If you had automatic mapping disabled, the first start of this version writes all
+of its settings to the configuration file, together with `custom_vehicle` and
+`custom_other` in the General section. Earlier versions wrote only the `Disable
+Module` entry while the module was disabled. The module stays disabled. Values
+you changed before you disabled it are kept if they are still in the file, and
+they apply once you turn the module back on in game.
 
 ### Dynamic objects
 
@@ -580,6 +605,11 @@ Supported types: `animal`, `container`, `door`, `dungeon`, `flora`, `mineral`,
 The result can include objects that feel unexpected for the selected type. For
 example, Flint can appear in the Flora search because Automatics can treat it as
 flora.
+
+When automatic mapping is not running, the mapping types (every type except
+`container` and `door`) start with a line saying so: fish, birds and ships are
+then missing from the list, and nothing listed is pinned. The command never turns
+the module on.
 
 | Option | Description |
 | --- | --- |

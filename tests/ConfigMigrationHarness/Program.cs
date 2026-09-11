@@ -28,6 +28,9 @@ namespace Automatics
             Run("P-C: user values inside automatic_processing survive migration", ProcessingInnerValuesSurviveMigration);
             Run("P-D: 1.2.0 automatic_processing renames keep a disabled module disabled", OldProcessingKeysMigrateUnderADisabledModule);
             Run("P-E: a current config with automatic_processing disabled is left untouched", CurrentDisabledProcessingConfigIsLeftUntouched);
+            Run("M-A: an enabled automatic_mapping module survives migration", EnabledMappingModuleSurvivesMigration);
+            Run("M-B: a disabled automatic_mapping module survives migration", DisabledMappingModuleSurvivesMigration);
+            Run("M-C: user values inside automatic_mapping survive migration", MappingInnerValuesSurviveMigration);
 
             return _failures == 0 ? 0 : 1;
         }
@@ -274,6 +277,74 @@ namespace Automatics
             var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
             if (migrated != expected)
                 throw new Exception($"A current config must not be rewritten. Expected:\n{expected}\nGot:\n{migrated}");
+        }
+
+        // Automatic Mapping binds its inner settings unconditionally from this change on, so a
+        // user who had turned it off gets the whole section written back on the next start. Its
+        // section is also the one the 1.6.0 pass rewrites: the migrator appends the new monsters,
+        // animals and flora to its allowlists in place. That rewrite has to carry over the module
+        // value the user chose and every inner value, because whatever survives here is what the
+        // bind picks up and what applies once the module is turned on.
+        private static void EnabledMappingModuleSurvivesMigration()
+        {
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "module = Enabled",
+                "allow_pinning_monster = Boar");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "[automatic_mapping]");
+            AssertEqual(1, CountOccurrences(migrated, "module = Enabled"), "The mapping module value should be carried over once.");
+            AssertDoesNotContain(migrated, "module = Disabled");
+        }
+
+        private static void DisabledMappingModuleSurvivesMigration()
+        {
+            // The setting is the user's, and no part of this mod is allowed to write it back
+            // (R1.3b). A migration that turned Disabled into Enabled would re-enable a module the
+            // user switched off.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "module = Disabled",
+                "allow_pinning_monster = Boar");
+
+            AssertContains(migrated, "Morgen");
+            AssertContains(migrated, "[automatic_mapping]");
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The mapping module value should be carried over once.");
+            AssertDoesNotContain(migrated, "module = Enabled");
+        }
+
+        private static void MappingInnerValuesSurviveMigration()
+        {
+            // Entries a disabled module now binds, one of each shape: a range, a flag, a key, and
+            // an allowlist the 1.6.0 pass itself extends. Their stored values have to survive, or
+            // the bind that follows re-creates them at their defaults and silently discards what
+            // the user set.
+            var migrated = Migrate(
+                "## Settings file was created by plugin Automatics v1.5.1",
+                "## Plugin GUID: net.eidee.valheim.automatics",
+                "[automatic_mapping]",
+                "module = Disabled",
+                "dynamic_object_mapping_range = 100",
+                "save_static_object_pins = true",
+                "navigation_start_key = LeftAlt",
+                "allow_pinning_monster = Boar");
+
+            AssertEqual(1, CountOccurrences(migrated, "module = Disabled"), "The mapping module value should be carried over once.");
+            AssertContains(migrated, "dynamic_object_mapping_range = 100");
+            AssertContains(migrated, "save_static_object_pins = true");
+            AssertContains(migrated, "navigation_start_key = LeftAlt");
+
+            // The extended allowlist keeps what the user had and gains what 1.6.0 adds.
+            var monsters = migrated
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+                .Single(line => line.StartsWith("allow_pinning_monster = ", StringComparison.Ordinal));
+            AssertContains(monsters, "Boar");
+            AssertContains(monsters, "Morgen");
         }
 
         private static void RegexMigrationsPreserveCapturedProcessingSuffixes()

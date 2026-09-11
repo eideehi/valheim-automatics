@@ -12,15 +12,14 @@
 # distinguishes "no match" from "could not search", and a missing or unreadable file stops
 # the script rather than quietly satisfying every reject_source_pattern in it.
 #
-# The Automatic Processing checks read code with comments and literals blanked over a
-# whitespace-collapsed stream, yet they still only see what is spelled out, so a state read, a
-# change or a gated call made through a delegate, a method group, a stored ZDO or inventory
-# reference, or a helper their patterns do not name still passes them.
+# The Automatic Processing and Automatic Mapping checks read code with comments and literals
+# blanked over a whitespace-collapsed stream, yet they still only see what is spelled out, so a
+# state read, a change or a gated call made through a delegate, a method group, a stored ZDO or
+# inventory reference, or a helper their patterns do not name still passes them.
 #
 # Two halves: the framework itself, and the modules that have been migrated onto it. The
 # migrated list below is explicit and grows by one line per migration, because "check every
-# module" would fail for the seven that still follow the start-up-only path on purpose
-# (R5.1a).
+# module" would fail for the six that still follow the start-up-only path on purpose (R5.1a).
 #
 set -euo pipefail
 
@@ -34,7 +33,11 @@ root_patches_file="Automatics/Patches.cs"
 
 # Modules migrated to the runtime lifecycle. One line per migration; everything else keeps
 # the start-up-only path and its early return, and checking it here would be wrong.
-migrated_module_dirs=("Automatics/AutomaticPickup" "Automatics/AutomaticProcessing")
+migrated_module_dirs=(
+  "Automatics/AutomaticPickup"
+  "Automatics/AutomaticProcessing"
+  "Automatics/AutomaticMapping"
+)
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
 # removing it before the module is migrated hands non-activation guards to code this slice
@@ -43,7 +46,6 @@ unmigrated_module_configs=(
   "Automatics/AutomaticDoor/Config.cs"
   "Automatics/AutomaticFarming/Config.cs"
   "Automatics/AutomaticFeeding/Config.cs"
-  "Automatics/AutomaticMapping/Config.cs"
   "Automatics/AutomaticMining/Config.cs"
   "Automatics/AutomaticRepair/Config.cs"
   "Automatics/AutomaticStorage/Config.cs"
@@ -83,6 +85,41 @@ processing_entries=(
   "FermenterProcess.Craft|$processing_dir/FermenterProcess.cs|public static void Craft\\(Fermenter |if (!Module.Running) return;"
   "FermenterProcess.Store|$processing_dir/FermenterProcess.cs|public static void Store\\(Fermenter |if (!Module.Running) return;"
   "TurretProcess.Charge|$processing_dir/TurretProcess.cs|public static void Charge\\(Turret |if (!Module.Running) return;"
+)
+
+mapping_dir="Automatics/AutomaticMapping"
+mapping_config="$mapping_dir/Config.cs"
+mapping_module="$mapping_dir/Module.cs"
+mapping_patches="$mapping_dir/Patches.cs"
+mapping_flora="$mapping_dir/FloraNetwork.cs"
+mapping_icon_pack="$mapping_dir/IconPack.cs"
+printobjects_file="Automatics/ConsoleCommands/PrintObjects.cs"
+
+# Every Automatic Mapping method the game reaches with an effect on the map, or with a new object
+# to take into the activation's ownership, one per line:
+# qualified name | file | declaration pattern | the exact statement it has to open with.
+# The statement fixes the pass-through value too, because it is what the game's own method goes
+# on with: ResizeIcon has to hand back the size it was given, and the click handlers false, so
+# that the game handles the click. See require_mapping_entries_open_with_the_gate.
+mapping_entries=(
+  "AutomaticMapping.Mapping|$mapping_dir/AutomaticMapping.cs|public static void Mapping\\(Player |if (!Module.Running) return;"
+  "AutomaticMapping.DynamicMapping|$mapping_dir/AutomaticMapping.cs|public static void DynamicMapping\\(|if (!Module.Running) return;"
+  "AutomaticMapping.AnimatePins|$mapping_dir/AutomaticMapping.cs|public static void AnimatePins\\(\\)|if (!Module.Running) return;"
+  "AutomaticMapping.SetSaveFlag|$mapping_dir/AutomaticMapping.cs|public static bool SetSaveFlag\\(|if (!Module.Running) return false;"
+  "Navigation.TryHandleMapClick|$mapping_dir/Navigation.cs|public static bool TryHandleMapClick\\(|if (!Module.Running) return false;"
+  "Navigation.Update|$mapping_dir/Navigation.cs|public static void Update\\(Player |if (!Module.Running) {"
+  "Map.ShouldHideAutomaticPin|$mapping_dir/Map.cs|public static bool ShouldHideAutomaticPin\\(|if (!Module.Running) return false;"
+  "Map.DestroyHiddenAutomaticPinMarkers|$mapping_dir/Map.cs|public static void DestroyHiddenAutomaticPinMarkers\\(|if (!Module.Running) return;"
+  "IconPack.ResizeIcon|$mapping_icon_pack|public static float ResizeIcon\\(|if (!Module.Running) return originalSize;"
+  "IconPack.IsNameTagHidden|$mapping_icon_pack|public static bool IsNameTagHidden\\(|if (!Module.Running) return false;"
+  "DynamicObjectMapping.FlushVehiclePins|$mapping_dir/DynamicObjectMapping.cs|public static void FlushVehiclePins\\(|if (!Module.Running) return;"
+  "DynamicObjectMapping.OnObjectDestroy|$mapping_dir/DynamicObjectMapping.cs|public static void OnObjectDestroy\\(|if (!Module.Running) return;"
+  "Config.OnHideUnexploredPinsChanged|$mapping_config|private static void OnHideUnexploredPinsChanged\\(|if (!Module.Running) return;"
+  "Patches.Minimap_Explore_Postfix|$mapping_patches|private static void Minimap_Explore_Postfix\\(|if (!Module.Running) return;"
+  "Patches.Minimap_AddSharedMapData_Postfix|$mapping_patches|private static void Minimap_AddSharedMapData_Postfix\\(|if (!Module.Running) return;"
+  "Patches.Destructible_Awake_Postfix|$mapping_patches|private static void Destructible_Awake_Postfix\\(|if (!Module.Discovering) return;"
+  "Patches.TeleportWorld_Awake_Postfix|$mapping_patches|private static void TeleportWorld_Awake_Postfix\\(|if (!Module.Discovering) return;"
+  "Patches.Vagon_Awake_Postfix|$mapping_patches|private static void Vagon_Awake_Postfix\\(|if (!Module.Discovering) return;"
 )
 
 # The Automatic Processing patterns are POSIX EREs matched against a stream in which every run
@@ -279,6 +316,8 @@ for source_file in \
   "$pickup_config" "$pickup_module" "$pickup_patches" \
   "$pickup_component" "$pickup_globals" \
   "$processing_config" "$processing_module" "$processing_patches" "$processing_globals" \
+  "$mapping_config" "$mapping_module" "$mapping_patches" "$mapping_flora" "$mapping_icon_pack" \
+  "$printobjects_file" \
   "${unmigrated_module_configs[@]}"; do
   if [[ ! -r "$source_file" ]]; then
     fail "cannot read $source_file; none of the checks below would mean anything"
@@ -295,6 +334,13 @@ for processing_entry in "${processing_entries[@]}"; do
   IFS='|' read -r _ processing_entry_file _ _ <<<"$processing_entry"
   if [[ ! -r "$processing_entry_file" ]]; then
     fail "cannot read $processing_entry_file; none of the checks below would mean anything"
+  fi
+done
+
+for mapping_entry in "${mapping_entries[@]}"; do
+  IFS='|' read -r _ mapping_entry_file _ _ <<<"$mapping_entry"
+  if [[ ! -r "$mapping_entry_file" ]]; then
+    fail "cannot read $mapping_entry_file; none of the checks below would mean anything"
   fi
 done
 
@@ -1142,7 +1188,8 @@ require_unmigrated_modules_keep_their_early_return() {
 
 # I2 / I3 (AC-S5, R2.4): a migrated module owns no subscription directly. Every add has to be
 # half of a scope.Subscribe pair, or the teardown has nothing to remove. The lambda form is
-# what makes the pair; a bare `Hooks.X += Handler;` statement is the defect shape.
+# what makes the pair; a bare `Hooks.X += Handler;` statement is the defect shape. The event may
+# be named through its owner, as in `h => PickableCache.OnCacheAdded += h`.
 require_event_wiring_goes_through_the_scope() {
   local module_dir
   local pattern="$1"
@@ -1154,7 +1201,7 @@ require_event_wiring_goes_through_the_scope() {
   for module_dir in "${migrated_module_dirs[@]}"; do
     while IFS= read -r file; do
       total="$(count_matches "$file" "$pattern\\s*(\\+|-)=")"
-      scoped="$(count_matches "$file" "h => $pattern\\s*(\\+|-)= h")"
+      scoped="$(count_matches "$file" "h => ([A-Za-z_][A-Za-z0-9_]*\\.)*$pattern\\s*(\\+|-)= h")"
 
       if lookup_failed "$total" "$scoped"; then
         fail "could not search $file for $what wiring; the check was not run"
@@ -1225,35 +1272,38 @@ require_components_are_created_through_the_scope() {
 # recovered if the user withdraws the request before the pump runs - no transition means no
 # reconciliation, ever. Attaching under a stop request is harmless; the component's own Live
 # gate stops it acting, and a disable that goes ahead destroys it with the rest of the scope.
+# Arguments: the module file, then the declaration of each of its attach paths.
 require_attach_paths_recheck_the_effective_state() {
+  local module="$1"
   local entry
   local body
   local predicate
 
-  for entry in "private static void OnPlayerAwake" "internal static void AttachCache"; do
-    body="$(extract_block "$pickup_module" "$entry")"
+  shift
+  for entry in "$@"; do
+    body="$(extract_block "$module" "$entry")"
     if [[ -z "$body" ]]; then
-      fail "the pickup module must define ${entry##* }"
+      fail "$module must define ${entry##* }"
       continue
     fi
 
     if ! printf '%s\n' "$body" | rg -q "if \\(!Discovering\\) return;"; then
-      fail "${entry##* } must open with \"if (!Discovering) return;\" (MAJOR-5 / FIX 2): it is reachable after the module stopped, and gating it on Running instead would drop objects that nothing ever comes back for"
+      fail "${entry##* } in $module must open with \"if (!Discovering) return;\" (MAJOR-5 / FIX 2): it is reachable after the module stopped, and gating it on Running instead would drop objects that nothing ever comes back for"
     fi
   done
 
-  predicate="$(extract_expression_body "$pickup_module" "internal static bool Discovering =>")"
+  predicate="$(extract_expression_body "$module" "internal static bool Discovering =>")"
   if [[ -z "$predicate" ]]; then
-    fail "the pickup module must define the Discovering predicate (FIX 2)"
+    fail "$module must define the Discovering predicate (FIX 2)"
     return
   fi
 
   if ! printf '%s\n' "$predicate" | rg -q "Active && CurrentScope != null"; then
-    fail "Discovering must be exactly the applied state and the scope (FIX 2): Active && CurrentScope != null"
+    fail "Discovering in $module must be exactly the applied state and the scope (FIX 2): Active && CurrentScope != null"
   fi
 
   if printf '%s\n' "$predicate" | rg -q "StopRequested|Running"; then
-    fail "Discovering must not carry the stop request (FIX 2): discovery and side effects are different questions, and sharing Running's predicate answers one of them wrongly"
+    fail "Discovering in $module must not carry the stop request (FIX 2): discovery and side effects are different questions, and sharing Running's predicate answers one of them wrongly"
   fi
 }
 
@@ -1334,7 +1384,9 @@ require_every_patch_is_gated() {
 # undoes registrations in reverse, so acquiring patches first is what puts their removal
 # last. Subscribing or attaching before the first PatchAll silently moves the patch removal
 # ahead of them. The framework cannot detect it; this is where it is caught.
+# Argument: the module file.
 require_enable_acquires_in_order() {
+  local module="$1"
   local body
   local scope_line
   local patch_line
@@ -1342,9 +1394,9 @@ require_enable_acquires_in_order() {
   local reconcile_line
   local last
 
-  body="$(extract_block "$pickup_module" "public void Enable\\(ModuleScope scope\\)")"
+  body="$(extract_block "$module" "public void Enable\\(ModuleScope scope\\)")"
   if [[ -z "$body" ]]; then
-    fail "the pickup module must define Enable(ModuleScope)"
+    fail "$module must define Enable(ModuleScope)"
     return
   fi
 
@@ -1354,25 +1406,25 @@ require_enable_acquires_in_order() {
   reconcile_line="$(printf '%s\n' "$body" | first_match_line "Reconcile[A-Za-z]*\\(")"
 
   if lookup_failed "$scope_line" "$patch_line" "$subscribe_line" "$reconcile_line"; then
-    fail "could not search the acquisition order of Enable; the check was not run"
+    fail "could not search the acquisition order of Enable in $module; the check was not run"
     return
   fi
 
   if [[ -z "$scope_line" || -z "$patch_line" || -z "$subscribe_line" || -z "$reconcile_line" ]]; then
-    fail "Enable must publish the scope, apply its patches, subscribe and then reconcile the scene"
+    fail "Enable in $module must publish the scope, apply its patches, subscribe and then reconcile the scene"
     return
   fi
 
   if ((scope_line >= patch_line)); then
-    fail "Enable must publish CurrentScope before it acquires anything (MAJOR-4): a component created while the activation runs needs an owner already"
+    fail "Enable in $module must publish CurrentScope before it acquires anything (MAJOR-4): a component created while the activation runs needs an owner already"
   fi
 
   if ((patch_line >= subscribe_line)); then
-    fail "Enable must apply its patches before it subscribes (R4.3): the scope registers one patch removal at the first PatchAll, and a subscription taken first has its removal run after the patches come off"
+    fail "Enable in $module must apply its patches before it subscribes (R4.3): the scope registers one patch removal at the first PatchAll, and a subscription taken first has its removal run after the patches come off"
   fi
 
   if ((subscribe_line >= reconcile_line)); then
-    fail "Enable must subscribe before it reconciles the scene (R4.3 / R4.2): a producer installed after the scan misses everything that appears in between"
+    fail "Enable in $module must subscribe before it reconciles the scene (R4.3 / R4.2): a producer installed after the scan misses everything that appears in between"
   fi
 
   last="$(
@@ -1388,17 +1440,19 @@ require_enable_acquires_in_order() {
   )"
 
   if [[ "$last" != "Active = true;" ]]; then
-    fail "the last statement of Enable must be \"Active = true;\" (R1.3 / R1.5): anything after it runs with the module already advertising itself as running, and a throw before it must leave the module inactive; found \"$last\""
+    fail "the last statement of Enable in $module must be \"Active = true;\" (R1.3 / R1.5): anything after it runs with the module already advertising itself as running, and a throw before it must leave the module inactive; found \"$last\""
   fi
 }
 
+# Argument: the module file.
 require_disable_lowers_the_flag_first() {
+  local module="$1"
   local body
   local first
 
-  body="$(extract_block "$pickup_module" "public void Disable\\(ModuleScope scope\\)")"
+  body="$(extract_block "$module" "public void Disable\\(ModuleScope scope\\)")"
   if [[ -z "$body" ]]; then
-    fail "the pickup module must define Disable(ModuleScope)"
+    fail "$module must define Disable(ModuleScope)"
     return
   fi
 
@@ -1413,15 +1467,15 @@ require_disable_lowers_the_flag_first() {
   )"
 
   if [[ "$first" != "Active = false;" ]]; then
-    fail "the first statement of Disable must be \"Active = false;\" (R1.5): every hot path has to be shut before anything is dismantled; found \"$first\""
+    fail "the first statement of Disable in $module must be \"Active = false;\" (R1.5): every hot path has to be shut before anything is dismantled; found \"$first\""
   fi
 
   if ! printf '%s\n' "$body" | rg -q "CurrentScope = null;"; then
-    fail "Disable must close the attach paths by clearing CurrentScope (MAJOR-4)"
+    fail "Disable in $module must close the attach paths by clearing CurrentScope (MAJOR-4)"
   fi
 
   if ! printf '%s\n' "$body" | rg -q "Generation = 0;"; then
-    fail "Disable must reset the generation to the reserved zero (R4.5): a component left over from this activation has to stop matching"
+    fail "Disable in $module must reset the generation to the reserved zero (R4.5): a component left over from this activation has to stop matching"
   fi
 }
 
@@ -1499,7 +1553,7 @@ require_no_warning_suppressions() {
 require_the_default_is_unchanged() {
   local config
 
-  for config in "$pickup_config" "$processing_config"; do
+  for config in "$pickup_config" "$processing_config" "$mapping_config"; do
     require_source_pattern \
       "$config" \
       "config\\.Bind\\(\"module\", AutomaticsModule\\.Enabled" \
@@ -1514,7 +1568,7 @@ require_the_runtime_toggle_strings_exist() {
   local key
   local config
 
-  for config in "$pickup_config" "$processing_config"; do
+  for config in "$pickup_config" "$processing_config" "$mapping_config"; do
     require_source_pattern \
       "$config" \
       "@config_common_disable_module_runtime_name" \
@@ -2434,6 +2488,276 @@ require_processing_containers_are_claimed_first() {
   done
 }
 
+# ---------------------------------------------------------------------------------------
+# Automatic Mapping: a migrated module whose effect is on the local minimap. It adds, moves and
+# removes pins, and moves no item. Its checks read code through strip_code, as the Automatic
+# Processing ones do.
+# ---------------------------------------------------------------------------------------
+
+# method_body for a file of any size. The stripped text reaches extract_block as a here-string,
+# written in full before extract_block starts, so extract_block stopping at the closing brace
+# cannot break a pipe that is still being written.
+mapping_method_body() {
+  local stripped
+
+  stripped="$(strip_code "$1")"
+  extract_block - "$2" <<<"$stripped"
+}
+
+# R1.5a: every Automatic Mapping entry point with an effect on the map opens with the module gate,
+# and every postfix that takes a new object into the activation's ownership with the discovery
+# gate. The game reaches them through the patches, the transpilers and the destroy callbacks left
+# on objects, and on a Harmony build that cannot remove patches it does so for the rest of the
+# session, so the first statement is where a stop has to take hold.
+require_mapping_entries_open_with_the_gate() {
+  local entry
+  local qualified
+  local file
+  local declaration
+  local gate
+  local body
+  local first
+  local after
+  local try_first
+
+  for entry in "${mapping_entries[@]}"; do
+    IFS='|' read -r qualified file declaration gate <<<"$entry"
+    body="$(mapping_method_body "$file" "$declaration")"
+    if [[ -z "$body" ]]; then
+      fail "cannot find $qualified in $file; the check that it opens with the module gate was not run"
+      continue
+    fi
+
+    first="$(printf '%s\n' "$body" | first_statement)"
+    if [[ "$first" != "${gate//[[:space:]]/}" ]]; then
+      fail "$qualified must open with \"$gate\" (R1.5a): the game reaches it after a stop request, and for the rest of the session where patches cannot be removed, so anything before the gate still acts on the map, and the value the gate returns is what the game goes on with; found \"$first\""
+    fi
+  done
+
+  # The one entry whose gate sits inside a try: its finally releases a destroyed rock's snapshot
+  # whether the module runs or not, so nothing may come before the try.
+  file="$mapping_dir/StaticObjectMapping.cs"
+  body="$(mapping_method_body "$file" "public static void OnObjectDestroy\\(Component ")"
+  if [[ -z "$body" ]]; then
+    fail "cannot find StaticObjectMapping.OnObjectDestroy in $file; the check that it opens with the module gate was not run"
+    return
+  fi
+
+  first="$(printf '%s\n' "$body" | first_statement)"
+  after="$(tail -n +2 <<<"$body")"
+  try_first="$(extract_block - '(^|[^A-Za-z0-9_])try([^A-Za-z0-9_]|$)' <<<"$after" | first_statement)"
+  if [[ "$first" != "try{" ]]; then
+    fail "StaticObjectMapping.OnObjectDestroy must open with its try (R1.5a): its gate is the first statement inside the try, and a statement before the try still runs after a stop; found \"$first\""
+  elif [[ "$try_first" != "if(!Module.Running)return;" ]]; then
+    fail "StaticObjectMapping.OnObjectDestroy must check \"if (!Module.Running) return;\" as the first statement of its try (R1.5a): destroy callbacks stay on objects while the module is off and still reach it; found \"$try_first\""
+  fi
+}
+
+# R7.3 / R1.5: the registry and allowlist subscriptions belong to the scope, and the module state is
+# read as the applied state. A bind-once flag, or the lazy subscription it guarded, subscribes for
+# the life of the game and leaves a disable nothing to remove.
+require_mapping_leaves_no_start_up_only_state() {
+  local file
+
+  for file in "$mapping_dir"/*.cs; do
+    reject_source_pattern \
+      "$file" \
+      "_registrySubscriptionsBound" \
+      "$file must not keep a bind-once subscription flag (R7.3): the scope owns the registry and allowlist subscriptions, and a flag that outlives it keeps the next activation from subscribing again"
+    reject_source_pattern \
+      "$file" \
+      "EnsureRegistrySubscriptions" \
+      "$file must not subscribe lazily from a scan (R7.3): a subscription made there is owned by no scope, so a disable cannot remove it"
+    reject_source_pattern \
+      "$file" \
+      "ModuleDisabled" \
+      "$file must not read the module setting as a flag (R1.5): the entry points read Module.Running, which carries the stop request"
+  done
+}
+
+# A destroy callback sits in a game object's Action field, where the scope cannot reach it, so each
+# object gets at most one: only Module.HookDestroyOnce adds one, behind the mark that makes it
+# once, and routes it to a gated entry point. The flora node's own callback is the one other, and
+# it is taken off again when the node is destroyed.
+require_mapping_destroy_callbacks_are_added_once() {
+  local file
+  local hits
+  local total
+  local inside
+  local first
+  local adds
+  local removes
+  local flora_total
+
+  for file in "$mapping_dir"/*.cs; do
+    if [[ "$file" == "$mapping_module" || "$file" == "$mapping_flora" ]]; then
+      continue
+    fi
+
+    hits="$(strip_code "$file" | count_hits 'm_onDestroyed *\+=')"
+    if lookup_failed "$hits"; then
+      fail "could not search $file for destroy callbacks; the check was not run"
+    elif ((hits != 0)); then
+      fail "$file adds to a game object's destroy callback directly ($hits found): only Module.HookDestroyOnce may, because the scope cannot take such a callback back and only its mark keeps it to one per object"
+    fi
+  done
+
+  total="$(strip_code "$mapping_module" | count_hits 'm_onDestroyed *\+=')"
+  inside="$(mapping_method_body "$mapping_module" "private static void HookDestroyOnce\\(" | count_hits 'm_onDestroyed *\+=')"
+  first="$(mapping_method_body "$mapping_module" "private static void HookDestroyOnce\\(" | first_statement)"
+  if lookup_failed "$total" "$inside"; then
+    fail "could not search $mapping_module for destroy callbacks; the check was not run"
+  elif ((inside == 0 || total != inside)); then
+    fail "$mapping_module must add destroy callbacks in HookDestroyOnce and nowhere else: $total add(s) in the file, $inside of them in HookDestroyOnce"
+  fi
+
+  if [[ "$first" != "if(!owner||DestroyHooked.TryGetValue(owner,out_))return;" ]]; then
+    fail "HookDestroyOnce must open with \"if (!owner || DestroyHooked.TryGetValue(owner, out _)) return;\": without the mark, turning the module on again adds a second callback to every object; found \"$first\""
+  fi
+
+  adds="$(strip_code "$mapping_flora" | count_hits '\+= *OnDestroyed([^A-Za-z0-9_]|$)')"
+  removes="$(strip_code "$mapping_flora" | count_hits '-= *OnDestroyed([^A-Za-z0-9_]|$)')"
+  flora_total="$(strip_code "$mapping_flora" | count_hits 'm_onDestroyed *\+=')"
+  if lookup_failed "$adds" "$removes" "$flora_total"; then
+    fail "could not search $mapping_flora for its destroy callback; the check was not run"
+    return
+  fi
+
+  if ((adds == 0 || adds != removes)); then
+    fail "the flora node must take its destroy callback off again as often as it adds it ($adds added, $removes removed): turning the module off destroys the node and keeps the pickable, so every activation would leave one more callback behind"
+  fi
+
+  if ((flora_total != adds)); then
+    fail "the flora node may add only its own OnDestroyed to a destroy callback: $flora_total add(s), $adds of them OnDestroyed"
+  fi
+}
+
+# R7.4: the custom icons extend the minimap's icon tables, so they are registered once per
+# minimap. Only IconPack.EnsureAttached registers them, and its first statement is the check that
+# the minimap does not have them yet; a registration anywhere else would extend the tables again
+# on every enable.
+require_mapping_icons_are_registered_once_per_minimap() {
+  local file
+  local hits
+  local declarations
+  local inside
+  local first
+
+  for file in "$mapping_dir"/*.cs; do
+    if [[ "$file" == "$mapping_icon_pack" ]]; then
+      continue
+    fi
+
+    hits="$(strip_code "$file" | count_hits '(^|[^A-Za-z0-9_])RegisterIcons *\(')"
+    if lookup_failed "$hits"; then
+      fail "could not search $file for RegisterIcons; the check was not run"
+    elif ((hits != 0)); then
+      fail "$file registers the custom icons ($hits call(s) of RegisterIcons) (R7.4): only IconPack.EnsureAttached may, behind its check that the minimap does not have them yet"
+    fi
+  done
+
+  hits="$(strip_code "$mapping_icon_pack" | count_hits '(^|[^A-Za-z0-9_])RegisterIcons *\(')"
+  declarations="$(strip_code "$mapping_icon_pack" | count_hits 'void +RegisterIcons *\(')"
+  inside="$(mapping_method_body "$mapping_icon_pack" "public static void EnsureAttached\\(" | count_hits '(^|[^A-Za-z0-9_])RegisterIcons *\(')"
+  first="$(mapping_method_body "$mapping_icon_pack" "public static void EnsureAttached\\(" | first_statement)"
+  if lookup_failed "$hits" "$declarations" "$inside"; then
+    fail "could not search $mapping_icon_pack for RegisterIcons; the check was not run"
+  elif ((declarations != 1 || inside != 1 || hits - declarations != 1)); then
+    fail "IconPack must register the custom icons from EnsureAttached and nowhere else (R7.4): $((hits - declarations)) call(s) of RegisterIcons, $inside of them in EnsureAttached"
+  fi
+
+  if [[ "$first" != "if(!map||map.GetInstanceID()==_attachedMinimapId)return;" ]]; then
+    fail "IconPack.EnsureAttached must open with \"if (!map || map.GetInstanceID() == _attachedMinimapId) return;\" (R7.4): turning the module on again for the same minimap would otherwise extend its icon tables a second time; found \"$first\""
+  fi
+}
+
+# The pin rule. A disable moves the vehicle pins to their vehicles, then removes the unsaved pins
+# the module holds, and only then drops the caches that say which pins it holds. Nothing in the
+# module clears a pin's saved flag or writes its owner: only the user's click saves a pin, and
+# the owner is what makes a pin shared.
+require_mapping_disable_keeps_the_pin_rule() {
+  local body
+  local flush
+  local dynamic
+  local static
+  local reset
+  local file
+  local cleared
+  local owned
+
+  body="$(mapping_method_body "$mapping_module" "public void Disable\\(ModuleScope scope\\)")"
+  if [[ -z "$body" ]]; then
+    fail "$mapping_module must define Disable(ModuleScope)"
+    return
+  fi
+
+  flush="$(printf '%s\n' "$body" | first_hit 'DynamicObjectMapping *\. *MoveVehiclePinsToTargets *\(')"
+  dynamic="$(printf '%s\n' "$body" | first_hit 'DynamicObjectMapping *\. *RemoveCachedPins *\(')"
+  static="$(printf '%s\n' "$body" | first_hit 'StaticObjectMapping *\. *RemoveCachedPins *\(')"
+  reset="$(printf '%s\n' "$body" | first_hit '(^|[^A-Za-z0-9_.])ResetSession *\(')"
+
+  if lookup_failed "$flush" "$dynamic" "$static" "$reset"; then
+    fail "could not search the mapping Disable for its pin handling; the check was not run"
+  elif [[ -z "$flush" || -z "$dynamic" || -z "$static" || -z "$reset" ]]; then
+    fail "the mapping Disable must move the vehicle pins, remove the unsaved pins both scans hold and reset the session"
+  else
+    if ((flush >= dynamic || flush >= static)); then
+      fail "the mapping Disable must move the vehicle pins to their vehicles before it removes the cached pins: the removal lets go of the vehicle pins, and a pin let go of first stays saved at a point on its vehicle's way"
+    fi
+
+    if ((dynamic >= reset || static >= reset)); then
+      fail "the mapping Disable must remove the cached pins before it resets the session: the reset forgets which pins the module holds, and an unsaved pin forgotten first stays on the map"
+    fi
+  fi
+
+  for file in "$mapping_dir"/*.cs; do
+    cleared="$(strip_code "$file" | count_hits 'm_save *= *false')"
+    owned="$(strip_code "$file" | count_hits 'm_ownerID *=([^=]|$)')"
+    if lookup_failed "$cleared" "$owned"; then
+      fail "could not search $file for pin flag writes; the check was not run"
+      continue
+    fi
+
+    if ((cleared != 0)); then
+      fail "$file clears a pin's saved flag ($cleared found): only the user's click decides that a pin is kept, and this module removes unsaved pins"
+    fi
+
+    if ((owned != 0)); then
+      fail "$file writes a pin's owner ($owned found): the owner is what makes a pin shared, and this module leaves shared pins alone"
+    fi
+  done
+}
+
+# R7.2: the console commands stay available whatever the modules are set to, and none of them
+# writes a setting. printobjects reads Automatic Mapping's applied state, says when it is not
+# running, and still lists; each language defines that line.
+require_console_commands_never_write_a_setting() {
+  local file
+  local writes
+  local language_file
+
+  for file in Automatics/ConsoleCommands/*.cs; do
+    writes="$(strip_code "$file" | count_hits '\. *Value *=([^=>]|$)')"
+    if lookup_failed "$writes"; then
+      fail "could not search $file for config writes; the check was not run"
+    elif ((writes != 0)); then
+      fail "$file assigns a config value ($writes found) (R7.2 / R1.3b): a console command may read a module's state but never turns a module on or off for the user"
+    fi
+  done
+
+  require_source_pattern \
+    "$printobjects_file" \
+    "\"@command_printobjects_message_mapping_not_running\"" \
+    "printobjects must print @command_printobjects_message_mapping_not_running when Automatic Mapping is not running (R7.2)"
+
+  for language_file in Automatics/Languages/en_us.json Automatics/Languages/ja_jp.json; do
+    require_source_pattern \
+      "$language_file" \
+      "\"@command_printobjects_message_mapping_not_running\"" \
+      "$language_file must define @command_printobjects_message_mapping_not_running (R9.2)"
+  done
+}
+
 require_setting_changed_handler_only_requests
 require_pump_contains_its_failures
 require_pump_containment_starts_at_the_top
@@ -2462,12 +2786,20 @@ require_unmigrated_modules_keep_their_early_return
 require_event_wiring_goes_through_the_scope "Hooks\\.[A-Za-z]+" "hook subscriptions"
 require_event_wiring_goes_through_the_scope "OnCacheAdded" "cache-added subscriptions"
 require_event_wiring_goes_through_the_scope "OnCacheRemoved" "cache-removed subscriptions"
+require_event_wiring_goes_through_the_scope "RegistryChanged" "registry-change subscriptions"
+require_event_wiring_goes_through_the_scope "StaticAllowlistChanged" "allowlist-change subscriptions"
 require_patching_goes_through_the_scope
 require_components_are_created_through_the_scope
-require_attach_paths_recheck_the_effective_state
+require_attach_paths_recheck_the_effective_state "$pickup_module" \
+  "private static void OnPlayerAwake" "internal static void AttachCache"
+require_attach_paths_recheck_the_effective_state "$mapping_module" \
+  "internal static void AttachCache" "internal static void AttachMineRock5" \
+  "private static void AttachFlora"
 require_every_patch_is_gated
-require_enable_acquires_in_order
-require_disable_lowers_the_flag_first
+require_enable_acquires_in_order "$pickup_module"
+require_enable_acquires_in_order "$mapping_module"
+require_disable_lowers_the_flag_first "$pickup_module"
+require_disable_lowers_the_flag_first "$mapping_module"
 require_reconciliation_enumerates_the_scene
 require_no_warning_suppressions
 require_the_default_is_unchanged
@@ -2482,6 +2814,13 @@ require_processing_entries_open_with_the_gate
 require_processing_entries_never_recheck_after_a_change
 require_processing_entries_check_ownership_first
 require_processing_containers_are_claimed_first
+
+require_mapping_entries_open_with_the_gate
+require_mapping_leaves_no_start_up_only_state
+require_mapping_destroy_callbacks_are_added_once
+require_mapping_icons_are_registered_once_per_minimap
+require_mapping_disable_keeps_the_pin_rule
+require_console_commands_never_write_a_setting
 
 if ((failures > 0)); then
   exit 1

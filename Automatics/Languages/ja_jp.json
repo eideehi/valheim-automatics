@@ -319,6 +319,7 @@
     "@command_printobjects_message_result_defined": "\"$1\" ($2) [$3として定義済み]\n  位置: $4 [距離: $5]\n  識別子: $6",
     "@command_printobjects_message_result_more": "他に $1 種類の $2 として扱うことのできるオブジェクトを発見しました。",
     "@command_printobjects_message_result_empty": "条件に一致する $1 が見つかりませんでした。",
+    "@command_printobjects_message_mapping_not_running": "自動マッピングが動作していません。この一覧には魚・鳥・船が含まれず、表示された対象もピン留めされません。このコマンドは自動マッピングを有効にしません。",
     "@command_printobjects_error_player_unavailable": "ローカルプレイヤーがまだ利用できません。",
     "@command_printobjects_error_world_unavailable": "ワールドのロケーション情報がまだ利用できません。",
     "@command_removemappins_usage": "使用方法: removemappins (OPTIONS...)",

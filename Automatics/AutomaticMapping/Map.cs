@@ -9,7 +9,7 @@ namespace Automatics.AutomaticMapping
 {
     internal static class Map
     {
-        // Cached once in OnMinimapStart so Map query helpers skip the
+        // Bound once, by the first Attach, so Map query helpers skip the
         // per-call Harmony reflection lookups. EmptyPinList is the safe
         // return when Minimap.instance is not yet live.
         private static AccessTools.FieldRef<Minimap, List<Minimap.PinData>> _pinsRef;
@@ -21,7 +21,12 @@ namespace Automatics.AutomaticMapping
 
         private static Minimap ValheimMap => Minimap.instance;
 
-        public static void OnMinimapStart()
+        /// <summary>
+        ///     Binds the minimap accessors and builds the pin index from the pins the minimap has.
+        ///     Called from the Minimap.Start postfix for a new minimap, and when the module is
+        ///     turned on for the one that already exists.
+        /// </summary>
+        public static void Attach(Minimap map)
         {
             // Bind each accessor in its own try/catch so a future Valheim
             // update that reshapes Minimap.m_pins or renames UpdatePins only
@@ -86,11 +91,12 @@ namespace Automatics.AutomaticMapping
 
             // Minimap.Start invokes LoadMapData before this postfix runs,
             // so AddPin_Postfix coverage depends on module load order.
-            // Rebuilding from the live list also drops stale PinData
-            // references from a prior session.
+            // A minimap the module is turned on for has pins the index
+            // never saw at all. Rebuilding from the live list covers both,
+            // and also drops stale PinData references from a prior session.
             AutomaticPins.Clear();
             PinIndex.Clear();
-            var pins = GetAllPins();
+            var pins = GetAllPins(map);
             for (var i = 0; i < pins.Count; i++)
             {
                 PinIndex.Track(pins[i]);
@@ -99,9 +105,24 @@ namespace Automatics.AutomaticMapping
             }
         }
 
+        /// <summary>
+        ///     Drops the pin index and the set of pins recognised as automatic. A disable calls it
+        ///     after it has removed the pins it held; the next <see cref="Attach" /> rebuilds both
+        ///     from the pins the minimap has then.
+        /// </summary>
+        public static void Detach()
+        {
+            AutomaticPins.Clear();
+            PinIndex.Clear();
+        }
+
         public static List<Minimap.PinData> GetAllPins()
         {
-            var map = ValheimMap;
+            return GetAllPins(ValheimMap);
+        }
+
+        private static List<Minimap.PinData> GetAllPins(Minimap map)
+        {
             if (!map) return EmptyPinList;
             return _pinsRef != null ? _pinsRef(map) : FallbackGetAllPins(map);
         }
@@ -258,6 +279,9 @@ namespace Automatics.AutomaticMapping
 
         public static bool ShouldHideAutomaticPin(Minimap.PinData pinData)
         {
+            // Called from the transpiled UpdatePins for every pin: stopped, the game draws them all.
+            if (!Module.Running) return false;
+
             // Cheap feature gate first: with unexplored-pin hiding disabled (the
             // default) this collapses to bool reads, skipping the per-pin hash
             // lookups in IsAutomaticPin and the IsExplored map call. Inlines
@@ -270,6 +294,7 @@ namespace Automatics.AutomaticMapping
 
         public static void DestroyHiddenAutomaticPinMarkers()
         {
+            if (!Module.Running) return;
             if (!ShouldFilterAutomaticPins()) return;
 
             var pins = GetAllPins();
@@ -325,7 +350,7 @@ namespace Automatics.AutomaticMapping
 
         private static bool ShouldFilterAutomaticPins()
         {
-            return !Config.ModuleDisabled &&
+            return Module.Running &&
                    Config.EnableAutomaticMapping &&
                    Config.HideUnexploredAutomaticMappingPins;
         }

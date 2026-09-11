@@ -63,6 +63,8 @@ namespace Automatics.AutomaticMapping
 
         public static bool TryHandleMapClick(Minimap map)
         {
+            // False hands the click back to the game's own handling.
+            if (!Module.Running) return false;
             if (!map) return false;
             if (Config.NavigationStartKey.MainKey == KeyCode.None) return false;
             if (map.m_mode != Minimap.MapMode.Large) return false;
@@ -86,6 +88,14 @@ namespace Automatics.AutomaticMapping
 
         public static void Update(Player player)
         {
+            // Stopped: the overlay is hidden in the frame the stop is requested, and destroyed
+            // with the rest of the session when the module is turned off.
+            if (!Module.Running)
+            {
+                SetVisible(false);
+                return;
+            }
+
             ValidateTargetPin();
 
             if (!ShouldShow(player))

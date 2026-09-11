@@ -177,7 +177,8 @@ namespace Automatics.SmokeTest
             private readonly Dictionary<string, CheckResult> _checks =
                 new Dictionary<string, CheckResult>(StringComparer.Ordinal);
 
-            private readonly ErrorObserver _errors = new ErrorObserver();
+            private readonly ErrorObserver _errors = new ErrorObserver(
+                "AutomaticsObserverProbe-toggle", "automatics_smoke_processing toggle");
             private readonly FuelBench _fuel;
 
             private ConfigEntry<AutomaticsModule> _toggle;
@@ -1014,52 +1015,6 @@ namespace Automatics.SmokeTest
                 if (!(__result > __state)) return;
                 if (Acted == 0) ActedAt = Time.realtimeSinceStartup;
                 Acted++;
-            }
-        }
-
-        // Everything Unity logs as an error, an exception or a failed assertion while the toggle
-        // check runs, unfiltered. The probe it logs as it starts shows that it receives what
-        // Unity logs; without it, an empty log would prove nothing.
-        private sealed class ErrorObserver
-        {
-            private const string ProbeMarker = "AutomaticsObserverProbe-toggle";
-
-            private readonly List<string> _unexpected = new List<string>();
-            private bool _listening;
-
-            public bool Started { get; private set; }
-            public int Probes { get; private set; }
-            public IReadOnlyList<string> Unexpected => _unexpected;
-
-            public void Start()
-            {
-                if (Started) return;
-                Started = true;
-                _listening = true;
-                Application.logMessageReceived += OnLog;
-                UnityEngine.Debug.LogException(new InvalidOperationException(
-                    $"{ProbeMarker}: a deliberate test entry of automatics_smoke_processing toggle, logged to show the check sees what Unity logs; it is not an error"));
-            }
-
-            public void Stop()
-            {
-                if (!_listening) return;
-                _listening = false;
-                Application.logMessageReceived -= OnLog;
-            }
-
-            private void OnLog(string condition, string stackTrace, LogType type)
-            {
-                if (type != LogType.Error && type != LogType.Exception && type != LogType.Assert) return;
-                if (condition != null && condition.Contains(ProbeMarker))
-                {
-                    Probes++;
-                    return;
-                }
-
-                _unexpected.Add(string.IsNullOrEmpty(stackTrace)
-                    ? $"[{type}] {condition}"
-                    : $"[{type}] {condition}\n{stackTrace.Trim()}");
             }
         }
     }

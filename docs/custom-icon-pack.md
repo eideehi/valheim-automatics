@@ -2,6 +2,8 @@
 
 Using png files and json, you can customize icons for pins added by Automatic mapping.
 
+Keep Automatic mapping turned on when you load a world that has saved pins with your custom icons, because the icons are registered only while the module runs and the map cannot draw such a pin without its icon.
+
 ![Example custom icons](images/readme/custom-icon-pack.png)
 
 ## Directory structure

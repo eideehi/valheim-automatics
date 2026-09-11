@@ -56,7 +56,7 @@ scripts/build.sh Debug
 scripts/build.sh smoke Debug [clean] [deploy|no-deploy]
 ```
 
-Besides the auto-run startup invariant checks, the smoke plugin registers three optional in-game console commands: `automatics_smoke_world` drives the live Storage/Door/Pickup/Processing entry points against freshly spawned objects, `automatics_smoke_lifecycle` toggles `automatic_pickup/module` at runtime to check patch application/removal and restores the original value afterwards, and `automatics_smoke_processing` checks Automatic Processing: `rpc` that its station intake RPCs keep every item on stations and a chest it spawns, `toggle` a runtime off/on of `automatic_processing/module` restored afterwards, and `config` (read-only) its section of the live `.cfg`. Only one runs at a time.
+Besides the auto-run startup invariant checks, the smoke plugin registers three optional in-game console commands: `automatics_smoke_world` drives the live Storage/Door/Pickup/Processing entry points against freshly spawned objects, `automatics_smoke_lifecycle` toggles `automatic_pickup/module` at runtime to check patch application/removal and restores the original value afterwards (`automatics_smoke_lifecycle mapping` takes `automatic_mapping/module` through three off/on cycles instead, checking patches, components, scans and pins, and spawns nothing), and `automatics_smoke_processing` checks Automatic Processing: `rpc` that its station intake RPCs keep every item on stations and a chest it spawns, `toggle` a runtime off/on of `automatic_processing/module` restored afterwards, and `config` (read-only) its section of the live `.cfg`. Only one runs at a time.
 
 Version consistency check:
 

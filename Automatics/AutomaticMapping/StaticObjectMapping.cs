@@ -78,7 +78,6 @@ namespace Automatics.AutomaticMapping
         private static int _committedStaticClassifierVersion;
         private static readonly HashSet<ValheimObject> PendingAllowlistInvalidations
             = new HashSet<ValheimObject>();
-        private static bool _registrySubscriptionsBound;
 
         // Sweep generation. LastSeenSweep on each PinCacheEntry is tagged with
         // _currentSweepId whenever the entry is observed during a pass. At
@@ -176,12 +175,16 @@ namespace Automatics.AutomaticMapping
         [UsedImplicitly]
         public static void OnObjectDestroy(Component component, ZNetView zNetView)
         {
-            // try/finally so a config-gated early return still drops the
-            // cached colliders. MineRock5_DamageArea_Transpiler only routes
+            // try/finally so a gated early return still drops the cached
+            // colliders. MineRock5_DamageArea_Transpiler only routes
             // fully-destroyed rocks here, so the entry is never useful again
-            // and holding it would leak until the next world unload.
+            // and holding it would leak until the next world unload. The
+            // module gate is the first statement inside the try: this is
+            // reached from destroy callbacks that stay on objects while the
+            // module is off, and from the SetPicked and DamageArea transpilers.
             try
             {
+                if (!Module.Running) return;
                 if (!Config.EnableAutomaticMapping) return;
                 if (!Config.RemovePinsOfDestroyedObject) return;
                 if (zNetView == null || !zNetView.IsValid()) return;
@@ -282,8 +285,6 @@ namespace Automatics.AutomaticMapping
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotStaticMapping))
             {
-                EnsureRegistrySubscriptions();
-
                 if (Config.StaticObjectMappingRange <= 0)
                 {
                     RemoveCachedPins();
@@ -952,21 +953,19 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        /// Wires up the registry / allowlist change subscribers on the first
-        /// <see cref="Mapping"/> call. Bound once for the lifetime of the
-        /// AppDomain — <see cref="Cleanup"/> intentionally does not flip the
-        /// flag because re-binding without unbinding would register duplicate
-        /// delegates and double-increment the classifier version.
+        /// Called when the module is turned on. Registry and allowlist changes
+        /// made while it was off were not observed, so the classification is
+        /// rebuilt from the live registries: the next <see cref="Mapping"/>
+        /// sees a new classifier version and forces a fresh scan. The two
+        /// handlers below are subscribed through the module's scope while it
+        /// runs, and removed with it.
         /// </summary>
-        private static void EnsureRegistrySubscriptions()
+        internal static void InvalidateClassification()
         {
-            if (_registrySubscriptionsBound) return;
-            _registrySubscriptionsBound = true;
-            ValheimObject.RegistryChanged += OnValheimObjectRegistryChanged;
-            Config.StaticAllowlistChanged += OnStaticAllowlistChanged;
+            _staticClassifierVersion++;
         }
 
-        private static void OnValheimObjectRegistryChanged(ValheimObject obj)
+        internal static void OnValheimObjectRegistryChanged(ValheimObject obj)
         {
             // Filter to the registries that the static mapping path actually
             // consumes. Vehicle / Animal / Monster live in the dynamic domain
@@ -982,7 +981,7 @@ namespace Automatics.AutomaticMapping
             }
         }
 
-        private static void OnStaticAllowlistChanged(ValheimObject registry)
+        internal static void OnStaticAllowlistChanged(ValheimObject registry)
         {
             // Allowlist toggles do not invalidate classifier output — they only
             // change whether the iteration acts on a given kind. Queue a

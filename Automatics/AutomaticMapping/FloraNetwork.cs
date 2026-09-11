@@ -7,14 +7,17 @@ using UnityEngine;
 namespace Automatics.AutomaticMapping
 {
     [DisallowMultipleComponent]
-    internal class FloraNode : ObjectNode<FloraNode, FloraNetwork>
+    internal class FloraNode : ObjectNode<FloraNode, FloraNetwork>, IScopedComponent
     {
         private static readonly Dictionary<ZDOID, FloraNode> NodeIndex =
             new Dictionary<ZDOID, FloraNode>();
 
         private Pickable _pickable;
+        private Destructible _destructible;
         private ZNetView _zNetView;
         private ZDOID _uniqueId;
+
+        public int ScopeGeneration { get; set; }
 
         private string Name => _pickable ? Objects.GetName(_pickable) : string.Empty;
 
@@ -29,8 +32,8 @@ namespace Automatics.AutomaticMapping
                 ? _zNetView.GetZDO().m_uid
                 : ZDOID.None;
 
-            var destructible = _pickable.GetComponent<Destructible>();
-            if (destructible != null) destructible.m_onDestroyed += OnDestroyed;
+            _destructible = _pickable.GetComponent<Destructible>();
+            if (_destructible != null) _destructible.m_onDestroyed += OnDestroyed;
 
             if (_uniqueId != ZDOID.None)
                 NodeIndex[_uniqueId] = this;
@@ -38,8 +41,14 @@ namespace Automatics.AutomaticMapping
             Invoke(nameof(NetworkConstruction), UnityEngine.Random.Range(1f, 2f));
         }
 
+        // Turning the module off destroys this node and leaves the pickable, so the callback Awake
+        // added to the pickable's destructible is taken off again here; the node the next
+        // activation attaches adds its own.
         protected override void OnDestroy()
         {
+            if (_destructible != null) _destructible.m_onDestroyed -= OnDestroyed;
+            _destructible = null;
+
             if (_uniqueId != ZDOID.None &&
                 NodeIndex.TryGetValue(_uniqueId, out var node) &&
                 ReferenceEquals(node, this))
@@ -61,6 +70,13 @@ namespace Automatics.AutomaticMapping
                    node.IsValid()
                 ? node
                 : null;
+        }
+
+        // Awake schedules the network construction, and a node the scope is about to destroy must
+        // not join a network in the part of the frame it has left.
+        public void OnScopeDetaching()
+        {
+            CancelInvoke(nameof(NetworkConstruction));
         }
 
         private void OnDestroyed()

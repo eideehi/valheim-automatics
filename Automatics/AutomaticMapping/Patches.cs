@@ -8,6 +8,19 @@ using UnityEngine;
 
 namespace Automatics.AutomaticMapping
 {
+    /// <summary>
+    ///     The patches reach this module's entry points, and the entry points carry the gates:
+    ///     each one with an effect on the map opens with <see cref="Module.Running" />, and each one
+    ///     that takes a new object into the activation's ownership with
+    ///     <see cref="Module.Discovering" />. The gates sit in the entry points rather than in the
+    ///     patch methods because the transpilers inject calls that run outside any patch method.
+    ///     The Explore and AddSharedMapData postfixes, and the three that give an object its
+    ///     destroy callback, carry the gate themselves.
+    ///     The patches that only keep the pin index in step with the minimap - AddPin, RemovePin,
+    ///     ClearPins, ResetSharedMapData and OnDestroy - and the Minimap.Start postfix are not
+    ///     gated: they change no pin, and the index is rebuilt from the minimap when the module is
+    ///     turned on anyway.
+    /// </summary>
     [SuppressMessage("ReSharper", "InconsistentNaming")]
     [HarmonyPatch]
     internal static class Patches
@@ -17,13 +30,13 @@ namespace Automatics.AutomaticMapping
         private static void Fish_Start_Postfix(Fish __instance, ZNetView ___m_nview)
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<FishCache>();
+                Module.AttachCache<FishCache>(__instance.gameObject);
         }
 
         private static void AddBirdCache(RandomFlyingBird bird, ZNetView zNetView)
         {
-            if (zNetView && zNetView.GetZDO() != null && bird.GetComponent<BirdCache>() == null)
-                bird.gameObject.AddComponent<BirdCache>();
+            if (zNetView && zNetView.GetZDO() != null)
+                Module.AttachCache<BirdCache>(bird.gameObject);
         }
 
         [HarmonyPatch]
@@ -48,24 +61,26 @@ namespace Automatics.AutomaticMapping
         private static void Ship_Awake_Postfix(Ship __instance, ZNetView ___m_nview)
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.gameObject.AddComponent<ShipCache>();
+                Module.AttachCache<ShipCache>(__instance.gameObject);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MineRock5), "Awake")]
-        private static void MineRock5_Awake_Postfix(MineRock5 __instance)
+        private static void MineRock5_Awake_Postfix(MineRock5 __instance, ZNetView ___m_nview)
         {
-            var binding = __instance.gameObject.GetComponent<MineRock5CacheBinding>()
-                          ?? __instance.gameObject.AddComponent<MineRock5CacheBinding>();
-            binding.Initialize(__instance);
+            // The same test as the other attach postfixes. A rock without a ZDO is never pinned,
+            // and an inactive template another mod keeps in the scene must not carry a binding
+            // that every rock spawned from it would copy.
+            if (___m_nview && ___m_nview.GetZDO() != null)
+                Module.AttachMineRock5(__instance);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Minimap), "Start")]
-        private static void Minimap_Start_Postfix()
+        private static void Minimap_Start_Postfix(Minimap __instance)
         {
-            IconPack.Initialize();
-            Map.OnMinimapStart();
+            IconPack.EnsureAttached(__instance);
+            Map.Attach(__instance);
         }
 
         [HarmonyPostfix]
@@ -277,6 +292,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Minimap), "Explore", new[] { typeof(Vector3), typeof(float) })]
         private static void Minimap_Explore_Postfix()
         {
+            if (!Module.Running) return;
             if (Config.HideUnexploredAutomaticMappingPins)
                 Map.RefreshPins();
         }
@@ -285,6 +301,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Minimap), nameof(Minimap.AddSharedMapData))]
         private static void Minimap_AddSharedMapData_Postfix(bool __result)
         {
+            if (!Module.Running) return;
             if (__result && Config.HideUnexploredAutomaticMappingPins)
                 Map.RefreshPins();
         }
@@ -490,11 +507,13 @@ namespace Automatics.AutomaticMapping
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Destructible), "Awake")]
+        // The three postfixes below give a new object its destroy callback. Each takes the object
+        // into the activation's ownership, so they gate on discovery like the attach paths do.
         private static void Destructible_Awake_Postfix(Destructible __instance, ZNetView ___m_nview)
         {
+            if (!Module.Discovering) return;
             if (___m_nview && ___m_nview.GetZDO() != null)
-                __instance.m_onDestroyed += () =>
-                    StaticObjectMapping.OnObjectDestroy(__instance, ___m_nview);
+                Module.HookStaticObjectDestroy(__instance, ___m_nview);
         }
 
         [HarmonyPostfix]
@@ -502,24 +521,20 @@ namespace Automatics.AutomaticMapping
         private static void TeleportWorld_Awake_Postfix(TeleportWorld __instance,
             ZNetView ___m_nview)
         {
+            if (!Module.Discovering) return;
             if (___m_nview == null || ___m_nview.GetZDO() == null) return;
 
-            var portal = __instance.GetComponent<WearNTear>();
-            if (portal)
-                portal.m_onDestroyed += () =>
-                    StaticObjectMapping.OnObjectDestroy(__instance, ___m_nview);
+            Module.HookPortalDestroy(__instance, ___m_nview);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Vagon), "Awake")]
         private static void Vagon_Awake_Postfix(Vagon __instance, ZNetView ___m_nview)
         {
+            if (!Module.Discovering) return;
             if (___m_nview == null || ___m_nview.GetZDO() == null) return;
 
-            var wearNTear = __instance.GetComponent<WearNTear>();
-            if (wearNTear)
-                wearNTear.m_onDestroyed += () =>
-                    DynamicObjectMapping.OnObjectDestroy(__instance);
+            Module.HookVehicleDestroy(__instance);
         }
     }
 }

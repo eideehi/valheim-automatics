@@ -198,7 +198,8 @@ safe.
 ### Lifecycle smoke command
 
 `automatics_smoke_lifecycle` (no arguments) exercises the runtime module
-lifecycle on Automatic Pickup, the one module migrated to it. Run it from the
+lifecycle on Automatic Pickup; with the argument `mapping` it exercises Automatic
+Mapping instead (described after this one). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
 through off → on → off:
@@ -259,6 +260,66 @@ A failing check names what it saw, for example:
 [Automatics Smoke] FAIL lifecycle_off_patches_removed: Harmony.HasAnyPatches("net.eidee.valheim.automatics.automatic-pickup") is still true after the disable (AC-R3)
 [Automatics Smoke] FAIL lifecycle_on_state_enabled: timed out after 10.0s (612 frames) waiting for Enabled; the registry reports Disabled and the toggle is Enabled
 [Automatics Smoke] SKIP lifecycle_restored_initial_state: restoration skipped: automatic_pickup/module was changed outside the check while it ran and is now Enabled; it was left as it is instead of being put back to Disabled
+```
+
+#### `automatics_smoke_lifecycle mapping`
+
+Takes `automatic_mapping / module` from `Enabled` through three off → on cycles
+by writing the setting, the way a user does, and makes sure it ends at its
+starting value. It spawns nothing and changes no other setting. Before the first
+cycle it records a baseline: the saved pins, the handler counts, the component
+counts and the minimap's icon tables.
+
+| Check | Asserts |
+|---|---|
+| `mapping_initial_state_settled` | The registry reports `Enabled` before anything is changed |
+| `mapping_off_state_disabled` | The registry reports `Disabled` after the disable request |
+| `mapping_off_stopped_at_request` | Right after the disable request the module is still applied but no longer running, which is what every entry point checks, and the static scan's pass counter does not move until `Disabled`: the stop takes hold at the request, not at the teardown |
+| `mapping_off_patches_removed` | No patch is left under Mapping's Harmony id (SKIP when runtime patch removal is unavailable) |
+| `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode` or `AutomaticsNavigationOverlay` is left in the scene |
+| `mapping_off_saved_pins_kept` | The saved pins are the ones there were before the run: type, name, position to 0.1 m, owner and checked flag. A vehicle pin's position is left out, because it follows its vehicle |
+| `mapping_off_unsaved_pins_removed` | None of the unsaved pins the module held just before the disable is on the map (SKIP when it held none) |
+| `mapping_on_state_enabled` | The registry reports `Enabled` after the enable request |
+| `mapping_on_patches_applied` | The patches under Mapping's Harmony id are exactly the (target, patch method) pairs its three patch classes declare |
+| `mapping_on_components_attached` | Every fish, bird, ship and `MineRock5` with a ZDO, and every pickable that is a configured flora, carries its component from the running generation, and there is no other (SKIP, inconclusive, when the scene has none of them) |
+| `mapping_on_counts_at_baseline` | The handler counts of the hooks, caches and registries Mapping subscribes to, the component counts, and the lengths of `Minimap.m_icons` and `m_visibleIconTypes` are what they were before the run |
+| `mapping_on_scans_resumed` | Within 10 s the static scan has run again and, if it held pins before the run, it holds one again (SKIP when a setting keeps the static scan from running on its own, such as `static_object_mapping_key`) |
+| `mapping_on_saved_pins_kept` | 4 s after the enable, once the flora pins are placed again, the saved pins are still the ones there were before the run |
+
+The component counts are sampled again for up to 10 frames before a mismatch is
+reported, because an object the game spawns or despawns in the same frame has
+its component attached or removed a moment later.
+| `mapping_restored_initial_state` | The setting is back at `Enabled` and the registry reports it |
+| `mapping_no_errors_logged` | No error or exception was logged while the check ran |
+
+The checks between the restore and the settle are made in every cycle, and pass
+only when all three cycles pass; a FAIL names the cycle. The run stops at the
+first state that is not reached and goes straight to the restore. The waits and
+the log check follow the same rules as the lifecycle command and
+`automatics_smoke_processing toggle`; the log check's deliberate entry is
+`InvalidOperationException: AutomaticsObserverProbe-mapping: a deliberate test
+entry …`, which is expected in `LogOutput.log` and is not an error.
+
+Safety, on top of the rules above:
+
+- The check only ever pauses Automatic Mapping, never turns it on for you. If
+  `automatic_mapping / module` is not `Enabled` when it starts, every check SKIPs
+  and nothing is written.
+- Each disable removes the unsaved pins Mapping added and each enable adds them
+  back as the scans reach their objects, so the map looks the same afterwards.
+  Saved pins are never removed; vehicle pins are moved to where their vehicles
+  are, as saving the map does.
+
+A passing run looks like this:
+
+```text
+[Automatics Smoke] automatics_smoke_lifecycle mapping started: automatic_mapping/module is turned off and on 3 times through its setting, nothing is spawned, and the setting is restored
+[Automatics Smoke] PASS mapping_initial_state_settled: nothing was changed
+[Automatics Smoke] PASS mapping_off_state_disabled: all 3 cycles
+[Automatics Smoke] PASS mapping_off_stopped_at_request: all 3 cycles; right after the disable request the module was still applied but no longer running, and the static scan's pass counter stayed at 41 until the registry reported Disabled
+...
+[Automatics Smoke] PASS mapping_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
+[Automatics Smoke] Summary: total=15 passed=15 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 ### Processing smoke command

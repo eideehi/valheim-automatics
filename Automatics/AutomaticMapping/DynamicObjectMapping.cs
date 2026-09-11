@@ -100,7 +100,6 @@ namespace Automatics.AutomaticMapping
         // independent of the static-mapping classifier version so custom_flora
         // edits do not invalidate character caches and vice versa.
         private static int _dynamicClassifierVersion;
-        private static bool _registrySubscriptionsBound;
 
         // Vagon.m_instances resolved once into a cached static-field ref so the
         // 10 Hz vehicle scan does not allocate a Traverse per call. Guarded bind
@@ -130,14 +129,18 @@ namespace Automatics.AutomaticMapping
             DirtyDrainBuffer = new List<ZDOID>();
         }
 
-        private static void EnsureRegistrySubscriptions()
+        /// <summary>
+        ///     Called when the module is turned on. Registry changes made while it was off were
+        ///     not observed, so every cached character classification is made stale and resolved
+        ///     again from the live registries on its next scan.
+        /// </summary>
+        internal static void InvalidateClassification()
         {
-            if (_registrySubscriptionsBound) return;
-            _registrySubscriptionsBound = true;
-            ValheimObject.RegistryChanged += OnValheimObjectRegistryChanged;
+            _dynamicClassifierVersion++;
         }
 
-        private static void OnValheimObjectRegistryChanged(ValheimObject obj)
+        // Subscribed to ValheimObject.RegistryChanged through the module's scope while it runs.
+        internal static void OnValheimObjectRegistryChanged(ValheimObject obj)
         {
             // Only the registries the dynamic scan reads from (Animal /
             // Monster) should invalidate cached identifiers. Static-domain
@@ -243,6 +246,9 @@ namespace Automatics.AutomaticMapping
 
         public static void OnObjectDestroy(Component component)
         {
+            // Reached from a vehicle's destroy callback, which stays on the vehicle while the
+            // module is off.
+            if (!Module.Running) return;
             if (component.GetComponent<Ship>() || component.GetComponent<Vagon>())
             {
                 if (!Objects.GetZdoid(component, out var uniqueId)) return;
@@ -311,7 +317,22 @@ namespace Automatics.AutomaticMapping
             VehicleDirtyPins.Clear();
         }
 
+        /// <summary>
+        ///     Called before the game saves the map, so a saved vehicle pin is written where its
+        ///     vehicle is rather than at a point on its way there.
+        /// </summary>
         public static void FlushVehiclePins()
+        {
+            if (!Module.Running) return;
+            MoveVehiclePinsToTargets();
+        }
+
+        /// <summary>
+        ///     Moves every vehicle pin this module holds to the last position its vehicle was seen
+        ///     at. Not gated: a disable calls it after the module has stopped, so the pins it then
+        ///     lets go of as ordinary saved pins are left where their vehicles are.
+        /// </summary>
+        internal static void MoveVehiclePinsToTargets()
         {
             if (VehiclePinCache.Count == 0) return;
 
@@ -435,8 +456,6 @@ namespace Automatics.AutomaticMapping
         {
             using (MappingProfiler.BeginScope(MappingProfiler.SlotDynamicMapping))
             {
-                EnsureRegistrySubscriptions();
-
                 var range = Config.DynamicObjectMappingRange;
                 if (range <= 0)
                 {
@@ -605,14 +624,18 @@ namespace Automatics.AutomaticMapping
 
             for (var i = 0; i < pins.Count; i++)
             {
+                // The type is checked for every candidate, not only for an unmarked one: a saved
+                // pin carries its author and a name a user can type, so without the vehicle pin
+                // type a manual pin of the same name could be adopted, and then moved or removed
+                // with the vehicle.
                 var candidate = pins[i];
-                var markedVehiclePin = IsMarkedVehiclePin(candidate);
                 if (candidate == null ||
                     !candidate.m_save ||
                     candidate.m_ownerID != 0L ||
                     candidate.m_name != pinName ||
+                    !IsVehiclePinTypeCompatible(candidate.m_type, pinType) ||
                     VehiclePinKeyCache.ContainsKey(candidate) ||
-                    (!markedVehiclePin &&
+                    (!IsMarkedVehiclePin(candidate) &&
                      !IsLikelyLegacyVehiclePin(candidate, pinName, pinType)))
                     continue;
 

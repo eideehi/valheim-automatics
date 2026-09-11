@@ -16,6 +16,10 @@ namespace Automatics.AutomaticMapping
 
         private static Minimap.PinType _vanillaPinTypeLength;
 
+        // The minimap the custom icons were last registered in, by instance id, so that the
+        // destroyed minimap of an earlier world is not kept alive here.
+        private static int _attachedMinimapId;
+
         static IconPack()
         {
             Icons = new List<Icon>();
@@ -30,12 +34,14 @@ namespace Automatics.AutomaticMapping
         }
 
         // Invoked from the Minimap.UpdatePins transpiler twice per pin while the map is
-        // shown, so this is a per-pin, per-frame hot path. Bail before any work when no
-        // icon pack is loaded (the common case) and look the icon up with a plain loop to
-        // avoid the capturing-lambda closure + enumerator that FirstOrDefault allocates.
+        // shown, so this is a per-pin, per-frame hot path. Bail before any work when the
+        // module is stopped or no icon pack is loaded (the common case) and look the icon up
+        // with a plain loop to avoid the capturing-lambda closure + enumerator that
+        // FirstOrDefault allocates. Stopped, the game's own size is kept.
         [UsedImplicitly]
         public static float ResizeIcon(Minimap.PinData pinData, float originalSize)
         {
+            if (!Module.Running) return originalSize;
             if (Icons.Count == 0) return originalSize;
 
             var icon = FindIcon(pinData.m_type);
@@ -64,6 +70,8 @@ namespace Automatics.AutomaticMapping
         [UsedImplicitly]
         public static bool IsNameTagHidden(Minimap.PinData pinData)
         {
+            // Called from the transpiled AddPin: stopped, every pin keeps its name tag.
+            if (!Module.Running) return false;
             if (Icons.Count == 0) return false;
             if (pinData.m_type < _vanillaPinTypeLength) return false;
             var icon = FindIcon(pinData.m_type);
@@ -191,7 +199,29 @@ namespace Automatics.AutomaticMapping
             }
         }
 
-        public static void Initialize()
+        /// <summary>
+        ///     Registers the custom icons in <paramref name="map" />, once per minimap (R7.4). The
+        ///     Minimap.Start postfix calls it for a new minimap, and turning the module on calls it
+        ///     for the one that exists. A minimap that already has the icons is left alone:
+        ///     registering again would extend its icon tables a second time. A new minimap - the
+        ///     next world - reloads the icon files and registers them, as every minimap start
+        ///     always has.
+        ///     Nothing undoes a registration when the module is turned off. The game's own pin
+        ///     update looks up each pin's icon by its type without a bound check, so a saved pin
+        ///     with a custom icon would break the whole map if the icon went away.
+        ///     The minimap is marked before the icons are registered, not after: a registration
+        ///     that throws part way has already extended the tables, and trying it again would
+        ///     extend them a second time.
+        /// </summary>
+        public static void EnsureAttached(Minimap map)
+        {
+            if (!map || map.GetInstanceID() == _attachedMinimapId) return;
+
+            _attachedMinimapId = map.GetInstanceID();
+            RegisterIcons(map, LoadResources());
+        }
+
+        private static List<(Icon, Sprite)> LoadResources()
         {
             _vanillaPinTypeLength = (Minimap.PinType)Enum
                 .GetValues(typeof(Minimap.PinType))
@@ -202,7 +232,7 @@ namespace Automatics.AutomaticMapping
             foreach (var directory in Automatics.GetAllResourcePath("Textures"))
                 LoadIcons(directory, sprites);
 
-            RegisterIcons(sprites);
+            return sprites;
         }
 
         private static void LoadIcons(string directory, List<(Icon, Sprite)> sprites)
@@ -298,10 +328,9 @@ namespace Automatics.AutomaticMapping
             }
         }
 
-        private static void RegisterIcons(List<(Icon, Sprite)> sprites)
+        private static void RegisterIcons(Minimap map, List<(Icon, Sprite)> sprites)
         {
             if (!sprites.Any()) return;
-            var map = Minimap.instance;
 
             var visibleIconTypes = Reflections.GetField<bool[]>(map, "m_visibleIconTypes");
             var originalArraySize = visibleIconTypes.Length;

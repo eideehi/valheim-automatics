@@ -72,7 +72,9 @@
     <Compile Include="SmokePlugin.cs" />
     <Compile Include="WorldSmokeCommand.cs" />
     <Compile Include="LifecycleSmokeCommand.cs" />
+    <Compile Include="LifecycleSmokeMapping.cs" />
     <Compile Include="SmokeSession.cs" />
+    <Compile Include="ErrorObserver.cs" />
     <Compile Include="ProcessingSmokeCommand.cs" />
     <Compile Include="ProcessingSmokeToggle.cs" />
   </ItemGroup>

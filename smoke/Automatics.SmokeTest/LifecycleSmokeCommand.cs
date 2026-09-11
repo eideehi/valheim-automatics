@@ -33,9 +33,13 @@ namespace Automatics.SmokeTest
     // hand back: it is put back to its starting value when the run ends or is cut short, but
     // only if it still holds the value the check itself wrote. A setting the user changed
     // while the check ran stays as the user set it, and stops the run.
-    internal static class LifecycleSmokeCommand
+    //
+    // With the argument "mapping" the command takes Automatic Mapping through three off -> on
+    // cycles instead, under the same rules; see LifecycleSmokeMapping.cs.
+    internal static partial class LifecycleSmokeCommand
     {
         private const string CommandName = "automatics_smoke_lifecycle";
+        private const string MappingArgument = "mapping";
 
         // A requested transition normally lands on the next pump tick, or a few ticks later
         // after a deferral. This bounds the wait; it is not an estimate of it.
@@ -74,7 +78,7 @@ namespace Automatics.SmokeTest
 
             _ = new Terminal.ConsoleCommand(
                 CommandName,
-                "Turn Automatic Pickup off, on and off through its setting, check the runtime lifecycle, then restore the setting.",
+                "Turn Automatic Pickup off, on and off through its setting, check the runtime lifecycle, then restore the setting. With 'mapping', turn Automatic Mapping off and on three times instead.",
                 OnCommand);
         }
 
@@ -88,16 +92,29 @@ namespace Automatics.SmokeTest
                 return;
             }
 
-            if (!SmokeSession.TryBegin(CommandName, out var runId, out var refusal))
+            var argument = (args.Args.Skip(1).FirstOrDefault(x => !string.IsNullOrEmpty(x)) ?? "")
+                .ToLowerInvariant();
+            if (argument.Length != 0 && argument != MappingArgument)
             {
                 Emit(context, LogLevel.Warning,
-                    $"[Automatics Smoke] {CommandName} was not started: {refusal}");
+                    $"[Automatics Smoke] usage: {CommandName} [{MappingArgument}] ('{argument}' is not an argument)");
+                return;
+            }
+
+            var runner = argument.Length == 0 ? CommandName : $"{CommandName} {MappingArgument}";
+            if (!SmokeSession.TryBegin(runner, out var runId, out var refusal))
+            {
+                Emit(context, LogLevel.Warning,
+                    $"[Automatics Smoke] {runner} was not started: {refusal}");
                 return;
             }
 
             // Guard hands back the run's obligations and releases the lock however the body
             // ends, a throw included.
-            _host.StartCoroutine(SmokeSession.Guard(runId, CommandName, Run(context, runId)));
+            var body = argument.Length == 0
+                ? Run(context, runId)
+                : RunMapping(context, runId, runner);
+            _host.StartCoroutine(SmokeSession.Guard(runId, runner, body));
         }
 
         private static IEnumerator Run(Terminal context, int runId)
@@ -107,12 +124,12 @@ namespace Automatics.SmokeTest
             Emit(context, LogLevel.Info,
                 $"[Automatics Smoke] {CommandName} started: automatic_pickup/module is turned off, on and off again, then restored");
 
-            var steps = Contain(run.Execute(), run, "lifecycle_run");
+            var steps = Contain(run.Execute(), run.Fail, "lifecycle_run");
             while (steps.MoveNext()) yield return steps.Current;
 
             run.RemoveSpawnedItem();
 
-            var restore = Contain(run.Restore(), run, "lifecycle_restored_initial_state");
+            var restore = Contain(run.Restore(), run.Fail, "lifecycle_restored_initial_state");
             while (restore.MoveNext()) yield return restore.Current;
 
             Report(context, run.Results);
@@ -121,7 +138,8 @@ namespace Automatics.SmokeTest
         // Advances a step sequence and turns an exception into a FAIL, so a throw in one phase
         // still lets the restore run. A yield cannot sit inside a try that has a catch, so the
         // step is taken inside one and the yield happens outside it.
-        private static IEnumerator Contain(IEnumerator steps, LifecycleRun run, string name)
+        private static IEnumerator Contain(IEnumerator steps, Action<string, string> fail,
+            string name)
         {
             while (true)
             {
@@ -134,7 +152,7 @@ namespace Automatics.SmokeTest
                 }
                 catch (Exception e)
                 {
-                    run.Fail(name, e.GetType().Name + ": " + e.Message);
+                    fail(name, e.GetType().Name + ": " + e.Message);
                     more = false;
                 }
 
@@ -148,7 +166,10 @@ namespace Automatics.SmokeTest
             foreach (var result in results)
             {
                 if (result.Status == CheckStatus.Pass)
-                    Emit(context, LogLevel.Info, $"[Automatics Smoke] PASS {result.Name}");
+                    Emit(context, LogLevel.Info,
+                        string.IsNullOrEmpty(result.Message)
+                            ? $"[Automatics Smoke] PASS {result.Name}"
+                            : $"[Automatics Smoke] PASS {result.Name}: {result.Message}");
                 else if (result.Status == CheckStatus.Skip)
                     Emit(context, LogLevel.Warning,
                         $"[Automatics Smoke] SKIP {result.Name}: {result.Message}");
@@ -200,16 +221,6 @@ namespace Automatics.SmokeTest
             public LifecycleRun(int runId)
             {
                 RunId = runId;
-            }
-
-            private enum WaitResult
-            {
-                Reached,
-                Faulted,
-                TimedOut,
-                EditedByUser,
-                WorldGone,
-                Abandoned
             }
 
             private int RunId { get; }
@@ -434,14 +445,14 @@ namespace Automatics.SmokeTest
             {
                 const string name = "lifecycle_on_patches_applied";
 
-                var expected = ExpectedPatches();
+                var expected = ExpectedPatches(typeof(PickupPatches));
                 if (expected.Count == 0)
                 {
                     Fail(name, "no [HarmonyPatch] target could be read from Automatics.AutomaticPickup.Patches");
                     return;
                 }
 
-                var actual = PatchesUnder(_harmonyId);
+                var actual = PatchesUnder(_harmonyId, out _);
                 var missing = expected.Where(x => !actual.Contains(x)).OrderBy(x => x).ToArray();
                 var unexpected = actual.Where(x => !expected.Contains(x)).OrderBy(x => x).ToArray();
                 Check(name, missing.Length == 0 && unexpected.Length == 0,
@@ -509,69 +520,17 @@ namespace Automatics.SmokeTest
                 return false;
             }
 
-            // Waits for the registry to report the expected state. Faulted is the failure
-            // itself rather than a step on the way, unless the caller is asking for a
-            // recovery. heldValue, when given, is the value the toggle must keep meanwhile.
+            // The shared wait, with this run's toggle and module.
             private IEnumerator WaitForState(ModuleState expected, bool faultIsFinal,
                 bool worldRequired, AutomaticsModule? heldValue = null)
             {
-                _wait = WaitResult.TimedOut;
-                _waitReport = "";
+                var wait = new StateWait();
+                var steps = AwaitState(RunId, _toggle, _moduleName, expected, faultIsFinal,
+                    worldRequired, wait, heldValue);
+                while (steps.MoveNext()) yield return steps.Current;
 
-                var started = Time.realtimeSinceStartup;
-                var frames = 0;
-                while (true)
-                {
-                    if (!SmokeSession.IsCurrent(RunId))
-                    {
-                        _wait = WaitResult.Abandoned;
-                        _waitReport = "the run was abandoned (the smoke plugin is shutting down)";
-                        yield break;
-                    }
-
-                    if (SmokeSession.ToggleEditedByUser ||
-                        (heldValue.HasValue && _toggle.Value != heldValue.Value))
-                    {
-                        _wait = WaitResult.EditedByUser;
-                        _waitReport =
-                            $"automatic_pickup/module was changed to {_toggle.Value} outside the check";
-                        yield break;
-                    }
-
-                    if (worldRequired && (ZNetScene.instance == null || !Player.m_localPlayer))
-                    {
-                        _wait = WaitResult.WorldGone;
-                        _waitReport = "the world was unloaded while the check ran";
-                        yield break;
-                    }
-
-                    var state = ModuleRegistry.GetState(_moduleName);
-                    if (state == expected)
-                    {
-                        _wait = WaitResult.Reached;
-                        yield break;
-                    }
-
-                    if (faultIsFinal && state == ModuleState.Faulted)
-                    {
-                        _wait = WaitResult.Faulted;
-                        _waitReport =
-                            $"the registry reports {state} while waiting for {expected}; the reason is in the Automatics log as a warning";
-                        yield break;
-                    }
-
-                    var elapsed = Time.realtimeSinceStartup - started;
-                    if (elapsed >= TransitionTimeoutSeconds)
-                    {
-                        _wait = WaitResult.TimedOut;
-                        _waitReport =
-                            $"timed out after {elapsed:0.0}s ({frames} frames) waiting for {expected}; the registry reports {state} and the toggle is {_toggle.Value}";
-                        yield break;
-                    }
-
-                    frames++;
-                    yield return null;
-                }
+                _wait = wait.Result;
+                _waitReport = wait.Report;
             }
 
             private static ModuleState StateFor(AutomaticsModule value)
@@ -589,63 +548,6 @@ namespace Automatics.SmokeTest
             {
                 return Object.FindObjectsByType<T>(FindObjectsInactive.Include,
                     FindObjectsSortMode.None).Length;
-            }
-
-            private static HashSet<string> ExpectedPatches()
-            {
-                const BindingFlags flags = BindingFlags.Static | BindingFlags.Public |
-                                           BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-
-                var patches = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var method in typeof(PickupPatches).GetMethods(flags))
-                foreach (var attribute in method.GetCustomAttributes(typeof(HarmonyPatch), false))
-                {
-                    var info = ((HarmonyPatch)attribute).info;
-                    if (info == null || info.declaringType == null ||
-                        string.IsNullOrEmpty(info.methodName))
-                        continue;
-
-                    var target = AccessTools.Method(info.declaringType, info.methodName,
-                        info.argumentTypes);
-                    var targetName = target == null
-                        ? $"{info.declaringType.Name}.{info.methodName} (unresolved)"
-                        : DescribeMethod(target);
-                    patches.Add($"{targetName} <- {method.DeclaringType?.Name}.{method.Name}");
-                }
-
-                return patches;
-            }
-
-            private static HashSet<string> PatchesUnder(string harmonyId)
-            {
-                var patches = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var target in Harmony.GetAllPatchedMethods())
-                {
-                    var info = Harmony.GetPatchInfo(target);
-                    if (info == null) continue;
-
-                    foreach (var list in new[]
-                             {
-                                 info.Prefixes, info.Postfixes, info.Transpilers, info.Finalizers,
-                                 info.ILManipulators
-                             })
-                    {
-                        if (list == null) continue;
-                        foreach (var patch in list)
-                            if (patch.owner == harmonyId)
-                                patches.Add(
-                                    $"{DescribeMethod(target)} <- {patch.PatchMethod.DeclaringType?.Name}.{patch.PatchMethod.Name}");
-                    }
-                }
-
-                return patches;
-            }
-
-            private static string DescribeMethod(MethodBase method)
-            {
-                var parameters = string.Join(",",
-                    method.GetParameters().Select(p => p.ParameterType.Name).ToArray());
-                return $"{method.DeclaringType?.Name}.{method.Name}({parameters})";
             }
 
             // A PickableItem with a fixed item is preferred: its Awake has nothing random to
@@ -668,6 +570,185 @@ namespace Automatics.SmokeTest
 
                 return fallback;
             }
+        }
+
+        // -- Shared by the pickup run and the mapping run ----------------------------
+
+        private enum WaitResult
+        {
+            Reached,
+            Faulted,
+            TimedOut,
+            EditedByUser,
+            WorldGone,
+            Abandoned
+        }
+
+        // The outcome of one AwaitState.
+        private sealed class StateWait
+        {
+            public WaitResult Result = WaitResult.TimedOut;
+            public string Report = "";
+        }
+
+        // Waits for the registry to report the expected state. Faulted is the failure itself
+        // rather than a step on the way, unless the caller is asking for a recovery. heldValue,
+        // when given, is the value the toggle must keep meanwhile. onFrame, when given, runs on
+        // every frame of the wait, before the state is read.
+        private static IEnumerator AwaitState(int runId, ConfigEntry<AutomaticsModule> toggle,
+            string moduleName, ModuleState expected, bool faultIsFinal, bool worldRequired,
+            StateWait wait, AutomaticsModule? heldValue = null, Action onFrame = null)
+        {
+            wait.Result = WaitResult.TimedOut;
+            wait.Report = "";
+            var setting = $"{toggle.Definition.Section}/{toggle.Definition.Key}";
+
+            var started = Time.realtimeSinceStartup;
+            var frames = 0;
+            while (true)
+            {
+                if (!SmokeSession.IsCurrent(runId))
+                {
+                    wait.Result = WaitResult.Abandoned;
+                    wait.Report = "the run was abandoned (the smoke plugin is shutting down)";
+                    yield break;
+                }
+
+                if (SmokeSession.ToggleEditedByUser ||
+                    (heldValue.HasValue && toggle.Value != heldValue.Value))
+                {
+                    wait.Result = WaitResult.EditedByUser;
+                    wait.Report = $"{setting} was changed to {toggle.Value} outside the check";
+                    yield break;
+                }
+
+                if (worldRequired && (ZNetScene.instance == null || !Player.m_localPlayer))
+                {
+                    wait.Result = WaitResult.WorldGone;
+                    wait.Report = "the world was unloaded while the check ran";
+                    yield break;
+                }
+
+                onFrame?.Invoke();
+
+                var state = ModuleRegistry.GetState(moduleName);
+                if (state == expected)
+                {
+                    wait.Result = WaitResult.Reached;
+                    yield break;
+                }
+
+                if (faultIsFinal && state == ModuleState.Faulted)
+                {
+                    wait.Result = WaitResult.Faulted;
+                    wait.Report =
+                        $"the registry reports {state} while waiting for {expected}; the reason is in the Automatics log as a warning";
+                    yield break;
+                }
+
+                var elapsed = Time.realtimeSinceStartup - started;
+                if (elapsed >= TransitionTimeoutSeconds)
+                {
+                    wait.Result = WaitResult.TimedOut;
+                    wait.Report =
+                        $"timed out after {elapsed:0.0}s ({frames} frames) waiting for {expected}; the registry reports {state} and the toggle is {toggle.Value}";
+                    yield break;
+                }
+
+                frames++;
+                yield return null;
+            }
+        }
+
+        // The (target, patch method) pairs the given patch classes declare. A patch method names
+        // its target in its own [HarmonyPatch] attribute; a class without one resolves its target
+        // with a [HarmonyTargetMethod] method, and each of its patch methods is paired with that
+        // target. A class whose resolver finds no target declares nothing: Harmony skips it too.
+        private static HashSet<string> ExpectedPatches(params Type[] patchTypes)
+        {
+            const BindingFlags flags = BindingFlags.Static | BindingFlags.Public |
+                                       BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            var patches = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var patchType in patchTypes)
+            {
+                var methods = patchType.GetMethods(flags);
+                var resolver = methods.FirstOrDefault(x =>
+                    x.IsDefined(typeof(HarmonyTargetMethod), false));
+                var classTarget = resolver?.Invoke(null, Array.Empty<object>()) as MethodBase;
+
+                foreach (var method in methods)
+                {
+                    var named = false;
+                    foreach (var attribute in method.GetCustomAttributes(typeof(HarmonyPatch), false))
+                    {
+                        var info = ((HarmonyPatch)attribute).info;
+                        if (info == null || info.declaringType == null ||
+                            string.IsNullOrEmpty(info.methodName))
+                            continue;
+
+                        named = true;
+                        var target = AccessTools.Method(info.declaringType, info.methodName,
+                            info.argumentTypes);
+                        var targetName = target == null
+                            ? $"{info.declaringType.Name}.{info.methodName} (unresolved)"
+                            : DescribeMethod(target);
+                        patches.Add($"{targetName} <- {method.DeclaringType?.Name}.{method.Name}");
+                    }
+
+                    if (named || classTarget == null || !IsPatchMethod(method)) continue;
+                    patches.Add(
+                        $"{DescribeMethod(classTarget)} <- {method.DeclaringType?.Name}.{method.Name}");
+                }
+            }
+
+            return patches;
+        }
+
+        private static bool IsPatchMethod(MethodInfo method)
+        {
+            return method.IsDefined(typeof(HarmonyPrefix), false) ||
+                   method.IsDefined(typeof(HarmonyPostfix), false) ||
+                   method.IsDefined(typeof(HarmonyTranspiler), false) ||
+                   method.IsDefined(typeof(HarmonyFinalizer), false);
+        }
+
+        // The (target, patch method) pairs installed under harmonyId, and how many patches that
+        // is in total: a pair applied twice appears once in the set and twice in the total.
+        private static HashSet<string> PatchesUnder(string harmonyId, out int total)
+        {
+            total = 0;
+            var patches = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var target in Harmony.GetAllPatchedMethods())
+            {
+                var info = Harmony.GetPatchInfo(target);
+                if (info == null) continue;
+
+                foreach (var list in new[]
+                         {
+                             info.Prefixes, info.Postfixes, info.Transpilers, info.Finalizers,
+                             info.ILManipulators
+                         })
+                {
+                    if (list == null) continue;
+                    foreach (var patch in list)
+                    {
+                        if (patch.owner != harmonyId) continue;
+                        total++;
+                        patches.Add(
+                            $"{DescribeMethod(target)} <- {patch.PatchMethod.DeclaringType?.Name}.{patch.PatchMethod.Name}");
+                    }
+                }
+            }
+
+            return patches;
+        }
+
+        private static string DescribeMethod(MethodBase method)
+        {
+            var parameters = string.Join(",",
+                method.GetParameters().Select(p => p.ParameterType.Name).ToArray());
+            return $"{method.DeclaringType?.Name}.{method.Name}({parameters})";
         }
 
         // -- Reporting (private copy mirroring SmokePlugin's shapes) ---------------

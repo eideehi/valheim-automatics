@@ -55,8 +55,13 @@ namespace Automatics.AutomaticMapping
             _lastAnimateTime = 0f;
         }
 
+        // The scan entry points below, and SetSaveFlag, open with the module gate: the player's
+        // fixed update, the minimap update and the transpiled click handlers reach them, and a
+        // stop request has to end their effect on the map in the frame it is made.
         public static void DynamicMapping(Player player, float delta)
         {
+            if (!Module.Running) return;
+
             MappingProfiler.FlushIfDue();
 
             if (!CanRun(player)) return;
@@ -85,6 +90,7 @@ namespace Automatics.AutomaticMapping
 
         public static void Mapping(Player player, float delta, bool takeInput)
         {
+            if (!Module.Running) return;
             if (!CanRun(player)) return;
             if (!Config.EnableAutomaticMapping)
             {
@@ -111,6 +117,8 @@ namespace Automatics.AutomaticMapping
         // SmoothDamp does not see a multi-minute jump at login.
         public static void AnimatePins()
         {
+            if (!Module.Running) return;
+
             var now = Time.time;
             float delta;
             if (_lastAnimateTime <= 0f)
@@ -125,6 +133,9 @@ namespace Automatics.AutomaticMapping
         [UsedImplicitly]
         public static bool SetSaveFlag(Vector3 pos, float radius)
         {
+            // False hands the click back to the game's own handling.
+            if (!Module.Running) return false;
+
             var pinData = Map.GetClosestPin(pos, radius, x => x.m_ownerID == 0L && !x.m_save);
             if (pinData is null) return false;
 

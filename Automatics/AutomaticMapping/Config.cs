@@ -37,7 +37,14 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
         private static ConfigEntry<bool> _mappingPerformanceLog;
 
-        public static bool ModuleDisabled => _module.Value == AutomaticsModule.Disabled;
+        /// <summary>
+        ///     The toggle the module registry follows. It is exposed so the registry can read the
+        ///     user's choice and subscribe to its changes; nothing writes it back (R1.3b), and no
+        ///     hot path reads it either - those read the applied state on <see cref="Module" />
+        ///     instead (R1.5).
+        /// </summary>
+        public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
+
         public static bool EnableAutomaticMapping => _enableAutomaticMapping.Value;
         public static int DynamicObjectMappingRange => _dynamicObjectMappingRange.Value;
         public static int StaticObjectMappingRange => _staticObjectMappingRange.Value;
@@ -95,12 +102,21 @@ namespace Automatics.AutomaticMapping
             config.ChangeSection(Section);
             _module = config.Bind("module", AutomaticsModule.Enabled, initializer: x =>
             {
-                x.DispName = Automatics.L10N.Translate("@config_common_disable_module_name");
-                x.Description = Automatics.L10N.Translate("@config_common_disable_module_description");
+                x.DispName =
+                    Automatics.L10N.Translate("@config_common_disable_module_runtime_name");
+                x.Description =
+                    Automatics.L10N.Translate("@config_common_disable_module_runtime_description");
             });
 
-            if (_module.Value == AutomaticsModule.Disabled) return;
-
+            // Bound unconditionally (R5.1). The module can be turned on while the game runs, so
+            // the settings it needs have to exist whether it starts on or off; the early return
+            // that used to sit here left them null and made a runtime enable impossible. The
+            // SettingChanged bridges below are therefore live while the module is off too. The
+            // allowlist bridges raise an event nothing subscribes to until the module is turned
+            // on, the animal-list bridge only refreshes two cached flags, and the one bridge that
+            // redraws the map checks the module's applied state first. The values bound here also
+            // pick up anything the user set before turning the module off, and they apply as soon
+            // as it is turned on.
             _enableAutomaticMapping = config.Bind("enable_automatic_mapping", true);
             _dynamicObjectMappingRange = config.Bind("dynamic_object_mapping_range", 64, (0, 128));
             _staticObjectMappingRange = config.Bind("static_object_mapping_range", 32, (0, 128));
@@ -142,7 +158,7 @@ namespace Automatics.AutomaticMapping
             // subscribers doing ReferenceEquals checks see the correct registry.
             RefreshAnimalListFlags();
             _allowPinningAnimal.SettingChanged += (_, __) => RefreshAnimalListFlags();
-            _hideUnexploredAutomaticMappingPins.SettingChanged += (_, __) => Map.RefreshPins();
+            _hideUnexploredAutomaticMappingPins.SettingChanged += OnHideUnexploredPinsChanged;
 
             _allowPinningFlora.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Flora);
             _allowPinningMineral.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Mineral);
@@ -154,6 +170,17 @@ namespace Automatics.AutomaticMapping
             config.ChangeSection("general", 128);
             config.BindCustomValheimObject("custom_vehicle", MappingObject.Vehicle);
             config.BindCustomValheimObject("custom_other", MappingObject.Other);
+        }
+
+        /// <summary>
+        ///     Redraws the pins when hiding unexplored automatic pins is switched. The bridge is
+        ///     bound whether the module runs or not, so it checks the applied state first: while
+        ///     the module is off the map is left exactly as the game draws it.
+        /// </summary>
+        private static void OnHideUnexploredPinsChanged(object sender, EventArgs e)
+        {
+            if (!Module.Running) return;
+            Map.RefreshPins();
         }
 
         private static void RefreshAnimalListFlags()

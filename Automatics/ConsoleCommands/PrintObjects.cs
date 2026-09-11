@@ -118,40 +118,49 @@ namespace Automatics.ConsoleCommands
             {
                 case "animal":
                     if (!TryGetLocalPlayer(args)) return;
+                    NoteMappingState(args);
                     PrintAnimal(args);
                     return;
                 case "monster":
                     if (!TryGetLocalPlayer(args)) return;
+                    NoteMappingState(args);
                     PrintMonster(args);
                     return;
                 case "flora":
                     if (!TryGetLocalPlayer(args)) return;
+                    NoteMappingState(args);
                     PrintFlora(args);
                     return;
                 case "mineral":
                     if (!TryGetLocalPlayer(args)) return;
+                    NoteMappingState(args);
                     PrintMineral(args);
                     return;
                 case "spawner":
                     if (!TryGetLocalPlayer(args)) return;
+                    NoteMappingState(args);
                     PrintSpawner(args);
                     return;
                 case "vehicle":
                     if (!TryGetLocalPlayer(args)) return;
+                    NoteMappingState(args);
                     PrintVehicle(args);
                     return;
                 case "other":
                     if (!TryGetLocalPlayer(args)) return;
+                    NoteMappingState(args);
                     PrintOther(args);
                     return;
                 case "dungeon":
                     if (!TryGetLocalPlayer(args)) return;
                     if (!TryGetZoneSystem(args)) return;
+                    NoteMappingState(args);
                     PrintDungeon(args);
                     return;
                 case "spot":
                     if (!TryGetLocalPlayer(args)) return;
                     if (!TryGetZoneSystem(args)) return;
+                    NoteMappingState(args);
                     PrintSpot(args);
                     return;
                 case "door":
@@ -163,6 +172,19 @@ namespace Automatics.ConsoleCommands
                     PrintContainer(args);
                     return;
             }
+        }
+
+        // Automatic Mapping fills the fish, bird and ship lists and pins what these types list.
+        // When it is not running the list is still printed, after one line saying so. The command
+        // only reads the module's applied state; it never turns the module on (R7.2).
+        private static void NoteMappingState(Terminal.ConsoleEventArgs args)
+        {
+            if (ModuleRegistry.GetState(AutomaticMapping.Module.Instance.Name) ==
+                ModuleState.Enabled)
+                return;
+
+            PrintLine(args,
+                Automatics.L10N.Translate("@command_printobjects_message_mapping_not_running"));
         }
 
         private bool TryGetLocalPlayer(Terminal.ConsoleEventArgs args)
