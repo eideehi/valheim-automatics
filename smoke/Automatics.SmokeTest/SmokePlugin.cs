@@ -51,10 +51,11 @@ namespace Automatics.SmokeTest
             // Register the optional in-game world smoke commands before the readiness
             // wait so the Hooks.OnInitTerminal subscriptions are in place before the
             // terminal's one-time init fires (mirrors how Automatics itself registers).
-            // Both run across frames, so they are handed this plugin to run their
+            // All of them run across frames, so they are handed this plugin to run their
             // coroutines on.
             WorldSmokeCommand.EnsureRegistered(this);
             LifecycleSmokeCommand.EnsureRegistered(this);
+            ProcessingSmokeCommand.EnsureRegistered(this);
 
             // Only Localization.instance is consumed by a check (and that check
             // skip-guards on it), so the readiness wait covers just that. The object

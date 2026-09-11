@@ -31,10 +31,22 @@ namespace Automatics.SmokeTest
     //
     // Item safety is asymmetric: a test item left behind is harmless, a real item removed
     // is not. Nothing is removed from an inventory unless it is provably the check's own.
+    //
+    // Each check starts in a frame of its own and spawns in a spot of its own, relative to the
+    // player, so nothing an earlier check placed is in its way: the storage chest 1.5 m ahead,
+    // the door 2 m to the left, the pickup drop 1.5 m to the right, and the smelter 3.5 m ahead
+    // with its chest 1.5 m to the right of it.
     internal static class WorldSmokeCommand
     {
         private const string CommandName = "automatics_smoke_world";
         private const string Smelter = "$piece_smelter";
+
+        // The storage check runs only when this argument is given: Store moves every item
+        // Automatic Storage would store out of the player's inventory, not only the test Wood.
+        private const string StorageArgument = "storage";
+
+        private const string StorageOptIn =
+            "opt-in: run `automatics_smoke_world storage` to include it. It moves every item Automatic Storage would store from your inventory into a test chest and hands them back; they may come back in different slots.";
 
         // The Container's m_name, which TryFindPrefabByObjectName compares against. The
         // GameObject is piece_chest_wood, but its m_name has no underscore; this is the
@@ -78,7 +90,7 @@ namespace Automatics.SmokeTest
             // guard above keeps this single-shot even if OnInitTerminal fires twice.
             _ = new Terminal.ConsoleCommand(
                 CommandName,
-                "Run Automatics live-world smoke checks (storage/door/pickup/processing).",
+                "Run Automatics live-world smoke checks (door/pickup/processing; add 'storage' to include the storage check).",
                 OnCommand);
         }
 
@@ -92,6 +104,17 @@ namespace Automatics.SmokeTest
                 return;
             }
 
+            var arguments = args.Args.Skip(1).Where(x => !string.IsNullOrEmpty(x))
+                .Select(x => x.ToLowerInvariant())
+                .ToList();
+            var argument = arguments.FirstOrDefault() ?? "";
+            if (arguments.Count > 1 || (argument.Length > 0 && argument != StorageArgument))
+            {
+                Emit(context, LogLevel.Warning,
+                    $"[Automatics Smoke] usage: {CommandName} [{StorageArgument}]");
+                return;
+            }
+
             if (!SmokeSession.TryBegin(CommandName, out var runId, out var refusal))
             {
                 Emit(context, LogLevel.Warning,
@@ -101,26 +124,43 @@ namespace Automatics.SmokeTest
 
             // Guard hands back the run's obligations and releases the lock however the body
             // ends, a throw included.
-            _host.StartCoroutine(SmokeSession.Guard(runId, CommandName, Run(context, runId)));
+            _host.StartCoroutine(SmokeSession.Guard(runId, CommandName,
+                Run(context, runId, argument == StorageArgument)));
         }
 
-        private static IEnumerator Run(Terminal context, int runId)
+        private static IEnumerator Run(Terminal context, int runId, bool includeStorage)
         {
             IEnumerator steps = null;
             try
             {
                 var results = new List<CheckResult>
                 {
-                    RunCheck("world_storage_store_moves_items", CheckStorageStoreMovesItems),
-                    RunCheck("world_door_open_sets_zdo_state", CheckDoorOpenSetsZdoState)
+                    includeStorage
+                        ? RunCheck("world_storage_store_moves_items", CheckStorageStoreMovesItems)
+                        : CheckResult.Skip(StorageOptIn).WithName("world_storage_store_moves_items")
                 };
+
+                // Each check starts in a frame of its own. ZNetView.Destroy removes an object only
+                // at the end of the frame, so a check that ran in the same frame would still find
+                // the previous check's objects in the scene: the door's obstacle linecast hit the
+                // storage check's chest and, correctly, did not open.
+                yield return null;
+                results.Add(SmokeSession.IsCurrent(runId)
+                    ? RunCheck("world_door_open_sets_zdo_state", CheckDoorOpenSetsZdoState)
+                    : CheckResult.Skip("the run was abandoned before this check")
+                                 .WithName("world_door_open_sets_zdo_state"));
+
+                yield return null;
 
                 // The pickup check spans frames, so it is advanced here instead of by
                 // RunCheck. A yield cannot sit inside a try that has a catch, so each step
                 // is taken inside one and the yield happens outside it.
                 CheckResult pickup = null;
-                steps = CheckPickupItemDropToInventory(runId, result => pickup = result);
-                while (true)
+                if (SmokeSession.IsCurrent(runId))
+                    steps = CheckPickupItemDropToInventory(runId, result => pickup = result);
+                else
+                    pickup = CheckResult.Skip("the run was abandoned before this check");
+                while (steps != null)
                 {
                     object current = null;
                     bool more;
@@ -141,6 +181,8 @@ namespace Automatics.SmokeTest
 
                 results.Add((pickup ?? CheckResult.Fail("", "the check ended without a result"))
                     .WithName("world_pickup_itemdrop_to_inventory"));
+
+                yield return null;
                 results.Add(SmokeSession.IsCurrent(runId)
                     ? RunCheck("world_processing_smelter_refuel", CheckProcessingSmelterRefuel)
                     : CheckResult.Skip("the run was abandoned before this check")
@@ -302,13 +344,19 @@ namespace Automatics.SmokeTest
                 scope.Keep(chestGo);
 
                 CheckResult result;
+                string storedCounts = null;
                 try
                 {
-                    result = StoreAndAssert(player, playerInventory, chestInventory, sample);
+                    result = StoreAndAssert(player, playerInventory, chestInventory, sample,
+                        out storedCounts);
                 }
                 catch (Exception e)
                 {
-                    result = CheckResult.Fail("", e.GetType().Name + ": " + e.Message);
+                    // A failed assertion carries the counts already; when the fault came before
+                    // Store's result was recorded, what reached the chest is counted here.
+                    result = CheckResult.Fail("", storedCounts == null
+                        ? $"{e.GetType().Name}: {e.Message} ({CountChest(chestInventory)}, result.StoredItems: not recorded)"
+                        : e.GetType().Name + ": " + e.Message);
                 }
 
                 var leftInChest = ReturnChestContents(scope, chestGo, chestInventory, playerInventory);
@@ -317,7 +365,9 @@ namespace Automatics.SmokeTest
                 if (leftInChest != null)
                     return CheckResult.Fail("", result.Status == CheckStatus.Fail
                         ? $"{leftInChest}; the check itself also failed: {result.Message}"
-                        : leftInChest);
+                        : storedCounts == null
+                            ? leftInChest
+                            : $"{leftInChest} ({storedCounts})");
 
                 if (testWoodLeft > 0 && result.Status == CheckStatus.Pass)
                     return CheckResult.Pass(
@@ -327,9 +377,13 @@ namespace Automatics.SmokeTest
             }
         }
 
+        // storedCounts is set as soon as Store has run, so that every FAIL message the caller
+        // builds can carry what reached the chest.
         private static CheckResult StoreAndAssert(Player player, Inventory playerInventory,
-            Inventory chestInventory, ItemDrop.ItemData sample)
+            Inventory chestInventory, ItemDrop.ItemData sample, out string storedCounts)
         {
+            storedCounts = null;
+
             // Hotbar guard: store_hotbar_items default false rejects row-0 items.
             if (!global::Automatics.AutomaticStorage.Config.StoreHotbarItems &&
                 !HasTestItemOffHotbar(playerInventory, sample))
@@ -347,16 +401,40 @@ namespace Automatics.SmokeTest
             // included, which is why this is not compared with the Wood delta.
             var storedInChest = chestInventory.GetAllItems().Sum(item => item.m_stack);
             var woodInChest = PickableHarvester.CountExactItems(chestInventory, sample);
+            storedCounts =
+                $"stored in the chest: {storedInChest}, result.StoredItems: {result.StoredItems}";
 
-            Expect(moved > 0, "Store should move at least one Wood out of the player inventory");
             Expect(result.StoredItems == storedInChest,
                 $"result.StoredItems ({result.StoredItems}) should equal the items that reached the chest ({storedInChest})");
             Expect(result.TouchedContainers == 1,
-                $"result.TouchedContainers ({result.TouchedContainers}) should be 1: the spawned chest is the only container in range");
+                $"result.TouchedContainers ({result.TouchedContainers}) should be 1: the spawned chest is the only container in range ({storedCounts})");
+
+            // Store takes the player's eligible items in inventory order, so with a full enough
+            // inventory the one test chest can fill up with the player's own items before the
+            // test Wood is reached. That says nothing about Store.
+            if (moved <= 0 && woodInChest == 0 && storedInChest > 0 &&
+                chestInventory.GetEmptySlots() == 0)
+                return CheckResult.Skip(
+                    $"the test chest filled up with your own items before any test Wood moved ({storedCounts}); run it with a near-empty inventory");
+
+            Expect(moved > 0,
+                $"Store should move at least one Wood out of the player inventory ({storedCounts})");
             Expect(woodInChest == moved,
-                $"the chest should hold the {moved} Wood that left the player (it holds {woodInChest})");
+                $"the chest should hold the {moved} Wood that left the player (it holds {woodInChest}; {storedCounts})");
 
             return CheckResult.Pass();
+        }
+
+        private static string CountChest(Inventory chestInventory)
+        {
+            try
+            {
+                return $"stored in the chest: {chestInventory.GetAllItems().Sum(item => item.m_stack)}";
+            }
+            catch
+            {
+                return "stored in the chest: unreadable";
+            }
         }
 
         // The selection AutomaticStorage.Store makes - range, allow_container, and whether the
@@ -459,12 +537,14 @@ namespace Automatics.SmokeTest
             if (!TryFindPrefabByObjectName<Door>(WoodDoorObjectName, out var doorPrefab))
                 return CheckResult.Skip($"{WoodDoorObjectName} prefab not found");
 
-            var forward = player.transform.forward;
+            // To the left, where no other check spawns, so nothing another check placed can
+            // stand between the player and the door.
+            var left = -player.transform.right;
             var origin = player.transform.position;
 
             using (var scope = new SpawnScope())
             {
-                var doorGo = scope.Spawn(doorPrefab, origin + forward * 2f, Quaternion.identity);
+                var doorGo = scope.Spawn(doorPrefab, origin + left * 2f, Quaternion.identity);
                 var door = doorGo.GetComponent<Door>();
                 if (door == null) return CheckResult.Skip("spawned door lacks Door component");
                 if (!Objects.HasValidOwnership(door, out var doorNview) || doorNview == null)
@@ -567,7 +647,7 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            var forward = player.transform.forward;
+            var right = player.transform.right;
             var origin = player.transform.position;
 
             GameObject go = null;
@@ -576,7 +656,7 @@ namespace Automatics.SmokeTest
             {
                 // Spawned outside a SpawnScope: the drop belongs to SmokeSession, which destroys
                 // it only while it still holds the one Wood the check gives it (see finally).
-                go = UnityEngine.Object.Instantiate(woodPrefab, origin + forward * 1.5f,
+                go = UnityEngine.Object.Instantiate(woodPrefab, origin + right * 1.5f,
                     Quaternion.identity);
 
                 // Recorded before the first frame boundary, so a run that is cut short still
@@ -746,11 +826,12 @@ namespace Automatics.SmokeTest
                 return CheckResult.Skip($"{ChestWood} prefab not found");
 
             var forward = player.transform.forward;
+            var right = player.transform.right;
             var origin = player.transform.position;
 
             using (var scope = new SpawnScope())
             {
-                var smelterGo = scope.Spawn(smelterPrefab, origin + forward * 2f, Quaternion.identity);
+                var smelterGo = scope.Spawn(smelterPrefab, origin + forward * 3.5f, Quaternion.identity);
                 var smelter = smelterGo.GetComponent<global::Smelter>();
                 if (smelter == null) return CheckResult.Skip("spawned smelter lacks Smelter component");
                 if (!Objects.GetZNetView(smelter, out var smelterNview) || smelterNview == null ||
@@ -771,7 +852,7 @@ namespace Automatics.SmokeTest
                         "refuel_only_when_materials_supplied requires queued ore");
 
                 var smelterPos = smelter.transform.position;
-                var chestGo = scope.Spawn(chestPrefab, smelterPos + Vector3.right * 1.5f,
+                var chestGo = scope.Spawn(chestPrefab, smelterPos + right * 1.5f,
                     Quaternion.identity);
                 var chest = chestGo.GetComponent<Container>();
                 if (chest == null) return CheckResult.Skip("spawned chest lacks Container");

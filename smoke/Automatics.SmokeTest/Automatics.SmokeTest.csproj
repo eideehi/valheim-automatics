@@ -73,6 +73,7 @@
     <Compile Include="WorldSmokeCommand.cs" />
     <Compile Include="LifecycleSmokeCommand.cs" />
     <Compile Include="SmokeSession.cs" />
+    <Compile Include="ProcessingSmokeCommand.cs" />
   </ItemGroup>
 
   <ItemGroup Label="BepInEx">

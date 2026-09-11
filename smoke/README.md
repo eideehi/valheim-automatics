@@ -5,7 +5,8 @@ checks. It is intentionally not part of the root `Automatics.sln`, and it does
 not add root-level MSBuild files or production project settings.
 
 The smoke plugin compiles only its own sources (`SmokePlugin.cs`,
-`WorldSmokeCommand.cs`, `LifecycleSmokeCommand.cs`, `SmokeSession.cs`). Every
+`WorldSmokeCommand.cs`, `LifecycleSmokeCommand.cs`, `ProcessingSmokeCommand.cs`,
+`SmokeSession.cs`). Every
 Automatics type it exercises (including the `StoragePlanner` routing types) is
 bound from the already-loaded `Automatics.dll` via
 `[assembly: InternalsVisibleTo("Automatics.SmokeTest")]`. It does **not** ship a
@@ -95,13 +96,13 @@ best-effort basis.
 
 ### Safety of the console commands
 
-Both console commands below run in the world you load, so they are written to
+The console commands below run in the world you load, so they are written to
 leave your save and your settings alone. The rule they follow is asymmetric: a
 test item left behind, or a setting left as you last set it, is harmless;
 removing one of your items or overwriting one of your settings is not. Wherever
 the commands cannot prove that something is their own, they leave it.
 
-- Only one smoke command runs at a time. Starting one while the other is still
+- Only one smoke command runs at a time. Starting one while another is still
   running is refused with `... was not started: <reason>`.
 - A run hands back what it owes — the Automatic Pickup setting and any test
   object it spawned — when it completes or throws (each command's body runs
@@ -123,27 +124,39 @@ the commands cannot prove that something is their own, they leave it.
 - Test objects that live longer than one frame are marked non-persistent, so the
   world save never contains them even if the game is saved mid-run.
 - A chest the checks spawn is destroyed only while it is empty, or holds nothing
-  but what the check put there itself (the refuel check's seeded fuel). Otherwise
-  it is left in the world and the log gives its coordinates and contents.
+  but what the check put there itself (the refuel check's seeded fuel, the
+  processing check's seeded materials and what they turned into). Otherwise it
+  is left in the world and the log gives its coordinates and contents. A left
+  object that was marked non-persistent is made persistent again, so what it
+  holds is saved with the world.
 
 ### World smoke command
 
 In addition to the automatic startup checks above, the plugin registers an
-optional console command `automatics_smoke_world` (no arguments). Run it from the
+optional console command `automatics_smoke_world [storage]`. Run it from the
 in-game console while a single-player world is loaded. It spawns real objects
 (chest, wood door, smelter, item drop) next to the player and drives the live
 Automatics entry points for Storage, Door, Pickup, and Processing, then asserts
-the observable result of each:
+the observable result of each. Each check spawns in a spot of its own: the
+storage chest 1.5 m ahead, the door 2 m to your left, the item drop 1.5 m to your
+right, and the smelter 3.5 m ahead with its chest 1.5 m to the right of it. Each
+check also starts in a frame of its own, so the objects the previous check removed
+are gone by then.
 
-- `world_storage_store_moves_items` — `AutomaticStorage.Store` moves test Wood
-  from the player into a spawned chest. `Store` moves every eligible item, not
-  only the test Wood, so the check compares its reported count with everything
-  that reached the chest. Afterwards everything in the chest is handed back to
-  you, and the chest is destroyed only once it has been seen empty. Returned
-  items may land in different slots. If something cannot be handed back, the
-  chest is left in the world and the check FAILs, listing what is in it and its
-  coordinates. The test Wood is then removed, but never so much that your own
-  count of that Wood drops below what you had before.
+- `world_storage_store_moves_items` — opt-in: it runs only as
+  `automatics_smoke_world storage`, and a plain `automatics_smoke_world` SKIPs it
+  with a message saying so. `AutomaticStorage.Store` moves test Wood from the
+  player into a spawned chest. `Store` moves every eligible item, not only the
+  test Wood, so the check compares its reported count with everything that
+  reached the chest. Afterwards everything in the chest is handed back to you,
+  and the chest is destroyed only once it has been seen empty. Returned items may
+  land in different slots, the hotbar included. If the chest fills up with your
+  own items before any test Wood has moved, the check SKIPs and suggests a
+  near-empty inventory. A FAIL message carries the counts: what is in the chest,
+  and `result.StoredItems`. If something cannot be handed back, the chest is left
+  in the world and the check FAILs, listing what is in it and its coordinates.
+  The test Wood is then removed, but never so much that your own count of that
+  Wood drops below what you had before.
 - `world_door_open_sets_zdo_state` — `AutomaticDoor.TryOpenNearby` flips the
   spawned door's ZDO `state` to non-zero.
 - `world_pickup_itemdrop_to_inventory` — the shared pickup gate plus
@@ -175,8 +188,9 @@ a second after it is typed. Each check logs a `PASS`/`FAIL`/`SKIP` line plus a
 in-game console (out of scope: Farming, Feeding, Mining). A `PASS` line can carry
 a note, for example when a test item had to be left in the inventory. Checks SKIP
 (never FAIL) when run at the main menu, when a module is disabled, when a
-required config flag is off, or when other containers are in range; the command
-never mutates config. The processing container cache is reset both before the
+required config flag is off, or when other containers are in range. The storage
+check also SKIPs unless `storage` is given. The command never mutates config.
+The processing container cache is reset both before the
 refuel call and again during teardown, so running the command back-to-back is
 safe.
 
@@ -245,6 +259,138 @@ A failing check names what it saw, for example:
 [Automatics Smoke] FAIL lifecycle_on_state_enabled: timed out after 10.0s (612 frames) waiting for Enabled; the registry reports Disabled and the toggle is Enabled
 [Automatics Smoke] SKIP lifecycle_restored_initial_state: restoration skipped: automatic_pickup/module was changed outside the check while it ran and is now Enabled; it was left as it is instead of being put back to Disabled
 ```
+
+### Processing smoke command
+
+`automatics_smoke_processing rpc` checks that Automatic Processing keeps every
+item when it moves one from a chest into a station. Processing does that by
+removing the item from the chest and invoking the station's intake RPC —
+`Smelter.RPC_AddOre(string, bool)`, `CookingStation.RPC_AddItem(string, bool)`
+or `Fermenter.RPC_AddItem(int, bool)` — and these are the paths that break when
+the game changes an RPC's payload. The command changes no setting.
+
+What it does:
+
+- It places a wood chest 4 m ahead of you, then a smelter to its right, a stone
+  oven to its left and a fermenter beyond it, each 2.5 m from the chest. When
+  Automatic Pickup may be running, everything is placed further out, beyond
+  `automatic_pickup_range` + 2 m from you.
+- It picks one material per station from that station's own conversions, one
+  that no other test station would take and that is not a fuel, and puts
+  `material_count_of_suppress_processing` + 3 of it into the chest (4 with the
+  default settings).
+- It sets up each station so that its intake can run. The smelter gets no fuel,
+  so the ore stays queued. The oven's fuel is set to 1, and a fire requirement is
+  lifted if the oven has one. The fermenter is held "not exposed". Only the test
+  objects' own fields and ZDOs are changed.
+- It calls each station's Craft entry once (`SmelterProcess.Craft`,
+  `CookingStationProcess.Craft`, `FermenterProcess.Craft`). If one takes nothing,
+  the station is set up again and called once more.
+- For 30 frames it keeps a ledger per station: what is left in the chest + what
+  the station holds in its ZDO + anything that turned into must equal what was
+  put into the chest, on every frame. The first sample is taken on the frame of
+  the call: the RPC goes to this peer, which handles it inline. The station's own
+  update may feed it more meanwhile; the ledger still has to hold.
+
+| Check | Station and RPC |
+|---|---|
+| `processing_rpc_smelter_add_ore` | Smelter, `RPC_AddOre(string, bool)` |
+| `processing_rpc_cooking_station_add_item` | Stone oven, `RPC_AddItem(string, bool)` |
+| `processing_rpc_fermenter_add_item` | Fermenter, `RPC_AddItem(int, bool)` |
+
+A check reports one of four results. None but PASS counts as a pass:
+
+- `PASS`: at least one item reached the station, and the ledger held on every
+  frame.
+- `FAIL`: the ledger broke (an item missing, or more than was put in), the
+  station holds something the check did not put there (fuel included), the entry
+  threw, or a test object disappeared. It also FAILs when a test item appears on
+  the ground near the test objects even though the ledger held, or when the
+  direct call moved more than one item. On the frame of the call no station has
+  run an update of its own, so whatever arrived by then is the call's. The
+  message gives the first broken frame, the figures and any new item drop near
+  the test objects.
+- `SKIP`: a precondition is missing, for example:
+  - no world is loaded
+  - it isn't a single-player world you host with nobody connected
+  - Automatic Processing is off
+  - a prefab is missing
+  - the wood chest isn't in `allow_container`
+  - the station's `allow_processing_by_*` has no Craft
+  - no material can be kept apart
+  - something that isn't the check's own is within reach
+  - Automatic Pickup's range would push the stations beyond 16 m
+  - Processing does not find the test chest
+  - the materials don't fit into the chest
+
+  A world that unloads mid-run makes the checks SKIP as inconclusive.
+- `NOT-RUN`: Processing found a container other than the test chest within a
+  station's reach on a watched frame (a cart, a ship, a chest just built). The
+  message names it and its coordinates, and the test objects go through the
+  keep rules below. Or: everything was in place, but the entry took nothing on
+  both
+  attempts and nothing reached the station within 30 frames. The message says
+  what the station looked like.
+
+Where to stand: in a single-player world, away from your own buildings. The
+command SKIPs before placing anything if any container that isn't its own is
+within a test station's `container_search_range_by_*` + 2 m. It also SKIPs if
+any processing station that isn't its own has a container range (+ 2 m) that
+reaches the test chest. It lists what it found in a warning and says how much
+clear space it needs. After placing its objects it asks Processing itself which
+containers each station finds; if that is anything but the test chest, the run
+stops in the same frame and removes its objects before any station has run an
+update.
+
+A passing run looks like this in the console and in the BepInEx log (item names
+depend on the game's conversions and your language):
+
+```text
+[Automatics Smoke] automatics_smoke_processing rpc started: it places a chest, a smelter, a stone oven and a fermenter ahead of you, drives each station's intake once from the chest, watches them for 30 frames and removes them; no setting is changed
+[Automatics Smoke] automatics_smoke_processing rpc: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] PASS processing_rpc_smelter_add_ore: Copper ore reached the smelter at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + smelter 1 + products 0 = 4 put in)
+[Automatics Smoke] PASS processing_rpc_cooking_station_add_item: Bread dough reached the stone oven at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + stone oven 1 + products 0 = 4 put in)
+[Automatics Smoke] PASS processing_rpc_fermenter_add_item: Mead base: Minor healing reached the fermenter at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + fermenter 1 + products 0 = 4 put in)
+[Automatics Smoke] Summary: total=3 passed=3 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+```
+
+The figures at frame 30 vary. A station's own update can take more of its
+material from the chest while it is watched. The sum still has to equal what was
+put in.
+
+Other results look like this:
+
+```text
+[Automatics Smoke] SKIP processing_rpc_smelter_add_ore: 2 container(s) or processing station(s) that are not the check's own are within reach of where its test objects go (the first: Chest at (98.1, 30.8, -44.0), 5.2 m from where the test smelter goes); stand where nothing of yours is within about 20 m of you and run it again
+[Automatics Smoke] NOT-RUN processing_rpc_fermenter_add_item: the entry returned without taking anything on both attempts, and nothing reached the fermenter within 30 frames (the chest still holds 4 of the 4 put in; owner=True, content=0, exposed=False, material_count_of_suppress_processing=1, product_stacks_of_suppress_processing=0, supply_only_when_materials_run_out=False)
+[Automatics Smoke] FAIL processing_rpc_smelter_add_ore: the ledger broke at frame 0: chest 3 + smelter 0 + products 0 = 3, but 4 were put in (1 missing); at frame 30: chest 3 + smelter 0 + products 0 = 3; no delivery was seen
+```
+
+Safety, on top of the rules above:
+
+- It never writes the BepInEx config, and it never touches your inventory. The
+  test materials are added only to its own chest, with the game's
+  `Inventory.AddItem`.
+- The chest and the stations are marked non-persistent and are spared support
+  and rain wear. A piece that breaks would drop what it holds.
+- A station is removed only after the contents the check caused (the queued ore,
+  the oven's slots and fuel, the fermenter's content) have been cleared from its
+  ZDO, so nothing drops. That happens only while everything the station holds is
+  the test material or its product and its ledger balances exactly: the chest's
+  units + the station's contents + products equal what was put in, with nothing
+  foreign. Fuel counts too: any smelter fuel, or oven fuel above the 1 the check
+  set, came from somewhere else. Otherwise the station is left, like a chest. A
+  deficit or a surplus leaves the station and the chest both, since either could
+  hold the difference. What
+  stays is decided before anything is removed. A left oven gets its fire
+  requirement back. A left fermenter checks its exposure again.
+- Item drops that appear near the test objects are reported, never removed.
+- The removal runs when the run ends or throws. If the smoke plugin is disabled
+  or the game quits mid-run, the session runs the same removal, with the same
+  rules. If removing an object throws, the object is left in the world, saved,
+  and reported. If a left object cannot be made part of the save, the warning
+  says it will vanish when the world is saved or unloaded, so take your items
+  out first. While a removal is still outstanding, a new smoke run is refused.
 
 ## Remove
 

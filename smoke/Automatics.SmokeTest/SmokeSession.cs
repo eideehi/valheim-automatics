@@ -38,6 +38,9 @@ namespace Automatics.SmokeTest
 
         private static readonly List<PendingSpawn> PendingSpawns = new List<PendingSpawn>();
 
+        private static readonly List<Func<string, bool>> PendingHandBacks =
+            new List<Func<string, bool>>();
+
         private static string _runner;
         private static int _runId;
         private static ToggleRestoration _toggle;
@@ -79,6 +82,9 @@ namespace Automatics.SmokeTest
                 if (_toggle != null)
                     refusal =
                         $"an earlier run could not put {ToggleName} back (see the warning in the log); set it yourself, then run the command again";
+                else if (PendingHandBacks.Count > 0)
+                    refusal =
+                        "an earlier run could not remove its test objects yet (see the warning in the log); run the command again later, or restart the game";
             }
 
             if (refusal != null) return false;
@@ -126,7 +132,41 @@ namespace Automatics.SmokeTest
                 Log.LogWarning($"[Automatics Smoke] {reason}: {detail}");
 
             PendingSpawns.RemoveAll(spawn => DestroyTestObject(spawn.Go, spawn.DropStack, reason));
+            foreach (var handBack in PendingHandBacks.ToArray())
+                if (RunHandBack(handBack, reason))
+                    PendingHandBacks.Remove(handBack);
             _runner = null;
+        }
+
+        // -- Test objects whose removal depends on what they hold ----------------------
+
+        // For test objects that can only be removed after looking at what they hold - a chest
+        // and the stations it feeds, say - the command registers its own hand-back, before the
+        // first frame boundary. Every trigger above runs it until it reports that it is done;
+        // false keeps it for the next trigger.
+        public static void TrackHandBack(Func<string, bool> handBack)
+        {
+            if (handBack != null && !PendingHandBacks.Contains(handBack))
+                PendingHandBacks.Add(handBack);
+        }
+
+        public static void ReleaseHandBack(Func<string, bool> handBack)
+        {
+            PendingHandBacks.Remove(handBack);
+        }
+
+        private static bool RunHandBack(Func<string, bool> handBack, string reason)
+        {
+            try
+            {
+                return handBack(reason);
+            }
+            catch (Exception e)
+            {
+                Log.LogWarning(
+                    $"[Automatics Smoke] {reason}: test objects could not be handed back yet ({e.GetType().Name}: {e.Message}); they are tried again at the next opportunity");
+                return false;
+            }
         }
 
         // -- Test objects that outlive a frame -----------------------------------------
