@@ -505,6 +505,10 @@ namespace Automatics.SmokeTest
             return EligibleTameables().Length;
         }
 
+        // How many frames the check waits, after an enable, for the mining interval hook to take up
+        // its timer again.
+        private const int MiningTimerFrames = 30;
+
         // Automatic Mining owns one patch, three hook subscriptions and one component on every
         // supported destructible with a ZDO. The precondition keeps normal mining from firing in
         // an on interval without changing any of the user's inner settings.
@@ -578,9 +582,39 @@ namespace Automatics.SmokeTest
                                 $"all {attached} eligible mineral object(s) carry the current generation {generation}",
                                 $"{attached} of {minerals.Length} eligible mineral object(s) carry the current generation {generation}");
                             return Enumerable.Empty<object>().GetEnumerator();
-                        })
+                        }),
+                    new ExtraCheck("interval_timer_resumed", Phase.AfterOn, MiningIntervalTimerResumed)
                 }
             };
+        }
+
+        // The interval hook takes up its timer again on its first physics step after the enable.
+        // Waiting for that here also leaves the next cycle's disable a timer to clear: the enable
+        // is seen in the frame it lands in, before any physics step has run the hook.
+        private static IEnumerator MiningIntervalTimerResumed(CycleRecorder record, int cycle)
+        {
+            var name = record.Check("interval_timer_resumed");
+            var player = Player.m_localPlayer;
+            if (!player)
+            {
+                record.CycleSkip(name, cycle, "there is no local player");
+                yield break;
+            }
+
+            if (!MinesOnAnInterval())
+            {
+                record.CycleSkip(name, cycle,
+                    "mining runs on a key or is turned off in the settings, so it keeps no interval timer");
+                yield break;
+            }
+
+            for (var frame = 0; frame < MiningTimerFrames && MiningModule.MiningTimerCount == 0; frame++)
+                yield return null;
+
+            var count = MiningModule.MiningTimerCount;
+            record.Cycle(name, cycle, count > 0,
+                $"the interval hook took up its timer again ({count} held)",
+                $"the interval hook took up no timer within {MiningTimerFrames} frames of the enable");
         }
 
         private static GameObject[] EligibleMinerals()
@@ -650,6 +684,13 @@ namespace Automatics.SmokeTest
             }
 
             return false;
+        }
+
+        // The guards of Module.OnPlayerFixedUpdate that decide whether it keeps a timer at all.
+        private static bool MinesOnAnInterval()
+        {
+            return MiningConfig.EnableAutomaticMining && MiningConfig.MiningInterval >= 0.1f &&
+                   MiningConfig.MiningKey.MainKey == KeyCode.None;
         }
 
         // Automatic Storage moves items only when its key is pressed, and the check never presses

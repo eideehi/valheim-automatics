@@ -454,6 +454,7 @@ checks:
 | `mining_on_patches_applied` | The patches under Mining's Harmony id exactly match `Automatics.AutomaticMining.Patches` |
 | `mining_on_probes_at_baseline` | All three handlers are restored, every currently eligible unique `Destructible`, `MineRock` and `MineRock5` GameObject with a ZDO has one component, and `AllInstance.Count` matches the active components rather than a stale baseline |
 | `mining_components_current_generation` | Every eligible mineral object, including inactive objects, has an `AutomaticMining` component stamped with the current activation generation |
+| `mining_interval_timer_resumed` | When mining runs on an interval, its hook takes up its timer again within 30 frames of the enable; SKIP when mining runs on a key or is turned off |
 
 Turning the module off stops new mining immediately and lets a mining pass already
 accepted by a player hook finish its selected hits, including damage and pickaxe

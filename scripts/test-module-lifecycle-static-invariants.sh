@@ -4002,7 +4002,8 @@ require_mining_smoke_descriptor() {
     'Probe *\. *Counter *\( *"AllInstance.Count"[^;]*CountActiveMiningComponents *\)@@the Mining descriptor must compare AllInstance with active components' \
     'Precondition *= *MiningPrecondition@@the Mining descriptor must use its non-mutating safety precondition' \
     'new ExtraCheck *\( *"timers_cleared" *, *Phase *\. *WhileOff@@the Mining descriptor must check timer cleanup only while off' \
-    'new ExtraCheck *\( *"components_current_generation" *, *Phase *\. *AfterOn@@the Mining descriptor must verify component generations after every enable'; do
+    'new ExtraCheck *\( *"components_current_generation" *, *Phase *\. *AfterOn@@the Mining descriptor must verify component generations after every enable' \
+    'new ExtraCheck *\( *"interval_timer_resumed" *, *Phase *\. *AfterOn *, *MiningIntervalTimerResumed *\)@@the Mining descriptor must see the interval hook take up its timer after every enable'; do
     local pattern="${row%%@@*}"
     local message="${row#*@@}"
     found="$(printf '%s\n' "$body" | count_hits "$pattern")"
