@@ -46,6 +46,24 @@
           "value": "$ship_longship_ashlands"
         }
       ]
+    },
+    {
+      "identifier": "Catapult",
+      "label": "$tool_catapult",
+      "matches": [
+        {
+          "value": "$tool_catapult"
+        }
+      ]
+    },
+    {
+      "identifier": "BatteringRam",
+      "label": "$tool_batteringram",
+      "matches": [
+        {
+          "value": "$tool_batteringram"
+        }
+      ]
     }
   ]
 }

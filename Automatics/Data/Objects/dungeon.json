@@ -61,6 +61,50 @@
           "value": "^MorgenHole\\d{0,}$"
         }
       ]
+    },
+    {
+      "identifier": "BearCave",
+      "label": "$location_bearcave",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^BearCave\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "Morkhalla",
+      "label": "$location_morkhalla",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^MorkBorg\\d{0,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "WindingTunnels",
+      "label": "$location_thehole",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^TheDarkestHole$"
+        },
+        {
+          "regex": true,
+          "value": "^TheHole\\d{1,}$"
+        }
+      ]
+    },
+    {
+      "identifier": "TombOfLordReto",
+      "label": "$location_mausoleum",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^PlaceofMystery3$"
+        }
+      ]
     }
   ]
 }

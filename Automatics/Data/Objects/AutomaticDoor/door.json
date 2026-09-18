@@ -82,6 +82,33 @@
           "value": "$piece_dvergr_door"
         }
       ]
+    },
+    {
+      "identifier": "TimberwoodGate",
+      "label": "$piece_stavegate",
+      "matches": [
+        {
+          "value": "$piece_stavegate"
+        }
+      ]
+    },
+    {
+      "identifier": "RoundpoleGate",
+      "label": "$piece_woodfencegate",
+      "matches": [
+        {
+          "value": "$piece_woodfencegate"
+        }
+      ]
+    },
+    {
+      "identifier": "Drawbridge",
+      "label": "$morkhalla_drawbridge",
+      "matches": [
+        {
+          "value": "$morkhalla_drawbridge"
+        }
+      ]
     }
   ]
 }

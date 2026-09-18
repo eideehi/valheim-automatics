@@ -460,6 +460,123 @@
           "value": "$enemy_bloblava"
         }
       ]
+    },
+    {
+      "identifier": "Frysling",
+      "label": "$enemy_frysling",
+      "matches": [
+        {
+          "value": "$enemy_frysling"
+        }
+      ]
+    },
+    {
+      "identifier": "Gammeltroll",
+      "label": "$enemy_trollfrost",
+      "matches": [
+        {
+          "value": "$enemy_trollfrost"
+        }
+      ]
+    },
+    {
+      "identifier": "Krigen",
+      "label": "$enemy_jotun_warrior",
+      "matches": [
+        {
+          "value": "$enemy_jotun_warrior"
+        }
+      ]
+    },
+    {
+      "identifier": "Hexen",
+      "label": "$enemy_jotun_witch",
+      "matches": [
+        {
+          "value": "$enemy_jotun_witch"
+        }
+      ]
+    },
+    {
+      "identifier": "Barka",
+      "label": "$enemy_barka",
+      "matches": [
+        {
+          "value": "$enemy_barka"
+        }
+      ]
+    },
+    {
+      "identifier": "Kvastur",
+      "label": "$enemy_kvastur",
+      "matches": [
+        {
+          "value": "$enemy_kvastur"
+        }
+      ]
+    },
+    {
+      "identifier": "Elaking",
+      "label": "$enemy_elaking",
+      "matches": [
+        {
+          "value": "$enemy_elaking"
+        }
+      ]
+    },
+    {
+      "identifier": "EyelessOne",
+      "label": "$enemy_elakingmole",
+      "matches": [
+        {
+          "value": "$enemy_elakingmole"
+        }
+      ]
+    },
+    {
+      "identifier": "ShapelessPulp",
+      "label": "$enemy_blobmork",
+      "matches": [
+        {
+          "value": "$enemy_blobmork"
+        }
+      ]
+    },
+    {
+      "identifier": "TinyPulp",
+      "label": "$enemy_blobmorkmini",
+      "matches": [
+        {
+          "value": "$enemy_blobmorkmini"
+        }
+      ]
+    },
+    {
+      "identifier": "Shadow",
+      "label": "$enemy_shadowperson",
+      "matches": [
+        {
+          "value": "$enemy_shadowperson"
+        }
+      ]
+    },
+    {
+      "identifier": "Mistile",
+      "label": "$enemy_mistile",
+      "matches": [
+        {
+          "value": "$enemy_mistile"
+        }
+      ]
+    },
+    {
+      "identifier": "FallenWarrior",
+      "label": "$enemy_fallenwarrior",
+      "matches": [
+        {
+          "value": "$enemy_fallenwarrior"
+        }
+      ]
     }
   ]
 }

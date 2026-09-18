@@ -73,6 +73,42 @@
           "value": "$item_flametalore"
         }
       ]
+    },
+    {
+      "identifier": "PetrifiedGammeltroll",
+      "label": "$piece_deposit_goldvein",
+      "matches": [
+        {
+          "value": "$piece_deposit_goldvein"
+        }
+      ]
+    },
+    {
+      "identifier": "SilverDeposit",
+      "label": "$piece_deposit_silver",
+      "matches": [
+        {
+          "value": "$piece_deposit_silver"
+        }
+      ]
+    },
+    {
+      "identifier": "AncientArmour",
+      "label": "$piece_giant_helmet",
+      "matches": [
+        {
+          "value": "$piece_giant_helmet"
+        }
+      ]
+    },
+    {
+      "identifier": "AncientSword",
+      "label": "$piece_giant_sword",
+      "matches": [
+        {
+          "value": "$piece_giant_sword"
+        }
+      ]
     }
   ]
 }

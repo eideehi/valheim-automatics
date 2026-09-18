@@ -131,6 +131,51 @@
           "value": "$enemy_asksvin_hatchling"
         }
       ]
+    },
+    {
+      "identifier": "Moose",
+      "label": "$enemy_moose",
+      "matches": [
+        {
+          "value": "$enemy_moose"
+        }
+      ]
+    },
+    {
+      "identifier": "MooseCalf",
+      "label": "$enemy_moosecalf",
+      "matches": [
+        {
+          "value": "$enemy_moosecalf"
+        }
+      ]
+    },
+    {
+      "identifier": "Seal",
+      "label": "$enemy_seal",
+      "matches": [
+        {
+          "value": "$enemy_seal"
+        }
+      ]
+    },
+    {
+      "identifier": "BabySeal",
+      "label": "$enemy_seal_baby",
+      "matches": [
+        {
+          "value": "$enemy_seal_baby"
+        }
+      ]
+    },
+    {
+      "identifier": "RiktigFuling",
+      "label": "$enemy_gemgoblin",
+      "matches": [
+        {
+          "value": "$enemy_gemgoblin"
+        }
+      ]
     }
   ]
 }

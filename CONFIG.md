@@ -86,7 +86,7 @@ Specify whether to enable the feature that automatically opens and closes the do
 ### Allow Automatic Door / [allow_automatic_door]
 Specify which doors are allowed to open and close automatically.
 
-- Default value: WoodDoor, WoodGate, IronGate, DarkwoodGate, PieceHexagonalDoor, AshwoodDoor, FlametalGate, DvergrDoor
+- Default value: WoodDoor, WoodGate, IronGate, DarkwoodGate, PieceHexagonalDoor, AshwoodDoor, FlametalGate, DvergrDoor, TimberwoodGate, RoundpoleGate, Drawbridge
 
 ### Interval To Open / [interval_to_open]
 Specify the interval at which the process of automatically opening the door is called. If set to less than 0.1, the function to automatically open the door will be disabled. (Unit: second)
@@ -156,12 +156,12 @@ Specify the range of location to be explored. "Location" is a specific place, su
 ### Allow Pinning Animal / [allow_pinning_animal]
 Specify the animals to be automatic pinning.
 
-- Default value: Boar, Piggy, Deer, Wolf, WolfCub, Lox, LoxCalf, Hen, Chicken, Hare, Bird, Fish, Asksvin, AsksvinHatchling
+- Default value: Boar, Piggy, Deer, Wolf, WolfCub, Lox, LoxCalf, Hen, Chicken, Hare, Bird, Fish, Asksvin, AsksvinHatchling, Moose, MooseCalf, Seal, BabySeal, RiktigFuling
 
 ### Allow Pinning Monster / [allow_pinning_monster]
 Specify the monsters to be automatic pinning.
 
-- Default value: Greyling, Neck, Ghost, Greydwarf, GreydwarfBrute, GreydwarfShaman, RancidRemains, Skeleton, Troll, Abomination, Blob, Draugr, DraugrElite, Leech, Oozer, Surtling, Wraith, Drake, Fenring, StoneGolem, Deathsquito, Fuling, FulingBerserker, FulingShaman, Growth, Serpent, Bat, FenringCultist, Ulv, DvergrRogue, DvergrMage, Tick, Seeker, SeekerBrood, Gjall, SeekerSoldier, CharredMelee, CharredArcher, CharredMage, CharredTwitcher, CharredGrunt, Morgen, Volture, BonemawSerpent, FallenValkyrie, Fader, SkeletonFire, FrostBlob, Bear, Vile, LavaBlob
+- Default value: Greyling, Neck, Ghost, Greydwarf, GreydwarfBrute, GreydwarfShaman, RancidRemains, Skeleton, Troll, Abomination, Blob, Draugr, DraugrElite, Leech, Oozer, Surtling, Wraith, Drake, Fenring, StoneGolem, Deathsquito, Fuling, FulingBerserker, FulingShaman, Growth, Serpent, Bat, FenringCultist, Ulv, DvergrRogue, DvergrMage, Tick, Seeker, SeekerBrood, Gjall, SeekerSoldier, CharredMelee, CharredArcher, CharredMage, CharredTwitcher, CharredGrunt, Morgen, Volture, BonemawSerpent, FallenValkyrie, Fader, SkeletonFire, FrostBlob, Bear, Vile, LavaBlob, Frysling, Gammeltroll, Krigen, Hexen, Barka, Kvastur, Elaking, EyelessOne, ShapelessPulp, TinyPulp, Shadow, Mistile, FallenWarrior
 
 ### Allow Pinning Flora / [allow_pinning_flora]
 Specify the flora to be automatic pinning.
@@ -171,7 +171,7 @@ Specify the flora to be automatic pinning.
 ### Allow Pinning Mineral / [allow_pinning_mineral]
 Specify the mineral to be automatic pinning.
 
-- Default value: CopperDeposit, TinDeposit, MudPile, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit
+- Default value: CopperDeposit, TinDeposit, MudPile, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit, PetrifiedGammeltroll, SilverDeposit, AncientArmour, AncientSword
 
 ### Allow Pinning Spawner / [allow_pinning_spawner]
 Specify the spawners to be automatic pinning.
@@ -191,7 +191,7 @@ Specify the other objects to be automatic pinning.
 ### Allow Pinning Dungeon / [allow_pinning_dungeon]
 Specify the dungeons to be automatic pinning.
 
-- Default value: BurialChambers, TrollCave, SunkenCrypts, MountainCave, InfestedMine, MorgenHole
+- Default value: BurialChambers, TrollCave, SunkenCrypts, MountainCave, InfestedMine, MorgenHole, BearCave, Morkhalla, WindingTunnels, TombOfLordReto
 
 ### Allow Pinning Spot / [allow_pinning_spot]
 Specify the spots to be automatic pinning.
@@ -276,7 +276,7 @@ Specify the HTML color code used for the storage connection effect shown by auto
 ### Allow Container / [allow_container]
 Specify containers that allow automatic operations such as item supply and storage.
 
-- Default value: PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred
+- Default value: PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred, PieceChestBarrel, PieceChestGrausten, PieceChestWardrobe
 
 ### Beehive: Allow Process / [allow_processing_by_piece_beehive]
 Specify the automatic processes to allow for Beehive. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
@@ -1287,7 +1287,7 @@ Specify the maximum distance to search for a mineral. Setting to 0 the pickaxe's
 ### Allow Mining Mineral / [allow_mining_mineral]
 Specify the minerals to be automatically mined.
 
-- Default value: CopperDeposit, TinDeposit, MudPile, ObsidianDeposit, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit
+- Default value: CopperDeposit, TinDeposit, MudPile, ObsidianDeposit, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit, PetrifiedGammeltroll, SilverDeposit, AncientArmour, AncientSword
 
 ### Need To Equip Pickaxe For Mining / [need_to_equip_pickaxe]
 Specify whether a pickaxe needs to be equipped to attempt automatic mining. Disabling this option will use the most advanced pickaxe in the player's inventory. If there is no pickaxe in the player's inventory, automatic mining will not be attempted.
@@ -1336,7 +1336,7 @@ Specify the maximum number of nearby containers to reference in distance order. 
 ### Allow Container / [allow_container]
 Specify containers that allow automatic storage. Private chests are excluded by default.
 
-- Default value: PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred
+- Default value: PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred, PieceChestBarrel, PieceChestGrausten, PieceChestWardrobe
 
 ### Allowed Item Types / [allowed_item_types]
 Specify Valheim item types that can be stored automatically.
@@ -1415,7 +1415,7 @@ Specify the maximum distance to search for crops to harvest. (Unit: meters)
 ### Allow Farming Crop / [allow_farming_crop]
 Specify the crops to be automatically harvested and replanted. Crops that have no plantable sapling are harvested only.
 
-- Default value: Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flex, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds
+- Default value: Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flex, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr, Lingonberries, BlueMushroom
 
 ### Seed Reserve / [seed_reserve]
 Specify the number of each seed item to keep in the active seed source. Planting stops consuming a seed once its count would drop below this value.

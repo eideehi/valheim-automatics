@@ -46,6 +46,33 @@
           "value": "$enemy_charredtwitcherspawner"
         }
       ]
+    },
+    {
+      "identifier": "WardrobeShaft",
+      "label": "$enemy_holespawner",
+      "matches": [
+        {
+          "value": "$enemy_holespawner"
+        }
+      ]
+    },
+    {
+      "identifier": "HexahedricPulp",
+      "label": "$enemy_bigblob",
+      "matches": [
+        {
+          "value": "$enemy_bigblob"
+        }
+      ]
+    },
+    {
+      "identifier": "MaliciousIce",
+      "label": "$blackice_core",
+      "matches": [
+        {
+          "value": "$blackice_core"
+        }
+      ]
     }
   ]
 }

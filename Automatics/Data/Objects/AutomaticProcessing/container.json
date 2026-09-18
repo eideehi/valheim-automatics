@@ -46,6 +46,33 @@
           "value": "$piece_charredchest"
         }
       ]
+    },
+    {
+      "identifier": "PieceChestBarrel",
+      "label": "$piece_chestbarrel",
+      "matches": [
+        {
+          "value": "$piece_chestbarrel"
+        }
+      ]
+    },
+    {
+      "identifier": "PieceChestGrausten",
+      "label": "$piece_chestgrausten",
+      "matches": [
+        {
+          "value": "$piece_chestgrausten"
+        }
+      ]
+    },
+    {
+      "identifier": "PieceChestWardrobe",
+      "label": "$piece_chestwarderobe",
+      "matches": [
+        {
+          "value": "$piece_chestwarderobe"
+        }
+      ]
     }
   ]
 }

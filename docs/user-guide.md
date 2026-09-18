@@ -574,9 +574,9 @@ farming activities flip the seed/crop relationship: growing crops plants seeds a
 harvests crops, while multiplying seeds plants crops and harvests seeds. A cultivation
 box and a seed-harvest box therefore never plant each other's stock, so ordinary seeds
 are never planted into a field meant only to multiply seeds, and vice versa. Whether a
-crop counts as a seed is read from data (the `seed` tag on the Flora definition:
-`CarrotSeeds`, `OnionSeeds`, `TurnipSeeds`, `VineberrySeeds`), not guessed from its
-name.
+crop counts as a seed is read from data (the `seed` tag on the Flora definition,
+for example on `CarrotSeeds`, `OnionSeeds`, `TurnipSeeds` and `VineberrySeeds`), not
+guessed from its name.
 
 In this mode each pass:
 
@@ -604,9 +604,9 @@ unloaded or remote fields are not farmed. When two same-role boxes' ranges overl
 may both sow the shared tiles, which is harmless (they plant the same kind of sapling);
 space the boxes by `Farming Range` if you want separate fields.
 
-Self-seeding crops (`Barley`, `Flex`, `Magecap`, `JotunPuffs`) have no separate seed,
-so only a cultivation box plants them, from the crop itself. `Vineberry` grows on a
-support and is never auto-planted.
+Self-seeding crops (for example `Barley`, `Flex`, `Magecap` and `JotunPuffs`) have no
+separate seed, so only a cultivation box plants them, from the crop itself. `Vineberry`
+grows on a support and is never auto-planted.
 
 Automatic farming places saplings only where they would grow healthy: cultivated
 ground when required, the correct biome, no roof overhead, no overheating or

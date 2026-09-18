@@ -194,6 +194,61 @@
         }
       ],
       "tags": ["seed"]
+    },
+    {
+      "identifier": "Kale",
+      "label": "$item_kale",
+      "matches": [
+        {
+          "value": "$item_kale"
+        }
+      ]
+    },
+    {
+      "identifier": "KaleSeeds",
+      "label": "$item_kaleseeds",
+      "matches": [
+        {
+          "value": "$item_kaleseeds"
+        }
+      ],
+      "tags": ["seed"]
+    },
+    {
+      "identifier": "Oat",
+      "label": "$item_oatseeds",
+      "matches": [
+        {
+          "value": "$item_oatseeds"
+        }
+      ]
+    },
+    {
+      "identifier": "Poteitr",
+      "label": "$item_poteitr",
+      "matches": [
+        {
+          "value": "$item_poteitr"
+        }
+      ]
+    },
+    {
+      "identifier": "Lingonberries",
+      "label": "$item_lingonberries",
+      "matches": [
+        {
+          "value": "$item_lingonberries"
+        }
+      ]
+    },
+    {
+      "identifier": "BlueMushroom",
+      "label": "$item_mushroomblue",
+      "matches": [
+        {
+          "value": "$item_mushroomblue"
+        }
+      ]
     }
   ]
 }
