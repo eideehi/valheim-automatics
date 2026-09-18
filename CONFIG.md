@@ -1415,7 +1415,7 @@ Specify the maximum distance to search for crops to harvest. (Unit: meters)
 ### Allow Farming Crop / [allow_farming_crop]
 Specify the crops to be automatically harvested and replanted. Crops that have no plantable sapling are harvested only.
 
-- Default value: Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flex, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr, Lingonberries, BlueMushroom
+- Default value: Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flax, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr, Lingonberries, BlueMushroom
 
 ### Seed Reserve / [seed_reserve]
 Specify the number of each seed item to keep in the active seed source. Planting stops consuming a seed once its count would drop below this value.

@@ -35,6 +35,13 @@ repair and automatic storage all apply that option while the game is running.
 Use [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager)
 to edit Automatics options in game.
 
+When an update changes an object list's default, Automatics adds the objects newly
+included in that default once to lists that still hold a default it recognizes;
+lists whose defaults did not change get no additions. A list you edited is left as
+it is, as are some lists kept unchanged since 1.4.0 or earlier; add the new names to
+those yourself. Objects you remove afterwards stay removed. Corrections to the
+entries themselves, such as a renamed object, apply to every list.
+
 ### Module disable options
 
 Each feature section has a module disable entry. Use it when you do not want
@@ -604,7 +611,7 @@ unloaded or remote fields are not farmed. When two same-role boxes' ranges overl
 may both sow the shared tiles, which is harmless (they plant the same kind of sapling);
 space the boxes by `Farming Range` if you want separate fields.
 
-Self-seeding crops (for example `Barley`, `Flex`, `Magecap` and `JotunPuffs`) have no
+Self-seeding crops (for example `Barley` and `Flax`) have no
 separate seed, so only a cultivation box plants them, from the crop itself. `Vineberry`
 grows on a support and is never auto-planted.
 

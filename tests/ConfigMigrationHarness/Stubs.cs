@@ -73,50 +73,7 @@ namespace ModUtils
     {
         public static IEnumerable<string> ParseLine(string line)
         {
-            var values = new List<string>();
-            var buffer = new StringBuilder();
-            var quoted = false;
-
-            for (var i = 0; i < line.Length; i++)
-            {
-                var current = line[i];
-                if (quoted)
-                {
-                    if (current == '"' && i + 1 < line.Length && line[i + 1] == '"')
-                    {
-                        buffer.Append('"');
-                        i++;
-                        continue;
-                    }
-
-                    if (current == '"')
-                    {
-                        quoted = false;
-                        continue;
-                    }
-
-                    buffer.Append(current);
-                    continue;
-                }
-
-                if (current == '"')
-                {
-                    quoted = true;
-                    continue;
-                }
-
-                if (current == ',')
-                {
-                    values.Add(buffer.ToString().Trim());
-                    buffer.Clear();
-                    continue;
-                }
-
-                buffer.Append(current);
-            }
-
-            values.Add(buffer.ToString().Trim());
-            return values;
+            return ParseLine(line, false);
         }
 
         // Mirrors mod-utils Csv.ParseLine(line, trimUnquotedFields): trims only
@@ -127,6 +84,7 @@ namespace ModUtils
             var buffer = new StringBuilder();
             var quoted = false;
             var fieldQuoted = false;
+            var quoteClosed = false;
 
             for (var i = 0; i < line.Length; i++)
             {
@@ -143,6 +101,7 @@ namespace ModUtils
                     if (current == '"')
                     {
                         quoted = false;
+                        quoteClosed = true;
                         continue;
                     }
 
@@ -152,7 +111,10 @@ namespace ModUtils
 
                 if (current == '"')
                 {
+                    if (trimUnquotedFields && string.IsNullOrWhiteSpace(buffer.ToString()))
+                        buffer.Clear();
                     quoted = true;
+                    quoteClosed = false;
                     fieldQuoted = true;
                     continue;
                 }
@@ -162,10 +124,12 @@ namespace ModUtils
                     values.Add(FlushField(buffer, fieldQuoted, trimUnquotedFields));
                     buffer.Clear();
                     fieldQuoted = false;
+                    quoteClosed = false;
                     continue;
                 }
 
-                buffer.Append(current);
+                if (!(trimUnquotedFields && quoteClosed && char.IsWhiteSpace(current)))
+                    buffer.Append(current);
             }
 
             values.Add(FlushField(buffer, fieldQuoted, trimUnquotedFields));
@@ -181,7 +145,9 @@ namespace ModUtils
 
         public static string Escape(string value)
         {
-            if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0)
+            if (value == null) return "";
+            if (value.Length > 0 && !char.IsWhiteSpace(value[0]) &&
+                !char.IsWhiteSpace(value[value.Length - 1]) && value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0)
                 return value;
 
             return $"\"{value.Replace("\"", "\"\"")}\"";
@@ -202,8 +168,11 @@ namespace Automatics
         {
         }
 
+        public List<string> Warnings { get; } = new List<string>();
+
         public void Warning(string message)
         {
+            Warnings.Add(message);
         }
 
         public void Error(string message)

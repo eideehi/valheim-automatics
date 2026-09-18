@@ -246,7 +246,7 @@ namespace Automatics
         // called.
         internal const string DefaultsRevisionSection = "hidden";
         internal const string DefaultsRevisionKey = "defaults_revision";
-        internal const int DefaultsRevision = 1;
+        internal const int DefaultsRevision = 2;
 
         // Has to run before anything binds an entry: the first bind writes the file, and from then
         // on a new install can no longer be told apart from an existing one.
@@ -274,9 +274,12 @@ namespace Automatics
                 return;
             }
 
+            var recognizedRevision = TryReadDefaultsRevision(file.Lines, out var revision);
+
             var versionsChanged = MigrateVersions(file.Lines);
             var keptRunning = KeepModulesRunning(file.Lines);
-            if (!versionsChanged && keptRunning == null)
+            var defaultsChanged = recognizedRevision && MigrateObjectDefaults(file.Lines, revision);
+            if (!versionsChanged && !defaultsChanged)
                 return;
 
             try
@@ -289,12 +292,13 @@ namespace Automatics
             }
             catch (Exception e) when (IsIoFailure(e) && !versionsChanged)
             {
-                // Only the module defaults were at stake, and without the marker the next start
-                // tries again. While the version passes have changes, a failure still stops the
-                // start, as it always has: once BepInEx rewrote the header, they would not run again.
+                // Only defaults were at stake; the unchanged marker lets the next start retry.
+                // While the version passes have changes, a failure still stops the start, as it
+                // always has: once BepInEx rewrote the header, they would not run again.
                 Automatics.Logger.Warning(
                     $"Could not update the config file {path} ({e.Message}). " +
-                    DescribeSessionDefaults(keptRunning) + " The next start tries again.");
+                    DescribeSessionDefaults(keptRunning) +
+                    " Object lists keep their stored values this session. The next start tries again.");
                 return;
             }
 
@@ -359,7 +363,7 @@ namespace Automatics
 
         private static string DescribeSessionDefaults(List<string> sections)
         {
-            return sections.Count == 0
+            return sections == null || sections.Count == 0
                 ? "Every module keeps the value it has in the file."
                 : "This session, these modules use the new default, Disabled: " +
                   string.Join(", ", sections) + ".";
@@ -449,10 +453,246 @@ namespace Automatics
                 Automatics.Logger.Message($"Keep the module running: [{section}] {ModuleKey} = Enabled");
             }
 
-            // The marker goes last, after every line it vouches for.
-            AppendSection(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
-            Automatics.Logger.Message($"Record the config defaults revision {DefaultsRevision}");
             return keptRunning;
+        }
+
+        // Revision 2 checks values after the current version passes. Bare pre-1.6 defaults
+        // cannot reach this check unedited. Released 1.6.0 instead preserved separator spaces
+        // and quoted them (fixed by eff53b0). Freeze those simulated outputs verbatim, so a
+        // clean edited list cannot match them. Matching uses raw parsed elements; afterwards,
+        // all ten lists touched by released 1.6.0 are repaired, edited or not.
+        // Reject older/rarer sets within one or two ordinal symmetric-difference elements
+        // of another accepted set, retaining fresh defaults to protect user edits.
+        // The released 1.6.0 door pass lacked PieceHexagonalDoor; 1.7.0 and the current pass add it.
+        // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
+        // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
+        private const string DoorDefaults = "WoodDoor, WoodGate, IronGate, DarkwoodGate, PieceHexagonalDoor, AshwoodDoor, FlametalGate, DvergrDoor";
+
+        // Released 1.6.0 AppendValues on the 1.4.1–1.5.1 door default serialized with ", ".
+        private const string DoorReleased160Defaults = "WoodDoor, \" WoodGate\", \" IronGate\", \" DarkwoodGate\", \" PieceHexagonalDoor\", AshwoodDoor, FlametalGate, DvergrDoor";
+
+        // Drop the pre-1.4 All clean set: fresh default plus WoodShutter (one edit).
+        // Drop the 1.3.x/1.4.0 released-1.6.0 form: the retained corrupt set minus
+        // " PieceHexagonalDoor" (one edit). Drop the corrupt pre-1.4 All form too:
+        // it replaces " PieceHexagonalDoor" with " WoodShutter" (two edits).
+
+        // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
+        // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
+        private const string AnimalDefaults = "Boar, Piggy, Deer, Wolf, WolfCub, Lox, LoxCalf, Hen, Chicken, Hare, Bird, Fish, Asksvin, AsksvinHatchling";
+
+        // Released 1.6.0 AppendValues on the 1.4.0–1.5.1 default serialized with ", ".
+        // The pre-1.4 All replacement is identical.
+        private const string AnimalReleased160Defaults = "Boar, \" Piggy\", \" Deer\", \" Wolf\", \" WolfCub\", \" Lox\", \" LoxCalf\", \" Hen\", \" Chicken\", \" Hare\", \" Bird\", \" Fish\", Asksvin, AsksvinHatchling";
+
+        // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
+        // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
+        private const string MonsterDefaults = "Greyling, Neck, Ghost, Greydwarf, GreydwarfBrute, GreydwarfShaman, RancidRemains, Skeleton, Troll, Abomination, Blob, Draugr, DraugrElite, Leech, Oozer, Surtling, Wraith, Drake, Fenring, StoneGolem, Deathsquito, Fuling, FulingBerserker, FulingShaman, Growth, Serpent, Bat, FenringCultist, Ulv, DvergrRogue, DvergrMage, Tick, Seeker, SeekerBrood, Gjall, SeekerSoldier, CharredMelee, CharredArcher, CharredMage, CharredTwitcher, CharredGrunt, Morgen, Volture, BonemawSerpent, FallenValkyrie, Fader, SkeletonFire, FrostBlob, Bear, Vile, LavaBlob";
+
+        // Released 1.6.0 AppendValues on the 1.4.0–1.5.1 default serialized with ", ".
+        // The pre-1.4 All replacement is identical.
+        private const string MonsterReleased160Defaults = "Greyling, \" Neck\", \" Ghost\", \" Greydwarf\", \" GreydwarfBrute\", \" GreydwarfShaman\", \" RancidRemains\", \" Skeleton\", \" Troll\", \" Abomination\", \" Blob\", \" Draugr\", \" DraugrElite\", \" Leech\", \" Oozer\", \" Surtling\", \" Wraith\", \" Drake\", \" Fenring\", \" StoneGolem\", \" Deathsquito\", \" Fuling\", \" FulingBerserker\", \" FulingShaman\", \" Growth\", \" Serpent\", \" Bat\", \" FenringCultist\", \" Ulv\", \" DvergrRogue\", \" DvergrMage\", \" Tick\", \" Seeker\", \" SeekerBrood\", \" Gjall\", \" SeekerSoldier\", CharredMelee, CharredArcher, CharredMage, CharredTwitcher, CharredGrunt, Morgen, Volture, BonemawSerpent, FallenValkyrie, Fader, SkeletonFire, FrostBlob, Bear, Vile, LavaBlob";
+
+        // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
+        // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
+        private const string MappingMineralDefaults = "CopperDeposit, TinDeposit, MudPile, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit";
+
+        // Released 1.6.0 AppendValues on the 1.4.0–1.5.1 default serialized with ", ".
+        private const string MappingMineralReleased160Defaults = "CopperDeposit, \" TinDeposit\", \" MudPile\", \" SilverVein\", \" PetrifiedBone\", \" SoftTissue\", FlametalDeposit";
+
+        // Drop both clean and released-1.6.0 forms of the 1.3.x default: each is
+        // its retained counterpart minus PetrifiedBone and SoftTissue (two edits).
+
+        // 1.0.0–1.2.1 bind Vein.Flag.All (-1L) ^ Obsidian (8), serialized as -9.
+        // MigrationFor130/140 only rename its key; either 1.6.0 pass adds FlametalDeposit.
+        // Retain this numeric form: it has no one- or two-element collision.
+        private const string MappingMineralEnumDefaults = "-9, FlametalDeposit";
+
+        // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
+        // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
+        private const string DungeonDefaults = "BurialChambers, TrollCave, SunkenCrypts, MountainCave, InfestedMine, MorgenHole";
+
+        // Released 1.6.0 AppendValues on the 1.4.0–1.5.1 default serialized with ", ".
+        // The pre-1.4 All replacement is identical.
+        private const string DungeonReleased160Defaults = "BurialChambers, \" TrollCave\", \" SunkenCrypts\", \" MountainCave\", \" InfestedMine\", MorgenHole";
+
+        // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
+        // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
+        private const string MiningMineralDefaults = "CopperDeposit, TinDeposit, MudPile, ObsidianDeposit, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit";
+
+        // Released 1.6.0 AppendValues on the 1.4.0–1.5.1 default serialized with ", ".
+        private const string MiningMineralReleased160Defaults = "CopperDeposit, \" TinDeposit\", \" MudPile\", \" ObsidianDeposit\", \" SilverVein\", \" PetrifiedBone\", \" SoftTissue\", FlametalDeposit";
+
+        // 1.7.0 first binds this list; its object JSON default equals 5d5cc7f^.
+        private const string CropDefaults = "Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flex, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds";
+
+        // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
+        // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
+        private const string ProcessingContainerDefaults = "PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred";
+
+        // Released 1.6.0 AppendValues on the 1.4.1–1.5.1 container default serialized with ", ".
+        private const string ProcessingContainerReleased160Defaults = "PieceChestWood, \" PieceChest\", \" PieceChestBlackmetal\", PieceChestCharred";
+
+        // 1.7.0 first binds this list; its object JSON default equals 5d5cc7f^.
+        private const string StorageContainerDefaults = "PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred";
+
+        private sealed class ObjectListRevision
+        {
+            public readonly string Section;
+            public readonly string Key;
+            public readonly string[] Additions;
+            public readonly HashSet<string>[] Defaults;
+
+            public ObjectListRevision(string section, string key, string additions, params string[] defaults)
+            {
+                Section = section;
+                Key = key;
+                Additions = ParseObjectList(additions).ToArray();
+                Defaults = defaults.Select(x => new HashSet<string>(ParseObjectList(x), StringComparer.Ordinal)).ToArray();
+            }
+        }
+
+        private static readonly ObjectListRevision[] ObjectListsRevision2 =
+        {
+            new ObjectListRevision("automatic_door", "allow_automatic_door",
+                "TimberwoodGate, RoundpoleGate, Drawbridge",
+                DoorDefaults, DoorReleased160Defaults),
+            new ObjectListRevision("automatic_mapping", "allow_pinning_animal",
+                "Moose, MooseCalf, Seal, BabySeal, RiktigFuling",
+                AnimalDefaults, AnimalReleased160Defaults),
+            new ObjectListRevision("automatic_mapping", "allow_pinning_monster",
+                "Frysling, Gammeltroll, Krigen, Hexen, Barka, Kvastur, Elaking, EyelessOne, ShapelessPulp, TinyPulp, Shadow, Mistile, FallenWarrior",
+                MonsterDefaults, MonsterReleased160Defaults),
+            new ObjectListRevision("automatic_mapping", "allow_pinning_mineral",
+                "PetrifiedGammeltroll, SilverDeposit, AncientArmour, AncientSword",
+                MappingMineralDefaults, MappingMineralReleased160Defaults, MappingMineralEnumDefaults),
+            new ObjectListRevision("automatic_mapping", "allow_pinning_dungeon",
+                "BearCave, Morkhalla, WindingTunnels, TombOfLordReto",
+                DungeonDefaults, DungeonReleased160Defaults),
+            new ObjectListRevision("automatic_mining", "allow_mining_mineral",
+                "PetrifiedGammeltroll, SilverDeposit, AncientArmour, AncientSword",
+                MiningMineralDefaults, MiningMineralReleased160Defaults),
+            new ObjectListRevision("automatic_farming", "allow_farming_crop",
+                "Kale, KaleSeeds, Oat, Poteitr, Lingonberries, BlueMushroom",
+                CropDefaults),
+            new ObjectListRevision("automatic_processing", "allow_container",
+                "PieceChestBarrel, PieceChestGrausten, PieceChestWardrobe",
+                ProcessingContainerDefaults, ProcessingContainerReleased160Defaults),
+            new ObjectListRevision("automatic_storage", "allow_container",
+                "PieceChestBarrel, PieceChestGrausten, PieceChestWardrobe",
+                StorageContainerDefaults),
+        };
+
+        private static List<string> ParseObjectList(string value)
+        {
+            return Csv.ParseLine(value ?? "", true).Where(x => !string.IsNullOrEmpty(x)).ToList();
+        }
+
+        private static bool TryReadDefaultsRevision(List<string> lines, out int revision)
+        {
+            var entries = ReadEntries(lines);
+            var hasMarker = entries.TryGetValue((DefaultsRevisionSection, DefaultsRevisionKey), out var marker);
+            revision = 0;
+            if (hasMarker && (!int.TryParse(marker.Value, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out revision) ||
+                revision < 0 || revision > DefaultsRevision))
+            {
+                Automatics.Logger.Warning(
+                    $"Unrecognized config defaults revision '{marker.Value}'; skipping the object defaults step and leaving the marker unchanged.");
+                return false;
+            }
+            return true;
+        }
+
+        private static bool MigrateObjectDefaults(List<string> lines, int revision)
+        {
+            if (revision >= DefaultsRevision) return false;
+            var entries = ReadEntries(lines);
+            var hasMarker = entries.ContainsKey((DefaultsRevisionSection, DefaultsRevisionKey));
+
+            foreach (var list in ObjectListsRevision2)
+            {
+                if (!entries.TryGetValue((list.Section, list.Key), out var entry)) continue;
+                var values = ParseObjectList(entry.Value);
+                var existing = new HashSet<string>(values, StringComparer.Ordinal);
+                if (!list.Defaults.Any(x => x.SetEquals(existing))) continue;
+
+                values = values.Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                existing = new HashSet<string>(values, StringComparer.Ordinal);
+                var added = list.Additions.Where(existing.Add).ToList();
+                if (added.Count == 0) continue;
+                values.AddRange(added);
+                lines[entry.Index] = $"{list.Key} = {string.Join(", ", values.Select(Csv.Escape))}";
+                Automatics.Logger.Message(
+                    $"Append values: [{list.Section}] {list.Key} += [{string.Join(", ", added)}]");
+            }
+
+            // Match raw elements before repairing the spaces released 1.6.0 wrote inside quotes.
+            // Edited lists need this repair too; appended lists have already been trimmed.
+            foreach (var key in new[] { "allow_pinning_monster", "allow_pinning_animal", "allow_pinning_flora",
+                         "allow_pinning_mineral", "allow_pinning_vehicle", "allow_pinning_spot", "allow_pinning_dungeon" })
+                RepairObjectListWhitespace(lines, "automatic_mapping", key);
+            RepairObjectListWhitespace(lines, "automatic_mining", "allow_mining_mineral");
+            RepairObjectListWhitespace(lines, "automatic_door", "allow_automatic_door");
+            RepairObjectListWhitespace(lines, "automatic_processing", "allow_container");
+
+            RenameFlax(lines, "automatic_farming", "allow_farming_crop");
+            RenameFlax(lines, "automatic_mapping", "allow_pinning_flora");
+
+            // Update every existing marker in place, retaining its comments and section layout.
+            // A file without a marker gets one at the end, after the migrated entries.
+            if (hasMarker)
+            {
+                var section = string.Empty;
+                for (var i = 0; i < lines.Count; i++)
+                {
+                    var line = lines[i].Trim();
+                    if (line.StartsWith("#")) continue;
+                    if (line.StartsWith("[") && line.EndsWith("]"))
+                        section = line.Substring(1, line.Length - 2);
+                    var split = line.Split(KeyValueSeparator, 2);
+                    if (section == DefaultsRevisionSection && split.Length == 2 &&
+                        split[0].Trim() == DefaultsRevisionKey)
+                        lines[i] = $"{DefaultsRevisionKey} = {FormatRevision()}";
+                }
+            }
+            else
+                AppendSection(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
+            Automatics.Logger.Message($"Record the config defaults revision {DefaultsRevision}");
+            return true;
+        }
+
+        private static void RepairObjectListWhitespace(List<string> lines, string section, string key)
+        {
+            if (!ReadEntries(lines).TryGetValue((section, key), out var entry)) return;
+            var values = ParseObjectList(entry.Value);
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var repaired = values.Select(x => x.Trim()).Where(seen.Add).ToList();
+            if (values.SequenceEqual(repaired, StringComparer.Ordinal)) return;
+
+            lines[entry.Index] = $"{key} = {string.Join(", ", repaired.Select(Csv.Escape))}";
+            Automatics.Logger.Message($"Repair list whitespace: [{section}] {key}");
+        }
+
+        private static void RenameFlax(List<string> lines, string section, string key)
+        {
+            if (!ReadEntries(lines).TryGetValue((section, key), out var entry)) return;
+            var values = ParseObjectList(entry.Value);
+            if (!values.Contains("Flex", StringComparer.Ordinal)) return;
+
+            var hasFlax = values.Contains("Flax", StringComparer.Ordinal);
+            for (var i = 0; i < values.Count; i++)
+            {
+                if (!string.Equals(values[i], "Flex", StringComparison.Ordinal)) continue;
+                if (hasFlax)
+                    values.RemoveAt(i--);
+                else
+                {
+                    values[i] = "Flax";
+                    hasFlax = true;
+                }
+            }
+            lines[entry.Index] = $"{key} = {string.Join(", ", values.Select(Csv.Escape))}";
+            Automatics.Logger.Message($"Replace value: [{section}] {key} Flex => Flax");
         }
 
         // Whether BepInEx can read the value, asked of the converter its SetSerializedValue uses. For

@@ -1913,10 +1913,12 @@ require_the_defaults_marker_is_hidden_and_read_first() {
   local first_config_line
   local first_runtime_line
 
-  rg -U -q "Bind\\(ConfigMigration\\.DefaultsRevisionSection, ConfigMigration\\.DefaultsRevisionKey,\\s*ConfigMigration\\.DefaultsRevision, initializer: x =>\\s*\\{[^}]*x\\.Browsable = false;" "$plugin_config_file" || status=$?
+  # A string preserves unreadable markers; "0" also retries a failed migration write.
+  # New installs get their marker from ConfigMigration.CreateForNewInstall.
+  rg -U -q "Bind\\(ConfigMigration\\.DefaultsRevisionSection, ConfigMigration\\.DefaultsRevisionKey,\\s*\"0\", initializer: x =>\\s*\\{[^}]*x\\.Browsable = false;" "$plugin_config_file" || status=$?
   case "$status" in
     0) ;;
-    1) fail "$plugin_config_file must bind the defaults marker (ConfigMigration.DefaultsRevisionKey) with Browsable = false: it is bookkeeping, and ConfigurationManager must not show it" ;;
+    1) fail "$plugin_config_file must bind the defaults marker (ConfigMigration.DefaultsRevisionKey) with string default \"0\" and Browsable = false: unreadable markers must survive and failed file writes must retry; new installs get the marker from ConfigMigration.CreateForNewInstall, and ConfigurationManager must not show it" ;;
     *) fail "could not search $plugin_config_file (rg exit $status); the check that the defaults marker is hidden was not run" ;;
   esac
 

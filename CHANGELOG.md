@@ -2,7 +2,9 @@
 - Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair and Automatic Storage can all be turned on and off while the game is running.
 - Automatic Repair and Automatic Mining now wear your tools by the world's durability modifier, as the game does when you repair or mine by hand; on a default world nothing changes.
 - Every module is now off on a new install; turn on the ones you want with their `Disable Module` option. An existing config keeps each module on or off as it was (a module whose `Disable Module` entry is missing from an older config, or holds a value Automatics cannot read, is turned on), and the settings inside each module keep their defaults.
-- Automatics recognizes more of the objects Valheim 1.0 added: crops, containers, doors, deposits, creatures, spawners, vehicles and dungeons. An existing configuration keeps its object lists as they were; add the new names to them to use these objects.
+- Automatics recognizes more of the objects Valheim 1.0 added: crops, containers, doors, deposits, creatures, spawners, vehicles and dungeons. An update adds, once, the objects newly included in each list's default to lists that still hold a default Automatics recognizes; lists whose defaults did not change get no additions. A list you edited is left as it is, as are some lists kept unchanged since 1.4.0 or earlier, so add the new names to those yourself.
+- The object list entry for flax is now spelled `Flax`; existing configurations are updated.
+- Object list entries written with a leading space by the 1.6.0 update no longer matched their targets; existing configurations are now repaired.
 
 #### v1.7.0 [2026-07-19]
 - Added Automatic Storage for moving eligible inventory items into nearby containers by hotkey.

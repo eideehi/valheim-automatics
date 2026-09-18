@@ -72,9 +72,10 @@ namespace Automatics
                 x.ReadOnly = true;
             });
 
-            // ConfigMigration writes this entry before any bind; see DefaultsRevision there.
+            // Bind as a string to preserve unreadable markers; default to "0" so failed writes retry.
+            // ConfigMigration.CreateForNewInstall writes the new-install marker.
             Instance.Bind(ConfigMigration.DefaultsRevisionSection, ConfigMigration.DefaultsRevisionKey,
-                ConfigMigration.DefaultsRevision, initializer: x =>
+                "0", initializer: x =>
                 {
                     x.Browsable = false;
                     x.ReadOnly = true;

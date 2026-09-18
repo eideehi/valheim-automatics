@@ -6,7 +6,7 @@ using BepInEx.Configuration;
 
 namespace Automatics
 {
-    internal static class Program
+    internal static partial class Program
     {
         private static int _failures;
 
@@ -28,7 +28,7 @@ namespace Automatics
 
         private const string MarkerSection = "hidden";
         private const string MarkerKey = "defaults_revision";
-        private const string MarkerValue = "1";
+        private const string MarkerValue = "2";
 
         private static int Main()
         {
@@ -89,6 +89,8 @@ namespace Automatics
             Run("a rewrite keeps the file's byte order mark, line breaks and final newline", RewriteKeepsEncodingAndLineBreaks);
             Run("a reload that keeps failing stops the start instead of letting defaults be saved", ReloadThatKeepsFailingStopsTheStart);
             Run("a reload that fails once is tried again", ReloadThatFailsOnceIsTriedAgain);
+
+            RunObjectRevisionTests();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -272,7 +274,7 @@ namespace Automatics
                 "[general]",
                 "custom_door = MyDoor, Custom door, MyDoorPrefab",
                 "[hidden]",
-                "defaults_revision = 1"
+                "defaults_revision = 2"
             };
 
             var migrated = Migrate(lines);
@@ -309,7 +311,7 @@ namespace Automatics
                 "[automatic_pickup]",
                 "module = Enabled",
                 "[hidden]",
-                "defaults_revision = 1");
+                "defaults_revision = 2");
 
             AssertContains(current, "[automatic_pickup]");
             AssertEqual(1, CountOccurrences(current, "module = Enabled"), "A current config should keep its pickup module value.");
@@ -458,7 +460,7 @@ namespace Automatics
                 "[automatic_processing]",
                 "module = Disabled",
                 "[hidden]",
-                "defaults_revision = 1"
+                "defaults_revision = 2"
             };
 
             var migrated = Migrate(lines);
@@ -696,7 +698,7 @@ namespace Automatics
                 "[automatic_feeding]",
                 "module = Disabled",
                 "[hidden]",
-                "defaults_revision = 1"
+                "defaults_revision = 2"
             };
 
             var migrated = Migrate(lines);
@@ -847,7 +849,7 @@ namespace Automatics
                 .Select(x => x.Trim())
                 .Last(x => x.Length > 0 && !x.StartsWith("#", StringComparison.Ordinal) &&
                            !x.StartsWith("[", StringComparison.Ordinal));
-            if (lastEntry != "defaults_revision = 1")
+            if (lastEntry != "defaults_revision = 2")
                 throw new Exception($"The marker should be the last entry, got '{lastEntry}' in:\n{migrated}");
 
             // A section the file has gains the entry under its header; it is not written twice.
@@ -940,7 +942,7 @@ namespace Automatics
                 "",
                 "[hidden]",
                 "",
-                "defaults_revision = 1",
+                "defaults_revision = 2",
                 ""
             };
 
@@ -1261,7 +1263,7 @@ namespace Automatics
             var migrated = Migrate("## Settings file was created by plugin Automatics v1.7.0",
                 "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = " + value);
             AssertModule(migrated, "automatic_repair", value);
-            AssertEqual(1, CountOccurrences(migrated, "defaults_revision = 1"), "The defaults marker is added once.");
+            AssertEqual(1, CountOccurrences(migrated, "defaults_revision = 2"), "The defaults marker is added once.");
         }
 
         private static void RepairInnerValuesSurviveMigration()
@@ -1290,7 +1292,7 @@ namespace Automatics
         {
             var lines = new[] { "## Settings file was created by plugin Automatics v1.7.0",
                 "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = Disabled",
-                "crafting_station_search_range = 11", "[hidden]", "defaults_revision = 1" };
+                "crafting_station_search_range = 11", "[hidden]", "defaults_revision = 2" };
             var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
             if (Migrate(lines) != expected)
                 throw new Exception("A current Repair config must not be rewritten.");
