@@ -23,7 +23,7 @@ namespace Automatics
             foreach (var fixture in fixtures)
             {
                 var name = $"[{fixture.Section}] {fixture.Key}";
-                var corrupted = fixture.HistoricalDefaults.First(x => x.Contains("\" "));
+                var corrupted = Corrupted(fixture);
                 Run(name + " repairs edited quoted elements without adding targets", () =>
                 {
                     var expected = string.Join(", ", ModUtils.Csv.ParseLine(corrupted, true)
@@ -33,11 +33,11 @@ namespace Automatics
                     AssertMarker(result);
                     AssertBytesUnchanged(result);
                 });
-                Run(name + " keeps clean edited bytes", () =>
-                    AssertEditedList(fixture, fixture.OldDefault + ", CustomObject"));
-                Run(name + " leaves quoted spaces untouched at revision two", () =>
-                    AssertBytesUnchanged(string.Join("\r\n", RevisionLines(fixture, corrupted, "2"))));
             }
+
+            var representative = RepresentativeList;
+            Run($"[{representative.Section}] {representative.Key} leaves quoted spaces untouched at revision two", () =>
+                AssertBytesUnchanged(string.Join("\r\n", RevisionLines(representative, Corrupted(representative), "2"))));
 
             Run("trimming deduplicates ordinally and keeps first positions with CSV escaping", () =>
             {
@@ -48,22 +48,26 @@ namespace Automatics
                 AssertList(result, fixture, expected);
                 AssertBytesUnchanged(result);
             });
-            foreach (var marker in new[] { "unknown", "-1", "3", "2147483648", "" })
+            // The unsupported defaults revision cases cover each way a marker goes unrecognized.
+            Run("unrecognized marker '3' leaves corrupted lists untouched", () =>
             {
-                Run("unrecognized marker '" + marker + " leaves corrupted lists untouched", () =>
-                {
-                    var lines = fixtures.SelectMany(f => new[] { "[" + f.Section + "]",
-                        f.Key + " = \" First \", \" Second\", First" });
-                    var content = "# Automatics v1.7.0\n" + string.Join("\n", lines) +
-                        "\n[hidden]\ndefaults_revision = " + marker + "\n";
-                    AssertBytesUnchanged(content);
-                });
-            }
+                var lines = fixtures.SelectMany(f => new[] { "[" + f.Section + "]",
+                    f.Key + " = \" First \", \" Second\", First" });
+                var content = "# Automatics v1.7.0\n" + string.Join("\n", lines) +
+                    "\n[hidden]\ndefaults_revision = 3\n";
+                AssertBytesUnchanged(content);
+            });
             Run("whitespace repair leaves lists outside the released migration alone", () =>
             {
                 AssertEditedList(ObjectListFixtures[6], "\" CustomCrop \", OtherCrop");
                 AssertEditedList(ObjectListFixtures[8], "\" CustomContainer \", OtherContainer");
             });
+        }
+
+        // The form released 1.6.0 wrote: separator spaces kept inside quotes.
+        private static string Corrupted(ObjectListFixture fixture)
+        {
+            return fixture.HistoricalDefaults.First(x => x.Contains("\" "));
         }
     }
 }

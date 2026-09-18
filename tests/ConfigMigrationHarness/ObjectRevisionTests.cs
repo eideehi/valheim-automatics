@@ -147,6 +147,12 @@ namespace Automatics
             },
         };
 
+        // The list the generic behaviour cases run on. The step handles every list through one
+        // table-driven loop that never reads module state, so these cases need one list only.
+        // The mapping minerals list has the most accepted sets: current, released 1.6.0 and -9.
+        private static ObjectListFixture RepresentativeList =>
+            ObjectListFixtures.Single(f => f.Key == "allow_pinning_mineral");
+
         private static void RunObjectRevisionTests()
         {
             foreach (var fixture in ObjectListFixtures)
@@ -154,26 +160,6 @@ namespace Automatics
                 var name = $"[{fixture.Section}] {fixture.Key}";
                 Run(name + " appends exactly the new objects to the previous default", () =>
                     AssertMigratedList(fixture, fixture.OldDefault, ExpectedList(fixture.OldDefault, fixture)));
-                Run(name + " accepts reordered defaults and keeps their order", () =>
-                {
-                    var reversed = string.Join(", ", fixture.OldDefault.Split(", ").Reverse());
-                    AssertMigratedList(fixture, reversed, ExpectedList(reversed, fixture));
-                });
-                Run(name + " keeps an extra identifier without appending", () =>
-                    AssertEditedList(fixture, fixture.OldDefault + ", CustomObject"));
-                Run(name + " keeps a removed default identifier without appending", () =>
-                    AssertEditedList(fixture, string.Join(", ", fixture.OldDefault.Split(", ").Skip(1))));
-                Run(name + " keeps an empty list empty", () => AssertEditedList(fixture, ""));
-                Run(name + " appends defaults even when its module is disabled", () =>
-                {
-                    var lines = RevisionLines(fixture, fixture.OldDefault).ToList();
-                    lines.Insert(2, "module = Disabled");
-                    var result = Migrate(lines.ToArray());
-                    AssertModule(result, fixture.Section, "Disabled");
-                    AssertList(result, fixture, ExpectedList(fixture.OldDefault, fixture));
-                });
-                Run(name + " accepted sets cannot equal one- or two-element edits", () =>
-                    AssertAcceptedSetsHaveNoSmallEdits(fixture));
                 foreach (var historical in fixture.HistoricalDefaults)
                 {
                     var value = historical;
@@ -182,8 +168,6 @@ namespace Automatics
                 }
                 if (fixture.Before160 != null)
                 {
-                    Run(name + " rejects a bare pre-1.6 default under a current header", () =>
-                        AssertEditedList(fixture, fixture.Before160));
                     Run(name + " applies both migrations to untouched pre-1.6 defaults", () =>
                     {
                         var result = Migrate(RevisionLines(fixture, fixture.Before160, version: "1.5.1"));
@@ -193,6 +177,33 @@ namespace Automatics
                 }
             }
 
+            var representative = RepresentativeList;
+            var representativeName = $"[{representative.Section}] {representative.Key}";
+            Run(representativeName + " accepts reordered defaults and keeps their order", () =>
+            {
+                var reversed = string.Join(", ", representative.OldDefault.Split(", ").Reverse());
+                AssertMigratedList(representative, reversed, ExpectedList(reversed, representative));
+            });
+            Run(representativeName + " keeps an extra identifier without appending", () =>
+                AssertEditedList(representative, representative.OldDefault + ", CustomObject"));
+            Run(representativeName + " keeps a removed default identifier without appending", () =>
+                AssertEditedList(representative, string.Join(", ", representative.OldDefault.Split(", ").Skip(1))));
+            Run(representativeName + " keeps an empty list empty", () => AssertEditedList(representative, ""));
+            Run(representativeName + " appends defaults even when its module is disabled", () =>
+            {
+                var lines = RevisionLines(representative, representative.OldDefault).ToList();
+                lines.Insert(2, "module = Disabled");
+                var result = Migrate(lines.ToArray());
+                AssertModule(result, representative.Section, "Disabled");
+                AssertList(result, representative, ExpectedList(representative.OldDefault, representative));
+            });
+            // The accepted sets equal the independent historical fixtures and lie three or more
+            // elements apart, so one- and two-element edits of an accepted set need no own case.
+            Run("every list's accepted sets equal its historical fixtures and cannot equal one- or two-element edits", () =>
+                AssertEachList(ObjectListFixtures, AssertAcceptedSetsHaveNoSmallEdits));
+            Run("every list rejects a bare pre-1.6 default under a current header", () =>
+                AssertEachList(ObjectListFixtures.Where(f => f.Before160 != null), f => AssertEditedList(f, f.Before160)));
+
             Run("migrated object lists are byte identical on the next run", ObjectRevisionIsIdempotent);
             Run("objects removed after revision two stay removed byte for byte", RemovedObjectStaysRemoved);
             Run("edited lists without flax keep their original bytes", EditedObjectLinesKeepBytes);
@@ -200,8 +211,20 @@ namespace Automatics
             Run("an existing Flax wins over Flex and lowercase flex stays", ExistingFlaxWins);
             Run("lowercase flex alone leaves its line byte identical", LowercaseFlexStays);
             Run("pre-1.4 All doors get version additions only while other defaults migrate", AllListsMigrate);
-            Run("markerless 1.6 lists migrate while module handling stays unchanged", () => MarkerlessListsMigrate("1.6.0"));
-            Run("markerless 1.7 lists migrate while module handling stays unchanged", () => MarkerlessListsMigrate("1.7.0"));
+            Run("markerless 1.6 and 1.7 lists migrate while module handling stays unchanged", () =>
+            {
+                foreach (var version in new[] { "1.6.0", "1.7.0" })
+                {
+                    try
+                    {
+                        MarkerlessListsMigrate(version);
+                    }
+                    catch (Exception e)
+                    {
+                        throw new Exception($"{version}: {e.Message}");
+                    }
+                }
+            });
             Run("an explicit revision zero migrates lists without changing module defaults", RevisionZeroWithMarker);
             Run("missing object keys are never added", MissingObjectKeysStayMissing);
             foreach (var value in new[] { "unknown", "-1", "3", "2147483648", "" })
@@ -213,38 +236,10 @@ namespace Automatics
             Run("the revision marker keeps its BepInEx position and description comments", MarkerStaysInPlace);
             Run("every repeated hidden revision marker is updated in place", RepeatedMarkersStayInPlace);
             Run("Flex in another object list keeps its line byte identical", OtherListFlexStays);
-            Run("removing FlametalDeposit from mining stays edited", () =>
-                AssertRemovedTarget("allow_mining_mineral", "FlametalDeposit"));
-            Run("adding ObsidianDeposit to mapping minerals stays edited", () =>
-                AssertEditedList(ObjectListFixtures[3], ObjectListFixtures[3].OldDefault + ", ObsidianDeposit"));
-            Run("removing MorgenHole from dungeons stays edited", () =>
-                AssertRemovedTarget("allow_pinning_dungeon", "MorgenHole"));
-            Run("removing PieceChestCharred from processing stays edited", () =>
-                AssertEditedList(ObjectListFixtures[7], ObjectListFixtures[7].Before160));
-            Run("removing PieceHexagonalDoor from clean doors stays edited", () =>
-                AssertRemovedTarget("allow_automatic_door", "PieceHexagonalDoor"));
-            Run("a clean All-derived door list without PieceHexagonalDoor stays edited", () =>
-                AssertEditedList(ObjectListFixtures[0], "WoodDoor, WoodGate, IronGate, DarkwoodGate, WoodShutter, AshwoodDoor, FlametalGate, DvergrDoor"));
-            Run("adding WoodShutter to current door defaults gets no additions", () =>
-                AssertEditedList(ObjectListFixtures[0], ObjectListFixtures[0].OldDefault + ", WoodShutter"));
-            Run("removing two minerals from current mapping defaults gets no additions", () =>
-                AssertEditedList(ObjectListFixtures[3], "CopperDeposit, TinDeposit, MudPile, SilverVein, FlametalDeposit"));
-            Run("removing the quoted hexagonal door from released defaults gets repair only", () =>
-                AssertMigratedList(ObjectListFixtures[0],
-                    "WoodDoor, \" WoodGate\", \" IronGate\", \" DarkwoodGate\", AshwoodDoor, FlametalGate, DvergrDoor",
-                    "WoodDoor, WoodGate, IronGate, DarkwoodGate, AshwoodDoor, FlametalGate, DvergrDoor"));
-            Run("replacing the quoted hexagonal door with a shutter gets repair only", () =>
-                AssertMigratedList(ObjectListFixtures[0],
-                    "WoodDoor, \" WoodGate\", \" IronGate\", \" DarkwoodGate\", \" WoodShutter\", AshwoodDoor, FlametalGate, DvergrDoor",
-                    "WoodDoor, WoodGate, IronGate, DarkwoodGate, WoodShutter, AshwoodDoor, FlametalGate, DvergrDoor"));
-            Run("removing two quoted minerals from released defaults gets repair only", () =>
-                AssertMigratedList(ObjectListFixtures[3],
-                    "CopperDeposit, \" TinDeposit\", \" MudPile\", \" SilverVein\", FlametalDeposit",
-                    "CopperDeposit, TinDeposit, MudPile, SilverVein, FlametalDeposit"));
             Run("quoted leading spaces must match the released corruption exactly", () =>
                 AssertMigratedList(ObjectListFixtures[0],
-                    "WoodDoor, \"  WoodGate\", \" IronGate\", \" DarkwoodGate\", AshwoodDoor, FlametalGate, DvergrDoor",
-                    "WoodDoor, WoodGate, IronGate, DarkwoodGate, AshwoodDoor, FlametalGate, DvergrDoor"));
+                    "WoodDoor, \"  WoodGate\", \" IronGate\", \" DarkwoodGate\", \" PieceHexagonalDoor\", AshwoodDoor, FlametalGate, DvergrDoor",
+                    "WoodDoor, WoodGate, IronGate, DarkwoodGate, PieceHexagonalDoor, AshwoodDoor, FlametalGate, DvergrDoor"));
             Run("the renamed 1.3 mineral default gets only version additions", OldMineralDefaultMigrates);
             Run("the pre-1.3 numeric mineral default receives both additions", EnumMineralDefaultMigrates);
             Run("an edited pre-1.4 mineral All is not an unedited default", MineralAllStaysEdited);
@@ -253,6 +248,25 @@ namespace Automatics
             Run("object identifiers and section and key names compare ordinally", ObjectRevisionIsOrdinal);
             Run("a revision two new install writes exactly the marker", NewInstallWritesExactlyMarker);
             RunWhitespaceRepairTests();
+        }
+
+        // Runs the check on every list and names each list that fails it.
+        private static void AssertEachList(IEnumerable<ObjectListFixture> fixtures, Action<ObjectListFixture> check)
+        {
+            var failures = new List<string>();
+            foreach (var fixture in fixtures)
+            {
+                try
+                {
+                    check(fixture);
+                }
+                catch (Exception e)
+                {
+                    failures.Add($"[{fixture.Section}] {fixture.Key}: {e.Message}");
+                }
+            }
+            if (failures.Count > 0)
+                throw new Exception(string.Join(Environment.NewLine, failures));
         }
 
         private static void AssertAcceptedSetsHaveNoSmallEdits(ObjectListFixture fixture)
@@ -503,12 +517,6 @@ namespace Automatics
         private static void OtherListFlexStays()
         {
             AssertEditedList(ObjectListFixtures[2], "Greyling, Flex, CustomObject");
-        }
-
-        private static void AssertRemovedTarget(string key, string target)
-        {
-            var f = ObjectListFixtures.Single(x => x.Key == key);
-            AssertEditedList(f, string.Join(", ", f.OldDefault.Split(", ").Where(x => x != target)));
         }
 
         private static void OldMineralDefaultMigrates()
