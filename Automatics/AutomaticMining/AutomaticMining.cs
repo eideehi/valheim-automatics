@@ -81,20 +81,85 @@ namespace Automatics.AutomaticMining
                     where x._zNetView.IsValid() &&
                           x._zNetView.HasOwner() &&
                           (x.transform.position - origin).sqrMagnitude <= cullSqr &&
-                          IsAllowMiningMinerals(x._component)
+                          IsAllowedMineral(x._component)
                     orderby Vector3.Distance(origin, x.transform.position)
                     select x).ToList();
 
             foreach (var automaticMining in automaticMinings)
                 if (automaticMining.Mining(player))
                     return;
+        }
 
-            bool IsAllowMiningMinerals(Component component)
+        internal static bool IsAllowedMineral(Component component)
+        {
+            var name = Objects.GetName(component);
+            return ValheimObject.Mineral.GetIdentify(name, out var identifier) &&
+                   Config.AllowMiningMinerals.Contains(identifier);
+        }
+
+        // The targets area mining may add to a swing: every hit collider of an allowed mineral
+        // within radius of center that the underground rule lets Automatic Mining mine, the same
+        // registry and rules TryMining uses. The caller applies the tool tier, what the swing
+        // already hit and the cap.
+        internal static void CollectAreaTargets(Player player, Vector3 center, float radius,
+            List<AreaMining.Target> targets)
+        {
+            // The same root-pivot margin as TryMining; the per-collider bounds check is exact.
+            var cullSqr = (radius + 24f) * (radius + 24f);
+            var equipments = player.GetInventory().GetEquippedItems();
+            foreach (var automaticMining in AllInstance)
             {
-                var name = Objects.GetName(component);
-                return ValheimObject.Mineral.GetIdentify(name, out var identifier) &&
-                       Config.AllowMiningMinerals.Contains(identifier);
+                if (!automaticMining._zNetView.IsValid() || !automaticMining._zNetView.HasOwner())
+                    continue;
+                if ((automaticMining.transform.position - center).sqrMagnitude > cullSqr) continue;
+                if (!IsAllowedMineral(automaticMining._component)) continue;
+                if (!automaticMining.GetMiningTarget(out var parent, out var minToolTier)) continue;
+
+                var colliders = GetColliders(parent);
+                if (colliders == null) continue;
+                foreach (var collider in colliders)
+                {
+                    // A destroyed rock section keeps its collider on an inactive object.
+                    if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy)
+                        continue;
+
+                    // The bounds only reject: a rotated or irregular rock fills little of them.
+                    if (collider.bounds.SqrDistance(center) > radius * radius) continue;
+                    if (!GetSurfacePoint(collider, center, out var point)) continue;
+                    var distance = Vector3.Distance(point, center);
+                    if (distance > radius) continue;
+                    if (!IsMineableMineral(collider, equipments)) continue;
+
+                    targets.Add(new AreaMining.Target(parent, automaticMining._component,
+                        automaticMining._zNetView, collider, minToolTier, point, distance));
+                }
             }
+        }
+
+        // A point on the collider's surface near origin. Unity finds the closest point only on
+        // primitive and convex mesh colliders; on any other collider the point is where a ray from
+        // origin toward the bounds centre enters it, which is never nearer than the closest point.
+        // An origin inside such a collider finds no entry, and the collider is not reached.
+        private static bool GetSurfacePoint(Collider collider, Vector3 origin, out Vector3 point)
+        {
+            if (collider is BoxCollider || collider is SphereCollider || collider is CapsuleCollider ||
+                collider is MeshCollider mesh && mesh.convex)
+            {
+                point = collider.ClosestPoint(origin);
+                return true;
+            }
+
+            var toCenter = collider.bounds.center - origin;
+            var length = toCenter.magnitude;
+            if (length > 0.001f &&
+                collider.Raycast(new Ray(origin, toCenter / length), out var hit, length))
+            {
+                point = hit.point;
+                return true;
+            }
+
+            point = default;
+            return false;
         }
 
         private Component GetDestructibleComponent()

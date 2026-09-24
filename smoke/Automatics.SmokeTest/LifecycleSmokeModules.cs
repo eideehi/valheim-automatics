@@ -22,6 +22,7 @@ using FarmingRoles = Automatics.AutomaticFarming.ContainerRoles;
 using FeedingComponent = Automatics.AutomaticFeeding.AutomaticFeeding;
 using FeedingModule = Automatics.AutomaticFeeding.Module;
 using FeedingPatches = Automatics.AutomaticFeeding.Patches;
+using MiningArea = Automatics.AutomaticMining.AreaMining;
 using MiningComponent = Automatics.AutomaticMining.AutomaticMining;
 using MiningConfig = Automatics.AutomaticMining.Config;
 using MiningModule = Automatics.AutomaticMining.Module;
@@ -570,6 +571,17 @@ namespace Automatics.SmokeTest
                                 record.Cycle(name, cycle, timerCountBeforeDisable > 0 && count == 0,
                                     $"the {timerCountBeforeDisable} mining timer(s) present before disabling were cleared",
                                     $"the mining timer table had {timerCountBeforeDisable} entry or entries before disabling and holds {count} while off");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    // A swing context lives only inside one Attack.DoMeleeAttack call, and the
+                    // disable clears it as well.
+                    new ExtraCheck("area_swing_cleared", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            var name = record.Check("area_swing_cleared");
+                            record.Cycle(name, cycle, !MiningArea.SwingActive && !MiningArea.Expanding,
+                                "no area-mining swing is open while off",
+                                "an area-mining swing is still open while the module is off");
                             return Enumerable.Empty<object>().GetEnumerator();
                         }),
                     new ExtraCheck("components_current_generation", Phase.AfterOn,

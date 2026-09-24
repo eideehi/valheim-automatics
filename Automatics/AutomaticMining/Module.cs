@@ -94,6 +94,7 @@ namespace Automatics.AutomaticMining
         private static void Cleanup()
         {
             MiningTimers.Clear();
+            AreaMining.Reset();
         }
 
         [AutomaticsInitializer(6)]

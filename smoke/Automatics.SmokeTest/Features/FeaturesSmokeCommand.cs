@@ -33,7 +33,7 @@ namespace Automatics.SmokeTest
         {
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("pickup", PickupFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("pin", PinFeatureSmoke.Run),
-            new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("mining", null),
+            new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("mining", MiningFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("planting", null),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("guide", null),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("supply", null)

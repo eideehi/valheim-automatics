@@ -154,6 +154,74 @@ elif ((damage_line >= use_line || use_line >= success_line)); then
   fail "each mining hit must apply Damage, then UsePickaxe, then mark the candidate mined"
 fi
 
+# Area mining: a swing's extra hits wear the pickaxe per target, and gain no skill, stamina or
+# Automatic Mining bookkeeping of their own.
+source_file="Automatics/AutomaticMining/AreaMining.cs"
+if [[ ! -r "$source_file" ]]; then
+  fail "cannot read $source_file; the area mining checks were not run"
+else
+  reject_source_pattern \
+    "RaiseSkill" \
+    "area mining must not raise a skill: the swing already raised it once"
+  reject_source_pattern \
+    "UsePickaxe|UseStamina|AddNoise" \
+    "area mining must not reuse Automatic Mining's per-hit bookkeeping or charge stamina: only durability is charged per extra target"
+  reject_source_pattern \
+    "m_durability -= [A-Za-z_.]*m_useDurabilityDrain;" \
+    "area mining must not subtract the raw durability drain: vanilla scales it by Game.m_durabilityRate"
+  require_source_pattern \
+    "if \\(!_swing \\|\\| _expanding" \
+    "recording and expansion must ignore the extra hits area mining applies itself"
+  require_source_pattern \
+    "if \\(_swing \\|\\| _expanding\\) return false;" \
+    "a melee attack nested inside a swing must not reset the open swing context"
+  require_source_pattern \
+    "if \\(!IsStanding\\(target\\)\\) continue;" \
+    "each extra target must be revalidated right before its hit, without spending durability or the cap"
+
+  expand_body="$(extract_block "internal static void Expand\\(\\)")"
+  expanding_line="$(printf '%s\n' "$expand_body" | first_match_line '_expanding = true;')"
+  standing_line="$(printf '%s\n' "$expand_body" | first_match_line 'if \(!IsStanding\(target\)\) continue;')"
+  check_line="$(printf '%s\n' "$expand_body" | first_match_line '_weapon\.m_durability <= 0f\) break;')"
+  damage_line="$(printf '%s\n' "$expand_body" | first_match_line 'target\.Destructible\.Damage\(hit\);')"
+  charge_line="$(printf '%s\n' "$expand_body" | first_match_line '_weapon\.m_durability -= shared\.m_useDurabilityDrain \* Game\.m_durabilityRate;')"
+  cleared_line="$(printf '%s\n' "$expand_body" | first_match_line '_expanding = false;')"
+  if [[ -z "$expand_body" || -z "$expanding_line" || -z "$check_line" || -z "$damage_line" ||
+        -z "$charge_line" || -z "$cleared_line" || "$expanding_line" == "ERROR" ||
+        "$check_line" == "ERROR" || "$damage_line" == "ERROR" || "$charge_line" == "ERROR" ||
+        "$cleared_line" == "ERROR" ]]; then
+    fail "could not locate the guard, durability check, Damage, durability charge and guard reset in the area expansion; their ordering check was not run"
+  elif [[ -z "$standing_line" || "$standing_line" == "ERROR" ]] || ((standing_line >= check_line)); then
+    fail "area expansion must revalidate a target before it checks and spends durability on it"
+  elif ((expanding_line >= check_line || check_line >= damage_line || damage_line >= charge_line ||
+         charge_line >= cleared_line)); then
+    fail "area expansion must raise its guard, check durability before each extra hit, apply Damage, charge durability per extra target, then lower the guard"
+  fi
+fi
+
+# The expansion runs once per swing, from the postfix only; the finalizer only clears the swing.
+source_file="Automatics/AutomaticMining/Patches.cs"
+if [[ ! -r "$source_file" ]]; then
+  fail "cannot read $source_file; the area mining patch checks were not run"
+else
+  postfix_body="$(extract_block "private static void Attack_DoMeleeAttack_Postfix\\(")"
+  finalizer_body="$(extract_block "private static void Attack_DoMeleeAttack_Finalizer\\(")"
+  expand_calls="$(rg -c "AreaMining\.Expand\(" "$source_file" || true)"
+  if [[ "$(printf '%s\n' "$postfix_body" | tr -d '[:space:]')" != *'(bool__state){if(__state)AreaMining.Expand();}' ]]; then
+    fail "the DoMeleeAttack postfix must only expand the swing its own prefix opened"
+  fi
+  if [[ "$(printf '%s\n' "$finalizer_body" | tr -d '[:space:]')" != *'(bool__state){if(__state)AreaMining.EndSwing();}' ]]; then
+    fail "the DoMeleeAttack finalizer must only clear the swing its own prefix opened"
+  fi
+  require_source_pattern \
+    "__state = AreaMining\\.BeginSwing\\(" \
+    "the DoMeleeAttack prefix must own the swing only when it opened the context"
+
+  if [[ "$expand_calls" != "1" ]]; then
+    fail "area expansion must be called exactly once, from the DoMeleeAttack postfix: found ${expand_calls:-0}"
+  fi
+fi
+
 if ((failures > 0)); then
   exit 1
 fi

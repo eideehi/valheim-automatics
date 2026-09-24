@@ -1320,6 +1320,23 @@ Specify a shortcut key to attempt mining. If a valid shortcut key is assigned to
 
 - Default value:
 
+### Area Mining / [enable_area_mining]
+Specify whether a pickaxe swing that hits an allowed mineral also hits other allowed minerals and rock sections near the hit point. Each extra target wears the pickaxe as a hit does; stamina and skill gain stay once per swing. Requires the module to be running.
+
+- Default value: true
+
+### Area Mining Radius / [area_mining_radius]
+Specify how far from the hit point area mining reaches. (Unit: meters)
+
+- Default value: 3
+- Acceptable value range: From 1 to 10
+
+### Area Mining Max Targets / [area_mining_max_targets]
+Specify the maximum number of extra minerals or rock sections one swing can hit.
+
+- Default value: 8
+- Acceptable value range: From 1 to 32
+
 ## [ #9 Automatic Storage ] / [automatic_storage]
 ### Disable Module / [module]
 You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.

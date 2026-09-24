@@ -169,13 +169,16 @@ mining_config="$mining_dir/Config.cs"
 mining_module="$mining_dir/Module.cs"
 mining_patches="$mining_dir/Patches.cs"
 mining_component="$mining_dir/AutomaticMining.cs"
+mining_area="$mining_dir/AreaMining.cs"
 mining_smoke="smoke/Automatics.SmokeTest/LifecycleSmokeModules.cs"
 
-# The two player hooks are the only boundaries at which a mining pass may observe a stop.
-# OnPlayerAwake only clears timers, and AttachMineral is discovery rather than a world effect.
+# The two player hooks and the swing prefix are the only boundaries at which mining may observe
+# a stop. OnPlayerAwake only clears timers, AttachMineral is discovery rather than a world effect,
+# and the area-mining damage recorders and expansion act only inside a swing the prefix opened.
 mining_entries=(
   "Module.OnPlayerUpdate|$mining_module|private static void OnPlayerUpdate\\(|if (!Module.Running) return;"
   "Module.OnPlayerFixedUpdate|$mining_module|private static void OnPlayerFixedUpdate\\(|if (!Module.Running) return;"
+  "Patches.Attack_DoMeleeAttack_Prefix|$mining_patches|private static void Attack_DoMeleeAttack_Prefix\\(|if (!Module.Running) return;"
 )
 
 # Every bind in Automatic Mining, in its persisted order. The patterns include the defaults so
@@ -190,6 +193,9 @@ mining_config_entries=(
   'allow_mining_underground_minerals|config *\. *Bind *\( *"allow_mining_underground_minerals" *, *true *\)'
   'need_to_equip_wishbone_for_mining_underground_minerals|config *\. *Bind *\( *"need_to_equip_wishbone_for_mining_underground_minerals" *, *true *\)'
   'mining_key|config *\. *Bind *\( *"mining_key" *, *new KeyboardShortcut *\( *\) *\)'
+  'enable_area_mining|config *\. *Bind *\( *"enable_area_mining" *, *true *\)'
+  'area_mining_radius|config *\. *Bind *\( *"area_mining_radius" *, *3f *, *\( *1f *, *10f *\) *\)'
+  'area_mining_max_targets|config *\. *Bind *\( *"area_mining_max_targets" *, *8 *, *\( *1 *, *32 *\) *\)'
 )
 
 feeding_dir="Automatics/AutomaticFeeding"
@@ -472,7 +478,7 @@ for source_file in \
   "$storage_config" "$storage_module" \
   "$door_config" "$door_module" "$door_patches" "$door_component" \
   "$door_smoke" "$door_world_smoke" "$door_startup_smoke" \
-  "$mining_config" "$mining_module" "$mining_patches" "$mining_component" "$mining_smoke" \
+  "$mining_config" "$mining_module" "$mining_patches" "$mining_component" "$mining_area" "$mining_smoke" \
   "$feeding_config" "$feeding_module" "$feeding_patches" "$feeding_component" \
   "$feeding_globals" "$feeding_animal_type" "$feeding_smoke" \
   "${unmigrated_module_configs[@]}"; do
@@ -3747,9 +3753,10 @@ require_mining_entries_and_attach_paths() {
   local declarations=0
   local inside=0
 
-  require_item_entries_open_with_the_gate mining_entries "$mining_dir" "$mining_module" 2
+  require_item_entries_open_with_the_gate mining_entries "$mining_dir" "$mining_module" 3
   require_item_entries_never_recheck_after_a_change mining_entries \
-    'AutomaticMining *\. *TryMining *\(' "$mining_component" "$mining_config"
+    'AutomaticMining *\. *TryMining *\(|AreaMining *\. *BeginSwing *\(' \
+    "$mining_component" "$mining_config" "$mining_area"
 
   stripped="$(strip_code "$mining_module")"
   found="$(printf '%s\n' "$stripped" | count_hits "$module_running_read")"
@@ -3906,8 +3913,8 @@ require_mining_cleanup_contract() {
 
   body="$(method_body "$mining_module" 'private static void Cleanup\(\)')"
   compact="$(printf '%s\n' "$body" | sed ':join;N;$!b join;s/[[:space:]]//g')"
-  if [[ "$compact" != 'privatestaticvoidCleanup(){MiningTimers.Clear();}' ]]; then
-    fail "Mining Cleanup must only clear MiningTimers"
+  if [[ "$compact" != 'privatestaticvoidCleanup(){MiningTimers.Clear();AreaMining.Reset();}' ]]; then
+    fail "Mining Cleanup must only clear MiningTimers and the area-mining swing context"
   fi
 
   body="$(method_body "$mining_module" 'private static void OnPlayerAwake\(')"
@@ -3951,8 +3958,8 @@ require_mining_config_contract() {
   local line
   local previous=0
 
-  if ((${#mining_config_entries[@]} != 9)); then
-    fail "the Mining config table must name exactly its nine persisted entries: found ${#mining_config_entries[@]}"
+  if ((${#mining_config_entries[@]} != 12)); then
+    fail "the Mining config table must name exactly its twelve persisted entries: found ${#mining_config_entries[@]}"
   fi
 
   stripped="$(strip_code "$mining_config" keep)"
@@ -3970,7 +3977,7 @@ require_mining_config_contract() {
     elif [[ -z "$line" ]]; then
       fail "Mining config must bind $key with its audited default and constraints"
     elif ((line <= previous)); then
-      fail "Mining config must keep its nine entries in persisted order; $key is out of order"
+      fail "Mining config must keep its twelve entries in persisted order; $key is out of order"
     else
       previous=$line
     fi

@@ -41,7 +41,7 @@ Automatically repairs items when the player is near usable crafting stations or,
 
 ### Automatic mining
 
-Automatically mines allowed minerals around the player. Mining can run at the configured interval or only when the mining shortcut is pressed, and it can require a pickaxe or wishbone for underground minerals.
+Automatically mines allowed minerals around the player. Mining can run at the configured interval or only when the mining shortcut is pressed, and it can require a pickaxe or wishbone for underground minerals. With `Area Mining` (on by default), a pickaxe swing at an allowed mineral also hits other allowed minerals and rock sections nearby, wearing the pickaxe once per extra target.
 
 ### Automatic storage
 

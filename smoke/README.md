@@ -453,7 +453,8 @@ checks:
 | `mining_off_stopped_at_request` | In the frame of the disable request the module remains applied but starts no new mining pass |
 | `mining_off_probes_as_expected` | The three Mining hook handlers and every `AutomaticMining` component are gone, `AllInstance.Count` is zero, and each Mining-owned handler's own occurrence in its hook is zero |
 | `mining_timers_cleared` | A non-empty `MiningTimers` table observed immediately before disabling is empty while the module is off; if it was already empty, cleanup was not observable and the check SKIPs |
-| `mining_on_patches_applied` | The patches under Mining's Harmony id exactly match `Automatics.AutomaticMining.Patches` |
+| `mining_area_swing_cleared` | No area-mining swing is open, and no extra hit is being applied, while the module is off |
+| `mining_on_patches_applied` | The patches under Mining's Harmony id exactly match `Automatics.AutomaticMining.Patches`, including the swing and rock damage patches of area mining |
 | `mining_on_probes_at_baseline` | All three handlers are restored, every currently eligible unique `Destructible`, `MineRock` and `MineRock5` GameObject with a ZDO has one component, and `AllInstance.Count` matches the active components rather than a stale baseline |
 | `mining_components_current_generation` | Every eligible mineral object, including inactive objects, has an `AutomaticMining` component stamped with the current activation generation |
 | `mining_interval_timer_resumed` | When mining runs on an interval, its hook takes up its timer again within 30 frames of the enable; SKIP when mining runs on a key or is turned off |
@@ -877,6 +878,49 @@ shared session cleanup, and the drop never enters the inventory. Cleanup failure
 the session for retry. Physical hotkey input, save/reload persistence, and a
 module off/on with the saved pin remain in-game verification steps outside this
 section; use `automatics_smoke_lifecycle mapping` for the module lifecycle checks.
+
+#### `mining`
+
+Run `automatics_smoke_features mining` in a single-player world with Automatic
+Mining enabled and `enable_area_mining` on, standing on open level ground with
+no allowed mineral of your world nearby (the section SKIPs and names the
+distance when one is), no building piece or other destructible object within
+about 4 m in front of you (the section SKIPs and names it), and two free
+inventory slots. It spawns two non-persistent deposits of the earlier biomes
+about 1.8 m in front of you, side by side, and a third to the other side, a
+little beyond `area_mining_radius`, all of the first kind `allow_mining_mineral`
+accepts, and gives every section a health no hit reaches, so nothing breaks or
+drops. It adds a pickaxe whose tool
+tier reaches the deposit and equips it, turns you to face the deposits, lowers
+your view a little, and starts a real attack with `Humanoid.StartAttack`. An
+observer patch, removed at the end of the section, records the melee call, every
+rock damage call and every Pickaxes skill raise. While it is in place, it also
+guards your world: a hit of yours on anything but the test deposits is dropped,
+and so is the terrain operation a pickaxe hit on the ground would spawn, so a
+swing that misses digs nothing.
+
+| Check | Asserts |
+|---|---|
+| `mining_area_expands` | The swing hit a test deposit, and area mining added at least one extra hit, each seen as a damage call |
+| `mining_area_cap_and_radius` | At most `area_mining_max_targets` extra hits, each within `area_mining_radius` of the swing's first mineral hit, none on a section or object the swing or an earlier extra hit already hit, and all on the test deposits |
+| `mining_area_damage_applied` | Every extra target lost health |
+| `mining_area_outside_radius_untouched` | The third deposit, which the physics engine's own sphere overlap at the swing's first mineral hit confirms lies beyond `area_mining_radius`, took no hit and kept its health (SKIP when it came within the radius) |
+| `mining_area_durability_per_target` | The pickaxe lost the vanilla per-hit drain, scaled by the world durability rate, once for the swing and once per extra target |
+| `mining_area_skill_once` | The Pickaxes skill was raised exactly once for the swing |
+| `mining_area_not_from_automatic_mining` | A hit through Automatic Mining's own hit path on a test deposit adds no extra hit |
+| `mining_area_not_from_other_weapons` | A real swing with an added club that hits a test deposit adds no extra hit |
+| `mining_world_guarded` | The section ran to its end under the guard; the note counts the hits on other objects and the terrain operations it dropped |
+| `mining_settings_restored` | Reported only when the section turned `enable_automatic_mining` off: it is back at your value |
+
+When Automatic Mining would mine on its timer, `enable_automatic_mining` is
+turned off for the section, so it cannot mine the test deposits with the test
+pickaxe, and put back at its end. An attack that does not start within 1 second,
+or triggers no melee hit within 3 seconds, SKIPs the swing's checks and names
+the reason; so does a swing that hits none of the test deposits. At the end
+the added pickaxe and club are removed from your inventory, the items you had
+equipped are equipped again, and your view pitch and Pickaxes skill level are
+put back. The swings still count toward your mining statistics and use some
+stamina. Do not move or attack while the section runs.
 
 ## Remove
 

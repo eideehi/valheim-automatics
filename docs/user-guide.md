@@ -459,9 +459,22 @@ Key settings:
 | `Allow Mining Underground Minerals` | Allows underground minerals to be mined. |
 | `Need To Wishbone For Mining Underground Minerals` | Requires Wishbone for underground mineral mining. |
 | `Attempt Mining` | Optional shortcut. When assigned, mining runs only when the shortcut is pressed. |
+| `Area Mining` | When your own pickaxe swing hits an allowed mineral, also hits other allowed minerals and rock sections near the hit. On by default. |
+| `Area Mining Radius` | How far from the hit area mining reaches (3 meters by default, 1 to 10). |
+| `Area Mining Max Targets` | How many extra minerals or rock sections one swing can hit (8 by default, 1 to 32). |
 
 Automatics checks the pickaxe tool tier against the mineral, uses pickaxe
 durability, raises the Pickaxes skill, and applies the pickaxe hit effects.
+
+Area mining applies the same hit as your swing to the nearest allowed targets
+the swing did not already hit, following the tool tier, `Allow Mining Mineral`
+and the underground mineral settings. Other sections of a large rock count as
+separate targets. Each extra target wears the pickaxe by one hit's durability,
+scaled by the world's durability modifier, and stops when the pickaxe breaks.
+Stamina and the Pickaxes skill gain stay once per swing. Only your own pickaxe
+swings expand: hits by automatic mining, other weapons and other characters do
+not, and the extra hits never expand again. It works only while this module is
+running.
 
 ## Automatic storage
 

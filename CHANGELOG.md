@@ -1,4 +1,5 @@
 #### Unreleased
+- Automatic Mining adds area mining, on by default while the module runs: when your pickaxe swing hits an allowed mineral, it also hits up to 8 other allowed minerals or rock sections within 3 meters of the hit, following the tool tier, allow list and underground rules. Each extra target wears the pickaxe by one hit's durability, scaled by the world's durability modifier; stamina and skill gain stay once per swing.
 - Added an optional shortcut to save a map pin for the object or ground you look at, using object names and icon-pack icons and skipping nearby duplicates.
 - Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair and Automatic Storage can all be turned on and off while the game is running.
 - Automatic Repair and Automatic Mining now wear your tools by the world's durability modifier, as the game does when you repair or mine by hand; on a default world nothing changes.

@@ -17,9 +17,13 @@ namespace Automatics.AutomaticMining
         private static ConfigEntry<bool> _allowMiningUndergroundMinerals;
         private static ConfigEntry<bool> _needToEquipWishboneForUndergroundMinerals;
         private static ConfigEntry<KeyboardShortcut> _miningKey;
+        private static ConfigEntry<bool> _enableAreaMining;
+        private static ConfigEntry<float> _areaMiningRadius;
+        private static ConfigEntry<int> _areaMiningMaxTargets;
 
         public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
         public static bool EnableAutomaticMining => _enableAutomaticMining.Value;
+        internal static ConfigEntry<bool> EnableAutomaticMiningEntry => _enableAutomaticMining;
         public static float MiningInterval => _miningInterval.Value;
         public static int MiningRange => _miningRange.Value;
         public static StringList AllowMiningMinerals => _allowMiningMineral.Value;
@@ -27,6 +31,9 @@ namespace Automatics.AutomaticMining
         public static bool AllowMiningUndergroundMinerals => _allowMiningUndergroundMinerals.Value;
         public static bool NeedToEquipWishboneForUndergroundMinerals => _needToEquipWishboneForUndergroundMinerals.Value;
         public static KeyboardShortcut MiningKey => _miningKey.Value;
+        public static bool EnableAreaMining => _enableAreaMining.Value;
+        public static float AreaMiningRadius => _areaMiningRadius.Value;
+        public static int AreaMiningMaxTargets => _areaMiningMaxTargets.Value;
 
         public static void Initialize()
         {
@@ -47,6 +54,9 @@ namespace Automatics.AutomaticMining
             _allowMiningUndergroundMinerals = config.Bind("allow_mining_underground_minerals", true);
             _needToEquipWishboneForUndergroundMinerals = config.Bind("need_to_equip_wishbone_for_mining_underground_minerals", true);
             _miningKey = config.Bind("mining_key", new KeyboardShortcut());
+            _enableAreaMining = config.Bind("enable_area_mining", true);
+            _areaMiningRadius = config.Bind("area_mining_radius", 3f, (1f, 10f));
+            _areaMiningMaxTargets = config.Bind("area_mining_max_targets", 8, (1, 32));
         }
     }
 }
