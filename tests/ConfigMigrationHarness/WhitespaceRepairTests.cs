@@ -54,7 +54,7 @@ namespace Automatics
                 var lines = fixtures.SelectMany(f => new[] { "[" + f.Section + "]",
                     f.Key + " = \" First \", \" Second\", First" });
                 var content = "# Automatics v1.7.0\n" + string.Join("\n", lines) +
-                    "\n[hidden]\ndefaults_revision = 3\n";
+                    "\n[hidden]\ndefaults_revision = 3\npickup_key_decoupled = 1\n";
                 AssertBytesUnchanged(content);
             });
             Run("whitespace repair leaves lists outside the released migration alone", () =>

@@ -1384,9 +1384,9 @@ Specify the interval within which objects are automatically pickup. Setting it t
 - Acceptable value range: From 0 to 4
 
 ### Pickup All Nearby / [pickup_all_nearby_key]
-Interacting with pickable objects using this key makes it possible to pick up the same object in a range at once. If a valid shortcut key is assigned to this option, pickup at regular intervals is disabled.
+Interacting with pickable objects using this key makes it possible to pick up the same object in a range at once. Periodic automatic pickup keeps running at its interval whether or not this key is assigned.
 
-- Default value:
+- Default value: E + LeftShift
 
 ## [ #11 Automatic Farming ] / [automatic_farming]
 ### Disable Module / [module]

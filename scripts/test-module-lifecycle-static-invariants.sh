@@ -1057,16 +1057,18 @@ require_every_yield_is_guarded() {
     return
   fi
 
-  if ((yields != 5)); then
-    fail "Pickup() must suspend at exactly the 5 known points (BLOCKER): found $yields; a new one needs its own guard and this count updated deliberately"
+  # 3: the idle wait and the two between the periodic pass's kinds. The key pass resolves its
+  # kind and name when the key goes down, so it no longer suspends between kinds.
+  if ((yields != 3)); then
+    fail "Pickup() must suspend at exactly the 3 known points (BLOCKER): found $yields; a new one needs its own guard and this count updated deliberately"
   fi
 
   if ((breaks != yields)); then
     fail "Pickup() must fold the iterator after every yield (BLOCKER): $yields yields but $breaks occurrences of \"if (!Alive) yield break;\""
   fi
 
-  if ((continues != 4)); then
-    fail "Pickup() must idle rather than fold on the reversible conditions after each of the 4 mid-pass yields (R1.5a / MAJOR-6): found $continues occurrences of \"if (!Live) continue;\""
+  if ((continues != 2)); then
+    fail "Pickup() must idle rather than fold on the reversible conditions after each of the 2 mid-pass yields (R1.5a / MAJOR-6): found $continues occurrences of \"if (!Live) continue;\""
   fi
 
   # The idle wait is the fifth yield and the one the loop head owns. Its guard is Alive only,

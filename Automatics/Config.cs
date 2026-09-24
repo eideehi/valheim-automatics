@@ -84,6 +84,17 @@ namespace Automatics
                         "Automatics writes this entry; do not change it.";
                 });
 
+            // The same shape for the Pickup All Nearby key marker: "0" lets a failed write retry.
+            Instance.Bind(ConfigMigration.DefaultsRevisionSection, ConfigMigration.PickupKeyDecoupledKey,
+                "0", initializer: x =>
+                {
+                    x.Browsable = false;
+                    x.ReadOnly = true;
+                    x.Description =
+                        "Whether the interval of a bound Pickup All Nearby key has been set to 0 once. " +
+                        "Automatics writes this entry; do not change it.";
+                });
+
             Instance.ChangeSection("system");
             _logEnabled = Instance.Bind("enable_logging", false);
             _allowedLogLevel = Instance.Bind("log_level_to_allow_logging",

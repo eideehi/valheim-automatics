@@ -508,16 +508,16 @@ Modes:
 
 | Mode | Behavior |
 | --- | --- |
-| No `Pickup All Nearby` shortcut assigned | Automatics runs periodic pickup using `Automatic Pickup Interval`. |
-| `Pickup All Nearby` shortcut assigned | Periodic pickup is disabled. Hold the shortcut while interacting with a pickable object or item to pick up matching nearby objects. |
+| Periodic pickup | Runs at `Automatic Pickup Interval` whether or not a `Pickup All Nearby` shortcut is assigned. Set the interval to `0` to turn it off. |
+| `Pickup All Nearby` shortcut (Left Shift + E by default) | Hold the shortcut while interacting with a pickable object or item to pick up matching nearby objects. |
 
 Key settings:
 
 | Setting | Effect |
 | --- | --- |
 | `Automatic Pickup Range` | Controls how far Automatics searches for pickup targets. |
-| `Automatic Pickup Interval` | Controls periodic pickup when no shortcut is assigned. Set it to `0` to disable periodic pickup. |
-| `Pickup All Nearby` | Optional shortcut for targeted pickup. |
+| `Automatic Pickup Interval` | Controls periodic pickup. Set it to `0` to disable periodic pickup. |
+| `Pickup All Nearby` | Shortcut for targeted pickup. Clear it to turn targeted pickup off. |
 
 Periodic pickup includes pickable world objects, pickable item objects, and item
 drops that allow automatic pickup. Targeted pickup matches the hovered object's

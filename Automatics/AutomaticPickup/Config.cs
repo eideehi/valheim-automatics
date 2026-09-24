@@ -1,4 +1,5 @@
 ﻿using BepInEx.Configuration;
+using UnityEngine;
 
 namespace Automatics.AutomaticPickup
 {
@@ -22,6 +23,8 @@ namespace Automatics.AutomaticPickup
         public static float AutomaticPickupRange => _automaticPickupRange.Value;
         public static float AutomaticPickupInterval => _automaticPickupInterval.Value;
         public static KeyboardShortcut PickupAllNearbyKey => _pickupAllNearbyKey.Value;
+        public static ConfigEntry<KeyboardShortcut> PickupAllNearbyKeyEntry => _pickupAllNearbyKey;
+        public static ConfigEntry<float> AutomaticPickupIntervalEntry => _automaticPickupInterval;
 
         public static void Initialize()
         {
@@ -44,7 +47,10 @@ namespace Automatics.AutomaticPickup
             // it writes to the config file.
             _automaticPickupRange = config.Bind("automatic_pickup_range", 4f, (1f, 64f));
             _automaticPickupInterval = config.Bind("automatic_pickup_interval", 0.5f, (0f, 4f));
-            _pickupAllNearbyKey = config.Bind("pickup_all_nearby_key", new KeyboardShortcut());
+            // Bound by default. A config that bound the key when binding it still turned periodic
+            // pickup off has had its interval set to 0 once (ConfigMigration.DecouplePickupKey).
+            _pickupAllNearbyKey = config.Bind("pickup_all_nearby_key",
+                new KeyboardShortcut(KeyCode.E, KeyCode.LeftShift));
         }
     }
 }

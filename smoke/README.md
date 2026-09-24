@@ -6,7 +6,7 @@ not add root-level MSBuild files or production project settings.
 
 The smoke plugin compiles only its own sources (`SmokePlugin.cs`,
 `WorldSmokeCommand.cs`, `LifecycleSmokeCommand.cs`, `ProcessingSmokeCommand.cs`,
-`SmokeSession.cs`). Every
+`SmokeSession.cs`, and the feature sections under `Features/`). Every
 Automatics type it exercises (including the `StoragePlanner` routing types) is
 bound from the already-loaded `Automatics.dll` via
 `[assembly: InternalsVisibleTo("Automatics.SmokeTest")]`. It does **not** ship a
@@ -104,7 +104,7 @@ the commands cannot prove that something is their own, they leave it.
 
 - Only one smoke command runs at a time. Starting one while another is still
   running is refused with `... was not started: <reason>`.
-- A run hands back what it owes — a module setting it changed and any test
+- A run hands back what it owes — any setting it changed and any test
   object it spawned — when it completes or throws (each command's body runs
   inside a guard that does this either way), and when the smoke plugin is
   disabled or destroyed or the game quits (the plugin's `OnDisable` /
@@ -115,12 +115,13 @@ the commands cannot prove that something is their own, they leave it.
   written, say — is kept and tried again at the next of those moments, and a new
   run is refused while it stands.
 - If the game itself stops mid-run (a crash or a killed process), nothing can
-  run. Before the lifecycle command or `automatics_smoke_processing toggle`
-  changes a module setting it records the change in
-  `BepInEx/config/AutomaticsSmoke/lifecycle-toggle-restore.txt`, and it does not
-  change the setting if that record cannot be written. At the next start the
-  smoke plugin logs one warning naming the command, the setting, its value before
-  the check, the value the check set and when, and then deletes the record. It never
+  run. Before the lifecycle command, `automatics_smoke_processing toggle` or
+  `automatics_smoke_features` changes a setting it records the change in
+  `BepInEx/config/AutomaticsSmoke/lifecycle-toggle-restore.txt`, one record per
+  setting, and it does not change the setting if that record cannot be written.
+  At the next start the smoke plugin logs one warning per record naming the
+  command, the setting, its value before the check, the value the check set and
+  when, and then deletes the record. It never
   changes the setting from that record: check it and set it yourself.
 - Test objects that live longer than one frame are marked non-persistent, so the
   world save never contains them even if the game is saved mid-run.
@@ -786,6 +787,64 @@ the file nor any setting.
 [Automatics Smoke] PASS processing_config_section_matches_bound_entries: [automatic_processing] in net.eidee.valheim.automatics.cfg has 160 keys, the same as the 160 entries Automatic Processing binds (650 lines in the section)
 [Automatics Smoke] PASS processing_config_module_line_matches_setting: automatic_processing/module = Enabled in net.eidee.valheim.automatics.cfg, the same as the setting
 [Automatics Smoke] Summary: total=2 passed=2 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+```
+
+### Feature smoke command
+
+`automatics_smoke_features all` runs every section below, and
+`automatics_smoke_features <section>` runs one of them: `pickup`, `pin`,
+`mining`, `planting`, `guide` or `supply`. Run it from the in-game console while
+a single-player world is loaded. Each section drives the real game code path of
+one feature against objects it spawns next to the player. The run ends with one
+`[Automatics Smoke] Summary: ...` line over every section it ran. A section that
+has no checks yet logs one `SKIP <section>_section: not implemented yet`, and an
+exception inside a section is a `FAIL <section>_section` line, after which the
+next section still runs.
+
+The command never turns a module on: a check whose module is off SKIPs and says
+so. A section may change a setting its checks need for the length of the run,
+under the rules in *Safety of the console commands* above: the change is
+recorded before it is made and refused when the record cannot be written, and
+the setting is put back when the section ends (or at the plugin's hand-back
+triggers), unless you changed it meanwhile, in which case your value is kept. A
+check whose settings still keep it from showing anything SKIPs and names the
+setting to change.
+Test drops are marked non-persistent and are recorded with the session, so a run
+that is cut short still removes them. Items a check picked up are removed from
+your inventory only when the count of that item grew by exactly what the check
+spawned; otherwise they stay and the log says so.
+
+#### `pickup`
+
+| Check | Asserts |
+|---|---|
+| `pickup_key_default_is_left_shift_e` | The `pickup_all_nearby_key` entry's default value is Left Shift + E and BepInEx writes it as `E + LeftShift`. Runs without a world and with the module off; the note gives the current value |
+| `pickup_hover_text_shows_key` | `ItemDrop.GetHoverText()` of a spawned Wood drop contains the line the hover patch adds: the key as BepInEx prints it and the translated message with the item's name (SKIP when the key is not set and could not be bound for the run) |
+| `pickup_key_pass_same_name_only` | Two Wood drops and one Stone drop lie 1.5 m to your right, a metre apart, with `m_autoPickup` cleared, so neither vanilla auto-pickup nor periodic pickup can take them. A key pass requested on the first Wood drop, through the call Automatic Pickup makes when the key goes down, takes both Wood drops, the Wood in your inventory grows by exactly 2, and the Stone drop is left. The Wood drops vanishing without the inventory growing is a FAIL; more Wood arriving than the check spawned is a SKIP, because Wood of your own was nearby (SKIP when `automatic_pickup_range` is below 2.5 m) |
+| `pickup_key_and_interval_in_one_pass` | The same three drops, 0.6 m apart, placed to your left half a metre beyond vanilla auto-pickup's reach (SKIP, inconclusive, when a Wood drop has rolled out of `automatic_pickup_range` before the requests; a FAIL gives each drop's distance at the request). In one frame the first Wood drop is given `m_autoPickup` and both the interval's and the key's request are made, through the calls `FixedUpdate` and `Update` make. The one pass that follows takes the hovered Wood drop for the interval, still takes the other Wood drop by its name for the key, and leaves the Stone drop; the same inventory rules apply (SKIP when the range does not reach past vanilla auto-pickup) |
+| `pickup_interval_runs_with_key_bound` | With the key set and `automatic_pickup_interval` above 0, a Wood drop placed to your left a metre beyond vanilla auto-pickup's reach is picked up by Automatic Pickup's own timer (SKIP when the key or the interval could not be set for the run, or the range does not reach past vanilla auto-pickup) |
+| `pickup_settings_restored` | Reported only when the section changed a setting: every setting it changed is back at your value |
+
+Every world check SKIPs unless `automatic_pickup / module` is `Enabled`. When
+`pickup_all_nearby_key` is not set, it is bound to its default, `E + LeftShift`,
+for the section. When `automatic_pickup_interval` is 0, it is set to its
+default, 0.5, for the last check only, because while it is above 0 Automatic
+Pickup also picks up your own items nearby. `pickup_settings_restored` then
+reports putting them back: PASS when they are back, SKIP when you changed one
+while the section ran and your value was kept, FAIL when one could not be written
+back (it is tried again at the next hand-back, and new runs are refused until
+then). Stand
+still while it runs: a player walking toward the drop could let vanilla
+auto-pickup take it. A passing run looks like this:
+
+```text
+[Automatics Smoke] automatics_smoke_features pickup started: pickup
+[Automatics Smoke] PASS pickup_key_default_is_left_shift_e: default 'E + LeftShift'; the current value is 'E + LeftShift'
+[Automatics Smoke] PASS pickup_hover_text_shows_key: 'E + LeftShift' with 'Pick up nearby Wood'
+[Automatics Smoke] PASS pickup_key_pass_same_name_only: both Wood drops were picked up and the Stone drop was left (woodDelta=2)
+[Automatics Smoke] PASS pickup_key_and_interval_in_one_pass: one pass took the hovered Wood drop with the interval and the other Wood drop by its name, and left the Stone drop (woodDelta=2)
+[Automatics Smoke] PASS pickup_interval_runs_with_key_bound: a Wood drop 3 m away was picked up at interval 0.5s with pickup_all_nearby_key 'E + LeftShift'
+[Automatics Smoke] Summary: total=5 passed=5 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 ## Remove

@@ -248,6 +248,21 @@ namespace Automatics
         internal const string DefaultsRevisionKey = "defaults_revision";
         internal const int DefaultsRevision = 2;
 
+        // A hidden entry recording that the pass for the Pickup All Nearby key has run. Binding
+        // the key used to turn periodic pickup off; it no longer does, so that pass sets the
+        // interval of a config whose key is bound to 0 once. It has a marker of its own so that
+        // it runs on a file the defaults revision is done with, without running that revision
+        // again, and never again after it has run, whatever the user sets later.
+        internal const string PickupKeyDecoupledKey = "pickup_key_decoupled";
+        internal const int PickupKeyDecoupled = 1;
+
+        private const string PickupSection = "automatic_pickup";
+        private const string PickupKeyKey = "pickup_all_nearby_key";
+        private const string PickupIntervalKey = "automatic_pickup_interval";
+
+        // The separators BepInEx's KeyboardShortcut.Deserialize splits a stored shortcut on.
+        private static readonly char[] ShortcutSeparators = { ' ', '+', ',', ';', '|' };
+
         // Has to run before anything binds an entry: the first bind writes the file, and from then
         // on a new install can no longer be told apart from an existing one.
         public static void Migration(ConfigFile config)
@@ -279,7 +294,8 @@ namespace Automatics
             var versionsChanged = MigrateVersions(file.Lines);
             var keptRunning = KeepModulesRunning(file.Lines);
             var defaultsChanged = recognizedRevision && MigrateObjectDefaults(file.Lines, revision);
-            if (!versionsChanged && !defaultsChanged)
+            var pickupChanged = DecouplePickupKey(file.Lines);
+            if (!versionsChanged && !defaultsChanged && !pickupChanged)
                 return;
 
             try
@@ -298,21 +314,27 @@ namespace Automatics
                 Automatics.Logger.Warning(
                     $"Could not update the config file {path} ({e.Message}). " +
                     DescribeSessionDefaults(keptRunning) +
-                    " Object lists keep their stored values this session. The next start tries again.");
+                    (defaultsChanged ? " Object lists keep their stored values this session." : "") +
+                    (pickupChanged
+                        ? " Automatic Pickup keeps its stored interval this session, so periodic pickup may run beside the Pickup All Nearby key."
+                        : "") +
+                    " The next start tries again.");
                 return;
             }
 
             ReloadOrFail(config);
         }
 
-        // A new install. Every module takes its default, Disabled, when it is bound. Only the marker
-        // is written, so that the next start does not take this file for one written before the
-        // change. Should that fail, the defaults apply all the same.
+        // A new install. Every module takes its default, Disabled, when it is bound. Only the
+        // markers are written, so that the next start does not take this file for one written
+        // before the change, nor set the interval of the default Pickup All Nearby key to 0.
+        // Should that fail, the defaults apply all the same.
         private static void CreateForNewInstall(ConfigFile config, string path)
         {
             Automatics.Logger.Message("New config file: every module starts disabled.");
             var lines = new List<string>();
             AppendSection(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
+            lines.Add($"{PickupKeyDecoupledKey} = {FormatPickupKeyDecoupled()}");
             var created = new ConfigText(lines, new UTF8Encoding(false), Environment.NewLine, true);
 
             try
@@ -641,24 +663,110 @@ namespace Automatics
             // Update every existing marker in place, retaining its comments and section layout.
             // A file without a marker gets one at the end, after the migrated entries.
             if (hasMarker)
-            {
-                var section = string.Empty;
-                for (var i = 0; i < lines.Count; i++)
-                {
-                    var line = lines[i].Trim();
-                    if (line.StartsWith("#")) continue;
-                    if (line.StartsWith("[") && line.EndsWith("]"))
-                        section = line.Substring(1, line.Length - 2);
-                    var split = line.Split(KeyValueSeparator, 2);
-                    if (section == DefaultsRevisionSection && split.Length == 2 &&
-                        split[0].Trim() == DefaultsRevisionKey)
-                        lines[i] = $"{DefaultsRevisionKey} = {FormatRevision()}";
-                }
-            }
+                RewriteEveryEntry(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
             else
                 AppendSection(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
             Automatics.Logger.Message($"Record the config defaults revision {DefaultsRevision}");
             return true;
+        }
+
+        // Rewrites every line holding the entry, keeping its comments and section layout.
+        private static void RewriteEveryEntry(List<string> lines, string section, string key, string value)
+        {
+            var current = string.Empty;
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var line = lines[i].Trim();
+                if (line.StartsWith("#")) continue;
+                if (line.StartsWith("[") && line.EndsWith("]"))
+                    current = line.Substring(1, line.Length - 2);
+                var split = line.Split(KeyValueSeparator, 2);
+                if (current == section && split.Length == 2 && split[0].Trim() == key)
+                    lines[i] = $"{key} = {value}";
+            }
+        }
+
+        // Reads the stored Pickup values before anything binds them. A key BepInEx reads as bound,
+        // under an interval that would run periodic pickup, gets the interval set to 0, so that
+        // the user keeps the key-only pickup binding the key used to give. A missing key entry is
+        // left alone: it takes the new default, and periodic pickup keeps running beside it.
+        // The marker is recorded in the same write; if the write fails, the next start runs the
+        // pass again. Returns whether the lines changed, the marker alone included.
+        private static bool DecouplePickupKey(List<string> lines)
+        {
+            var entries = ReadEntries(lines);
+            var hasMarker = entries.TryGetValue((DefaultsRevisionSection, PickupKeyDecoupledKey), out var marker);
+            if (hasMarker)
+            {
+                if (!int.TryParse(marker.Value, System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var done) || done < 0)
+                {
+                    Automatics.Logger.Warning(
+                        $"Unrecognized Pickup All Nearby key marker '{marker.Value}'; skipping the pickup interval step and leaving the marker unchanged.");
+                    return false;
+                }
+
+                // 0 is the value BepInEx saves when the write that should have recorded the pass failed.
+                if (done >= PickupKeyDecoupled) return false;
+            }
+
+            if (entries.TryGetValue((PickupSection, PickupKeyKey), out var key) && IsBoundShortcut(key.Value))
+            {
+                var hasInterval = entries.TryGetValue((PickupSection, PickupIntervalKey), out var interval);
+                if (!hasInterval || RunsPeriodicPickup(interval.Value))
+                {
+                    if (hasInterval)
+                        lines[interval.Index] = $"{PickupIntervalKey} = 0";
+                    else
+                        AddEntry(lines, PickupSection, PickupIntervalKey, "0");
+                    Automatics.Logger.Message(
+                        $"Keep pickup on the Pickup All Nearby key only: [{PickupSection}] {PickupIntervalKey} = {(hasInterval ? interval.Value : "(missing)")} => 0");
+                }
+            }
+
+            // Lines may have moved, so the entries are read again. A new marker goes right after
+            // the defaults marker, or at the end of the file when there is none.
+            if (hasMarker)
+                RewriteEveryEntry(lines, DefaultsRevisionSection, PickupKeyDecoupledKey, FormatPickupKeyDecoupled());
+            else if (ReadEntries(lines).TryGetValue((DefaultsRevisionSection, DefaultsRevisionKey), out var revision))
+                lines.Insert(revision.Index + 1, $"{PickupKeyDecoupledKey} = {FormatPickupKeyDecoupled()}");
+            else
+                AppendSection(lines, DefaultsRevisionSection, PickupKeyDecoupledKey, FormatPickupKeyDecoupled());
+            Automatics.Logger.Message("Record the Pickup All Nearby key marker");
+            return true;
+        }
+
+        // Whether BepInEx reads the stored shortcut as bound, decided the way its
+        // KeyboardShortcut.Deserialize reads it: the value is split on the shortcut separators
+        // with empty parts dropped, and every part goes through Enum.Parse for KeyCode, case
+        // sensitive. A part that fails makes the whole shortcut unbound, and so does no part at
+        // all or a first key, the main key, of None.
+        private static bool IsBoundShortcut(string value)
+        {
+            var parts = value.Split(ShortcutSeparators, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return false;
+
+            try
+            {
+                var keys = parts.Select(x => (KeyCode)Enum.Parse(typeof(KeyCode), x)).ToArray();
+                return keys[0] != KeyCode.None;
+            }
+            catch (SystemException)
+            {
+                return false;
+            }
+        }
+
+        // Whether the stored interval runs periodic pickup. BepInEx reads it with float.Parse in
+        // the invariant culture and keeps the default, 0.5, for a value it cannot read; the
+        // accepted range then clamps it, so only a value above 0 runs.
+        private static bool RunsPeriodicPickup(string value)
+        {
+            if (!float.TryParse(value,
+                    System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands,
+                    System.Globalization.NumberFormatInfo.InvariantInfo, out var interval))
+                return true;
+            return interval.CompareTo(0f) > 0;
         }
 
         private static void RepairObjectListWhitespace(List<string> lines, string section, string key)
@@ -846,6 +954,11 @@ namespace Automatics
         private static string FormatRevision()
         {
             return DefaultsRevision.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatPickupKeyDecoupled()
+        {
+            return PickupKeyDecoupled.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private static void MigrationFor130(List<string> lines)

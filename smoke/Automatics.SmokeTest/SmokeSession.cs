@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -13,7 +14,7 @@ using Object = UnityEngine.Object;
 namespace Automatics.SmokeTest
 {
     // What the smoke console commands share: one run at a time, and what a run owes the
-    // user's game - a module setting it changed, spawned test objects - until it is handed
+    // user's game - the settings it changed, spawned test objects - until it is handed
     // back. HandBack does that:
     //   - when a command's body completes or throws (Guard; Unity stops a coroutine that
     //     throws without running its iterator's finally, so the body cannot do it itself);
@@ -21,8 +22,10 @@ namespace Automatics.SmokeTest
     //     OnDisable / OnDestroy / OnApplicationQuit);
     //   - at the start of the next run, for anything the triggers above could not hand back.
     // A logout does not end a run: the plugin object survives scene changes. A crash ends the
-    // process, so the setting is changed only after a marker file records the change; the
-    // next start logs a warning from it and never writes the config from it.
+    // process, so a setting is changed only after a marker file records the change; the next
+    // start logs a warning from it and never writes the config from it. A run may hold several
+    // settings (a module toggle, or the settings a feature check needs); the marker then holds
+    // one record per setting.
     //
     // Every hand-back follows the asymmetric rule: a test item left behind, or a setting left
     // as the user set it, is harmless; deleting a real item or overwriting the user's own
@@ -46,10 +49,14 @@ namespace Automatics.SmokeTest
         private static readonly List<Func<string, bool>> PendingHandBacks =
             new List<Func<string, bool>>();
 
+        // Every setting a run has taken on and not yet handed back. The module toggle the
+        // lifecycle and processing commands drive is one of them, and _toggle names it.
+        private static readonly List<SettingRestoration> Settings = new List<SettingRestoration>();
+
         private static string _runner;
         private static int _runId;
-        private static ToggleRestoration _toggle;
-        private static bool _writingToggle;
+        private static SettingRestoration _toggle;
+        private static bool _writingSetting;
 
         internal enum ToggleOutcome
         {
@@ -84,9 +91,9 @@ namespace Automatics.SmokeTest
                 // still cannot be put back blocks the run: a second obligation on the same
                 // setting would lose the value the user started with.
                 HandBack("before a new smoke run");
-                if (_toggle != null)
+                if (Settings.Count > 0)
                     refusal =
-                        $"an earlier run could not put {_toggle.Name} back (see the warning in the log); set it yourself, then run the command again";
+                        $"an earlier run could not put {Settings[0].Name} back (see the warning in the log); set it yourself, then run the command again";
                 else if (PendingHandBacks.Count > 0)
                     refusal =
                         "an earlier run could not remove its test objects yet (see the warning in the log); run the command again later, or restart the game";
@@ -132,9 +139,9 @@ namespace Automatics.SmokeTest
 
         public static void HandBack(string reason)
         {
-            var outcome = DischargeToggle(out var detail);
-            if (outcome != ToggleOutcome.NothingWritten)
-                Log.LogWarning($"[Automatics Smoke] {reason}: {detail}");
+            foreach (var result in DischargeAll())
+                if (result.Outcome != ToggleOutcome.NothingWritten)
+                    Log.LogWarning($"[Automatics Smoke] {reason}: {result.Detail}");
 
             PendingSpawns.RemoveAll(spawn => DestroyTestObject(spawn.Go, spawn.DropStack, reason));
             foreach (var handBack in PendingHandBacks.ToArray())
@@ -227,7 +234,7 @@ namespace Automatics.SmokeTest
             }
         }
 
-        // -- A module toggle ---------------------------------------------------------------
+        // -- Settings a run changes ---------------------------------------------------------
 
         // Starts watching the toggle for writes that are not the check's own. Any such write
         // - the settings UI, a config reload - means the user has taken the setting back. The
@@ -237,15 +244,9 @@ namespace Automatics.SmokeTest
         {
             refusal = IsCurrent(runId) && _toggle == null ? null : "the run does not own the setting";
             if (refusal != null) return false;
+            if (!BeginSetting(runId, entry, out var setting, out refusal)) return false;
 
-            _toggle = new ToggleRestoration
-            {
-                Entry = entry,
-                Original = entry.Value,
-                Name = $"{entry.Definition.Section}/{entry.Definition.Key}",
-                Command = _runner
-            };
-            entry.SettingChanged += OnToggleChanged;
+            _toggle = setting;
             return true;
         }
 
@@ -254,19 +255,13 @@ namespace Automatics.SmokeTest
         // leave behind without a trace is not made.
         public static bool WriteToggle(int runId, AutomaticsModule value, out string refusal)
         {
-            refusal = null;
             if (_toggle == null || !IsCurrent(runId))
+            {
                 refusal = "the run no longer owns the setting";
-            else if (_toggle.EditedByUser)
-                refusal = $"{_toggle.Name} was changed outside the check";
-            else if (!WriteMarker(_toggle, value, out var failure))
-                refusal = $"the record of the change could not be written ({failure}), so {_toggle.Name} was not changed";
+                return false;
+            }
 
-            if (refusal != null) return false;
-
-            _toggle.Written = true;
-            Assign(_toggle, value);
-            return true;
+            return WriteSetting(runId, _toggle, value, out refusal);
         }
 
         // The toggling check's own restore. The lock and TryBegin mean a current run's
@@ -274,90 +269,197 @@ namespace Automatics.SmokeTest
         // whichever trigger handed it back.
         public static ToggleOutcome RestoreToggle(int runId, out string detail)
         {
-            if (IsCurrent(runId)) return DischargeToggle(out detail);
+            if (!IsCurrent(runId))
+            {
+                detail = "the run was abandoned, so the smoke plugin handled the setting";
+                return ToggleOutcome.NotThisRun;
+            }
 
-            detail = "the run was abandoned, so the smoke plugin handled the setting";
-            return ToggleOutcome.NotThisRun;
+            var toggle = _toggle;
+            var results = DischargeAll();
+            var own = results.FirstOrDefault(x => ReferenceEquals(x.Setting, toggle));
+            if (own == null)
+            {
+                detail = "";
+                return ToggleOutcome.NothingWritten;
+            }
+
+            detail = own.Detail;
+            return own.Outcome;
+        }
+
+        // Any setting, the same way as the toggle: the run takes it on before it writes it,
+        // writes it only through WriteSetting, and hands it back through RestoreSettings or any
+        // of the triggers above.
+        public static bool BeginSetting(int runId, ConfigEntryBase entry, out SettingRestoration setting,
+            out string refusal)
+        {
+            setting = null;
+            refusal = IsCurrent(runId) && entry != null && Settings.All(x => x.Entry != entry)
+                ? null
+                : "the run does not own the setting";
+            if (refusal != null) return false;
+
+            setting = new SettingRestoration
+            {
+                Entry = entry,
+                Original = entry.BoxedValue,
+                Name = $"{entry.Definition.Section}/{entry.Definition.Key}",
+                Command = _runner
+            };
+            var watched = setting;
+            setting.Handler = (sender, args) =>
+            {
+                // Raised from the settings UI and from a config reload: record, never throw.
+                if (!_writingSetting && args != null && ReferenceEquals(args.ChangedSetting, watched.Entry))
+                    watched.EditedByUser = true;
+            };
+            entry.ConfigFile.SettingChanged += setting.Handler;
+            Settings.Add(setting);
+            return true;
+        }
+
+        public static bool WriteSetting(int runId, SettingRestoration setting, object value, out string refusal)
+        {
+            refusal = null;
+            if (setting == null || !IsCurrent(runId) || !Settings.Contains(setting))
+                refusal = "the run no longer owns the setting";
+            else if (setting.EditedByUser)
+                refusal = $"{setting.Name} was changed outside the check";
+            else if (!WriteMarker(setting, value, out var failure))
+                refusal = $"the record of the change could not be written ({failure}), so {setting.Name} was not changed";
+
+            if (refusal != null) return false;
+
+            setting.Written = true;
+            Assign(setting, value);
+            return true;
+        }
+
+        public static bool EditedByUser(SettingRestoration setting)
+        {
+            return setting != null && setting.EditedByUser;
+        }
+
+        // Every setting the run holds, put back; one entry per setting that had been written. A
+        // run that is no longer current leaves them to whichever trigger handed them back.
+        public static List<KeyValuePair<ToggleOutcome, string>> RestoreSettings(int runId)
+        {
+            if (!IsCurrent(runId))
+                return new List<KeyValuePair<ToggleOutcome, string>>
+                {
+                    new KeyValuePair<ToggleOutcome, string>(ToggleOutcome.NotThisRun,
+                        "the run was abandoned, so the smoke plugin handled its settings")
+                };
+
+            return DischargeAll()
+                .Where(x => x.Outcome != ToggleOutcome.NothingWritten)
+                .Select(x => new KeyValuePair<ToggleOutcome, string>(x.Outcome, x.Detail))
+                .ToList();
+        }
+
+        private static List<Discharge> DischargeAll()
+        {
+            var results = new List<Discharge>();
+            if (Settings.Count == 0) return results;
+
+            foreach (var setting in Settings.ToArray())
+                results.Add(new Discharge
+                {
+                    Setting = setting,
+                    Outcome = DischargeSetting(setting, out var detail),
+                    Detail = detail
+                });
+
+            // What could not be put back stays recorded for a crash; the rest is dropped.
+            if (Settings.Any(x => x.Written))
+                WriteMarker(null, null, out _);
+            else
+                DeleteMarker();
+            return results;
         }
 
         // Puts the setting back only when nobody else has written it and it still holds the
         // value the check last wrote. The obligation is dropped only once it is discharged: a
         // restore that fails keeps it, and the next trigger tries again.
-        private static ToggleOutcome DischargeToggle(out string detail)
+        private static ToggleOutcome DischargeSetting(SettingRestoration setting, out string detail)
         {
             detail = "";
-            var toggle = _toggle;
-            if (toggle == null) return ToggleOutcome.NothingWritten;
-
             var outcome = ToggleOutcome.NothingWritten;
             try
             {
-                var current = toggle.Entry.Value;
-                if (toggle.Written && (toggle.EditedByUser || current != toggle.LastWritten))
+                var current = setting.Entry.BoxedValue;
+                if (setting.Written && (setting.EditedByUser || !Equals(current, setting.LastWritten)))
                 {
                     outcome = ToggleOutcome.LeftForUser;
                     detail =
-                        $"{toggle.Name} was changed outside the check and is now {current}; it was left as it is instead of being put back to {toggle.Original}";
+                        $"{setting.Name} was changed outside the check and is now {Format(setting, current)}; it was left as it is instead of being put back to {Format(setting, setting.Original)}";
                 }
-                else if (toggle.Written && current == toggle.Original)
+                else if (setting.Written && Equals(current, setting.Original))
                 {
                     outcome = ToggleOutcome.AlreadyOriginal;
-                    detail = $"{toggle.Name} is already back at {toggle.Original}";
+                    detail = $"{setting.Name} is already back at {Format(setting, setting.Original)}";
                 }
-                else if (toggle.Written)
+                else if (setting.Written)
                 {
-                    Assign(toggle, toggle.Original);
-                    outcome = toggle.EditedByUser ? ToggleOutcome.LeftForUser : ToggleOutcome.Restored;
-                    detail = toggle.EditedByUser
-                        ? $"{toggle.Name} was changed outside the check while it was being put back and is now {toggle.Entry.Value}; it was left as it is"
-                        : $"{toggle.Name} was put back from {current} to {toggle.Original}";
+                    Assign(setting, setting.Original);
+                    outcome = setting.EditedByUser ? ToggleOutcome.LeftForUser : ToggleOutcome.Restored;
+                    detail = setting.EditedByUser
+                        ? $"{setting.Name} was changed outside the check while it was being put back and is now {Format(setting, setting.Entry.BoxedValue)}; it was left as it is"
+                        : $"{setting.Name} was put back from {Format(setting, current)} to {Format(setting, setting.Original)}";
                 }
             }
             catch (Exception e)
             {
                 detail =
-                    $"{toggle.Name} could not be put back to {toggle.Original} ({e.GetType().Name}: {e.Message}); the restoration is kept and tried again at the next opportunity";
+                    $"{setting.Name} could not be put back to {Format(setting, setting.Original)} ({e.GetType().Name}: {e.Message}); the restoration is kept and tried again at the next opportunity";
                 return ToggleOutcome.Failed;
             }
 
-            _toggle = null;
-            toggle.Entry.SettingChanged -= OnToggleChanged;
-            DeleteMarker();
+            Settings.Remove(setting);
+            if (ReferenceEquals(_toggle, setting)) _toggle = null;
+            setting.Entry.ConfigFile.SettingChanged -= setting.Handler;
             return outcome;
         }
 
-        // The bracket tells OnToggleChanged that the change is the check's own. BepInEx raises
-        // SettingChanged synchronously on this thread, inside the assignment: the setter of
-        // ConfigEntry<T>.Value calls ConfigFile.OnSettingChanged, which saves and then invokes
-        // the file's handlers in a loop, and the entry's own event is raised from one of them
-        // (its constructor subscribes it) - checked against BepInEx 5.4.23.5. So no
+        // The bracket tells the SettingChanged handler that the change is the check's own.
+        // BepInEx raises SettingChanged synchronously on this thread, inside the assignment: the
+        // setter of ConfigEntry<T>.Value calls ConfigFile.OnSettingChanged, which saves and then
+        // invokes the file's handlers in a loop - checked against BepInEx 5.4.23.5. So no
         // notification of this write arrives after the bracket closes. The bracket can hide a
         // write another handler makes in response, though, so the value is read back: anything
         // but what was written means someone else changed it, which counts as the user's edit.
-        private static void Assign(ToggleRestoration toggle, AutomaticsModule value)
+        private static void Assign(SettingRestoration setting, object value)
         {
             // Set first: if the assignment throws after the value changed, the next discharge
             // still recognises the value as the check's own.
-            toggle.LastWritten = value;
+            setting.LastWritten = value;
 
-            _writingToggle = true;
+            _writingSetting = true;
             try
             {
-                toggle.Entry.Value = value;
+                setting.Entry.BoxedValue = value;
             }
             finally
             {
-                _writingToggle = false;
+                _writingSetting = false;
             }
 
-            if (toggle.Entry.Value != value) toggle.EditedByUser = true;
+            if (!Equals(setting.Entry.BoxedValue, value)) setting.EditedByUser = true;
         }
 
-        private static void OnToggleChanged(object sender, EventArgs args)
+        // The value the way the config file writes it: an enum by its name, a shortcut as
+        // "E + LeftShift".
+        private static string Format(SettingRestoration setting, object value)
         {
-            // Raised from the settings UI and from a config reload: record, never throw.
-            var toggle = _toggle;
-            if (toggle != null && !_writingToggle) toggle.EditedByUser = true;
+            try
+            {
+                return TomlTypeConverter.ConvertToString(value, setting.Entry.SettingType);
+            }
+            catch
+            {
+                return value?.ToString() ?? "(null)";
+            }
         }
 
         // -- The marker for a run the process did not survive --------------------------
@@ -377,14 +479,19 @@ namespace Automatics.SmokeTest
                 return;
             }
 
-            var values = new Dictionary<string, string>(StringComparer.Ordinal);
+            // One record per setting; a record starts at its "setting=" line. A marker written
+            // before records were grouped holds a single record.
+            var records = new List<Dictionary<string, string>>();
             try
             {
                 foreach (var line in File.ReadAllLines(path))
                 {
                     var separator = line.IndexOf('=');
-                    if (separator > 0)
-                        values[line.Substring(0, separator).Trim()] = line.Substring(separator + 1).Trim();
+                    if (separator <= 0) continue;
+                    var key = line.Substring(0, separator).Trim();
+                    if (records.Count == 0 || (key == "setting" && records[records.Count - 1].ContainsKey("setting")))
+                        records.Add(new Dictionary<string, string>(StringComparer.Ordinal));
+                    records[records.Count - 1][key] = line.Substring(separator + 1).Trim();
                 }
             }
             catch
@@ -392,11 +499,15 @@ namespace Automatics.SmokeTest
                 // The warning still goes out, with whatever could be read.
             }
 
-            var command = values.TryGetValue("command", out var recorded) && !string.IsNullOrEmpty(recorded)
-                ? recorded
-                : DefaultMarkerCommand;
-            Log.LogWarning(
-                $"[Automatics Smoke] an {command} run did not finish (the game stopped while it ran). At {Read(values, "at")} it changed {Read(values, "setting")} from {Read(values, "original")} to {Read(values, "written")}. It was not changed back: check that setting and set it to what you want.");
+            if (records.Count == 0) records.Add(new Dictionary<string, string>(StringComparer.Ordinal));
+            foreach (var values in records)
+            {
+                var command = values.TryGetValue("command", out var recorded) && !string.IsNullOrEmpty(recorded)
+                    ? recorded
+                    : DefaultMarkerCommand;
+                Log.LogWarning(
+                    $"[Automatics Smoke] an {command} run did not finish (the game stopped while it ran). At {Read(values, "at")} it changed {Read(values, "setting")} from {Read(values, "original")} to {Read(values, "written")}. It was not changed back: check that setting and set it to what you want.");
+            }
 
             // A deletion that fails only means this warning appears again at the next start.
             DeleteMarker();
@@ -407,24 +518,35 @@ namespace Automatics.SmokeTest
             return Path.Combine(Path.Combine(Paths.ConfigPath, "AutomaticsSmoke"), MarkerFile);
         }
 
-        // Written in place: a crash in the middle of it leaves a partial record, which only
-        // makes the warning less specific, since the record is never acted on.
-        private static bool WriteMarker(ToggleRestoration toggle, AutomaticsModule written,
-            out string failure)
+        // One record for every setting the run has written, and one for the write about to be
+        // made (pending, with its value), which replaces that setting's earlier record. Written in
+        // place: a crash in the middle of it leaves a partial record, which only makes the
+        // warning less specific, since the record is never acted on.
+        private static bool WriteMarker(SettingRestoration pending, object written, out string failure)
         {
             failure = null;
             try
             {
+                var lines = new List<string>();
+                foreach (var setting in Settings)
+                {
+                    var isPending = ReferenceEquals(setting, pending);
+                    if (!isPending && !setting.Written) continue;
+                    if (lines.Count > 0) lines.Add("");
+                    lines.Add("setting=" + setting.Name);
+                    lines.Add("original=" + Format(setting, setting.Original));
+                    lines.Add("written=" + Format(setting, isPending ? written : setting.LastWritten));
+                    lines.Add("at=" + (isPending || setting.WrittenAt == null
+                        ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)
+                        : setting.WrittenAt));
+                    lines.Add("command=" + setting.Command);
+                    if (isPending)
+                        setting.WrittenAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture);
+                }
+
                 var path = MarkerPath();
                 Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-                File.WriteAllLines(path, new[]
-                {
-                    "setting=" + toggle.Name,
-                    "original=" + toggle.Original,
-                    "written=" + written,
-                    "at=" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture),
-                    "command=" + toggle.Command
-                });
+                File.WriteAllLines(path, lines);
             }
             catch (Exception e)
             {
@@ -461,15 +583,26 @@ namespace Automatics.SmokeTest
             public int DropStack;
         }
 
-        private sealed class ToggleRestoration
+        private sealed class Discharge
         {
-            public ConfigEntry<AutomaticsModule> Entry;
+            public SettingRestoration Setting;
+            public ToggleOutcome Outcome;
+            public string Detail;
+        }
+
+        // A setting a run has taken on: what it was, what the run last wrote, and whether the
+        // user has written it since.
+        internal sealed class SettingRestoration
+        {
+            public ConfigEntryBase Entry;
             public string Name;
             public string Command;
-            public AutomaticsModule Original;
+            public object Original;
             public bool Written;
-            public AutomaticsModule LastWritten;
+            public object LastWritten;
+            public string WrittenAt;
             public bool EditedByUser;
+            public EventHandler<SettingChangedEventArgs> Handler;
         }
     }
 }

@@ -24,6 +24,25 @@ namespace Automatics.AutomaticPickup
         private float _pickupTimer;
         private bool _active;
 
+        // What the pass _active asks for. The interval asks for everything allowed nearby, the
+        // Pickup All Nearby key for the nearby objects named like the one hovered when it went
+        // down. They are separate so that neither takes the other's place: a pass both asked
+        // for does both, the interval's part first. The key's kind and name are read when the
+        // key goes down, so the key's part still runs when the interval's part has already
+        // picked up the hovered object itself.
+        private bool _intervalRequested;
+        private bool _keyRequested;
+        private KeyTargetKind _keyKind;
+        private string _keyName;
+        private GameObject _keyTarget;
+
+        private enum KeyTargetKind
+        {
+            Pickable,
+            PickableItem,
+            ItemDrop
+        }
+
         /// <summary>
         ///     Set by the scope immediately before it destroys this component, and by OnDestroy.
         ///     Once true it never goes back: this component belongs to an activation that is
@@ -115,7 +134,7 @@ namespace Automatics.AutomaticPickup
         private void OnDisable()
         {
             _running = false;
-            _active = false;
+            ClearRequests();
             StopCoroutine(nameof(Pickup));
         }
 
@@ -129,7 +148,7 @@ namespace Automatics.AutomaticPickup
         public void OnScopeDetaching()
         {
             _cancelled = true;
-            _active = false;
+            ClearRequests();
             _running = false;
             StopCoroutine(nameof(Pickup));
         }
@@ -140,10 +159,71 @@ namespace Automatics.AutomaticPickup
             // a Player object the game removes. The ownership guard that used to stand here
             // meant a Player whose ownership had moved kept its coroutine running.
             _cancelled = true;
-            _active = false;
+            ClearRequests();
             _running = false;
             StopCoroutine(nameof(Pickup));
             _player = null;
+        }
+
+        // A request left over from before a stop would otherwise ride along with the next pass
+        // the interval asks for, and pick up by the name of an object hovered long ago.
+        private void ClearRequests()
+        {
+            _active = false;
+            _intervalRequested = false;
+            _keyRequested = false;
+            _keyName = null;
+            _keyTarget = null;
+        }
+
+        /// <summary>
+        ///     The interval's request: the next pass picks up everything allowed nearby.
+        ///     FixedUpdate makes it each time the interval has passed.
+        /// </summary>
+        internal void RequestIntervalPickup()
+        {
+            _intervalRequested = true;
+            _active = true;
+        }
+
+        /// <summary>
+        ///     The Pickup All Nearby key's request: the next pass picks up the nearby objects of the
+        ///     same kind and name as <paramref name="target" />. Update makes it when the key goes
+        ///     down, with the object the player hovers at that moment. Nothing is requested when
+        ///     the target is none of the kinds pickup handles.
+        /// </summary>
+        internal void RequestKeyPickup(GameObject target)
+        {
+            if (!target) return;
+
+            var pickable = target.GetComponentInParent<Pickable>();
+            var pickableItem = pickable ? null : target.GetComponentInParent<PickableItem>();
+            var itemDrop = pickable || pickableItem ? null : target.GetComponentInParent<ItemDrop>();
+            if (pickable)
+            {
+                _keyKind = KeyTargetKind.Pickable;
+                _keyName = GetPickableName(pickable);
+                _keyTarget = pickable.gameObject;
+            }
+            else if (pickableItem)
+            {
+                _keyKind = KeyTargetKind.PickableItem;
+                _keyName = GetPickableItemName(pickableItem);
+                _keyTarget = pickableItem.gameObject;
+            }
+            else if (itemDrop)
+            {
+                _keyKind = KeyTargetKind.ItemDrop;
+                _keyName = GetItemDropName(itemDrop);
+                _keyTarget = itemDrop.gameObject;
+            }
+            else
+            {
+                return;
+            }
+
+            _keyRequested = true;
+            _active = true;
         }
 
         internal static void ClearSharedBuffers()
@@ -178,8 +258,17 @@ namespace Automatics.AutomaticPickup
                 }
 
                 _active = false;
+                var byInterval = _intervalRequested;
+                var byKey = _keyRequested;
+                var keyKind = _keyKind;
+                var keyName = _keyName;
+                var hovering = _keyTarget;
+                _intervalRequested = false;
+                _keyRequested = false;
+                _keyName = null;
+                _keyTarget = null;
 
-                if (Config.PickupAllNearbyKey.MainKey == KeyCode.None)
+                if (byInterval)
                 {
                     PickupAllNearby(_player,
                         (Pickable x) => !AutomaticFarming.AutomaticFarming.ClaimsCrop(_player, x));
@@ -192,61 +281,33 @@ namespace Automatics.AutomaticPickup
                     if (!Live) continue;
                     PickupAllNearby(_player, (ItemDrop x) => x.m_autoPickup);
                 }
-                else
+
+                if (!byKey) continue;
+
+                var lastHoverInteractTime =
+                    Reflections.GetField<float>(_player, "m_lastHoverInteractTime");
+                if (Time.time - lastHoverInteractTime < 0.20000000298023224) continue;
+                Reflections.SetField(_player, "m_lastHoverInteractTime", Time.time);
+
+                // The kind and name were read when the key went down, so this runs even when the
+                // interval's part above has already picked up the hovered object itself.
+                switch (keyKind)
                 {
-                    var hovering = Reflections.GetField<GameObject>(_player, "m_hovering");
-                    if (!hovering) continue;
-
-                    var lastHoverInteractTime =
-                        Reflections.GetField<float>(_player, "m_lastHoverInteractTime");
-                    if (Time.time - lastHoverInteractTime < 0.20000000298023224) continue;
-                    Reflections.SetField(_player, "m_lastHoverInteractTime", Time.time);
-
-                    var pickable = hovering.GetComponentInParent<Pickable>();
-                    if (pickable)
-                    {
-                        var pickableName = GetPickableName(pickable);
-                        PickupAllNearby(_player, x => GetPickableName(x) == pickableName);
-                        Reflections.InvokeMethod(_player, "DoInteractAnimation",
-                            pickable.gameObject);
-                        continue;
-                    }
-
-                    yield return null;
-                    if (!Alive) yield break;
-                    if (!Live) continue;
-                    // The hover target was validated before the suspension, not after it. It
-                    // can be picked, destroyed or swapped while the iterator is parked, and
-                    // dereferencing it then raises MissingReferenceException outside the
-                    // per-object handlers below - which kills the iterator and silently stops
-                    // pickup for this player.
-                    if (!hovering) continue;
-
-                    var pickableItem = hovering.GetComponentInParent<PickableItem>();
-                    if (pickableItem)
-                    {
-                        var itemName = GetPickableItemName(pickableItem);
-                        PickupAllNearby(_player, x => GetPickableItemName(x) == itemName);
-                        Reflections.InvokeMethod(_player, "DoInteractAnimation",
-                            pickableItem.gameObject);
-                        continue;
-                    }
-
-                    yield return null;
-                    if (!Alive) yield break;
-                    if (!Live) continue;
-                    if (!hovering) continue;
-
-                    var itemDrop = hovering.GetComponentInParent<ItemDrop>();
-                    if (itemDrop)
-                    {
-                        var itemName = GetItemDropName(itemDrop);
-                        PickupAllNearby(_player, x => GetItemDropName(x) == itemName);
-                        Reflections.InvokeMethod(_player, "DoInteractAnimation",
-                            itemDrop.gameObject);
-                        continue;
-                    }
+                    case KeyTargetKind.Pickable:
+                        PickupAllNearby(_player, (Pickable x) => GetPickableName(x) == keyName);
+                        break;
+                    case KeyTargetKind.PickableItem:
+                        PickupAllNearby(_player, (PickableItem x) => GetPickableItemName(x) == keyName);
+                        break;
+                    case KeyTargetKind.ItemDrop:
+                        PickupAllNearby(_player, (ItemDrop x) => GetItemDropName(x) == keyName);
+                        break;
                 }
+
+                // Only the animation needs the hovered object, and it may be gone by now: picked
+                // up above, or destroyed while the iterator was parked.
+                if (hovering)
+                    Reflections.InvokeMethod(_player, "DoInteractAnimation", hovering);
             }
         }
 
@@ -258,20 +319,20 @@ namespace Automatics.AutomaticPickup
             if (!Reflections.InvokeMethod<bool>(_player, "TakeInput")) return;
             if (!Config.PickupAllNearbyKey.IsDown()) return;
 
-            _active = true;
+            RequestKeyPickup(Reflections.GetField<GameObject>(_player, "m_hovering"));
         }
 
+        // Whether the key is bound has no say here: periodic pickup stops only at interval 0.
         private void FixedUpdate()
         {
             if (!Live) return;
-            if (Config.PickupAllNearbyKey.MainKey != KeyCode.None) return;
             if (Config.AutomaticPickupInterval <= 0) return;
 
             _pickupTimer += Time.deltaTime;
             if (_pickupTimer < Config.AutomaticPickupInterval) return;
             _pickupTimer = 0f;
 
-            _active = true;
+            RequestIntervalPickup();
         }
 
         private static string GetPickableName(Pickable pickable)

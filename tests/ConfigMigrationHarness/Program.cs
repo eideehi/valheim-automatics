@@ -91,6 +91,7 @@ namespace Automatics
             Run("a reload that fails once is tried again", ReloadThatFailsOnceIsTriedAgain);
 
             RunObjectRevisionTests();
+            RunPickupKeyMigrationTests();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -274,7 +275,8 @@ namespace Automatics
                 "[general]",
                 "custom_door = MyDoor, Custom door, MyDoorPrefab",
                 "[hidden]",
-                "defaults_revision = 2"
+                "defaults_revision = 2",
+                "pickup_key_decoupled = 1"
             };
 
             var migrated = Migrate(lines);
@@ -340,7 +342,9 @@ namespace Automatics
         {
             // These three are the entries that start being bound even for a disabled module.
             // Their stored values have to survive, or the bind that follows re-creates them at
-            // their defaults and silently discards what the user set.
+            // their defaults and silently discards what the user set. The one exception is the
+            // interval under a bound key: binding the key used to turn periodic pickup off, so the
+            // interval is set to 0 once to keep that behaviour.
             var migrated = Migrate(
                 "## Settings file was created by plugin Automatics v1.5.1",
                 "## Plugin GUID: net.eidee.valheim.automatics",
@@ -355,7 +359,7 @@ namespace Automatics
             AssertContains(migrated, "Morgen");
             AssertContains(migrated, "module = Disabled");
             AssertContains(migrated, "automatic_pickup_range = 12");
-            AssertContains(migrated, "automatic_pickup_interval = 1.5");
+            AssertContains(migrated, "automatic_pickup_interval = 0");
             AssertContains(migrated, "pickup_all_nearby_key = LeftAlt");
         }
 
@@ -460,7 +464,8 @@ namespace Automatics
                 "[automatic_processing]",
                 "module = Disabled",
                 "[hidden]",
-                "defaults_revision = 2"
+                "defaults_revision = 2",
+                "pickup_key_decoupled = 1"
             };
 
             var migrated = Migrate(lines);
@@ -698,7 +703,8 @@ namespace Automatics
                 "[automatic_feeding]",
                 "module = Disabled",
                 "[hidden]",
-                "defaults_revision = 2"
+                "defaults_revision = 2",
+                "pickup_key_decoupled = 1"
             };
 
             var migrated = Migrate(lines);
@@ -843,14 +849,17 @@ namespace Automatics
             AssertMarker(migrated);
 
             // The marker comes last, after the sections added for the modules the file lacked, even
-            // though the file already has a [hidden] section before them.
-            var lastEntry = migrated
+            // though the file already has a [hidden] section before them. Only the pickup key
+            // marker, which the next pass records right after it, follows it.
+            var entries = migrated
                 .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
                 .Select(x => x.Trim())
-                .Last(x => x.Length > 0 && !x.StartsWith("#", StringComparison.Ordinal) &&
-                           !x.StartsWith("[", StringComparison.Ordinal));
-            if (lastEntry != "defaults_revision = 2")
-                throw new Exception($"The marker should be the last entry, got '{lastEntry}' in:\n{migrated}");
+                .Where(x => x.Length > 0 && !x.StartsWith("#", StringComparison.Ordinal) &&
+                            !x.StartsWith("[", StringComparison.Ordinal))
+                .ToList();
+            var lastEntry = entries[entries.Count - 2];
+            if (lastEntry != "defaults_revision = 2" || entries[entries.Count - 1] != "pickup_key_decoupled = 1")
+                throw new Exception($"The marker should be the last entry before the pickup key marker, got '{lastEntry}' in:\n{migrated}");
 
             // A section the file has gains the entry under its header; it is not written twice.
             AssertEqual(1, CountOccurrences(migrated, "[automatic_door]"), "The door section should appear once.");
@@ -943,6 +952,7 @@ namespace Automatics
                 "[hidden]",
                 "",
                 "defaults_revision = 2",
+                "pickup_key_decoupled = 1",
                 ""
             };
 
@@ -1292,7 +1302,7 @@ namespace Automatics
         {
             var lines = new[] { "## Settings file was created by plugin Automatics v1.7.0",
                 "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = Disabled",
-                "crafting_station_search_range = 11", "[hidden]", "defaults_revision = 2" };
+                "crafting_station_search_range = 11", "[hidden]", "defaults_revision = 2", "pickup_key_decoupled = 1" };
             var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
             if (Migrate(lines) != expected)
                 throw new Exception("A current Repair config must not be rewritten.");

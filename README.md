@@ -47,7 +47,7 @@ Stores eligible player inventory items into nearby allowed containers when the s
 
 ### Automatic pickup
 
-Automatically picks up nearby items at the configured interval when no Pickup All Nearby shortcut is assigned. If the shortcut is assigned, interacting with a pickable object while pressing it picks up matching nearby objects instead of running interval pickup.
+Automatically picks up nearby items at the configured interval; an interval of 0 turns this off. Interacting with a pickable object while pressing the Pickup All Nearby shortcut (Left Shift + E by default) picks up the matching nearby objects at once.
 
 ### Automatic farming
 

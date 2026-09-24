@@ -5,6 +5,7 @@
 - Automatics recognizes more of the objects Valheim 1.0 added: crops, containers, doors, deposits, creatures, spawners, vehicles and dungeons. An update adds, once, the objects newly included in each list's default to lists that still hold a default Automatics recognizes; lists whose defaults did not change get no additions. A list you edited is left as it is, as are some lists kept unchanged since 1.4.0 or earlier, so add the new names to those yourself.
 - The object list entry for flax is now spelled `Flax`; existing configurations are updated.
 - Object list entries written with a leading space by the 1.6.0 update no longer matched their targets; existing configurations are now repaired.
+- Automatic Pickup's `Pickup All Nearby` key is now Left Shift + E by default, and binding it no longer turns periodic pickup off; only an `Automatic Pickup Interval` of 0 does. An existing config whose key is bound gets its interval set to 0 once, so it keeps picking up by key only.
 
 #### v1.7.0 [2026-07-19]
 - Added Automatic Storage for moving eligible inventory items into nearby containers by hotkey.

@@ -1,0 +1,596 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using Automatics.Valheim;
+using BepInEx.Configuration;
+using ModUtils;
+using UnityEngine;
+using PickupComponent = Automatics.AutomaticPickup.AutomaticPickup;
+using PickupConfig = Automatics.AutomaticPickup.Config;
+using PickupModule = Automatics.AutomaticPickup.Module;
+
+namespace Automatics.SmokeTest
+{
+    // The `pickup` section of automatics_smoke_features: the Pickup All Nearby key is bound to
+    // Left Shift + E by default, the hover line shows it, periodic pickup runs while it is
+    // bound, and a key pass picks up only the objects named like the one it was made on, also
+    // when the same pass picks up for the interval and takes the hovered object first.
+    //
+    // The world checks need Automatic Pickup running; the section never turns it on. An unset
+    // Pickup All Nearby key is bound to its default, Left Shift + E, for the run, and an
+    // interval of 0 is set to its default, 0.5 s, for the last check only. Both go through
+    // SmokeSession like the lifecycle command's module toggle: the change is recorded before it
+    // is made, and put back afterwards unless the user changed the setting meanwhile.
+    //
+    // The key pass is requested through AutomaticPickup.RequestKeyPickup, the call Update makes
+    // when the key goes down, with the object the player would be hovering; the pass itself is
+    // the component's own coroutine. Its test drops have m_autoPickup cleared, so neither vanilla
+    // auto-pickup nor the periodic pass can take them: only the key pass can. The overlap check
+    // also makes the request FixedUpdate makes, AutomaticPickup.RequestIntervalPickup, in the
+    // same frame. The interval check leaves periodic pickup to the component's own FixedUpdate
+    // timer, with a drop placed beyond vanilla's auto-pickup reach and inside Automatic Pickup's.
+    //
+    // Item safety as in the world command: picked-up test items are removed from the inventory
+    // only when the count of that item grew by exactly what the check spawned; otherwise they
+    // stay and the log says so.
+    internal static class PickupFeatureSmoke
+    {
+        private const string WoodPrefab = "Wood";
+        private const string StonePrefab = "Stone";
+
+        private const string DefaultCheck = "pickup_key_default_is_left_shift_e";
+        private const string HoverCheck = "pickup_hover_text_shows_key";
+        private const string KeyPassCheck = "pickup_key_pass_same_name_only";
+        private const string OverlapCheck = "pickup_key_and_interval_in_one_pass";
+        private const string IntervalCheck = "pickup_interval_runs_with_key_bound";
+        private const string RestoreCheck = "pickup_settings_restored";
+
+        // Bounds on the waits, not estimates of them: vanilla refuses a drop for 0.5 s after it
+        // spawns, and a pass the component starts finishes within a few frames.
+        private const float PickableTimeoutSeconds = 5f;
+        private const float KeyPassTimeoutSeconds = 3f;
+
+        // How long a drop the key pass must leave is watched after the pass took the others.
+        private const float SettleSeconds = 0.5f;
+
+        // The key pass is ignored within 0.2 s of a vanilla interaction; the check waits that out.
+        private const float HoverInteractCooldown = 0.25f;
+
+        public static IEnumerator Run(FeatureRun run)
+        {
+            CheckDefaultKey(run);
+
+            var problem = WorldProblem(out var player, out var component, out var wood, out var stone);
+            if (problem != null)
+            {
+                run.Skip(HoverCheck, problem);
+                run.Skip(KeyPassCheck, problem);
+                run.Skip(OverlapCheck, problem);
+                run.Skip(IntervalCheck, problem);
+                yield break;
+            }
+
+            var held = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
+            try
+            {
+                // The hover line and periodic pickup with the key bound need a key. An unset key
+                // is bound to its default for the run and put back afterwards.
+                if (PickupConfig.PickupAllNearbyKey.MainKey == KeyCode.None)
+                    Write(run, held, PickupConfig.PickupAllNearbyKeyEntry,
+                        new KeyboardShortcut(KeyCode.E, KeyCode.LeftShift));
+
+                var keyPass = FeaturesSmokeCommand.Contain(
+                    CheckWoodPass(run, KeyPassCheck, false, player, component, wood, stone), run, KeyPassCheck);
+                while (keyPass.MoveNext()) yield return keyPass.Current;
+
+                yield return null;
+                if (!run.IsCurrent)
+                {
+                    run.Skip(OverlapCheck, "the run was abandoned before this check");
+                    run.Skip(IntervalCheck, "the run was abandoned before this check");
+                    yield break;
+                }
+
+                var overlap = FeaturesSmokeCommand.Contain(
+                    CheckWoodPass(run, OverlapCheck, true, player, component, wood, stone), run, OverlapCheck);
+                while (overlap.MoveNext()) yield return overlap.Current;
+
+                yield return null;
+                if (!run.IsCurrent)
+                {
+                    run.Skip(IntervalCheck, "the run was abandoned before this check");
+                    yield break;
+                }
+
+                // Periodic pickup off is set to its default, 0.5 s, only for this last check:
+                // while it is on, Automatic Pickup also picks up your own items nearby.
+                if (PickupConfig.AutomaticPickupInterval <= 0f)
+                    Write(run, held, PickupConfig.AutomaticPickupIntervalEntry, 0.5f);
+
+                var interval = FeaturesSmokeCommand.Contain(
+                    CheckIntervalPickup(run, player, wood), run, IntervalCheck);
+                while (interval.MoveNext()) yield return interval.Current;
+            }
+            finally
+            {
+                if (held.Count > 0) ReportRestore(run);
+            }
+        }
+
+        // Takes the setting on with the session - which records the change before it is made and
+        // refuses it when the record cannot be written - and writes it. A refusal is logged; the
+        // checks that need the value then SKIP on the value they find.
+        private static void Write(FeatureRun run, Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held,
+            ConfigEntryBase entry, object value)
+        {
+            string refusal;
+            if (!held.TryGetValue(entry, out var setting))
+            {
+                if (!SmokeSession.BeginSetting(run.RunId, entry, out setting, out refusal))
+                {
+                    FeaturesSmokeCommand.Warn(
+                        $"[Automatics Smoke] {entry.Definition.Section}/{entry.Definition.Key} was not changed for the run: {refusal}");
+                    return;
+                }
+
+                held[entry] = setting;
+            }
+
+            if (!SmokeSession.WriteSetting(run.RunId, setting, value, out refusal))
+                FeaturesSmokeCommand.Warn(
+                    $"[Automatics Smoke] {entry.Definition.Section}/{entry.Definition.Key} was not changed for the run: {refusal}");
+        }
+
+        // Puts back every setting the section changed, and reports it as one check.
+        private static void ReportRestore(FeatureRun run)
+        {
+            var results = SmokeSession.RestoreSettings(run.RunId);
+            if (results.Count == 0) return;
+
+            var detail = string.Join("; ", results.Select(x => x.Value));
+            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
+                run.Fail(RestoreCheck, detail);
+            else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
+                                      x.Key == SmokeSession.ToggleOutcome.NotThisRun))
+                run.Skip(RestoreCheck, "restoration skipped: " + detail);
+            else
+                run.Pass(RestoreCheck, detail);
+        }
+
+        // The default the entry was bound with, and how BepInEx writes it into the file. It needs
+        // no world: the setting is bound whether the module is on or off.
+        private static void CheckDefaultKey(FeatureRun run)
+        {
+            var entry = PickupConfig.PickupAllNearbyKeyEntry;
+            if (entry == null)
+            {
+                run.Fail(DefaultCheck, "the pickup_all_nearby_key entry is not bound");
+                return;
+            }
+
+            var expected = new KeyboardShortcut(KeyCode.E, KeyCode.LeftShift);
+            var serialized = TomlTypeConverter.ConvertToString(entry.DefaultValue, typeof(KeyboardShortcut));
+            if (!(entry.DefaultValue is KeyboardShortcut actual) || !actual.Equals(expected) ||
+                serialized != "E + LeftShift")
+            {
+                run.Fail(DefaultCheck,
+                    $"the default of pickup_all_nearby_key is '{serialized}', not 'E + LeftShift'");
+                return;
+            }
+
+            run.Pass(DefaultCheck, $"default 'E + LeftShift'; the current value is '{entry.GetSerializedValue()}'");
+        }
+
+        private static string WorldProblem(out Player player, out PickupComponent component,
+            out GameObject wood, out GameObject stone)
+        {
+            player = null;
+            component = null;
+            wood = null;
+            stone = null;
+
+            if (ZNetScene.instance == null) return "ZNetScene.instance is null; run it in a loaded world";
+            player = Player.m_localPlayer;
+            if (player == null) return "Player.m_localPlayer is null";
+            if (player.GetInventory() == null) return "the player inventory is null";
+            if (ObjectDB.instance == null || ObjectDB.instance.m_items.Count == 0) return "ObjectDB is not ready";
+            if (!PickupModule.Running)
+                return "Automatic Pickup is not running; set automatic_pickup/module to Enabled to include this check";
+
+            component = player.GetComponent<PickupComponent>();
+            if (component == null) return "the local player carries no AutomaticPickup component";
+
+            wood = ZNetScene.instance.GetPrefab(WoodPrefab);
+            stone = ZNetScene.instance.GetPrefab(StonePrefab);
+            if (wood == null || wood.GetComponent<ItemDrop>() == null) return "the Wood prefab was not found";
+            if (stone == null || stone.GetComponent<ItemDrop>() == null) return "the Stone prefab was not found";
+            return null;
+        }
+
+        // Two Wood drops and one Stone drop a metre apart, all with m_autoPickup cleared. A key
+        // pass requested on the first Wood drop has to take both Wood drops and leave the Stone.
+        //
+        // Without overlap they lie 1.5 m to the right of the player, and the hover line is read
+        // from the first Wood drop. With overlap they lie to the left, a metre beyond vanilla's
+        // auto-pickup reach, and in one frame the first Wood drop is given m_autoPickup and both
+        // an interval and a key request are made, as FixedUpdate and Update make them. The
+        // interval's part of that pass takes the hovered drop itself, and the key's part still
+        // has to take the other Wood drop by its name.
+        private static IEnumerator CheckWoodPass(FeatureRun run, string check, bool overlap,
+            Player player, PickupComponent component, GameObject woodPrefab, GameObject stonePrefab)
+        {
+            var transform = player.transform;
+            var range = PickupConfig.AutomaticPickupRange;
+            Vector3 origin;
+            var spacing = 1f;
+            if (overlap)
+            {
+                // Half a metre beyond vanilla's reach and 0.6 m apart, so every drop stays well
+                // inside Automatic Pickup's range even after it has fallen or rolled a little.
+                var distance = player.m_autoPickupRange + 0.5f;
+                spacing = 0.6f;
+                if (range < distance + 1f)
+                {
+                    run.Skip(check,
+                        $"automatic_pickup_range is {range:0.#} m, too short to place the drops beyond vanilla auto-pickup ({player.m_autoPickupRange:0.#} m); set it to {distance + 1f:0.#} m or more to include this check");
+                    yield break;
+                }
+
+                origin = transform.position + Vector3.up * 0.3f - transform.right * distance;
+            }
+            else
+            {
+                if (range < 2.5f)
+                {
+                    var reason =
+                        $"automatic_pickup_range is {range:0.#} m and the test drops lie up to 1.9 m away; set it to 2.5 m or more to include this check";
+                    run.Skip(HoverCheck, reason);
+                    run.Skip(check, reason);
+                    yield break;
+                }
+
+                origin = transform.position + Vector3.up * 0.3f + transform.right * 1.5f;
+            }
+
+            var inventory = player.GetInventory();
+            var woodSample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
+            var stoneSample = PickableHarvester.CreatePickupItemData(stonePrefab, 1);
+
+            ItemDrop first = null;
+            ItemDrop second = null;
+            ItemDrop other = null;
+            var woodMayBeLeft = false;
+            var stoneMayBeLeft = false;
+            try
+            {
+                first = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, origin, false);
+                second = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, origin + transform.forward * spacing, false);
+                other = FeaturesSmokeCommand.SpawnTestDrop(stonePrefab, origin - transform.forward * spacing, false);
+                if (first == null || second == null || other == null)
+                {
+                    if (!overlap) run.Skip(HoverCheck, "a test drop could not be set up");
+                    run.Skip(check, "a test drop could not be set up");
+                    yield break;
+                }
+
+                if (!overlap) CheckHoverText(run, first);
+
+                var paused = Game.IsPaused();
+                var started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player &&
+                       !(first.CanPickup() && second.CanPickup() && other.CanPickup()) &&
+                       !AnyConsumed(first, second, other) &&
+                       Time.realtimeSinceStartup - started < PickableTimeoutSeconds)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) paused = true;
+                }
+
+                if (!run.IsCurrent || !player)
+                {
+                    run.Skip(check, "inconclusive: the run was abandoned or the player went away before the pass");
+                    yield break;
+                }
+
+                if (AnyConsumed(first, second, other))
+                {
+                    run.Fail(check,
+                        "a test drop disappeared before the pass; its m_autoPickup was false, so neither vanilla auto-pickup nor periodic pickup should have taken it");
+                    yield break;
+                }
+
+                if (!(first.CanPickup() && second.CanPickup() && other.CanPickup()))
+                {
+                    if (paused)
+                        run.Skip(check,
+                            $"inconclusive: the game was paused while the check waited up to {PickableTimeoutSeconds:0.#}s for the drops to become pickable");
+                    else
+                        run.Fail(check,
+                            $"the drops did not become pickable within {PickableTimeoutSeconds:0.#}s");
+                    yield break;
+                }
+
+                if (!PickableHarvester.CanAddItem(player, first.m_itemData, 2))
+                {
+                    run.Skip(check, "the inventory cannot take two Wood (space or weight); make room to include this check");
+                    yield break;
+                }
+
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player &&
+                       Time.time - Reflections.GetField<float>(player, "m_lastHoverInteractTime") < HoverInteractCooldown &&
+                       Time.realtimeSinceStartup - started < KeyPassTimeoutSeconds)
+                    yield return null;
+
+                // The drops fall and can roll after they spawn. One that has left Automatic
+                // Pickup's range could not be taken by any pass, so the check cannot tell anything.
+                var distances = $"first {Distance(player, first):0.00} m, second {Distance(player, second):0.00} m, stone {Distance(player, other):0.00} m, range {range:0.#} m";
+                if (Distance(player, first) > range - 0.1f || Distance(player, second) > range - 0.1f)
+                {
+                    run.Skip(check, $"inconclusive: a Wood drop rolled out of automatic_pickup_range before the pass ({distances})");
+                    yield break;
+                }
+
+                var woodBefore = PickableHarvester.CountExactItems(inventory, woodSample);
+                var stoneBefore = PickableHarvester.CountExactItems(inventory, stoneSample);
+                woodMayBeLeft = true;
+                stoneMayBeLeft = true;
+
+                // One frame, no yield in between: the pass that follows sees both requests.
+                if (overlap)
+                {
+                    first.m_autoPickup = true;
+                    component.RequestIntervalPickup();
+                }
+
+                component.RequestKeyPickup(first.gameObject);
+
+                paused = Game.IsPaused();
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player &&
+                       !(FeaturesSmokeCommand.IsConsumed(first) && FeaturesSmokeCommand.IsConsumed(second)) &&
+                       Time.realtimeSinceStartup - started < KeyPassTimeoutSeconds)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) paused = true;
+                }
+
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && Time.realtimeSinceStartup - started < SettleSeconds)
+                    yield return null;
+
+                if (!player)
+                {
+                    run.Skip(check, "inconclusive: the local player went away during the pass");
+                    yield break;
+                }
+
+                var woodDelta = PickableHarvester.CountExactItems(inventory, woodSample) - woodBefore;
+                var stoneDelta = PickableHarvester.CountExactItems(inventory, stoneSample) - stoneBefore;
+                if (woodDelta <= 0) woodMayBeLeft = false;
+                if (stoneDelta <= 0) stoneMayBeLeft = false;
+
+                var firstTaken = FeaturesSmokeCommand.IsConsumed(first);
+                var secondTaken = FeaturesSmokeCommand.IsConsumed(second);
+                var otherTaken = FeaturesSmokeCommand.IsConsumed(other);
+
+                // Proven to be the test drops' items only when the counts moved by exactly them.
+                if (woodDelta == 2 && firstTaken && secondTaken &&
+                    FeaturesSmokeCommand.RemoveExactItems(inventory, woodSample, 2) == 2)
+                    woodMayBeLeft = false;
+                if (stoneDelta == 1 && otherTaken &&
+                    FeaturesSmokeCommand.RemoveExactItems(inventory, stoneSample, 1) == 1)
+                    stoneMayBeLeft = false;
+                var notes = woodMayBeLeft || stoneMayBeLeft
+                    ? "; the picked-up test items could not be told apart from your own and were left in the inventory"
+                    : "";
+
+                if (!firstTaken || !secondTaken)
+                {
+                    if (paused && run.IsCurrent)
+                        run.Skip(check,
+                            $"inconclusive: the game was paused during the pass (first Wood taken={firstTaken}, second={secondTaken})");
+                    else
+                        run.Fail(check,
+                            $"the pass did not take both Wood drops (first={firstTaken}, second={secondTaken}, woodDelta={woodDelta}; at the request {distances}){notes}");
+                    yield break;
+                }
+
+                if (otherTaken || stoneDelta != 0)
+                {
+                    run.Fail(check,
+                        $"the pass made on a Wood drop also took the Stone drop (taken={otherTaken}, stoneDelta={stoneDelta}){notes}");
+                    yield break;
+                }
+
+                if (woodDelta < 2)
+                {
+                    run.Fail(check,
+                        $"both Wood drops disappeared but the Wood in the inventory grew by {woodDelta}, not 2{notes}");
+                    yield break;
+                }
+
+                if (woodDelta > 2)
+                {
+                    run.Skip(check,
+                        $"inconclusive: the Wood in the inventory grew by {woodDelta}, more than the 2 test drops, so Wood of your own nearby was picked up too; run it away from other Wood drops{notes}");
+                    yield break;
+                }
+
+                run.Pass(check, overlap
+                    ? "one pass took the hovered Wood drop with the interval and the other Wood drop by its name, and left the Stone drop (woodDelta=2)"
+                    : "both Wood drops were picked up and the Stone drop was left (woodDelta=2)");
+            }
+            finally
+            {
+                if (woodMayBeLeft || stoneMayBeLeft)
+                    FeaturesSmokeCommand.Warn(
+                        $"[Automatics Smoke] {check}: test Wood or Stone the pass picked up could not be attributed to the test drops, so it was left in the inventory");
+
+                // A drop still there is destroyed only while it holds the one item the check gave
+                // it; one that grew has absorbed real items and is left in the world.
+                FeaturesSmokeCommand.RemoveTestDrop(first, check);
+                FeaturesSmokeCommand.RemoveTestDrop(second, check);
+                FeaturesSmokeCommand.RemoveTestDrop(other, check);
+            }
+        }
+
+        // The line the hover text patch adds: the key as BepInEx prints it, and the message with
+        // the item's name.
+        private static void CheckHoverText(FeatureRun run, ItemDrop drop)
+        {
+            var key = PickupConfig.PickupAllNearbyKey;
+            if (key.MainKey == KeyCode.None)
+            {
+                run.Skip(HoverCheck,
+                    "pickup_all_nearby_key is not set, so no hover line is added; set a key to include this check");
+                return;
+            }
+
+            var message = global::Automatics.Automatics.L10N.Localize(
+                "@message_automatic_pickup_pickup_all_nearby", drop.m_itemData.m_shared.m_name);
+            if (string.IsNullOrEmpty(message) || message.Contains("message_automatic_pickup"))
+            {
+                run.Fail(HoverCheck, $"the hover message is not translated: '{message}'");
+                return;
+            }
+
+            var line = $"[<color=yellow><b>{key}</b></color>] {message}";
+            var text = drop.GetHoverText();
+            if (text == null || !text.Contains(line))
+            {
+                run.Fail(HoverCheck, $"the hover text lacks '{line}': '{text}'");
+                return;
+            }
+
+            run.Pass(HoverCheck, $"'{key}' with '{message}'");
+        }
+
+        // A Wood drop that allows auto-pickup, placed a metre beyond vanilla's auto-pickup reach,
+        // has to be picked up by the component's own timer while the key is bound.
+        private static IEnumerator CheckIntervalPickup(FeatureRun run, Player player, GameObject woodPrefab)
+        {
+            if (!player)
+            {
+                run.Skip(IntervalCheck, "the local player went away");
+                yield break;
+            }
+
+            if (PickupConfig.PickupAllNearbyKey.MainKey == KeyCode.None)
+            {
+                run.Skip(IntervalCheck,
+                    "pickup_all_nearby_key is not set; this check is about periodic pickup with the key bound, so set a key to include it");
+                yield break;
+            }
+
+            var interval = PickupConfig.AutomaticPickupInterval;
+            if (interval <= 0f)
+            {
+                run.Skip(IntervalCheck,
+                    "automatic_pickup_interval is 0, so periodic pickup is off; set it above 0 to include this check");
+                yield break;
+            }
+
+            var distance = player.m_autoPickupRange + 1f;
+            var range = PickupConfig.AutomaticPickupRange;
+            if (distance > range - 0.5f)
+            {
+                run.Skip(IntervalCheck,
+                    $"automatic_pickup_range is {range:0.#} m, too short to place a drop beyond vanilla auto-pickup ({player.m_autoPickupRange:0.#} m); set it to {distance + 0.5f:0.#} m or more to include this check");
+                yield break;
+            }
+
+            var inventory = player.GetInventory();
+            var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
+            var transform = player.transform;
+            var position = transform.position + Vector3.up * 0.3f - transform.right * distance;
+
+            ItemDrop drop = null;
+            var woodMayBeLeft = false;
+            try
+            {
+                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, position, true);
+                if (drop == null)
+                {
+                    run.Skip(IntervalCheck, "the test drop could not be set up");
+                    yield break;
+                }
+
+                if (!PickableHarvester.CanAddItem(player, drop.m_itemData))
+                {
+                    run.Skip(IntervalCheck, "the inventory cannot take one Wood (space or weight); make room to include this check");
+                    yield break;
+                }
+
+                var before = PickableHarvester.CountExactItems(inventory, sample);
+                woodMayBeLeft = true;
+
+                var timeout = interval + PickableTimeoutSeconds + 1f;
+                var paused = Game.IsPaused();
+                var started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && !FeaturesSmokeCommand.IsConsumed(drop) &&
+                       Time.realtimeSinceStartup - started < timeout)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) paused = true;
+                }
+
+                if (!player)
+                {
+                    run.Skip(IntervalCheck, "inconclusive: the local player went away while the check waited");
+                    yield break;
+                }
+
+                var delta = PickableHarvester.CountExactItems(inventory, sample) - before;
+                if (delta <= 0) woodMayBeLeft = false;
+
+                if (!FeaturesSmokeCommand.IsConsumed(drop))
+                {
+                    if (!run.IsCurrent || paused)
+                        run.Skip(IntervalCheck,
+                            "inconclusive: the run was abandoned or the game was paused while the check waited");
+                    else
+                        run.Fail(IntervalCheck,
+                            $"a Wood drop {distance:0.#} m away was not picked up within {timeout:0.#}s at interval {interval:0.##}s with pickup_all_nearby_key '{PickupConfig.PickupAllNearbyKey}'");
+                    yield break;
+                }
+
+                if (delta <= 0)
+                {
+                    run.Skip(IntervalCheck,
+                        "inconclusive: the drop was taken but no Wood reached the inventory, so something other than Automatic Pickup took it");
+                    yield break;
+                }
+
+                var note = "";
+                if (delta == 1 && FeaturesSmokeCommand.RemoveExactItems(inventory, sample, 1) == 1)
+                    woodMayBeLeft = false;
+                else
+                    note = $"; the Wood count grew by {delta}, so the test Wood could not be told apart from your own and was left in the inventory";
+
+                run.Pass(IntervalCheck,
+                    $"a Wood drop {distance:0.#} m away was picked up at interval {interval:0.##}s with pickup_all_nearby_key '{PickupConfig.PickupAllNearbyKey}'{note}");
+            }
+            finally
+            {
+                if (woodMayBeLeft)
+                    FeaturesSmokeCommand.Warn(
+                        $"[Automatics Smoke] {IntervalCheck}: the Wood periodic pickup took could not be attributed to the test drop, so it was left in the inventory");
+                FeaturesSmokeCommand.RemoveTestDrop(drop, IntervalCheck);
+            }
+        }
+
+        private static float Distance(Player player, ItemDrop drop)
+        {
+            return drop ? Vector3.Distance(player.transform.position, drop.transform.position) : -1f;
+        }
+
+        private static bool AnyConsumed(params ItemDrop[] drops)
+        {
+            foreach (var drop in drops)
+                if (FeaturesSmokeCommand.IsConsumed(drop))
+                    return true;
+            return false;
+        }
+    }
+}

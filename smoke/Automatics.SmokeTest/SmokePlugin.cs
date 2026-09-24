@@ -56,6 +56,7 @@ namespace Automatics.SmokeTest
             WorldSmokeCommand.EnsureRegistered(this);
             LifecycleSmokeCommand.EnsureRegistered(this);
             ProcessingSmokeCommand.EnsureRegistered(this);
+            FeaturesSmokeCommand.EnsureRegistered(this);
 
             // Only Localization.instance is consumed by a check (and that check
             // skip-guards on it), so the readiness wait covers just that. The object

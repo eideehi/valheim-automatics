@@ -78,6 +78,8 @@
     <Compile Include="ErrorObserver.cs" />
     <Compile Include="ProcessingSmokeCommand.cs" />
     <Compile Include="ProcessingSmokeToggle.cs" />
+    <Compile Include="Features\FeaturesSmokeCommand.cs" />
+    <Compile Include="Features\PickupFeatureSmoke.cs" />
   </ItemGroup>
 
   <ItemGroup Label="BepInEx">

@@ -51,6 +51,23 @@ namespace Automatics
 
 namespace UnityEngine
 {
+    // The UnityEngine.KeyCode members the fixtures name, with Unity's own values, so that
+    // Enum.Parse reads a name or a number here as it does in the game. A name missing from this
+    // list reads as unbound, as a misspelt one does there.
+    public enum KeyCode
+    {
+        None = 0,
+        A = 97,
+        E = 101,
+        F = 102,
+        RightShift = 303,
+        LeftShift = 304,
+        RightControl = 305,
+        LeftControl = 306,
+        RightAlt = 307,
+        LeftAlt = 308
+    }
+
     public static class Mathf
     {
         public static int Min(int a, int b)

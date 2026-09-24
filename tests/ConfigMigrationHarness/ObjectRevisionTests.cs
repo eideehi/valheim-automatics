@@ -246,7 +246,7 @@ namespace Automatics
             Run("a read-only revision one file warns and keeps its marker for retry", ReadOnlyObjectRevision);
             Run("quoted CSV, duplicate identifiers and empty elements still match an unedited set", CsvDefaultsMatch);
             Run("object identifiers and section and key names compare ordinally", ObjectRevisionIsOrdinal);
-            Run("a revision two new install writes exactly the marker", NewInstallWritesExactlyMarker);
+            Run("a revision two new install writes exactly the markers", NewInstallWritesExactlyMarker);
             RunWhitespaceRepairTests();
         }
 
@@ -305,7 +305,7 @@ namespace Automatics
         {
             return new[] { "## Settings file was created by plugin Automatics v" + version,
                 "[" + fixture.Section + "]", fixture.Key + " = " + value,
-                "[hidden]", "defaults_revision = " + revision };
+                "[hidden]", "defaults_revision = " + revision, "pickup_key_decoupled = 1" };
         }
 
         private static string ExpectedList(string value, ObjectListFixture fixture)
@@ -441,8 +441,8 @@ namespace Automatics
             foreach (var section in ModuleSections)
                 AssertModule(result, section, section == "automatic_door" ? "Disabled" : "Enabled");
             AssertMarker(result);
-            if (!result.TrimEnd().EndsWith("defaults_revision = 2", StringComparison.Ordinal))
-                throw new Exception("The marker must be last.");
+            if (!result.TrimEnd().EndsWith("defaults_revision = 2" + Environment.NewLine + "pickup_key_decoupled = 1", StringComparison.Ordinal))
+                throw new Exception("The marker, followed by the pickup key marker, must be last.");
         }
 
         private static void RevisionZeroWithMarker()
@@ -491,7 +491,7 @@ namespace Automatics
             var f = ObjectListFixtures[0];
             var lines = new[] { "# Automatics v1.7.0", "[automatic_door]", f.Key + " = " + f.OldDefault,
                 "[hidden]", "NexusID = 1170", "", "## Revision of the configuration defaults.",
-                "# Setting type: Int32", "# Default value: 0", "defaults_revision = 1", "",
+                "# Setting type: Int32", "# Default value: 0", "defaults_revision = 1", "pickup_key_decoupled = 1", "",
                 "[system]", "enable_logging = true" };
             var expected = (string[])lines.Clone();
             expected[2] = f.Key + " = " + ExpectedList(f.OldDefault, f);
@@ -507,7 +507,7 @@ namespace Automatics
         {
             var lines = new[] { "# Automatics v1.7.0", "[hidden]", "# first", "defaults_revision = 0",
                 "NexusID = 1170", "# second", "defaults_revision = 1", "[system]", "defaults_revision = 1",
-                "[hidden]", "# third", "defaults_revision = 1" };
+                "[hidden]", "# third", "defaults_revision = 1", "pickup_key_decoupled = 1" };
             var expected = (string[])lines.Clone();
             foreach (var i in new[] { 3, 6, 11 }) expected[i] = "defaults_revision = 2";
             if (Migrate(lines) != string.Join(Environment.NewLine, expected) + Environment.NewLine)
@@ -579,9 +579,10 @@ namespace Automatics
 
         private static void NewInstallWritesExactlyMarker()
         {
-            var expected = "[hidden]" + Environment.NewLine + "defaults_revision = 2" + Environment.NewLine;
+            var expected = "[hidden]" + Environment.NewLine + "defaults_revision = 2" + Environment.NewLine +
+                "pickup_key_decoupled = 1" + Environment.NewLine;
             if (MigrateWithoutAConfigFile() != expected)
-                throw new Exception("A new install must write only the revision two marker.");
+                throw new Exception("A new install must write only the revision two marker and the pickup key marker.");
         }
     }
 }
