@@ -307,7 +307,7 @@ namespace Automatics.AutomaticMapping
             }
         }
 
-        private static bool IsAutomaticPin(Minimap.PinData pinData)
+        internal static bool IsAutomaticPin(Minimap.PinData pinData)
         {
             return AutomaticPins.Contains(pinData) ||
                    DynamicObjectMapping.OwnsPin(pinData) ||

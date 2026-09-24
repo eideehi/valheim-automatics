@@ -34,6 +34,8 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<int> _floraPinMergeRange;
         private static ConfigEntry<bool> _needToEquipWishboneForUndergroundMinerals;
         private static ConfigEntry<KeyboardShortcut> _staticObjectMappingKey;
+        private static ConfigEntry<KeyboardShortcut> _pinObjectKey;
+        private static ConfigEntry<float> _pinObjectRange;
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
         private static ConfigEntry<bool> _mappingPerformanceLog;
 
@@ -51,6 +53,8 @@ namespace Automatics.AutomaticMapping
         public static int LocationMappingRange => _locationMappingRange.Value;
         public static bool HideUnexploredAutomaticMappingPins =>
             _hideUnexploredAutomaticMappingPins?.Value == true;
+        internal static ConfigEntry<bool> HideUnexploredAutomaticMappingPinsEntry =>
+            _hideUnexploredAutomaticMappingPins;
         public static StringList AllowPinningAnimal => _allowPinningAnimal.Value;
         public static StringList AllowPinningMonster => _allowPinningMonster.Value;
         public static StringList AllowPinningFlora => _allowPinningFlora.Value;
@@ -72,6 +76,8 @@ namespace Automatics.AutomaticMapping
             _needToEquipWishboneForUndergroundMinerals.Value;
 
         public static KeyboardShortcut StaticObjectMappingKey => _staticObjectMappingKey.Value;
+        public static KeyboardShortcut PinObjectKey => _pinObjectKey.Value;
+        public static float PinObjectRange => _pinObjectRange.Value;
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
         public static bool MappingPerformanceLog => _mappingPerformanceLog.Value;
 
@@ -147,6 +153,8 @@ namespace Automatics.AutomaticMapping
             _floraPinMergeRange = config.Bind("flora_pins_merge_range", 8, (0, 16));
             _needToEquipWishboneForUndergroundMinerals = config.Bind("need_to_equip_wishbone_for_underground_minerals", true);
             _staticObjectMappingKey = config.Bind("static_object_mapping_key", new KeyboardShortcut());
+            _pinObjectKey = config.Bind("pin_object_key", new KeyboardShortcut());
+            _pinObjectRange = config.Bind("pin_object_range", 100f, (10f, 300f));
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
             _mappingPerformanceLog = config.Bind("mapping_performance_log", false);

@@ -847,6 +847,37 @@ auto-pickup take it. A passing run looks like this:
 [Automatics Smoke] Summary: total=5 passed=5 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
+#### `pin`
+
+Run `automatics_smoke_features pin` outdoors in a single-player world with
+Automatic Mapping enabled. This section uses the current `pin_object_range`
+and does not require a bound key. It changes one setting, for one check only:
+`hide_unexplored_automatic_mapping_pins` is turned on for `pin_not_hidden` when
+it is off, and put back before the next check. It calls the same ray pinning
+action as the shortcut, bypassing the physical key and its input gate because
+the console is open.
+
+| Check | Asserts |
+|---|---|
+| `pin_object_saved` | A camera ray to a spawned non-persistent Wood drop adds exactly one saved, unauthored pin with the localized name and icon-pack type. Both automatic-pin classification and unexplored-pin hiding return false |
+| `pin_duplicate` | A second ray to that drop, in the same frame, adds nothing: the duplicate check also sees a pin that has no minimap marker yet |
+| `pin_not_hidden` | With `hide_unexplored_automatic_mapping_pins` on, the manual pin from `pin_object_saved` is not hidden as an automatic pin (SKIP when `enable_automatic_mapping` is off or the setting could not be turned on) |
+| `pin_settings_restored` | Reported only when `pin_not_hidden` changed the setting: it is back at your value |
+| `pin_piece_name` | A camera ray to a spawned non-persistent wood wall (a workbench when the wall prefab is missing) adds one saved pin named after the localized piece name, not the prefab name and without `$`, with the icon-pack type for the piece's name |
+| `pin_bare_ground` | A camera ray to bare terrain adds an unnamed saved `Icon3` pin at the hit point |
+| `pin_no_hit` | A camera ray with nothing within range adds nothing |
+| `pin_cleanup` | Every pin created by the section has been removed |
+
+Obstructed object rays, unavailable bare ground, existing duplicate pins, and
+no empty direction within range cause the affected checks to SKIP. Move to an
+open area and retry. Pin creation and removal finish in the same frame, before
+another map save or player input. Only pins added by the section's calls are
+removed; existing pins are untouched. The test drop and the test piece use the
+shared session cleanup, and the drop never enters the inventory. Cleanup failures stay registered with
+the session for retry. Physical hotkey input, save/reload persistence, and a
+module off/on with the saved pin remain in-game verification steps outside this
+section; use `automatics_smoke_lifecycle mapping` for the module lifecycle checks.
+
 ## Remove
 
 To uninstall the smoke plugin, remove the dedicated deploy directory:

@@ -216,6 +216,15 @@ Module` entry while the module was disabled. The module stays disabled. Values
 you changed before you disabled it are kept if they are still in the file, and
 they apply once you turn the module back on in game.
 
+Bind `Pin Looked-at Object` (unbound by default) to pin what you look at within
+`Object Pin Range` (100 meters, configurable from 10 to 300). Objects use their
+localized name and icon-pack icon; bare ground gets an unnamed generic pin.
+These are ordinary saved pins: they survive reload and module toggles and are
+not hidden by the unexplored-area filter. A saved non-automatic pin with the
+same name within 2 meters prevents a duplicate. Adding a pin, finding a duplicate,
+or hitting nothing shows a short message. The shortcut works only while this
+module is running and no menu or text input has focus.
+
 ### Dynamic objects
 
 Dynamic object mapping covers moving objects:

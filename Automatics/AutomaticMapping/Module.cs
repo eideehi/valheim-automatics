@@ -247,12 +247,14 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        ///     The navigation overlay. <see cref="Navigation.Update" /> opens with the module gate
+        ///     The navigation overlay and manual pin shortcut. Both check the module gate;
+        ///     <see cref="Navigation.Update" /> opens with the gate
         ///     itself, and hides the overlay in the frame a stop is requested.
         /// </summary>
         private static void OnPlayerUpdate(Player player, bool takeInput)
         {
             Navigation.Update(player);
+            ObjectPinning.OnPlayerUpdate(player, takeInput);
         }
 
         /// <summary>

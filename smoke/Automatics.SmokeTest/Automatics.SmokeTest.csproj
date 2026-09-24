@@ -80,6 +80,7 @@
     <Compile Include="ProcessingSmokeToggle.cs" />
     <Compile Include="Features\FeaturesSmokeCommand.cs" />
     <Compile Include="Features\PickupFeatureSmoke.cs" />
+    <Compile Include="Features\PinFeatureSmoke.cs" />
   </ItemGroup>
 
   <ItemGroup Label="BepInEx">
@@ -106,6 +107,11 @@
       <HintPath>$(UnityManagedDirectory)\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UnityManagedDirectory)\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup Label="Valheim">
@@ -117,6 +123,11 @@
     <Reference Include="assembly_valheim">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>$(ManagedDataDirectory)\assembly_valheim.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Splatform">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(ManagedDataDirectory)\Splatform.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="assembly_utils">

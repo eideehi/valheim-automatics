@@ -32,7 +32,7 @@ namespace Automatics.SmokeTest
         private static readonly KeyValuePair<string, Func<FeatureRun, IEnumerator>>[] Sections =
         {
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("pickup", PickupFeatureSmoke.Run),
-            new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("pin", null),
+            new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("pin", PinFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("mining", null),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("planting", null),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("guide", null),

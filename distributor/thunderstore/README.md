@@ -17,6 +17,8 @@ Automatically opens and closes allowed doors near the player. The open and close
 
 ### Automatic mapping
 
+Bind `Pin Looked-at Object` to save a pin for the object or ground you look at, up to `Object Pin Range` (100 meters by default).
+
 Automatically pins nearby dynamic objects, static objects, and locations to the map, including animals, monsters, flora, minerals, vehicles, portals, dungeons, spots, and other configured objects. You can configure search ranges, allowed targets, static pin saving, destroyed-object pin cleanup, and user-defined objects. The map navigation shortcut starts or clears navigation by holding the configured modifier key (Left Shift by default) and left-clicking a pin on the large map; while navigating, the HUD shows the target name and distance.
 
 - **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.md](https://github.com/eideehi/valheim-automatics/blob/1.7.0/docs/custom-icon-pack.md) for custom icon pack specifications.

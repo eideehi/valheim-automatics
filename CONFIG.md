@@ -246,6 +246,17 @@ Specify shortcut keys for mapping static objects. Setting this item disables the
 
 - Default value:
 
+### Pin Looked-at Object / [pin_object_key]
+Press this shortcut to save a map pin for the object you are looking at, using its display name and icon-pack icon. Bare terrain gets an unnamed pin. Unbound by default; requires the module to be running.
+
+- Default value: unbound
+
+### Object Pin Range / [pin_object_range]
+Maximum distance in meters from the camera for pinning the object you are looking at.
+
+- Default value: 100
+- Acceptable value range: From 10 to 300
+
 ### Map Navigation Start Key / [navigation_start_key]
 Specify the modifier key used to start navigation by left-clicking a pin on the large map. Left click is fixed.
 

@@ -1,4 +1,5 @@
 #### Unreleased
+- Added an optional shortcut to save a map pin for the object or ground you look at, using object names and icon-pack icons and skipping nearby duplicates.
 - Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair and Automatic Storage can all be turned on and off while the game is running.
 - Automatic Repair and Automatic Mining now wear your tools by the world's durability modifier, as the game does when you repair or mine by hand; on a default world nothing changes.
 - Every module is now off on a new install; turn on the ones you want with their `Disable Module` option. An existing config keeps each module on or off as it was (a module whose `Disable Module` entry is missing from an older config, or holds a value Automatics cannot read, is turned on), and the settings inside each module keep their defaults.
