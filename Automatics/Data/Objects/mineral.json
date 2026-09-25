@@ -109,6 +109,135 @@
           "value": "$piece_giant_sword"
         }
       ]
+    },
+    {
+      "identifier": "Rock",
+      "label": "@mineral_rock",
+      "matches": [
+        {
+          "value": "rock4_coast"
+        },
+        {
+          "value": "rock4_coast_frac"
+        },
+        {
+          "value": "rock4_forest"
+        },
+        {
+          "value": "rock4_forest_frac"
+        },
+        {
+          "value": "rock4_heath"
+        },
+        {
+          "value": "rock4_heath_frac"
+        },
+        {
+          "value": "rock2_heath"
+        },
+        {
+          "value": "rock2_heath_frac"
+        },
+        {
+          "value": "rock1_mountain"
+        },
+        {
+          "value": "rock1_mountain_frac"
+        },
+        {
+          "value": "rock2_mountain"
+        },
+        {
+          "value": "rock2_mountain_frac"
+        },
+        {
+          "value": "rock3_mountain"
+        },
+        {
+          "value": "rock3_mountain_frac"
+        },
+        {
+          "value": "rock3_mountain_1"
+        },
+        {
+          "value": "rock3_mountain_1_frac"
+        },
+        {
+          "value": "Rock_3"
+        },
+        {
+          "value": "Rock_3_frac"
+        },
+        {
+          "value": "BigRock"
+        },
+        {
+          "value": "rock4_bigrock_frac"
+        },
+        {
+          "value": "highstone"
+        },
+        {
+          "value": "highstone_2"
+        },
+        {
+          "value": "highstone_frac"
+        },
+        {
+          "value": "highstone_2_frac"
+        },
+        {
+          "value": "widestone"
+        },
+        {
+          "value": "widestone_2"
+        },
+        {
+          "value": "widestone_frac"
+        },
+        {
+          "value": "widestone_2_frac"
+        },
+        {
+          "value": "Rock_4"
+        },
+        {
+          "value": "Rock_4_plains"
+        },
+        {
+          "value": "Rock_7"
+        },
+        {
+          "value": "Rock_7_meadows"
+        },
+        {
+          "value": "rock_mistlands1"
+        },
+        {
+          "value": "rock_mistlands1_frac"
+        },
+        {
+          "value": "rock_mistlands2"
+        },
+        {
+          "value": "rock1_mistlands"
+        },
+        {
+          "value": "Rock_3_deepnorth"
+        },
+        {
+          "value": "Rock_3_deepnorth_frac"
+        },
+        {
+          "value": "Rock_4_deepnorth"
+        },
+        {
+          "value": "Rock_7_deepnorth"
+        },
+        {
+          "value": "Rock"
+        }
+      ]
     }
   ]
 }

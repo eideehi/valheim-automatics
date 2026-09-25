@@ -347,6 +347,17 @@ namespace Automatics.SmokeTest
             Expect(ValheimObject.Mineral.GetName("CopperDeposit", out var label) &&
                    label == "$piece_deposit_copper",
                 "CopperDeposit should round-trip back to $piece_deposit_copper");
+            Expect(ValheimObject.Mineral.GetIdentify("Rock_4", out var rock4) &&
+                   rock4 == "Rock",
+                "Rock_4 should resolve to Rock");
+            Expect(ValheimObject.Mineral.GetIdentify("rock4_forest_frac", out var rock4ForestFrac) &&
+                   rock4ForestFrac == "Rock",
+                "rock4_forest_frac should resolve to Rock");
+            Expect(ValheimObject.Mineral.GetIdentify("Rock", out var rock) &&
+                   rock == "Rock",
+                "Rock should resolve to Rock");
+            Expect(!ValheimObject.Mineral.GetIdentify("rock4_copper", out _),
+                "rock4_copper should not resolve to Rock");
             return CheckResult.Pass();
         }
 

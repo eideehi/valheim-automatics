@@ -66,6 +66,23 @@ if [[ "$runestone_match" != '$piece_lorestone' ]]; then
   fail "Runestone matcher should be \$piece_lorestone but was ${runestone_match:-<empty>}"
 fi
 
+rock_matches="$(
+  jq -r '
+    .values[] | select(.identifier == "Rock") | .matches[]
+    | [((.regex // false) | tostring), .value] | @tsv
+  ' Automatics/Data/Objects/mineral.json
+)"
+if [[ -z "$rock_matches" ]]; then
+  fail "mineral data must define a Rock entry for ordinary stone rocks"
+else
+  if printf '%s\n' "$rock_matches" | cut -f1 | grep -qv '^false$'; then
+    fail "the Rock mineral entry must use only exact (non-regex) matchers"
+  fi
+  if printf '%s\n' "$rock_matches" | cut -f2 | grep -qx -e 'rock4_copper' -e 'rock3_silver'; then
+    fail "the Rock mineral entry must not match the copper or silver deposit prefabs"
+  fi
+fi
+
 duplicates="$(
   for file in "${object_files[@]}"; do
     jq -r '

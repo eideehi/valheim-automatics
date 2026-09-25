@@ -486,6 +486,10 @@ Key settings:
 | `Area Mining Radius` | How far from the hit area mining reaches (3 meters by default, 1 to 10). |
 | `Area Mining Max Targets` | How many extra minerals or rock sections one swing can hit (8 by default, 1 to 32). |
 
+Ordinary stone rocks (mined for stone) can be added to `Allow Mining Mineral` as
+`Rock`. They are not included by default, since rocks are everywhere and each
+hit wears the pickaxe.
+
 Automatics checks the pickaxe tool tier against the mineral, uses pickaxe
 durability, raises the Pickaxes skill, and applies the pickaxe hit effects.
 

@@ -198,7 +198,7 @@ mining_config_entries=(
   'enable_automatic_mining|config *\. *Bind *\( *"enable_automatic_mining" *, *true *\)'
   'mining_interval|config *\. *Bind *\( *"mining_interval" *, *1\.5f *, *\( *0\.1f *, *4f *\) *\)'
   'mining_range|config *\. *Bind *\( *"mining_range" *, *3 *, *\( *0 *, *32 *\) *\)'
-  'allow_mining_mineral|config *\. *BindValheimObjectList *\( *"allow_mining_mineral" *, *ValheimObject *\. *Mineral *\)'
+  'allow_mining_mineral|config *\. *BindValheimObjectList *\( *"allow_mining_mineral" *, *ValheimObject *\. *Mineral *, *excludes: *new\[\] *\{ *"Rock" *\} *\)'
   'need_to_equip_pickaxe|config *\. *Bind *\( *"need_to_equip_pickaxe" *, *true *\)'
   'allow_mining_underground_minerals|config *\. *Bind *\( *"allow_mining_underground_minerals" *, *true *\)'
   'need_to_equip_wishbone_for_mining_underground_minerals|config *\. *Bind *\( *"need_to_equip_wishbone_for_mining_underground_minerals" *, *true *\)'
