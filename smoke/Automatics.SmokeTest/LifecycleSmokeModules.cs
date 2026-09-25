@@ -247,8 +247,10 @@ namespace Automatics.SmokeTest
                         () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(FarmingModule),
                             "OnPlayerFixedUpdate"),
                         OffExpectation.Zero, 0, () => 1),
-                    // Container roles are the user's and live on the containers: a disable neither
-                    // clears nor rewrites them, so the count stays where it was throughout.
+                    // The patch inventory is read from FarmingPatches, including manual placement.
+                    Probe.Counter("farming.pending_grid", () => global::Automatics.AutomaticFarming.GridPlanting.HasPending ? 1 : 0,
+                        OffExpectation.Zero, 0),
+                    // Container roles stay where the user put them through a disable.
                     Probe.Counter("farming.designated_containers", CountDesignatedContainers,
                         OffExpectation.BelowBaseline, 0)
                 },

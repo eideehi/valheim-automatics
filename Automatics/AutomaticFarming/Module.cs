@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Automatics.AutomaticFarming
 {
     /// <summary>
-    ///     Automatic Farming on the module lifecycle. A scope owns its container hover patch and its
+    ///     Automatic Farming on the module lifecycle. A scope owns its container hover and manual planting patches and its
     ///     three player hook subscriptions, so turning the module off removes them instead of
     ///     leaving them installed. It attaches no component to anything in the scene, so an
     ///     activation has nothing to reconcile: crops, cultivated ground and designated containers
@@ -32,9 +32,9 @@ namespace Automatics.AutomaticFarming
 
         /// <summary>
         ///     The one predicate this module's entry points read, never the config value (R1.5).
-        ///     Four methods check it, each as its first statement: the two player hook handlers,
+        ///     Five methods check it, each as its first statement: the two player hook handlers,
         ///     which can still be called after their subscriptions are gone, the container hover
-        ///     postfix, and <see cref="AutomaticFarming.ClaimsCrop(Player, Pickable)" />, which
+        ///     and manual placement postfixes, and <see cref="AutomaticFarming.ClaimsCrop(Player, Pickable)" />, which
         ///     Automatic Pickup asks before it collects a crop. A farming pass is accepted only at
         ///     the two hook gates and then finishes (R8.11): it harvests a crop into the inventory
         ///     or a container, spends seeds and places the sapling, and each of those calls into
@@ -140,6 +140,7 @@ namespace Automatics.AutomaticFarming
         private static void ResetSession()
         {
             FarmingTimers.Clear();
+            GridPlanting.ClearPending();
         }
 
         private static void OnPlayerUpdate(Player player, bool takeInput)
@@ -148,6 +149,7 @@ namespace Automatics.AutomaticFarming
             // caller fetched before the removal, can still call a handler that is no longer
             // subscribed.
             if (!Running) return;
+            GridPlanting.ConsumePending(player);
             if (!Config.EnableAutomaticFarming) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;

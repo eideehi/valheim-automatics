@@ -1477,3 +1477,19 @@ Specify a shortcut key to attempt farming. If a valid shortcut key is assigned t
 Specify a shortcut key that cycles the role of the container you are looking at between none, cultivation, seed harvest, and storage. When Seed Source is set to Nearby Containers, a cultivation box grows crops from the seeds it holds, a seed-harvest box grows seeds from the crops it holds, and harvested yield is deposited into nearby storage boxes first, otherwise back into the matching planting box. Changing a role claims ownership of the chest, so it only works on containers you can access.
 
 - Default value:
+
+### Grid Planting / [enable_grid_planting]
+Hold the grid planting key while planting by hand to add a grid of the same crop. Each extra crop costs what a hand-placed crop costs: seeds from your inventory, stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of automatic farming, Seed Source and Seed Reserve.
+
+- Default value: true
+
+### Grid Planting Modifier / [grid_planting_key]
+Hold this key while placing a crop to plant a grid. An unbound key makes every manual crop placement plant a grid, except while alternate placement (AltPlace) is held. Left Alt does not conflict with vanilla alternate placement.
+
+- Default value: LeftAlt
+
+### Grid Planting Size / [grid_planting_size]
+Number of cells per side, including the manually planted crop. Set to 1 to disable. The grid follows the placement rotation and uses grow radius multiplied by Sowing Spacing Factor for spacing.
+
+- Default value: 5
+- Acceptable value range: From 1 to 9

@@ -1,6 +1,7 @@
 ﻿using Automatics.Valheim;
 using BepInEx.Configuration;
 using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticFarming
 {
@@ -20,6 +21,10 @@ namespace Automatics.AutomaticFarming
         private static ConfigEntry<KeyboardShortcut> _farmingKey;
         private static ConfigEntry<KeyboardShortcut> _designateContainerKey;
 
+        private static ConfigEntry<bool> _enableGridPlanting;
+        private static ConfigEntry<KeyboardShortcut> _gridPlantingKey;
+        private static ConfigEntry<int> _gridPlantingSize;
+
         /// <summary>
         ///     The toggle the module registry follows. It is exposed so the registry can read the
         ///     user's choice and subscribe to its changes; nothing writes it back (R1.3b), and no
@@ -38,6 +43,10 @@ namespace Automatics.AutomaticFarming
         public static float SowingSpacingFactor => _sowingSpacingFactor.Value;
         public static KeyboardShortcut FarmingKey => _farmingKey.Value;
         public static KeyboardShortcut DesignateContainerKey => _designateContainerKey.Value;
+
+        public static bool EnableGridPlanting => _enableGridPlanting.Value;
+        public static KeyboardShortcut GridPlantingKey => _gridPlantingKey.Value;
+        public static int GridPlantingSize => _gridPlantingSize.Value;
 
         public static void Initialize()
         {
@@ -60,6 +69,9 @@ namespace Automatics.AutomaticFarming
             _sowingSpacingFactor = config.Bind("sowing_spacing_factor", 1f, (0.5f, 4f));
             _farmingKey = config.Bind("farming_key", new KeyboardShortcut());
             _designateContainerKey = config.Bind("designate_container_key", new KeyboardShortcut());
+            _enableGridPlanting = config.Bind("enable_grid_planting", true);
+            _gridPlantingKey = config.Bind("grid_planting_key", new KeyboardShortcut(KeyCode.LeftAlt));
+            _gridPlantingSize = config.Bind("grid_planting_size", 5, (1, 9));
         }
     }
 

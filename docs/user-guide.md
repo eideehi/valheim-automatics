@@ -548,6 +548,18 @@ carry weight, tar restrictions, and pieces that should not be picked up.
 
 ## Automatic farming
 
+With the module enabled, hold Left Alt while planting with the cultivator to add
+more of the same crop in a grid aligned to the placement rotation. `Grid Planting`
+is independent of automatic harvesting and sowing. `Grid Planting Size` defaults
+to 5 cells per side (1 disables it); `Grid Planting Modifier` can be changed or
+left unbound to make every manual crop placement a grid, except while alternate
+placement (AltPlace) is held. Spacing uses the crop's grow radius multiplied by
+`Sowing Spacing Factor`. Each extra crop costs what a hand-placed crop costs:
+inventory seeds, build stamina and cultivator durability at the world's rate. As
+in vanilla, seeds are not needed in free-build worlds. Invalid
+cells are skipped, and planting stops at the first unaffordable cell. `Seed Source`
+and `Seed Reserve` apply only to automatic farming, not these manual grids.
+
 Automatic farming harvests grown crops around the local player and replants the
 regrowing sapling at each harvested spot. It can run at the configured interval
 or only when `Attempt Farming` is pressed.

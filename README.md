@@ -53,6 +53,8 @@ Automatically picks up nearby items at the configured interval; an interval of 0
 
 ### Automatic farming
 
+Hold Left Alt while planting with the cultivator to add a grid of the same crop (5×5 by default), each extra crop costing what a hand-placed crop costs: inventory seeds, stamina and cultivator durability (no seeds in free-build worlds, as in vanilla). Invalid cells are skipped; planting stops when you cannot pay for another crop.
+
 Harvests grown crops around the player and replants the regrowing sapling at each harvested spot, keeping a configurable reserve of every planting input. It can also sow into nearby empty cultivated ground on a spacing grid so the saplings settle healthy. Planting can draw from the player inventory, or from containers you designate by role — cultivation boxes to grow crops, seed-harvest boxes to multiply seeds, and storage boxes to receive the yield — so whole fields can run from chests without ever planting the wrong stock. Farming can run at the configured interval or only when the farming shortcut is pressed. While farming is active, Automatic pickup leaves allowlisted crops for farming to harvest and replant.
 
 ## Console commands

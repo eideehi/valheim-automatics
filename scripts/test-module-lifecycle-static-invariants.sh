@@ -243,6 +243,7 @@ farming_module="$farming_dir/Module.cs"
 farming_patches="$farming_dir/Patches.cs"
 farming_core="$farming_dir/AutomaticFarming.cs"
 farming_planting="$farming_dir/CropPlanting.cs"
+farming_grid="$farming_dir/GridPlanting.cs"
 farming_seed_pool="$farming_dir/SeedPool.cs"
 farming_containers="$farming_dir/FarmingContainers.cs"
 farming_roles="$farming_dir/ContainerRole.cs"
@@ -254,7 +255,9 @@ farming_smoke="smoke/Automatics.SmokeTest/LifecycleSmokeModules.cs"
 # The other two gates are the player hook handlers in Module.cs, the only places a farming pass is
 # accepted. They open with the bare Running and are checked by
 # require_hook_handlers_open_with_the_gate, as the Storage handler is.
+# Manual grid placement adds one gated postfix; automatic farming keeps its existing gates.
 farming_entries=(
+  "Patches.Player_TryPlacePiece_Postfix|$farming_patches|internal static void Player_TryPlacePiece_Postfix\\(|if (!Module.Running) return;"
   "Patches.Container_GetHoverText_Postfix|$farming_patches|private static void Container_GetHoverText_Postfix\\(|if (!Module.Running) return;"
   "AutomaticFarming.ClaimsCrop|$farming_core|public static bool ClaimsCrop\\(Player player, Pickable pickable\\)|if (!Module.Running) return false;"
 )
@@ -272,6 +275,10 @@ farming_config_entries=(
   'sowing_spacing_factor|config *\. *Bind *\( *"sowing_spacing_factor" *, *1f *, *\( *0\.5f *, *4f *\) *\)'
   'farming_key|config *\. *Bind *\( *"farming_key" *, *new KeyboardShortcut *\( *\) *\)'
   'designate_container_key|config *\. *Bind *\( *"designate_container_key" *, *new KeyboardShortcut *\( *\) *\)'
+  # Grid planting appends three settings without changing the automatic-farming entries.
+  'enable_grid_planting|config *\. *Bind *\( *"enable_grid_planting" *, *true *\)'
+  'grid_planting_key|config *\. *Bind *\( *"grid_planting_key" *, *new KeyboardShortcut *\( *KeyCode *\. *LeftAlt *\) *\)'
+  'grid_planting_size|config *\. *Bind *\( *"grid_planting_size" *, *5 *, *\( *1 *, *9 *\) *\)'
 )
 
 # The Automatic Processing patterns are POSIX EREs matched against a stream in which every run
@@ -4597,12 +4604,14 @@ require_farming_never_rechecks_after_a_change() {
     fi
   done
 
+  # The manual-placement postfix adds its own module gate, outside any automatic pass.
   # file@@reads of Module.@@occurrences of ClaimsCrop
   for row in \
     "$farming_module@@0@@0" \
-    "$farming_patches@@1@@0" \
+    "$farming_patches@@2@@0" \
     "$farming_core@@1@@3" \
     "$farming_planting@@0@@0" \
+    "$farming_grid@@0@@0" \
     "$farming_seed_pool@@0@@0" \
     "$farming_containers@@0@@0" \
     "$farming_roles@@0@@0" \
@@ -4762,9 +4771,10 @@ require_farming_session_is_reset() {
   require_exact_method_body "$farming_module" 'public void Disable\(ModuleScope scope\)' \
     'publicvoidDisable(ModuleScopescope){Active=false;ResetSession();CropPlanting.ClearCaches();}' \
     "Farming Disable must only lower Active, reset the session and drop the planting caches (R6.1): the scope removes the patch and the subscriptions, no item is held to put back, and the container roles are the user's"
+  # Pending manual placements must not survive a disable or a player change.
   require_exact_method_body "$farming_module" 'private static void ResetSession\(\)' \
-    'privatestaticvoidResetSession(){FarmingTimers.Clear();}' \
-    "Farming ResetSession must clear FarmingTimers and do nothing else (R6.1 / R6.2): a timer left there carries into the next activation and runs its first interval pass early"
+    'privatestaticvoidResetSession(){FarmingTimers.Clear();GridPlanting.ClearPending();}' \
+    "Farming ResetSession must clear FarmingTimers and pending grid planting (R6.1 / R6.2): a timer left there carries into the next activation and runs its first interval pass early"
   require_exact_method_body "$farming_module" 'private static void OnPlayerAwake\(' \
     'privatestaticvoidOnPlayerAwake(Playerplayer,ZNetViewzNetView){ResetSession();}' \
     "Farming OnPlayerAwake must do nothing but reset the session (R6.2): it runs without a gate, so anything else it did would act after a stop"
@@ -4820,8 +4830,9 @@ require_farming_crop_claim_contract() {
   found="$(strip_code "$farming_patches" | count_hits '\[ *HarmonyPatch *\( *typeof *\(')"
   if lookup_failed "$found"; then
     fail "could not count the Farming patch targets; the check was not run"
-  elif ((found != 1)); then
-    fail "the Farming patch class must patch exactly its one audited target, Container.GetHoverText: found $found"
+  # Manual grid planting adds Player.TryPlacePiece to the module-owned patch class.
+  elif ((found != 2)); then
+    fail "the Farming patch class must patch exactly Container.GetHoverText and Player.TryPlacePiece: found $found"
   fi
 }
 
@@ -4887,6 +4898,25 @@ require_farming_checks_access_before_changes() {
     'the ward check (a failed PrivateArea.CheckAccess returns)|if *\( *! *PrivateArea *\. *CheckAccess *\( *pos *, *0f *, *false *\) *\)' \
     'the placement (PlacePiece)|player *\. *PlacePiece *\(' \
     'the seed consumption (ConsumeSeeds)|(^|[^A-Za-z0-9_])ConsumeSeeds *\('
+  # A manual grid charges each extra crop like a hand-placed one: stamina and durability are checked,
+  # the seeds are secured unless placement costs are waived as vanilla waives them, the crop is
+  # placed, and only then are stamina and durability spent.
+  require_farming_steps_in_order "$farming_grid" 'internal static void ConsumePending\(' \
+    "GridPlanting.ConsumePending" \
+    'the stamina check (HaveStamina)|player *\. *HaveStamina *\(' \
+    'the seed check (EnsureSeedsInInventory unless costs are waived)|if *\( *! *costWaived *&& *! *EnsureSeedsInInventory *\(' \
+    'the placement (CropPlanting.TryPlant)|CropPlanting *\. *TryPlant *\(' \
+    'the stamina charge (UseStamina)|player *\. *UseStamina *\(' \
+    'the durability charge|m_durability *-='
+  # Only the manual grid may waive the seed gate; automatic farming always pays for its crops.
+  for file in "$farming_dir"/*.cs; do
+    found="$(strip_code "$file" | count_hits '(^|[^A-Za-z0-9_])(costWaived|placementCostWaived)([^A-Za-z0-9_]|$)')"
+    if lookup_failed "$found"; then
+      fail "could not search $file for the placement cost waiver; the check was not run"
+    elif [[ "$file" != "$farming_grid" && "$file" != "$farming_planting" ]] && ((found != 0)); then
+      fail "$file must not waive the seed cost: only manual grid planting mirrors vanilla's cost-free placement; found $found"
+    fi
+  done
   require_farming_steps_in_order "$farming_core" 'private static void HarvestAndReplant\(' \
     "AutomaticFarming.HarvestAndReplant" \
     'the crop owner check (a crop this peer does not own returns)|if *\( *! *zNetView *\. *IsOwner *\( *\) *\) *return *;' \
@@ -4912,8 +4942,9 @@ require_farming_config_contract() {
   local previous=0
   local file
 
-  if ((${#farming_config_entries[@]} != 11)); then
-    fail "the Farming config table must name exactly its eleven persisted entries: found ${#farming_config_entries[@]}"
+  # The original eleven entries plus three manual grid planting options.
+  if ((${#farming_config_entries[@]} != 14)); then
+    fail "the Farming config table must name exactly its fourteen persisted entries: found ${#farming_config_entries[@]}"
   fi
 
   stripped="$(strip_code "$farming_config" keep)"
@@ -4931,7 +4962,7 @@ require_farming_config_contract() {
     elif [[ -z "$line" ]]; then
       fail "Farming config must bind $key with its audited default and constraints"
     elif ((line <= previous)); then
-      fail "Farming config must keep its eleven entries in persisted order; $key is out of order"
+      fail "Farming config must keep its fourteen entries in persisted order; $key is out of order"
     else
       previous=$line
     fi
@@ -5079,7 +5110,8 @@ require_module_enable_and_disable_shape "$farming_module" farming --patches \
 require_module_has_no_component_machinery "$farming_module"
 require_hook_handlers_open_with_the_gate "$farming_module" \
   "private static void OnPlayerUpdate\\(" "private static void OnPlayerFixedUpdate\\("
-require_item_entries_open_with_the_gate farming_entries "$farming_dir" "$farming_module" 2
+# Manual placement is the third external gated entry; the three hook subscriptions stay unchanged.
+require_item_entries_open_with_the_gate farming_entries "$farming_dir" "$farming_module" 3
 require_farming_state_and_registration
 require_farming_never_rechecks_after_a_change
 require_farming_call_sites

@@ -104,8 +104,11 @@ namespace Automatics.AutomaticFarming
         // repeat GetComponent<Plant> on every candidate tile, and a pre-resolved
         // SeedPool so a sow pass enumerates nearby containers once instead of per
         // tile (the container set cannot change within a single synchronous pass).
+        // placementCostWaived is for manual grid planting only: when vanilla would let
+        // the player place without seeds (no-cost mode or the piece's free-build key),
+        // the seed reserve gate is skipped. Automatic farming never passes it.
         public static bool TryPlant(Player player, Piece sapling, Plant plant, SeedPool seedPool,
-            Vector3 pos, Quaternion rot, int reserve, out string reason)
+            Vector3 pos, Quaternion rot, int reserve, out string reason, bool placementCostWaived = false)
         {
             if (!PrivateArea.CheckAccess(pos, 0f, false))
             {
@@ -132,7 +135,7 @@ namespace Automatics.AutomaticFarming
             // The reserve gate and the consume step below share the one resolved
             // pool, so they see the same container set (in Inventory mode no
             // container is touched at all).
-            if (!HasSeedAboveReserve(seedPool, sapling, reserve, out var seedInfo))
+            if (!placementCostWaived && !HasSeedAboveReserve(seedPool, sapling, reserve, out var seedInfo))
             {
                 reason = $"seed reserve ({seedInfo})";
                 return false;

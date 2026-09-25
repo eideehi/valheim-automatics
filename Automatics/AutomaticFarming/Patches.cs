@@ -8,6 +8,18 @@ namespace Automatics.AutomaticFarming
     [HarmonyPatch]
     internal static class Patches
     {
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Player), nameof(Player.TryPlacePiece))]
+        internal static void Player_TryPlacePiece_Postfix(Player __instance, Piece piece,
+            bool __result, GameObject ___m_placementGhost)
+        {
+            if (!Module.Running) return;
+            if (!___m_placementGhost) return;
+            GridPlanting.RecordPlacement(__instance, piece, __result,
+                ___m_placementGhost.transform.position, ___m_placementGhost.transform.rotation,
+                GridPlanting.IsModifierHeld(__instance, Config.GridPlantingKey));
+        }
+
         // Container.GetHoverText returns an already-localized string, so the
         // appended role line is localized here too (matching the Pickable hover
         // hints in Automatic Pickup). The role is read from the replicated ZDO, so

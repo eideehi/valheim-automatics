@@ -932,3 +932,56 @@ rm -r /mnt/g/steam/steamapps/common/Valheim/BepInEx/plugins/AutomaticsSmoke
 
 The smoke project is optional developer tooling. The fast static-invariant grep
 scripts under `scripts/` are unaffected by this plugin.
+
+#### `planting`
+
+Requires a single-player world and the Farming module with `enable_grid_planting`
+on. It walks the cultivator's own piece table in order and uses the first piece
+with a `Plant` that needs no cultivated ground, has no terrain modifier, takes
+one kind of seed that you do not carry, and grows in your current biome (all
+read at runtime). A piece whose seed you carry is passed over for the next one.
+It SKIPs if no piece is usable, fewer than three inventory slots are free, the
+world's free-build key for the piece is set (the SKIP names the key; world
+modifiers are never changed), stamina is insufficient, or no patch around you is plantable. It tries grid
+centres in eight directions around your facing at about 4, 8 and 12 m (farther
+when the grid is wide) and uses the first one where every cell passes the rules
+the mod applies before planting: build access, biome, cultivation, roof, grow
+space (grass has no collider and never blocks) and, for crops that refuse
+tilting ground, a slope limit. The SKIP lists each tried centre with how many
+cells passed and the first failing reason. A slot or piece SKIP names the free
+slot count, the biome and each plant piece's verdict (allowed biomes, carried seed count); pieces that grow
+only in biomes from the Mistlands update onward are counted, not named. No
+terrain is modified. If only your own no-cost toggle (`nocost`) is on, the
+section turns it off for its synchronous checks and turns it back on afterwards,
+also through the session hand-back; stamina and durability are charged the same
+either way, as in vanilla. God mode is lifted and restored the same way, because the
+Debug build of Automatics skips stamina use while god mode is on.
+
+The session temporarily sets a 3×3 grid, spacing factor 2.5 and Left Alt, then
+restores the settings. It adds its own cultivators and seeds, captures and
+restores equipment, and drives recorded manual-placement requests synchronously.
+Expected cell positions are computed by the check itself (the hand-placed crop's
+position plus the rotated lattice offsets), not taken from the mod. It checks:
+
+- a 4×4 grid keeps the hand-placed crop as a lattice cell and sits half a cell
+  off it on both axes
+- the released-modifier check calls the actual placement postfix and SKIPs while
+  Left Alt is held; release the key before running it
+- with the key temporarily unbound, the same postfix records a request (SKIPs
+  while the alternative placement button is held)
+- a failed placement and a piece without a `Plant` record nothing
+- eight planted cells and each crop's seed, stamina and durability cost
+- two cells with seeds for two, seven with a local collider blocking the first
+  cell, two with stamina for two charges, and one with durability below one charge
+- a request is rejected when the right-hand tool is swapped before it runs
+- a second consume never replays a request
+
+The extra crops do not raise the Farming skill or the build statistics; only the
+hand-placed crop does, by design, so the section does not check either.
+
+Plants created during these calls are tracked, made non-persistent and removed
+before the frame ends. Only the added inventory items are removed. Stamina, its
+regeneration delay and the test cultivator's durability are restored within the
+same synchronous check. The
+real cultivator key input and vanilla manual placement remain a separate in-game
+check; this section drives the request path after a successful manual placement.
