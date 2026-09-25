@@ -9,7 +9,7 @@ Automatics is a mod that automates the tedious tasks of life in Valheim. Most of
 
 ## Features
 
-> **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Disable Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair and Automatic Storage can all switch without restarting the game. Turning one off stops new actions immediately and lets work already in progress finish; the switch completes over the next few frames. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
+> **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Disable Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair, Automatic Storage and Automatic Supply can all switch without restarting the game. Turning one off stops new actions immediately and lets work already in progress finish; the switch completes over the next few frames. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
 
 For feature-by-feature usage, see [docs/user-guide.md](docs/user-guide.md).
 
@@ -53,9 +53,13 @@ Automatically picks up nearby items at the configured interval; an interval of 0
 
 ### Automatic farming
 
-Hold Left Alt while planting with the cultivator to add a grid of the same crop (5×5 by default), each extra crop costing what a hand-placed crop costs: inventory seeds, stamina and cultivator durability (no seeds in free-build worlds, as in vanilla). Invalid cells are skipped; planting stops when you cannot pay for another crop.
+Hold Left Alt while planting with the cultivator to add a grid of the same crop (5×5 by default), each extra crop costing what a hand-placed crop costs: inventory seeds (plus nearby containers while Automatic supply runs), stamina and cultivator durability (no seeds in free-build worlds, as in vanilla). Invalid cells are skipped; planting stops when you cannot pay for another crop.
 
 Harvests grown crops around the player and replants the regrowing sapling at each harvested spot, keeping a configurable reserve of every planting input. It can also sow into nearby empty cultivated ground on a spacing grid so the saplings settle healthy. Planting can draw from the player inventory, or from containers you designate by role — cultivation boxes to grow crops, seed-harvest boxes to multiply seeds, and storage boxes to receive the yield — so whole fields can run from chests without ever planting the wrong stock. Farming can run at the configured interval or only when the farming shortcut is pressed. While farming is active, Automatic pickup leaves allowlisted crops for farming to harvest and replant.
+
+### Automatic supply
+
+Lets nearby containers supply what you use by hand. When you craft at a crafting station, build with the hammer or plant with the cultivator, items in accessible containers within `Supply Range` (10 m by default) count toward the requirements, and what your inventory lacks is taken from them, nearest first. Adding fuel to a fire, ore or fuel to a smelter-type station, or food to a cooking station takes one suitable item from a nearby container when you carry none. A craft or placement never completes without being fully paid for, and anything taken for an action that does not use it goes back. Warded, private, in-use and other containers you cannot access are never used. It starts off, even in an existing configuration.
 
 ## Console commands
 

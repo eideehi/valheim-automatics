@@ -16,6 +16,7 @@ defaults, and accepted value ranges, see [CONFIG.md](../CONFIG.md).
 - [Automatic storage](#automatic-storage)
 - [Automatic pickup](#automatic-pickup)
 - [Automatic farming](#automatic-farming)
+- [Automatic supply](#automatic-supply)
 - [Console commands](#console-commands)
 
 ## Start here
@@ -28,7 +29,8 @@ Automatics is split into feature modules. Each module has a `Disable Module`
 option, and most modules also have a separate on/off option for the feature
 behavior. Automatic door, automatic pickup, automatic processing, automatic
 mapping, automatic mining, automatic feeding, automatic farming, automatic
-repair and automatic storage all apply that option while the game is running.
+repair, automatic storage and automatic supply all apply that option while the
+game is running.
 
 ## Common configuration concepts
 
@@ -62,6 +64,9 @@ stay off for that session, and tries again at the next start. If you delete the
 configuration file, the next start is a new install, with every module turned
 off.
 
+Automatic supply is the exception: it is new, so an existing configuration
+without its `Disable Module` entry keeps it off until you turn it on.
+
 | Module | Entry | When the change takes effect |
 | --- | --- | --- |
 | Automatic door | `Disable Module` | While the game is running. No restart. |
@@ -73,6 +78,7 @@ off.
 | Automatic farming | `Disable Module` | While the game is running. No restart. |
 | Automatic storage | `Disable Module` | While the game is running. No restart. |
 | Automatic repair | `Disable Module` | While the game is running. No restart. |
+| Automatic supply | `Disable Module` | While the game is running. No restart. |
 
 When you turn automatic door, automatic pickup, automatic processing, automatic
 mapping, automatic mining, automatic feeding, automatic farming, automatic repair or automatic
@@ -562,7 +568,9 @@ to 5 cells per side (1 disables it); `Grid Planting Modifier` can be changed or
 left unbound to make every manual crop placement a grid, except while alternate
 placement (AltPlace) is held. Spacing uses the crop's grow radius multiplied by
 `Sowing Spacing Factor`. Each extra crop costs what a hand-placed crop costs:
-inventory seeds, build stamina and cultivator durability at the world's rate. As
+inventory seeds (plus seeds from nearby containers while
+[Automatic supply](#automatic-supply) is running), build stamina and cultivator
+durability at the world's rate. As
 in vanilla, seeds are not needed in free-build worlds. Invalid
 cells are skipped, and planting stops at the first unaffordable cell. `Seed Source`
 and `Seed Reserve` apply only to automatic farming, not these manual grids.
@@ -675,6 +683,46 @@ returns those crops to periodic pickup right away; crops Automatic pickup
 collects while farming is off are not replanted. Container roles are kept while
 the module is off and apply again when you turn it back on. The targeted
 `Pickup All Nearby` shortcut still picks up those crops regardless of this.
+
+Its `Disable Module` option takes effect without a restart. See
+[Module disable options](#module-disable-options).
+
+## Automatic supply
+
+Automatic supply lets nearby containers supply what you use by hand, as if you
+carried it. It is off by default, including in an existing configuration: an
+update never turns it on for you.
+
+- **Crafting.** At a crafting station, items in nearby containers count toward
+  each requirement, so the recipe list, the "can craft" state and the
+  requirement panel show what you can craft with them. When you craft, what your
+  inventory lacks is taken from the containers first, and the craft happens only
+  when everything is in your inventory; otherwise nothing is crafted and the
+  taken items go back. Station level, item quality, upgrade costs and the craft
+  multiplier work as in vanilla, and so do worlds without crafting costs.
+- **Building and planting.** With the hammer or the cultivator, the build panel
+  and the "can build" state count nearby containers too. A piece is placed only
+  after its whole cost is in your inventory; if something cannot be taken (your
+  inventory is full, for example), nothing is placed and a message says why.
+  [Grid planting](#automatic-farming) takes its seeds the same way, and returns
+  the seeds it took and did not plant.
+- **Station intake.** Adding fuel to a fire, ore or fuel to a smelter-type
+  station, or food to a cooking station takes one suitable item from a nearby
+  container when you carry none, in the order the station prefers.
+- **Order and return.** Your inventory is used first, then containers from the
+  nearest. Items taken for an action that does not use them go back to the
+  container they came from; anything that cannot go back stays in your inventory.
+  Nothing is dropped or created.
+- **Access.** Warded, private or group-restricted containers, containers another
+  player has open and containers on a wagon in use are never used.
+
+Recipes where you choose one of several ingredients work as in vanilla, and
+eating, ammunition, repair, the fermenter and items used directly from the
+hotbar are not supplied.
+
+| Setting | Effect |
+| --- | --- |
+| `Supply Range` | How far from you containers are used, 10 m by default (1–64). |
 
 Its `Disable Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).

@@ -200,9 +200,10 @@ safe.
 
 `automatics_smoke_lifecycle` (no arguments) exercises the runtime module
 lifecycle on Automatic Pickup; with the argument `mapping` it exercises Automatic
-Mapping instead, and with `door`, `farming`, `feeding`, `mining`, `repair` or
-`storage` it exercises Automatic Door, Automatic Farming, Automatic Feeding,
-Automatic Mining, Automatic Repair or Automatic Storage through the module runner
+Mapping instead, and with `door`, `farming`, `feeding`, `mining`, `repair`,
+`storage` or `supply` it exercises Automatic Door, Automatic Farming, Automatic
+Feeding, Automatic Mining, Automatic Repair, Automatic Storage or Automatic Supply
+through the module runner
 the migrated modules share (described after this one). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
@@ -378,7 +379,9 @@ Safety, on top of the rules above:
 
 - The check only ever pauses the module, never turns it on for you. If its
   `module` setting is not `Enabled` when it starts, or its precondition does not
-  hold, every check SKIPs and nothing is written.
+  hold, every check SKIPs and nothing is written. The one exception is `supply`:
+  Automatic Supply is off by default, so the run turns it on first and puts the
+  recorded setting back off afterwards.
 - Automatic Storage moves items only when `Store Items` is pressed, and the
   check never presses it, so no item moves.
 - The handler counts are shared with other modules, so turning another module on
@@ -540,6 +543,19 @@ crop it harvested is replanted in the same call. The patch and subscriptions are
 removed over the next few frames, and container roles stay on their containers.
 While the module is on between cycles, farming may harvest and replant within its
 range as it normally would; the check itself moves no item.
+
+#### `automatics_smoke_lifecycle supply`
+
+`supply` uses the descriptor-driven runner for three off/on cycles of
+`automatic_supply / module`. It checks Supply's patches (the requirement checks
+and panels, the inventory counts, the removal overloads it measures, crafting,
+placement and the station intakes), its one `OnPlayerAwake` subscription and
+named handler, and, while off, that no counting scope, suppression or open action
+is left (`supply_session_idle_while_off`). It spawns nothing and moves no item.
+Automatic Supply is off by default, so unlike the other modules it is turned on
+for the run when it is off in your settings: the write is recorded through the
+session before it is made, and the setting is put back off at the end, on a
+throw and at any hand-back trigger, unless you changed it meanwhile.
 
 #### `automatics_smoke_lifecycle repair`
 
@@ -802,8 +818,10 @@ has no checks yet logs one `SKIP <section>_section: not implemented yet`, and an
 exception inside a section is a `FAIL <section>_section` line, after which the
 next section still runs.
 
-The command never turns a module on: a check whose module is off SKIPs and says
-so. A section may change a setting its checks need for the length of the run,
+The command never turns a module on, with one exception: `supply` turns
+`automatic_supply / module` on for its own section when it is off, because the
+module is off by default. Everywhere else a check whose module is off SKIPs and
+says so. A section may change a setting its checks need for the length of the run,
 under the rules in *Safety of the console commands* above: the change is
 recorded before it is made and refused when the record cannot be written, and
 the setting is put back when the section ends (or at the plugin's hand-back
@@ -1016,3 +1034,62 @@ The section removes only its own test pin and puts back the map mode and your
 navigation target, also through the session hand-back when a run is cut short.
 Whether the swarm looks like glowing insects, and its frame cost, remain an
 in-game judgement outside this section.
+
+#### `supply`
+
+Run `automatics_smoke_features supply` in a single-player world, away from your own
+containers, with the inventory closed, outside build mode and not at a crafting
+station, and with at least four free inventory slots. The section:
+
+- turns `automatic_supply / module` on when it is off and waits for it to start,
+  and sets `supply_range` to 4 m; both are recorded and put back through the
+  session, like every setting a section changes;
+- lifts your own no-cost toggle (`nocost`) for the section and turns it back on
+  afterwards, because vanilla skips crafting and building costs while it is on;
+- spawns a wooden chest 1.5 m to your right, a workbench, a fireplace, a smelter,
+  a cooking station over a fire pit and, for one check, a ward, all
+  non-persistent. It SKIPs when any other usable container is within 4 m.
+
+Every test item is an early material you carry none of, chosen at runtime (a
+workbench recipe and a hammer piece of such materials, the fireplace's fuel, the
+smelter's and the cooking station's accepted items). The log names none of
+them. A check whose station or material cannot be found SKIPs and says why.
+
+| Check | Asserts |
+|---|---|
+| `supply_module_enabled` | Reported when the section turned the module on: it started within 600 frames |
+| `supply_no_cost_lifted` | Reported when your no-cost toggle was on and was lifted for the section |
+| `supply_container_panel_hidden` | With the container panel left active as the last chest leaves it, `InventoryGui.Show(null)` hides it in the same frame; `InventoryGui.Hide()` alone leaves it as vanilla does (still active, for the closing fade); the inventory is closed and the panel hidden again afterwards |
+| `supply_containers_eligible` | The test chest is the only usable container within Supply Range |
+| `supply_scoped_count` | With the recipe's materials only in the chest and the workbench as the current station, the real requirement check passes, and every per-quality count it makes is the inventory plus the chest for that quality; the same count outside the check is the inventory alone |
+| `supply_panel_matches_check` | The build panel (`Hud.SetupPieceInfo`) and the build check (`HaveRequirements(piece, CanBuild)`) count the inventory plus the chest for a material the chest holds (SKIP when the piece's crafting station is not in range) |
+| `supply_partial_insertion` | With room for two, a take of five moves two, leaves the rest in the chest and reports a full inventory; closing the action returns both |
+| `supply_ledger_refund` | Two taken, one removed from the inventory the way vanilla consumes: the ledger reads pulled 2, debited 1, unconsumed 1, and one goes back to the chest |
+| `supply_insertion_shortfall_returned` | The last free slot is filled from the chest's own change callback, between the removal from the chest and the insertion: nothing arrives, the full inventory is reported, and every unit is back in the chest |
+| `supply_craft_complete` | `InventoryGui.DoCrafting` with the materials only in the chest crafts the item, and the chest pays exactly the recipe cost |
+| `supply_craft_incomplete` | With room for one material only, `DoCrafting` crafts nothing, the chest ends unchanged and no material is left in the inventory |
+| `supply_place_incomplete` | With a full inventory and the placement status held at Valid (vanilla's ghost update is skipped and a stand-in ghost is set, and `Player.PlacePiece` is intercepted and recorded instead of run), `Player.TryPlacePiece` inside the module's placement bracket returns false, the module's own rejection counter moves by one, `PlacePiece` is never reached, and nothing moves |
+| `supply_place_failed_refund` | With room, the placement takes every material, vanilla refuses the spot (the placement status is held at Invalid, so vanilla can never place the piece here), and closing the bracket returns everything to the chest |
+| `supply_fireplace_intake` | `Fireplace.Interact` takes one fuel from the chest; none is left in the inventory |
+| `supply_exception_no_refund` | The player inventory's change callback throws once, right after the fuel arrived: `Fireplace.Interact` throws, chest plus inventory is unchanged (the fuel stays in the inventory, not returned), and no action, counting scope or suppression is left open |
+| `supply_smelter_ore_intake` | The smelter's add-ore switch takes one accepted item from the chest (SKIP when you carry an item the smelter takes) |
+| `supply_smelter_fuel_intake` | The smelter's add-fuel switch takes one fuel from the chest |
+| `supply_cooking_intake` | With the test fire lit, the cooking station takes one accepted item from the chest into a free slot (SKIP when the fire does not light the station within 240 frames) |
+| `supply_in_use_chest_untouched` | With the chest marked in use, the fireplace takes nothing from it |
+| `supply_warded_chest_untouched` | Inside a switched-on ward no player has access to, the fireplace takes nothing from the chest |
+| `supply_settings_restored` | Every setting the section changed is back at your value |
+
+The crafting checks run in one frame, because the player drops a station it is
+not using at its next update. The crafting skill and the cooking skill are put
+back afterwards. The section counts every unit of a test item it gives, puts in
+the chest or crafts, and never removes more than that. After each frame boundary
+it records any test item already in your inventory or the chest as yours (a
+pickup while it waited) and stops with a SKIP; those units are never removed.
+When a count cannot be accounted for, nothing of that item is removed and
+`supply_test_items_removed` SKIPs. The chest is removed only when taking out the
+section's own units leaves it empty; otherwise it is kept, saved with your world,
+and its position and contents are logged (`supply_chest_removed` SKIP). A test
+object whose removal fails is kept for the next hand-back trigger. The real UI
+paths (a craft through the crafting panel, a placement with the hammer, a grid
+planting with seeds only in a chest) and multiplayer container use remain
+in-game checks outside this section.

@@ -34,6 +34,10 @@ using RepairPatches = Automatics.AutomaticRepair.Patches;
 using RepairItems = Automatics.AutomaticRepair.ItemRepair;
 using RepairPieces = Automatics.AutomaticRepair.PieceRepair;
 using StorageModule = Automatics.AutomaticStorage.Module;
+using SupplyModule = Automatics.AutomaticSupply.Module;
+using SupplyPatches = Automatics.AutomaticSupply.Patches;
+using SupplyScope = Automatics.AutomaticSupply.SupplyScope;
+using SupplyTransfer = Automatics.AutomaticSupply.SupplyTransfer;
 
 namespace Automatics.SmokeTest
 {
@@ -52,7 +56,9 @@ namespace Automatics.SmokeTest
     //
     // It spawns nothing and writes only the setting, through SmokeSession, under the lifecycle
     // command's rules. It only ever turns a module off and back on: when the module is off in the
-    // user's settings, every check SKIPs and nothing is written.
+    // user's settings, every check SKIPs and nothing is written. A descriptor marked EnableWhenOff
+    // (a module that is off by default) is the exception: it is turned on first, and the recorded
+    // setting puts it back off at the end, on a throw and at any hand-back trigger.
     internal static partial class LifecycleSmokeCommand
     {
         private const int ModuleCycles = 3;
@@ -68,7 +74,8 @@ namespace Automatics.SmokeTest
                 ["feeding"] = DescribeFeeding,
                 ["mining"] = DescribeMining,
                 ["repair"] = DescribeRepair,
-                ["storage"] = DescribeStorage
+                ["storage"] = DescribeStorage,
+                ["supply"] = DescribeSupply
             };
 
         // Automatic Door owns one patch, four hook subscriptions and one component on every Door
@@ -787,6 +794,44 @@ namespace Automatics.SmokeTest
             };
         }
 
+        // Automatic Supply owns its requirement, consumption and station intake patches and one
+        // hook subscription, and no component. While it is off nothing counts container stock and
+        // no action that took items is left open. Nothing is spawned and no item moves. It is off
+        // by default, so when it is off in your settings the run turns it on first and puts it
+        // back off at the end.
+        private static ModuleDescriptor DescribeSupply()
+        {
+            return new ModuleDescriptor
+            {
+                Argument = "supply",
+                EnableWhenOff = true,
+                Module = SupplyModule.Instance,
+                Active = () => SupplyModule.Active,
+                Running = () => SupplyModule.Running,
+                PatchTypes = new[] { typeof(SupplyPatches) },
+                Probes = new[]
+                {
+                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Counter("supply.OnPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(SupplyModule), "OnPlayerAwake"),
+                        OffExpectation.Zero, 0, () => 1)
+                },
+                Precondition = null,
+                Extras = new[]
+                {
+                    new ExtraCheck("session_idle_while_off", Phase.WhileOff, (record, cycle) =>
+                    {
+                        var name = record.Check("session_idle_while_off");
+                        var idle = !SupplyScope.Counting && !SupplyScope.Suppressed && SupplyTransfer.Current == null;
+                        record.Cycle(name, cycle, idle,
+                            "no counting scope, suppression or open action while off",
+                            $"counting={SupplyScope.Counting}, suppressed={SupplyScope.Suppressed}, open action={SupplyTransfer.Current != null}");
+                        return Enumerable.Empty<object>().GetEnumerator();
+                    })
+                }
+            };
+        }
+
         private static void AddRepairCleanupCheck(List<ExtraCheck> extras, Type owner, string field)
         {
             var before = -1;
@@ -931,6 +976,11 @@ namespace Automatics.SmokeTest
             public Func<string> Precondition;
 
             public ExtraCheck[] Extras;
+
+            // True for a module that is off by default: when it is off in the user's settings the
+            // run turns it on first, through the same recorded setting, and puts it back off at
+            // the end. Every other module is only ever turned off and back on.
+            public bool EnableWhenOff;
         }
 
         // What a probe should read while the module is off: nothing at all, its value before the
@@ -1252,6 +1302,9 @@ namespace Automatics.SmokeTest
 
             private int RunId { get; }
 
+            // The run turned an off-by-default module on, and puts it back off when it ends.
+            private bool _turnedOn;
+
             public IReadOnlyList<CheckResult> Results => _record.Results;
 
             public IEnumerator Execute()
@@ -1290,8 +1343,11 @@ namespace Automatics.SmokeTest
                 }
 
                 // The check only ever turns the module off and back on. Turning it on for the user
-                // would let it act in their world, so when it is off it stays off.
-                if (_toggle.Value != AutomaticsModule.Enabled)
+                // would let it act in their world, so when it is off it stays off - unless the
+                // descriptor is for a module that is off by default, which is turned on for the
+                // run and put back off afterwards.
+                _turnedOn = _toggle.Value != AutomaticsModule.Enabled && _descriptor.EnableWhenOff;
+                if (_toggle.Value != AutomaticsModule.Enabled && !_turnedOn)
                 {
                     _record.SkipAll(
                         $"{_section}/module is off in your settings, so the check changed nothing. It only ever turns the module off and back on; turn it on yourself if you want this check, then run it again.");
@@ -1309,6 +1365,12 @@ namespace Automatics.SmokeTest
                 _toggleOwned = true;
                 SmokeSession.TrackHandBack(_observerHandBack);
                 _errors.Start();
+
+                if (_turnedOn && !SmokeSession.WriteToggle(RunId, AutomaticsModule.Enabled, out refusal))
+                {
+                    _record.SkipAll("inconclusive: the module could not be turned on for the run: " + refusal);
+                    yield break;
+                }
 
                 // The registry has to agree with the setting before anything is asked of it, or a
                 // transition still pending from before the command would be read as this one's.
@@ -1373,7 +1435,8 @@ namespace Automatics.SmokeTest
                         default:
                             // A fault is not final here: putting the value back is also what asks
                             // the registry to recover, so the wait gives it the full bound.
-                            var wait = Await(ModuleState.Enabled, false, false, AutomaticsModule.Enabled);
+                            var original = _turnedOn ? AutomaticsModule.Disabled : AutomaticsModule.Enabled;
+                            var wait = Await(_turnedOn ? ModuleState.Disabled : ModuleState.Enabled, false, false, original);
                             while (wait.MoveNext()) yield return wait.Current;
                             RecordWait(_restored, 0, detail);
                             break;

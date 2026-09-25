@@ -89,6 +89,7 @@ namespace Automatics.AutomaticFarming
             var costWaived = player.NoCostCheat() ||
                              (ZoneSystem.instance && ZoneSystem.instance.GetGlobalKey(request.Piece.FreeBuildKey()));
             _planting = true;
+            var completed = false;
             try
             {
                 // Stamina and durability are charged as vanilla charges them, cost-free or not. The
@@ -105,10 +106,11 @@ namespace Automatics.AutomaticFarming
                     if (request.Tool.m_shared.m_useDurability)
                         request.Tool.m_durability -= GetPlaceDurability(player, request.Tool) * Game.m_durabilityRate;
                 }
+                completed = true;
             }
             finally
             {
-                try { ReturnUnusedSeeds(player); }
+                try { ReturnUnusedSeeds(completed); }
                 finally { _planting = false; }
             }
         }
@@ -129,15 +131,26 @@ namespace Automatics.AutomaticFarming
             return cells;
         }
 
-        // Keep the complete per-cell seed check in one place for container supply integration.
+        // The seeds a grid took from nearby containers, while it runs.
+        private static AutomaticSupply.SupplyAction _supplyAction;
+
+        // The hand-placed crop's seed path: the inventory, plus Automatic Supply's containers when
+        // that module is running. The full cost of the cell is in the inventory before it is
+        // planted, so paying from the inventory cannot fall short.
         internal static bool EnsureSeedsInInventory(Player player, Piece piece)
         {
+            if (_supplyAction == null) _supplyAction = AutomaticSupply.SupplyTransfer.BeginIfRunning(player);
+            if (_supplyAction != null) AutomaticSupply.SupplyTransfer.EnsurePieceRequirements(_supplyAction, piece, true);
             return CropPlanting.CanAffordPlanting(SeedPool.FromPlayerInventory(player), piece, 0);
         }
 
-        internal static void ReturnUnusedSeeds(Player player)
+        // Seeds taken from containers and not planted go back when the grid ends normally. After an
+        // exception they stay in the inventory, so none is lost or duplicated.
+        internal static void ReturnUnusedSeeds(bool completedNormally)
         {
-            // Inventory-only planting has no borrowed seeds to return.
+            var action = _supplyAction;
+            _supplyAction = null;
+            AutomaticSupply.SupplyTransfer.End(action, completedNormally);
         }
     }
 }

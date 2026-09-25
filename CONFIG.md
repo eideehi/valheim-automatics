@@ -1,6 +1,6 @@
 # Configurations
 
-Every module is off on a new install; turn on the ones you want by setting their `Disable Module` entry to `Enabled`. An existing configuration file keeps each module on or off as it was. Only the default of `Disable Module` changed: the settings inside each module keep their defaults.
+Every module is off on a new install; turn on the ones you want by setting their `Disable Module` entry to `Enabled`. An existing configuration file keeps each module on or off as it was; Automatic Supply, which is new, starts off there too. Only the default of `Disable Module` changed: the settings inside each module keep their defaults.
 
 ## [ #1 System ] / [system]
 ### Logging / [enable_logging]
@@ -1489,7 +1489,7 @@ Specify a shortcut key that cycles the role of the container you are looking at 
 - Default value:
 
 ### Grid Planting / [enable_grid_planting]
-Hold the grid planting key while planting by hand to add a grid of the same crop. Each extra crop costs what a hand-placed crop costs: seeds from your inventory, stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of automatic farming, Seed Source and Seed Reserve.
+Hold the grid planting key while planting by hand to add a grid of the same crop. Each extra crop costs what a hand-placed crop costs: seeds from your inventory (and from nearby containers while Automatic Supply is running), stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of automatic farming, Seed Source and Seed Reserve.
 
 - Default value: true
 
@@ -1503,3 +1503,16 @@ Number of cells per side, including the manually planted crop. Set to 1 to disab
 
 - Default value: 5
 - Acceptable value range: From 1 to 9
+
+## [ #12 Automatic Supply ] / [automatic_supply]
+### Disable Module / [module]
+You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+
+- Default value: Disabled
+- Acceptable values: Enabled, Disabled
+
+### Supply Range / [supply_range]
+Specify the range around the player within which containers supply items for manual crafting, building, planting and station intake. Items in the inventory are used first, then containers from the nearest. Containers you cannot access, such as warded, private or in-use ones, are never used. (Unit: meters)
+
+- Default value: 10
+- Acceptable value range: From 1 to 64

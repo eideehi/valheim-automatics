@@ -43,6 +43,16 @@ migrated_module_dirs=(
   "Automatics/AutomaticFeeding"
   "Automatics/AutomaticFarming"
   "Automatics/AutomaticRepair"
+  "Automatics/AutomaticSupply"
+)
+
+# Module sections the config migrator must not keep running. A module listed here is off for
+# every config, including one written before the Disabled default: it did not exist when those
+# files were written, so there is no earlier on state to keep, and turning it on for an upgrader
+# would change what their game does without being asked. Each entry is checked: its section
+# exists, its module entry defaults to Disabled, and the migrator's ModuleSections does not name it.
+modules_not_kept_running=(
+  "automatic_supply"
 )
 
 # Modules that have not been migrated. Their early return is part of passing, not a defect:
@@ -413,9 +423,12 @@ extract_block() {
   local file="$1"
   local start_pattern="$2"
 
-  # The pattern travels through the environment: awk -v would eat its backslashes.
+  # The pattern travels through the environment: awk -v would eat its backslashes. The input is
+  # read to its end even after the block closes: exiting early would close the pipe on a writer
+  # still printing a large file, and under pipefail its SIGPIPE would stop the whole script.
   EXTRACT_BLOCK_START="$start_pattern" awk '
     BEGIN { start = ENVIRON["EXTRACT_BLOCK_START"] }
+    done { next }
     !started && $0 ~ start { started = 1 }
     !started { next }
     {
@@ -425,7 +438,7 @@ extract_block() {
       depth += opens - closes
       if (!opened && opens > 0) opened = 1
       print line
-      if (opened && depth <= 0) exit
+      if (opened && depth <= 0) done = 1
     }
   ' "$file"
 }
@@ -1856,7 +1869,7 @@ migration_file="Automatics/ConfigMigration.cs"
 plugin_config_file="Automatics/Config.cs"
 
 # The Config.cs of every module, found on disk rather than listed, so that a module added later
-# is checked too. The callers insist on nine.
+# is checked too. The callers insist on ten.
 module_config_files() {
   find Automatics -mindepth 2 -maxdepth 2 -path 'Automatics/Automatic*/Config.cs' -type f | sort
 }
@@ -1869,8 +1882,8 @@ require_every_module_starts_disabled() {
   local config
 
   mapfile -t configs < <(module_config_files)
-  if ((${#configs[@]} != 9)); then
-    fail "expected the Config.cs of nine modules under Automatics/Automatic*/, found ${#configs[@]}: a module added or removed also changes ConfigMigration.ModuleSections and this count"
+  if ((${#configs[@]} != 10)); then
+    fail "expected the Config.cs of ten modules under Automatics/Automatic*/, found ${#configs[@]}: a module added or removed also changes ConfigMigration.ModuleSections (or modules_not_kept_running) and this count"
   fi
 
   for config in "${configs[@]}"; do
@@ -1901,9 +1914,13 @@ require_the_migrator_keeps_every_module_running() {
   fi
 
   mapfile -t configs < <(module_config_files)
-  if ((${#configs[@]} != 9)); then
-    fail "expected the Config.cs of nine modules under Automatics/Automatic*/, found ${#configs[@]}; the migrator's list was checked against those only"
+  if ((${#configs[@]} != 10)); then
+    fail "expected the Config.cs of ten modules under Automatics/Automatic*/, found ${#configs[@]}; the migrator's list was checked against those only"
   fi
+
+  local exempt
+  local is_exempt
+  local -A seen_exempt=()
 
   for config in "${configs[@]}"; do
     section="$(sed -n -E 's/^[[:space:]]*private const string Section = "([a-z_]+)";.*$/\1/p' "$config" || true)"
@@ -1912,8 +1929,36 @@ require_the_migrator_keeps_every_module_running() {
       continue
     fi
 
+    is_exempt=0
+    for exempt in "${modules_not_kept_running[@]}"; do
+      if [[ "$exempt" == "$section" ]]; then
+        is_exempt=1
+        seen_exempt[$section]=1
+      fi
+    done
+
+    if ((is_exempt)); then
+      # A module that is off for every config: the migrator must leave it alone, and its own
+      # default has to be what keeps it off.
+      if grep -Fq "\"$section\"" <<<"$list"; then
+        fail "$migration_file must not list \"$section\" in ModuleSections ($config): that module is off by default for every config, upgraders included, and the migrator would turn it on for a config written before the Disabled default"
+      fi
+      require_source_pattern \
+        "$config" \
+        "config\\.Bind\\(\"module\", AutomaticsModule\\.Disabled," \
+        "$config must bind its module entry with the default Disabled: the migrator does not keep \"$section\" running, so its default is the only thing that keeps it off"
+      continue
+    fi
+
     if ! grep -Fq "\"$section\"" <<<"$list"; then
       fail "$migration_file must list \"$section\" in ModuleSections ($config): without it, updating turns that module off for a config written before the Disabled default"
+    fi
+  done
+
+  # A stale exemption would let a later module named the same way skip the check unnoticed.
+  for exempt in "${modules_not_kept_running[@]}"; do
+    if [[ -z "${seen_exempt[$exempt]:-}" ]]; then
+      fail "modules_not_kept_running names \"$exempt\", but no Automatics/Automatic*/Config.cs binds that section; remove the exemption or restore the module"
     fi
   done
 }
@@ -5288,9 +5333,26 @@ require_repair_config_contract
 
 require_source_pattern "$repair_smoke" '\["repair"\] = DescribeRepair' 'Repair smoke must use the shared descriptor runner'
 require_source_pattern "$repair_smoke" 'using RepairPatches = Automatics.AutomaticRepair.Patches;' 'Repair smoke must inspect the Repair patch type'
+# The runner leaves a module that is off alone, except one whose descriptor is marked as off by
+# default (EnableWhenOff): that one is turned on for the run through the recorded toggle, which
+# puts it back off. Only Automatic Supply's descriptor carries the mark.
 require_farming_steps_in_order "$repair_smoke" 'public IEnumerator Execute\(' 'Repair shared smoke runner' \
-  'disabled setting skip|if *\( *_toggle *\. *Value *!= *AutomaticsModule *\. *Enabled *\) *\{ *_record *\. *SkipAll *\( *\$?"" *\) *; *yield break *; *\}' \
-  'toggle ownership|SmokeSession *\. *BeginToggle *\('
+  'off-by-default mark read from the descriptor|_turnedOn *= *_toggle *\. *Value *!= *AutomaticsModule *\. *Enabled *&& *_descriptor *\. *EnableWhenOff *;' \
+  'disabled setting skip|if *\( *_toggle *\. *Value *!= *AutomaticsModule *\. *Enabled *&& *! *_turnedOn *\) *\{ *_record *\. *SkipAll *\( *\$?"" *\) *; *yield break *; *\}' \
+  'toggle ownership|SmokeSession *\. *BeginToggle *\(' \
+  'the turn-on for an off-by-default module, after the toggle is owned|if *\( *_turnedOn *&& *! *SmokeSession *\. *WriteToggle *\( *RunId *, *AutomaticsModule *\. *Enabled *,'
+enable_when_off_marks="$(strip_code "$repair_smoke" | count_hits 'EnableWhenOff *= *true')"
+if lookup_failed "$enable_when_off_marks"; then
+  fail "could not count the off-by-default marks in $repair_smoke; the check was not run"
+elif ((enable_when_off_marks != 1)); then
+  fail "exactly one lifecycle descriptor (Automatic Supply's, off by default) may be marked EnableWhenOff = true; found $enable_when_off_marks: the runner turns such a module on for the user"
+fi
+supply_mark="$(strip_code "$repair_smoke" keep | count_hits 'Argument *= *"supply" *, *EnableWhenOff *= *true')"
+if lookup_failed "$supply_mark"; then
+  fail "could not find the supply descriptor's off-by-default mark; the check was not run"
+elif ((supply_mark != 1)); then
+  fail "the EnableWhenOff mark must sit right after the supply descriptor's Argument; found $supply_mark"
+fi
 require_exact_method_body "$repair_smoke" 'private static ModuleDescriptor DescribeRepair\(' \
   'privatestaticModuleDescriptorDescribeRepair(){varextras=newList<ExtraCheck>{newExtraCheck("",Phase.WhileOff,(record,cycle)=>{varname=record.Check("");if(RepairModule.Running){record.Cycle(name,cycle,false,"","");returnEnumerable.Empty<object>().GetEnumerator();}RepairItems.Repair(null);RepairPieces.Repair(null);RepairItems.CraftingStationInteractHook(null,null);record.Cycle(name,cycle,true,"","");returnEnumerable.Empty<object>().GetEnumerator();})};AddRepairCleanupCheck(extras,typeof(RepairModule),"");AddRepairCleanupCheck(extras,typeof(RepairModule),"");AddRepairCleanupCheck(extras,typeof(RepairItems),"");AddRepairCleanupCheck(extras,typeof(RepairPieces),"");AddRepairCleanupCheck(extras,typeof(RepairPieces),"");AddRepairCleanupCheck(extras,typeof(RepairPieces),"");AddRepairCleanupCheck(extras,typeof(RepairPieces),"");returnnewModuleDescriptor{Argument="",Module=RepairModule.Instance,Active=()=>RepairModule.Active,Running=()=>RepairModule.Running,PatchTypes=new[]{typeof(RepairPatches)},Probes=new[]{Probe.Handlers("",()=>Hooks.OnPlayerAwake,1),Probe.Handlers("",()=>Hooks.OnPlayerFixedUpdate,1),Probe.Counter("",()=>CountHandlersOf(Hooks.OnPlayerAwake,typeof(RepairModule),""),OffExpectation.Zero,0,()=>1),Probe.Counter("",()=>CountHandlersOf(Hooks.OnPlayerFixedUpdate,typeof(RepairModule),""),OffExpectation.Zero,0,()=>1)},Precondition=null,Extras=extras.ToArray()};}' \
   'Repair smoke must use its declared patch and two hook deltas, observe cleanup and call only stopped null entries without spawning or writing settings'
@@ -5316,6 +5378,22 @@ require_farming_steps_in_order "$repair_piece" 'public static void Repair\(' 'Re
   'stamina payment|player *\. *UseStamina *\(' \
   'eitr payment|player *\. *UseEitr *\(' \
   'durability payment|tool *\. *m_durability *-= *toolData *\. *m_useDurabilityDrain *\* *Game *\. *m_durabilityRate *;'
+
+# ---------------------------------------------------------------------------------------
+# Automatic Supply: patches and one player hook, no component. It is off for every config (see
+# modules_not_kept_running), and its registration order follows the nine modules before it.
+# ---------------------------------------------------------------------------------------
+supply_module="Automatics/AutomaticSupply/Module.cs"
+require_enable_acquires_in_order "$supply_module" patch subscribe
+require_disable_lowers_the_flag_first "$supply_module" --no-scope
+require_module_enable_and_disable_shape "$supply_module" supply --patches OnPlayerAwake
+require_module_has_no_component_machinery "$supply_module"
+require_single_code_match "$supply_module" '\[AutomaticsInitializer\(10\)\]' \
+  'Supply must register with initializer order 10, after the nine modules before it'
+require_source_pattern "$supply_module" 'public string ConfigSection => "automatic_supply";' \
+  'Supply must keep its config section'
+require_single_code_match "$supply_module" 'internal static bool Running *=> *Active *&& *!StopRequested *;' \
+  'Supply Running must combine the applied state and stop request'
 
 if ((failures > 0)); then
   exit 1

@@ -84,6 +84,7 @@
     <Compile Include="Features\MiningFeatureSmoke.cs" />
     <Compile Include="Features\PlantingFeatureSmoke.cs" />
     <Compile Include="Features\GuideFeatureSmoke.cs" />
+    <Compile Include="Features\SupplyFeatureSmoke.cs" />
   </ItemGroup>
 
   <ItemGroup Label="BepInEx">

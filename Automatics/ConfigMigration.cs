@@ -223,7 +223,9 @@ namespace Automatics
                 : !string.IsNullOrEmpty(matcher.Pattern) && string.Equals(value, matcher.Pattern, StringComparison.OrdinalIgnoreCase);
         }
 
-        // The sections of the nine modules. Each binds a `module` entry whose default is Disabled.
+        // The sections of the nine modules kept running across the update. Each binds a `module`
+        // entry whose default is Disabled. Automatic Supply is left out on purpose: it did not
+        // exist when those files were written, so it stays off for every config, upgraders included.
         private static readonly string[] ModuleSections =
         {
             "automatic_door",
