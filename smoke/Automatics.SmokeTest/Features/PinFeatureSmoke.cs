@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Automatics.AutomaticMapping;
+using Automatics.Valheim;
 using HarmonyLib;
 using ModUtils;
 using UnityEngine;
@@ -66,7 +67,7 @@ namespace Automatics.SmokeTest
                 CheckHidden(run, objectPin);
 
                 piece = SpawnTestPiece(camera.position + camera.forward * 4f - camera.right * 2f,
-                    camera.forward, out var pieceSkip);
+                    camera.forward, true, out var pieceSkip);
                 if (!piece)
                     run.Skip("pin_piece_name", pieceSkip);
                 else
@@ -75,6 +76,11 @@ namespace Automatics.SmokeTest
                     CheckPiece(run, player, piece, created);
                 }
 
+                CheckDetachedPiece(run, player, piece, created);
+                CheckLocation(run, player, created, false);
+                CheckLocation(run, player, created, true);
+                CheckObjectsInLocation(run, player, created);
+                CheckInterior(run, player, created);
                 CheckGround(run, player, created);
                 CheckMiss(run, player, created);
             }
@@ -248,7 +254,7 @@ namespace Automatics.SmokeTest
             var count = Map.GetAllPins().Count;
             var added = Invoke(player, ray, created);
             if (added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
-                !string.IsNullOrEmpty(name) && added.m_name == name && name != prefabName &&
+                piece.IsPlacedByPlayer() && !string.IsNullOrEmpty(name) && added.m_name == name && name != prefabName &&
                 !name.Contains("$") && added.m_type == expectedType &&
                 Vector3.Distance(added.m_pos, go.transform.position) < 0.01f &&
                 !Map.IsAutomaticPin(added))
@@ -259,25 +265,45 @@ namespace Automatics.SmokeTest
         }
 
         // A building piece kept out of every world save and recorded with the session, so a run
-        // cut short still has it removed. Returns null with the reason when none could be set up.
-        private static GameObject SpawnTestPiece(Vector3 position, Vector3 forward, out string skip)
+        // cut short still has it removed. Vanilla Piece.SetCreator writes only while the creator
+        // is 0, so a piece that must stay world-generated is spawned with playerCreator false and
+        // never given one. Returns null with the reason when none could be set up.
+        private static GameObject SpawnTestPiece(Vector3 position, Vector3 forward, bool playerCreator,
+            out string skip)
         {
-            skip = "no wood wall or workbench prefab is available";
-            foreach (var prefabName in new[] { "woodwall", "piece_workbench" })
+            var facing = Vector3.ProjectOnPlane(-forward, Vector3.up);
+            var rotation = facing.sqrMagnitude > 0.001f ? Quaternion.LookRotation(facing) : Quaternion.identity;
+            var go = SpawnTestObject(new[] { "woodwall", "piece_workbench" }, position, rotation, out skip,
+                prefab => prefab.GetComponent<Piece>());
+            if (!go) return null;
+            var piece = go.GetComponent<Piece>();
+            if (playerCreator) piece.SetCreator(Player.m_localPlayer.GetPlayerID(), default);
+            if (piece.IsPlacedByPlayer() == playerCreator) return go;
+            skip = playerCreator
+                ? "the test piece did not take the player as its creator"
+                : "the test piece has a creator although none was set";
+            RemoveTestObject(go);
+            return null;
+        }
+
+        // Spawns the first available prefab non-persistent and records it with the session, so a
+        // run cut short still has it removed. Returns null with the reason when none could be set up.
+        private static GameObject SpawnTestObject(string[] prefabNames, Vector3 position, Quaternion rotation,
+            out string skip, Func<GameObject, bool> accept = null)
+        {
+            skip = $"none of {string.Join(", ", prefabNames)} is available";
+            foreach (var prefabName in prefabNames)
             {
                 var prefab = ZNetScene.instance.GetPrefab(prefabName);
-                if (!prefab || !prefab.GetComponent<Piece>()) continue;
+                if (!prefab || (accept != null && !accept(prefab))) continue;
 
-                var facing = Vector3.ProjectOnPlane(-forward, Vector3.up);
-                var rotation = facing.sqrMagnitude > 0.001f ? Quaternion.LookRotation(facing) : Quaternion.identity;
                 var go = UnityEngine.Object.Instantiate(prefab, position, rotation);
                 SmokeSession.TrackSpawn(go);
                 if (!Objects.GetZNetView(go.transform, out var nview) || nview == null ||
                     !nview.IsValid() || nview.GetZDO() == null)
                 {
                     skip = $"the spawned {prefabName} has no ZDO";
-                    if (SmokeSession.DestroyTestObject(go, 0, "pin feature smoke"))
-                        SmokeSession.ReleaseSpawn(go);
+                    RemoveTestObject(go);
                     return null;
                 }
                 if (!nview.IsOwner()) nview.ClaimOwnership();
@@ -287,12 +313,437 @@ namespace Automatics.SmokeTest
             return null;
         }
 
+        // Deactivated first: ZNetScene destroys the GameObject only at the end of the frame, and
+        // its colliders must not block the rays of the checks that follow.
+        private static void RemoveTestObject(GameObject go)
+        {
+            if (!go) return;
+            go.SetActive(false);
+            Physics.SyncTransforms();
+            if (SmokeSession.DestroyTestObject(go, 0, "pin feature smoke")) SmokeSession.ReleaseSpawn(go);
+        }
+
+        // Loaded early-content locations whose recognized name the action would show. The explicit
+        // allow list also keeps the output free of later content names.
+        private static readonly string[] EarlyLocations =
+        {
+            "BurialChambers", "TrollCave", "SunkenCrypts", "MountainCave",
+            "InfestedTree", "FireHole", "DrakeNest", "GoblinCamp", "TarPit"
+        };
+
+        private sealed class KnownLocation
+        {
+            public Location Location;
+            public string Prefab;
+            public string Label;
+            public string Name;
+            public Vector3 Position => Location.transform.position;
+        }
+
+        private static KnownLocation Recognize(Location location)
+        {
+            if (!location || !location.gameObject.activeInHierarchy) return null;
+            var prefab = Objects.GetPrefabName(location.gameObject);
+            var registry = ValheimObject.Dungeon;
+            if (!registry.GetIdentify(prefab, out var identifier))
+            {
+                registry = ValheimObject.Spot;
+                if (!registry.GetIdentify(prefab, out identifier)) return null;
+            }
+            if (!EarlyLocations.Contains(identifier) || !registry.GetName(identifier, out var label) ||
+                string.IsNullOrEmpty(label))
+                return null;
+            var name = Automatics.L10N.TranslateInternalName(label);
+            var missing = label[0] == '@' ? "automatics_" + label.Substring(1) :
+                label[0] == '$' ? label.Substring(1) : null;
+            if (string.IsNullOrWhiteSpace(name) || name == missing || name.Contains("$") || name.Contains("@"))
+                return null;
+            return new KnownLocation { Location = location, Prefab = prefab, Label = label, Name = name };
+        }
+
+        // Exterior locations within pin range with a recognized name and no manual pin of it yet.
+        private static List<KnownLocation> ExteriorLocations(Vector3 origin)
+        {
+            var result = new List<KnownLocation>();
+            var locations = StaticObjectMapping.LoadedLocations;
+            if (locations == null) return result;
+            foreach (var location in locations)
+            {
+                var known = Recognize(location);
+                if (known == null || location.m_exteriorRadius <= 0f || Character.InInterior(known.Position) ||
+                    Vector3.Distance(origin, known.Position) > MappingConfig.PinObjectRange ||
+                    HasManualPin(known.Position, known.Name))
+                    continue;
+                result.Add(known);
+            }
+            return result;
+        }
+
+        // How many loaded location areas strictly contain the point, as Location.IsInside tests.
+        private static int ContainingAreas(Vector3 point)
+        {
+            var locations = StaticObjectMapping.LoadedLocations;
+            return locations == null ? 0 : locations.Count(location => location &&
+                location.gameObject.activeInHierarchy &&
+                Utils.DistanceXZ(point, location.transform.position) < location.m_exteriorRadius);
+        }
+
+        // The oracle asserts a location only when it is the one area containing the point, so
+        // overlapping areas (including locations outside the allow list) never decide a result.
+        private static bool OnlyInside(Vector3 point, Location location)
+        {
+            return !Character.InInterior(point) &&
+                   Utils.DistanceXZ(point, location.transform.position) < location.m_exteriorRadius &&
+                   ContainingAreas(point) == 1;
+        }
+
+        // Moves a test object to spots inside the location's area until a camera ray's first hit
+        // is the object at a point only that area contains.
+        private static bool TryArrange(Player player, GameObject go, KnownLocation location, out Ray ray)
+        {
+            ray = default(Ray);
+            var origin = GameCamera.instance.transform.position;
+            var center = location.Position;
+            var spots = new List<Vector3> { center + Vector3.up * 3f };
+            for (var i = 0; i < 8; i++)
+            {
+                var angle = i * Mathf.PI / 4f;
+                var spot = center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) *
+                    location.Location.m_exteriorRadius * 0.4f;
+                spot.y = ZoneSystem.instance.GetGroundHeight(spot) + 1f;
+                spots.Add(spot);
+            }
+            foreach (var spot in spots)
+            {
+                go.transform.position = spot;
+                Physics.SyncTransforms();
+                foreach (var collider in go.GetComponentsInChildren<Collider>()
+                             .Where(x => x.enabled && !x.isTrigger && x.gameObject.activeInHierarchy).Take(3))
+                {
+                    var candidate = new Ray(origin, collider.bounds.center - origin);
+                    if (!FirstHit(player, candidate, out var hit) || !hit.collider.transform.IsChildOf(go.transform) ||
+                        !OnlyInside(hit.point, location.Location))
+                        continue;
+                    ray = candidate;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Uses loaded locations without modifying them: location prefabs can alter terrain. The
+        // world-generated piece is spawned here without a creator and never given one; the
+        // player's piece is the one CheckPiece used, whose creator SpawnTestPiece set.
+        private static void CheckDetachedPiece(FeatureRun run, Player player, GameObject playerPiece,
+            List<Minimap.PinData> created)
+        {
+            const string check = "pin_location_detached_piece";
+            var camera = GameCamera.instance.transform;
+            var locations = ExteriorLocations(camera.position);
+            var worldPiece = SpawnTestPiece(camera.position + camera.forward * 4f + camera.up * 3f,
+                camera.forward, false, out var skip);
+            KnownLocation found = null;
+            try
+            {
+                if (!worldPiece)
+                    run.Skip(check, skip);
+                else
+                {
+                    var piece = worldPiece.GetComponent<Piece>();
+                    foreach (var location in locations)
+                    {
+                        if (!TryArrange(player, worldPiece, location, out var ray)) continue;
+                        found = location;
+                        var count = Map.GetAllPins().Count;
+                        var added = Invoke(player, ray, created);
+                        var expectedType = IconPack.GetPinType(new Target
+                        {
+                            name = location.Label, prefabName = location.Prefab
+                        });
+                        if (!piece.IsPlacedByPlayer() && !worldPiece.GetComponentInParent<Location>() &&
+                            added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
+                            added.m_name == location.Name && added.m_type == expectedType &&
+                            !Map.IsAutomaticPin(added) &&
+                            Vector3.Distance(added.m_pos, location.Position) < 0.01f)
+                            run.Pass(check, "a detached piece with creator 0 saved the containing location's name, icon and position");
+                        else
+                            run.Fail(check, "the detached world-generated piece did not save exactly one location pin");
+                        if (added != null) Minimap.instance.RemovePin(added);
+                        break;
+                    }
+                    if (found == null)
+                        run.Skip(check, "no loaded early-content location area within range has an unobstructed test-piece ray at a point only it contains and no existing manual pin; stand near a dungeon entrance or tar pit and retry; location prefabs are not spawned because they can alter terrain or entities");
+                }
+            }
+            finally
+            {
+                RemoveTestObject(worldPiece);
+            }
+
+            CheckPlayerPiece(run, player, playerPiece, found ?? locations.FirstOrDefault(), created);
+        }
+
+        private static void CheckPlayerPiece(FeatureRun run, Player player, GameObject go,
+            KnownLocation location, List<Minimap.PinData> created)
+        {
+            const string check = "pin_location_player_piece";
+            var piece = go ? go.GetComponent<Piece>() : null;
+            if (!piece || !piece.IsPlacedByPlayer())
+            {
+                run.Skip(check, "no test piece with a player creator is available");
+                return;
+            }
+            if (location == null)
+            {
+                run.Skip(check, "no suitable loaded early-content location area is within range");
+                return;
+            }
+            var originalPosition = go.transform.position;
+            try
+            {
+                if (!TryArrange(player, go, location, out var ray))
+                {
+                    run.Skip(check, "no unobstructed ray to the player's test piece at a point only the location's area contains");
+                    return;
+                }
+                var pieceName = Localization.instance.Localize(piece.m_name);
+                if (HasManualPin(go.transform.position, pieceName))
+                {
+                    run.Skip(check, "an existing saved pin of that piece is within 2 m of the test spot");
+                    return;
+                }
+                var count = Map.GetAllPins().Count;
+                var added = Invoke(player, ray, created);
+                var expectedType = IconPack.GetPinType(new Target
+                {
+                    name = piece.m_name, prefabName = Objects.GetPrefabName(go)
+                });
+                if (piece.IsPlacedByPlayer() && added != null && Map.GetAllPins().Count == count + 1 &&
+                    added.m_save && added.m_name == pieceName && added.m_name != location.Name &&
+                    added.m_type == expectedType && !Map.IsAutomaticPin(added) &&
+                    Vector3.Distance(added.m_pos, go.transform.position) < 0.01f)
+                    run.Pass(check, "a piece with a player creator inside the location's area saved the piece itself");
+                else
+                    run.Fail(check, "the player-built piece inside the location did not save its own pin");
+                if (added != null) Minimap.instance.RemovePin(added);
+            }
+            finally
+            {
+                go.transform.position = originalPosition;
+                Physics.SyncTransforms();
+            }
+        }
+
+        // A tree, a deposit and a creature inside a location's area pin as themselves. Each is
+        // spawned non-persistent and removed before the next is spawned.
+        private static void CheckObjectsInLocation(FeatureRun run, Player player, List<Minimap.PinData> created)
+        {
+            var checks = new[]
+            {
+                new KeyValuePair<string, string[]>("pin_location_tree", new[] { "Beech1", "Birch1", "Oak1" }),
+                new KeyValuePair<string, string[]>("pin_location_deposit", new[] { "MineRock_Tin", "rock4_copper" }),
+                new KeyValuePair<string, string[]>("pin_location_creature", new[] { "Deer", "Boar" })
+            };
+            var camera = GameCamera.instance.transform;
+            var locations = ExteriorLocations(camera.position);
+            foreach (var entry in checks)
+            {
+                var check = entry.Key;
+                if (locations.Count == 0)
+                {
+                    run.Skip(check, "no loaded early-content location area without a manual pin is within range; stand near a dungeon entrance or tar pit and retry");
+                    continue;
+                }
+                var go = SpawnTestObject(entry.Value, camera.position + camera.forward * 4f + camera.up * 3f,
+                    Quaternion.identity, out var skip);
+                try
+                {
+                    if (!go)
+                    {
+                        run.Skip(check, skip);
+                        continue;
+                    }
+                    KnownLocation found = null;
+                    var ray = default(Ray);
+                    foreach (var location in locations)
+                    {
+                        if (!TryArrange(player, go, location, out ray)) continue;
+                        found = location;
+                        break;
+                    }
+                    if (found == null)
+                    {
+                        run.Skip(check, "no unobstructed ray to the test object at a point only one location area contains");
+                        continue;
+                    }
+                    if (Map.GetClosestPin(go.transform.position, 2f, pin => pin.m_save && !Map.IsAutomaticPin(pin),
+                            includeInactive: true) != null)
+                    {
+                        run.Skip(check, "an existing saved pin is within 2 m of the test spot");
+                        continue;
+                    }
+                    var count = Map.GetAllPins().Count;
+                    var added = Invoke(player, ray, created);
+                    if (added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
+                        added.m_name != found.Name && !Map.IsAutomaticPin(added) &&
+                        Vector3.Distance(added.m_pos, go.transform.position) < 0.01f)
+                        run.Pass(check, $"{Objects.GetPrefabName(go)} inside the location's area saved its own pin '{added.m_name}'");
+                    else
+                        run.Fail(check, $"{Objects.GetPrefabName(go)} inside the location's area did not save its own pin");
+                    if (added != null) Minimap.instance.RemovePin(added);
+                }
+                finally
+                {
+                    RemoveTestObject(go);
+                }
+            }
+        }
+
+        // Interior rooms are 5000 m above their zone, beyond pin range from outdoors, so this
+        // check runs only when the camera is already inside a loaded dungeon interior.
+        private static void CheckInterior(FeatureRun run, Player player, List<Minimap.PinData> created)
+        {
+            const string check = "pin_location_interior";
+            var origin = GameCamera.instance.transform.position;
+            if (!Character.InInterior(origin))
+            {
+                run.Skip(check, "the camera is not inside a dungeon interior, which is out of pin range from outdoors; enter an early-content dungeon and retry");
+                return;
+            }
+            var directions = new List<Vector3> { GameCamera.instance.transform.forward, Vector3.down };
+            for (var i = 0; i < 8; i++)
+            {
+                var angle = i * Mathf.PI / 4f;
+                directions.Add(new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)));
+            }
+            foreach (var direction in directions)
+            {
+                var ray = new Ray(origin, direction);
+                if (!FirstHit(player, ray, out var hit) || !Character.InInterior(hit.point) ||
+                    !IsLocationSurface(hit.collider))
+                    continue;
+                var location = Recognize(Location.GetZoneLocation(hit.point));
+                if (location == null || HasManualPin(location.Position, location.Name)) continue;
+                var parent = hit.collider.GetComponentInParent<Location>();
+                if (parent && parent != location.Location) continue;
+
+                var count = Map.GetAllPins().Count;
+                var added = Invoke(player, ray, created);
+                var expectedType = IconPack.GetPinType(new Target
+                {
+                    name = location.Label, prefabName = location.Prefab
+                });
+                if (added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
+                    added.m_name == location.Name && added.m_type == expectedType && !Map.IsAutomaticPin(added) &&
+                    Vector3.Distance(added.m_pos, location.Position) < 0.01f)
+                    run.Pass(check, "an interior surface saved its zone location's name, icon and entrance position");
+                else
+                    run.Fail(check, "the interior ray did not save exactly one pin for its zone location");
+                if (added != null) Minimap.instance.RemovePin(added);
+                return;
+            }
+            run.Skip(check, "no interior surface of a recognized early-content dungeon without an existing manual pin is in view; face a wall and retry");
+        }
+
+        // A hit the action resolves as location structure rather than as an object of its own.
+        private static bool IsLocationSurface(Collider collider)
+        {
+            var piece = collider.GetComponentInParent<Piece>();
+            if (collider.isTrigger || (piece && piece.IsPlacedByPlayer()) ||
+                collider.GetComponentInParent<Character>() || collider.GetComponentInParent<MineRock>() ||
+                collider.GetComponentInParent<MineRock5>() || collider.GetComponentInParent<ItemDrop>() ||
+                collider.GetComponentInParent<Pickable>() || collider.GetComponentInParent<TreeBase>() ||
+                collider.GetComponentInParent<TreeLog>())
+                return false;
+            return piece || (collider.GetComponentInParent<IDestructible>() == null &&
+                             collider.GetComponentInParent<Interactable>() == null &&
+                             collider.GetComponentInParent<Hoverable>() == null);
+        }
+
         private static bool HasManualPin(Vector3 position, string name)
         {
             // Include pins without a live minimap marker, as the action does.
             return Map.GetClosestPin(position, 2f,
                 pin => pin.m_save && !Map.IsAutomaticPin(pin) && pin.m_name == name,
                 includeInactive: true) != null;
+        }
+
+        // Read existing locations only: spawning their prefab can generate terrain or entities.
+        private static void CheckLocation(FeatureRun run, Player player,
+            List<Minimap.PinData> created, bool ground)
+        {
+            var check = ground ? "pin_location_ground" : "pin_location_wall";
+            var origin = GameCamera.instance.transform.position;
+            var overlapping = false;
+            foreach (var location in ExteriorLocations(origin))
+            {
+                var rays = new List<Ray>();
+                if (ground)
+                {
+                    for (var i = 0; i < 8; i++)
+                    {
+                        var angle = i * Mathf.PI / 4f;
+                        var point = location.Position + new Vector3(Mathf.Cos(angle), 0f,
+                            Mathf.Sin(angle)) * location.Location.m_exteriorRadius * 0.5f;
+                        rays.Add(new Ray(origin, point - origin));
+                    }
+                }
+                else
+                {
+                    foreach (var collider in location.Location.GetComponentsInChildren<Collider>())
+                        if (collider.enabled && !collider.isTrigger)
+                            rays.Add(new Ray(origin, collider.bounds.center - origin));
+                }
+                foreach (var ray in rays)
+                {
+                    if (!FirstHit(player, ray, out var hit)) continue;
+                    if (ground)
+                    {
+                        if (!hit.collider.GetComponentInParent<Heightmap>() || Character.InInterior(hit.point) ||
+                            Utils.DistanceXZ(hit.point, location.Position) >= location.Location.m_exteriorRadius)
+                            continue;
+                        // The action takes the nearest containing area; assert only a point one area contains.
+                        if (ContainingAreas(hit.point) > 1)
+                        {
+                            overlapping = true;
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        // Static structure under the Location; pieces resolve by area instead.
+                        var collider = hit.collider;
+                        var destructible = collider.GetComponentInParent<IDestructible>() as Component;
+                        if (collider.isTrigger || collider.GetComponentInParent<Piece>() ||
+                            collider.GetComponentInParent<Character>() ||
+                            collider.GetComponentInParent<MineRock>() || collider.GetComponentInParent<MineRock5>() ||
+                            collider.GetComponentInParent<ItemDrop>() || collider.GetComponentInParent<Pickable>() ||
+                            collider.GetComponentInParent<TreeBase>() || collider.GetComponentInParent<TreeLog>() ||
+                            collider.GetComponentInParent<Heightmap>() ||
+                            (destructible && ValheimObject.Mineral.GetIdentify(Objects.GetName(destructible), out _)) ||
+                            collider.GetComponentInParent<Location>() != location.Location) continue;
+                    }
+                    var count = Map.GetAllPins().Count;
+                    var added = Invoke(player, ray, created);
+                    var expectedType = IconPack.GetPinType(new Target
+                    {
+                        name = location.Label, prefabName = location.Prefab
+                    });
+                    if (added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
+                        added.m_name == location.Name && added.m_type == expectedType && !Map.IsAutomaticPin(added) &&
+                        Vector3.Distance(added.m_pos, location.Position) < 0.01f &&
+                        Invoke(player, ray, created) == null && Map.GetAllPins().Count == count + 1)
+                        run.Pass(check, "one saved location pin with the recognized name, icon and position; repeat adds nothing");
+                    else
+                        run.Fail(check, "the location ray did not add exactly one recognized location pin or allowed a duplicate");
+                    // Let the other ray check exercise the same location without a test duplicate.
+                    if (added != null) Minimap.instance.RemovePin(added);
+                    return;
+                }
+            }
+            run.Skip(check, overlapping
+                ? "every terrain point found lies inside more than one location area; move to a spot where one location's area stands alone and retry"
+                : "no visible eligible loaded location without an existing manual pin; stand near a dungeon entrance or tar pit and retry; location spawning is not used");
         }
 
         private static void CheckGround(FeatureRun run, Player player,
@@ -309,6 +760,10 @@ namespace Automatics.SmokeTest
                     hit.collider.GetComponentInParent<Hoverable>() != null ||
                     hit.collider.GetComponentInParent<Character>() != null) continue;
                 if (HasManualPin(hit.point, "")) continue;
+                if (StaticObjectMapping.LoadedLocations != null && StaticObjectMapping.LoadedLocations.Any(
+                        location => location && location.gameObject.activeInHierarchy &&
+                                    Utils.DistanceXZ(hit.point, location.transform.position) <= location.m_exteriorRadius))
+                    continue;
 
                 var count = Map.GetAllPins().Count;
                 var added = Invoke(player, ray, created);

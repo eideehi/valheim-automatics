@@ -112,7 +112,7 @@
     "@config_automatic_mapping_static_object_mapping_key_name": "静的オブジェクトのピン留め",
     "@config_automatic_mapping_static_object_mapping_key_description": "静的オブジェクトをピン留めするためのショートカットキーを指定します。この項目を設定すると、一定間隔ごとの静的オブジェクト検索は無効化され、ショートカットキーが押される度に一度だけ実行されるようになります。",
     "@config_automatic_mapping_pin_object_key_name": "見ているオブジェクトをピン留め",
-    "@config_automatic_mapping_pin_object_key_description": "このショートカットを押すと、見ているオブジェクトの表示名とアイコンパックのアイコンでマップにピンを保存します。地面には名前のないピンを追加します。初期状態では未設定です。モジュールが動作中の場合に使えます。",
+    "@config_automatic_mapping_pin_object_key_description": "このショートカットを押すと、見ているものの表示名とアイコンパックのアイコンでマップにピンを保存します。ワールドに生成された場所（その建造物、範囲内の地面、ダンジョンの内部）を見ている場合は、自動マッピングが認識する名前とアイコンでその場所をピン留めします。プレイヤーが建てた建物、生き物、木、鉱床などはそれ自体をピン留めし、それ以外の地面には名前のないピンを追加します。初期状態では未設定です。モジュールが動作中の場合に使えます。",
     "@config_automatic_mapping_pin_object_range_name": "オブジェクトのピン留め距離",
     "@config_automatic_mapping_pin_object_range_description": "見ているオブジェクトをピン留めできる、カメラからの最大距離（メートル）です。",
     "@config_automatic_mapping_navigation_start_key_name": "マップナビ開始キー",

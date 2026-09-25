@@ -224,7 +224,17 @@ they apply once you turn the module back on in game.
 
 Bind `Pin Looked-at Object` (unbound by default) to pin what you look at within
 `Object Pin Range` (100 meters, configurable from 10 to 300). Objects use their
-localized name and icon-pack icon; bare ground gets an unnamed generic pin.
+localized name and icon-pack icon. A location’s structure, the ground within
+its loaded exterior area (also when you look through water or tar) and a
+dungeon’s interior get one pin at the location with the name and icon Automatic
+Mapping recognizes. An unrecognized location uses its localized discovery label
+when available; otherwise the usual object or ground pin applies.
+World-generated pieces inside a loaded location’s area also pin the location,
+even when detached from its hierarchy. Overlapping areas use the nearest
+containing location, and when that location is not recognized the usual pin
+applies. Player-built pieces, creatures, trees, deposits, loose items and other
+objects such as rune stones keep their own pins. Bare ground outside a location
+gets an unnamed generic pin.
 These are ordinary saved pins: they survive reload and module toggles and are
 not hidden by the unexplored-area filter. A saved non-automatic pin with the
 same name within 2 meters prevents a duplicate. Adding a pin, finding a duplicate,

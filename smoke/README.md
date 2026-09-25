@@ -883,9 +883,19 @@ the console is open.
 | `pin_not_hidden` | With `hide_unexplored_automatic_mapping_pins` on, the manual pin from `pin_object_saved` is not hidden as an automatic pin (SKIP when `enable_automatic_mapping` is off or the setting could not be turned on) |
 | `pin_settings_restored` | Reported only when `pin_not_hidden` changed the setting: it is back at your value |
 | `pin_piece_name` | A camera ray to a spawned non-persistent wood wall (a workbench when the wall prefab is missing) adds one saved pin named after the localized piece name, not the prefab name and without `$`, with the icon-pack type for the piece's name |
-| `pin_bare_ground` | A camera ray to bare terrain adds an unnamed saved `Icon3` pin at the hit point |
+| `pin_location_wall` | A ray at an existing early-content location’s static structure (under its `Location`, not a piece) saves its recognized location name, icon and position once; the repeat adds nothing |
+| `pin_location_detached_piece` | A separately spawned non-persistent piece whose creator is never set (creator 0), with no location parent and moved inside a loaded location’s area, saves the location name, icon and position |
+| `pin_location_player_piece` | The `pin_piece_name` piece, whose player creator is set explicitly and verified, moved inside the same area, saves the piece’s own name, icon and position |
+| `pin_location_ground` | A terrain ray at a point inside exactly one location’s exterior area saves the same location identity once |
+| `pin_location_tree` | A spawned non-persistent tree inside a location’s area saves its own pin at the tree, not the location |
+| `pin_location_deposit` | The same for a spawned non-persistent mineable deposit |
+| `pin_location_creature` | The same for a spawned non-persistent creature |
+| `pin_location_interior` | With the camera inside a dungeon interior, a ray at an interior surface saves the pin of the location in that zone at its entrance position (SKIP outdoors: interiors are out of pin range from outside) |
+| `pin_bare_ground` | A camera ray to bare terrain outside loaded location areas adds an unnamed saved `Icon3` pin at the hit point |
 | `pin_no_hit` | A camera ray with nothing within range adds nothing |
 | `pin_cleanup` | Every pin created by the section has been removed |
+
+Location checks read loaded locations without modifying them and remove only their own pins and objects. They SKIP with a reason when no suitable location ray without an existing manual pin is available; stand near a dungeon entrance or tar pit and retry. No location prefab is spawned because its initialization can generate terrain or entities. Vanilla `Piece.SetCreator` writes only while the creator is 0, so the creator-0 piece is its own spawn and never gets a creator. Test pieces, trees, deposits and creatures are non-persistent, placed only where the camera ray's first hit is the object at a point that exactly one loaded location area contains (strictly inside, as `Location.IsInside` tests), and deactivated and removed before the next check; the `pin_piece_name` piece gets its position back. Checks SKIP with a reason when no such spot, unobstructed ray or duplicate-free position is available, and `pin_location_ground` SKIPs when every terrain point it finds lies inside more than one area. The action gives world-generated pieces, terrain and unnamed hits the nearest containing loaded location; when that location is unrecognized, the usual object or ground pin applies. Player-built pieces, creatures, deposits, trees, loose items and non-piece networked parts of a location such as destructibles or interactables keep their own pins; the game spawns those parts as scene roots, not under the location.
 
 Obstructed object rays, unavailable bare ground, existing duplicate pins, and
 no empty direction within range cause the affected checks to SKIP. Move to an

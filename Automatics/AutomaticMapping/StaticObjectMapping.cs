@@ -100,6 +100,32 @@ namespace Automatics.AutomaticMapping
         private static readonly Lazy<List<Location>> AllLocationsLazy = new Lazy<List<Location>>(
             () => Reflections.GetStaticField<Location, List<Location>>("s_allLocations"));
 
+        internal static IReadOnlyList<Location> LoadedLocations => AllLocationsLazy.Value;
+
+        // The name Automatic Mapping gives a known dungeon or spot. It can be the fallback
+        // `@location_<prefab>` key without a translation; callers that show it to the player
+        // check the translation first. Automatic pins keep using the name as is.
+        internal static bool TryGetLocationName(string prefabName, out string name)
+        {
+            if (ValheimObject.Dungeon.GetIdentify(prefabName, out var identifier))
+            {
+                name = GetLocationName(ValheimObject.Dungeon, identifier, prefabName);
+                return true;
+            }
+            if (ValheimObject.Spot.GetIdentify(prefabName, out identifier))
+            {
+                name = GetLocationName(ValheimObject.Spot, identifier, prefabName);
+                return true;
+            }
+            name = "";
+            return false;
+        }
+
+        private static string GetLocationName(ValheimObject registry, string identifier, string prefabName)
+        {
+            return registry.GetName(identifier, out var name) ? name : $"@location_{prefabName.ToLower()}";
+        }
+
         static StaticObjectMapping()
         {
             ColliderBuffer = new Collider[ColliderBufferInitialLength];
@@ -1530,8 +1556,7 @@ namespace Automatics.AutomaticMapping
             if (!GetDungeon(prefabName, out var data)) return false;
             if (!data.IsAllowed) return true;
 
-            if (!ValheimObject.Dungeon.GetName(data.Identifier, out var name))
-                name = $"@location_{prefabName.ToLower()}";
+            var name = GetLocationName(ValheimObject.Dungeon, data.Identifier, prefabName);
 
             // Linear min-scan instead of OrderBy: only the nearest teleport
             // collider is consumed, so sorting the whole candidate list would
@@ -1598,8 +1623,7 @@ namespace Automatics.AutomaticMapping
                 return true;
             }
 
-            if (!ValheimObject.Spot.GetName(data.Identifier, out var name))
-                name = $"@location_{prefabName.ToLower()}";
+            var name = GetLocationName(ValheimObject.Spot, data.Identifier, prefabName);
 
             if (Map.GetClosestPin(pos,
                     includeInactive: true) == null)

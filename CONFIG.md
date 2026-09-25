@@ -247,7 +247,7 @@ Specify shortcut keys for mapping static objects. Setting this item disables the
 - Default value:
 
 ### Pin Looked-at Object / [pin_object_key]
-Press this shortcut to save a map pin for the object you are looking at, using its display name and icon-pack icon. Bare terrain gets an unnamed pin. Unbound by default; requires the module to be running.
+Press this shortcut to save a map pin for the object you are looking at, using its display name and icon-pack icon. A location’s structure, the ground within its loaded area (also when looking through water or tar) and a dungeon’s interior get one pin at the location with the name and icon Automatic Mapping recognizes. World-generated pieces inside a loaded location’s area also pin the location, even when detached from its hierarchy. Overlapping areas use the nearest containing location; when that location is not recognized, the usual object or ground pin applies. Player-built pieces, creatures, trees, deposits, loose items and other objects such as rune stones keep their own pins. Other bare terrain gets an unnamed pin. Unbound by default; requires the module to be running.
 
 - Default value: unbound
 

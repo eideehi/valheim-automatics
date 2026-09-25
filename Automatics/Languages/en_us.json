@@ -112,7 +112,7 @@
     "@config_automatic_mapping_static_object_mapping_key_name": "Static Object Mapping",
     "@config_automatic_mapping_static_object_mapping_key_description": "Specify shortcut keys for mapping static objects. Setting this item disables the static object mapping at regular intervals, so that it is performed only once each time the shortcut key is pressed.",
     "@config_automatic_mapping_pin_object_key_name": "Pin Looked-at Object",
-    "@config_automatic_mapping_pin_object_key_description": "Press this shortcut to save a map pin for the object you are looking at, using its display name and icon-pack icon. Bare terrain gets an unnamed pin. Unbound by default; requires the module to be running.",
+    "@config_automatic_mapping_pin_object_key_description": "Press this shortcut to save a map pin for what you are looking at, using its display name and icon-pack icon. Looking at a world-generated location (its structure, the ground within its area or a dungeon's interior) pins the location with the name and icon Automatic Mapping recognizes. Player-built pieces, creatures, trees, deposits and other objects keep their own pins, and other bare ground gets an unnamed pin. Unbound by default; requires the module to be running.",
     "@config_automatic_mapping_pin_object_range_name": "Object Pin Range",
     "@config_automatic_mapping_pin_object_range_description": "Maximum distance in meters from the camera for pinning the object you are looking at.",
     "@config_automatic_mapping_navigation_start_key_name": "Map Navigation Start Key",
