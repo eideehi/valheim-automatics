@@ -32,9 +32,10 @@ namespace Automatics.AutomaticFarming
 
         /// <summary>
         ///     The one predicate this module's entry points read, never the config value (R1.5).
-        ///     Five methods check it, each as its first statement: the two player hook handlers,
+        ///     Six methods check it, each as its first statement: the two player hook handlers,
         ///     which can still be called after their subscriptions are gone, the container hover
-        ///     and manual placement postfixes, and <see cref="AutomaticFarming.ClaimsCrop(Player, Pickable)" />, which
+        ///     and manual placement postfixes, the placement ghost prefix that opens lattice
+        ///     snapping, and <see cref="AutomaticFarming.ClaimsCrop(Player, Pickable)" />, which
         ///     Automatic Pickup asks before it collects a crop. A farming pass is accepted only at
         ///     the two hook gates and then finishes (R8.11): it harvests a crop into the inventory
         ///     or a container, spends seeds and places the sapling, and each of those calls into

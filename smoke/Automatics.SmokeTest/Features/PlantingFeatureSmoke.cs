@@ -10,6 +10,7 @@ using FarmingModule = Automatics.AutomaticFarming.Module;
 using FarmingPatches = Automatics.AutomaticFarming.Patches;
 using Grid = Automatics.AutomaticFarming.GridPlanting;
 using Planting = Automatics.AutomaticFarming.CropPlanting;
+using Snapping = Automatics.AutomaticFarming.LatticeSnapping;
 
 namespace Automatics.SmokeTest
 {
@@ -197,6 +198,7 @@ namespace Automatics.SmokeTest
                 var requirement = piece.m_resources.First(r => r.m_resItem && r.GetAmount(0) > 0);
                 foreach (var limit in new[] { Limit.None, Limit.Seeds, Limit.Blocked, Limit.Stamina, Limit.Durability, Limit.ToolSwapped })
                     CheckGrid(run, player, piece, tool, requirement, added, created, cells, centre, rotation, limit);
+                CheckLatticeSnapping(run, player, piece, tool, requirement, added, created, centre, rotation, spacing, keySetting, harmony);
             }
             finally
             {
@@ -539,9 +541,403 @@ namespace Automatics.SmokeTest
             }
         }
 
+        // The oracle for lattice snapping, written out here instead of asking LatticeSnapping: a
+        // position lies on the first grid's lattice when its ground-plane offset from the first
+        // grid's centre, turned back by the first grid's rotation, is a whole number of cells on
+        // both axes; a yaw lies on it when it differs from the first grid's by whole quarter turns.
+        private static bool OnLattice(Vector3 pos, Vector3 centre, Quaternion rotation, float spacing, out Vector2Int cell)
+        {
+            var local = Quaternion.Inverse(rotation) * new Vector3(pos.x - centre.x, 0f, pos.z - centre.z);
+            var x = local.x / spacing;
+            var z = local.z / spacing;
+            cell = new Vector2Int(Mathf.RoundToInt(x), Mathf.RoundToInt(z));
+            return Mathf.Abs(x - cell.x) * spacing < 0.05f && Mathf.Abs(z - cell.y) * spacing < 0.05f;
+        }
+
+        private static bool YawOnLattice(float yaw, Quaternion rotation)
+        {
+            var delta = Mathf.DeltaAngle(rotation.eulerAngles.y, yaw);
+            return Mathf.Abs(delta - Mathf.Round(delta / 90f) * 90f) < 0.5f;
+        }
+
+        // Plants a first grid, then drives a second placement next to it through the snapping path:
+        // the lattice pose directly, the real Player.UpdatePlacementGhost with the modifier active
+        // and released, and a second grid planted at the snapped pose. Afterwards the first grid is
+        // removed and the same aim must no longer snap. The key is unbound (always active) on entry.
+        private static void CheckLatticeSnapping(FeatureRun run, Player player, Piece piece, ItemDrop.ItemData tool,
+            Piece.Requirement requirement, List<ItemDrop.ItemData> added, List<GameObject> created,
+            Vector3 centre, Quaternion rotation, float spacing, SmokeSession.SettingRestoration keySetting, Harmony harmony)
+        {
+            var inventory = player.GetInventory();
+            var seedName = requirement.m_resItem.m_itemData.m_shared.m_name;
+            var seeds = requirement.m_resItem.m_itemData.Clone();
+            seeds.m_stack = 2 * (Size * Size - 1) * requirement.GetAmount(0);
+            seeds.m_dropPrefab = requirement.m_resItem.gameObject;
+            seeds.m_worldLevel = (byte)Game.m_worldLevel;
+            if (inventory.CountItems(seedName) != 0 || !inventory.AddItem(seeds))
+            {
+                run.Skip("planting_lattice_section", "could not add an isolated test seed stack");
+                return;
+            }
+            added.Add(seeds);
+            var stamina = (float)Stamina.GetValue(player);
+            var delay = (float)StaminaDelay.GetValue(player);
+            var durability = tool.m_durability;
+            var start = created.Count;
+            try
+            {
+                Stamina.SetValue(player, player.GetMaxStamina());
+                Grid.RecordPlacement(player, piece, true, centre, rotation, true);
+                Grid.ConsumePending(player);
+                var first = created.Skip(start).Where(x => x && x.GetComponent<Plant>()).ToList();
+                if (first.Count == 0)
+                {
+                    run.Skip("planting_lattice_section", "the first grid planted no crop");
+                    return;
+                }
+
+                // Aimed past the first grid's +x edge and off the lattice by a fraction of a cell, with
+                // a player rotation that is not a quarter turn from the grid's.
+                var edge = Size / 2;
+                var expectedCell = new Vector2Int(edge + 2, 0);
+                var raw = centre + rotation * new Vector3((expectedCell.x + 0.35f) * spacing, 0f, 0.3f * spacing);
+                raw.y = ZoneSystem.instance.GetGroundHeight(raw);
+                var playerYaw = rotation.eulerAngles.y + 100f;
+                var snapped = Snapping.TryLatticePose(piece, true, raw, playerYaw, out var pose, out var yaw);
+                var onLattice = OnLattice(pose, centre, rotation, spacing, out var cell);
+                Check(run, "planting_lattice_snap_pose",
+                    snapped && onLattice && cell == expectedCell && YawOnLattice(yaw, rotation) &&
+                    Mathf.Abs(Mathf.DeltaAngle(yaw, rotation.eulerAngles.y + 90f)) < 0.5f,
+                    $"snapped={snapped}, onLattice={onLattice}, cell={cell}/{expectedCell}, yaw={yaw:F1} (grid {rotation.eulerAngles.y:F1}, player {playerYaw:F1})");
+
+                var released = Snapping.TryLatticePose(piece, false, raw, playerYaw, out var releasedPose, out var releasedYaw);
+                Check(run, "planting_lattice_no_modifier",
+                    !released && releasedPose == raw && Mathf.Approximately(releasedYaw, playerYaw),
+                    $"snapped={released}, moved={(releasedPose - raw).magnitude:F3} m");
+
+                var far = centre + rotation * new Vector3((edge + 1 + Size + 0.6f) * spacing, 0f, 0f);
+                far.y = ZoneSystem.instance.GetGroundHeight(far);
+                var farSnapped = Snapping.TryLatticePose(piece, true, far, playerYaw, out _, out _);
+                var nearest = first.Min(x => new Vector2(x.transform.position.x - far.x, x.transform.position.z - far.z).magnitude);
+                Check(run, "planting_lattice_out_of_radius",
+                    !farSnapped && nearest > Snapping.SearchRadius(spacing, Size),
+                    $"snapped={farSnapped}, nearest crop {nearest:F2} m, radius {Snapping.SearchRadius(spacing, Size):F2} m");
+
+                var ghostPose = CheckRealGhost(run, player, piece, harmony, keySetting, raw, centre, rotation, spacing, expectedCell, first);
+                var secondCentre = ghostPose.HasValue ? ghostPose.Value.Key : pose;
+                var secondYaw = ghostPose.HasValue ? ghostPose.Value.Value : yaw;
+                if (snapped)
+                {
+                    secondCentre.y = ZoneSystem.instance.GetGroundHeight(secondCentre);
+                    var before = created.Count;
+                    Stamina.SetValue(player, player.GetMaxStamina());
+                    Grid.RecordPlacement(player, piece, true, secondCentre, Quaternion.Euler(0f, secondYaw, 0f), true);
+                    Grid.ConsumePending(player);
+                    var second = created.Skip(before).Where(x => x && x.GetComponent<Plant>()).ToList();
+                    var off = second.Where(x => !OnLattice(x.transform.position, centre, rotation, spacing, out _) ||
+                                                !YawOnLattice(x.transform.eulerAngles.y, rotation)).ToList();
+                    if (second.Count == 0) run.Skip("planting_lattice_grid_aligned", "the second grid found no plantable cell");
+                    else
+                        Check(run, "planting_lattice_grid_aligned", off.Count == 0,
+                            $"{second.Count} crop(s) of the second grid (centre from {(ghostPose.HasValue ? "the real ghost" : "the lattice pose")}) on the first grid's lattice, {off.Count} off it");
+                }
+                else run.Skip("planting_lattice_grid_aligned", "the aimed point did not snap");
+
+                // Both grids go, so no crop of the kind is left anywhere near the aim.
+                RemoveObjects(created.Skip(start).ToList());
+                Physics.SyncTransforms();
+                var gone = Snapping.TryLatticePose(piece, true, raw, playerYaw, out _, out _);
+                Check(run, "planting_lattice_no_crop_near", !gone,
+                    "with both grids removed the same aim does not snap", "the same aim still snapped with both grids removed");
+            }
+            finally
+            {
+                Grid.ClearPending();
+                if (!player.IsItemEquiped(tool)) player.EquipItem(tool, false);
+                RemoveObjects(created.Skip(start).ToList());
+                created.RemoveRange(start, created.Count - start);
+                if (inventory.ContainsItem(seeds)) inventory.RemoveItem(seeds);
+                Stamina.SetValue(player, stamina);
+                StaminaDelay.SetValue(player, delay);
+                tool.m_durability = durability;
+                Physics.SyncTransforms();
+            }
+        }
+
+        private static readonly System.Reflection.FieldInfo PlacementGhostField = AccessTools.Field(typeof(Player), "m_placementGhost");
+        private static readonly System.Reflection.FieldInfo PlacementStatusField = AccessTools.Field(typeof(Player), "m_placementStatus");
+        private static readonly System.Reflection.FieldInfo PlaceRotationField = AccessTools.Field(typeof(Player), "m_placeRotation");
+        private static readonly System.Reflection.FieldInfo PlaceDegreesField = AccessTools.Field(typeof(Player), "m_placeRotationDegrees");
+        private static readonly System.Reflection.FieldInfo BuildPiecesField = AccessTools.Field(typeof(Player), "m_buildPieces");
+        private static readonly System.Reflection.MethodInfo UpdateGhost = AccessTools.Method(typeof(Player), "UpdatePlacementGhost");
+        private static readonly System.Reflection.MethodInfo SetupGhost = AccessTools.Method(typeof(Player), "SetupPlacementGhost");
+
+        // Runs the real Player.UpdatePlacementGhost with the camera briefly looking straight down at
+        // an aimed point: with the unbound (always active) key at the free lattice cell (vanilla must
+        // call the snapped pose Valid), at an occupied cell (it must not), and at a point whose
+        // lattice point lies just beyond the reach (no snap); then with Left Alt released. The real
+        // Player.TryPlacePiece is driven at the free and the occupied cell with PlacePiece
+        // intercepted. Nothing renders in between: the camera, the reach, the piece selection and
+        // the rotation step are put back in the same frame. Returns the snapped ghost pose, or null
+        // when the path could not be driven.
+        private static KeyValuePair<Vector3, float>? CheckRealGhost(FeatureRun run, Player player, Piece piece,
+            Harmony harmony, SmokeSession.SettingRestoration keySetting, Vector3 raw, Vector3 centre,
+            Quaternion rotation, float spacing, Vector2Int expectedCell, List<GameObject> first)
+        {
+            const string name = "planting_lattice_real_ghost";
+            var table = BuildPiecesField?.GetValue(player) as PieceTable;
+            var camera = GameCamera.instance ? GameCamera.instance.transform : null;
+            var place = AccessTools.Method(typeof(Player), nameof(Player.PlacePiece));
+            if (PlacementGhostField == null || PlacementStatusField == null || PlaceRotationField == null ||
+                PlaceDegreesField == null || UpdateGhost == null || SetupGhost == null || place == null || !table || !camera)
+            {
+                run.Skip(name, "placement fields, the build table or the camera could not be resolved");
+                return null;
+            }
+            // Captured before the selection changes: selecting a piece can re-roll the rotation step.
+            var originalSteps = (int)PlaceRotationField.GetValue(player);
+            var originalDegrees = (float)PlaceDegreesField.GetValue(player);
+            var category = table.GetSelectedCategory();
+            var index = table.GetSelectedIndex();
+            var cameraPosition = camera.position;
+            var cameraRotation = camera.rotation;
+            var reach = player.m_maxPlaceDistance;
+            KeyValuePair<Vector3, float>? result = null;
+            try
+            {
+                if (!player.SetSelectedPiece(piece))
+                {
+                    run.Skip(name, "the test sapling is not available in the build table (recipe unknown)");
+                    return null;
+                }
+                var ghost = PlacementGhostField.GetValue(player) as GameObject;
+                if (!ghost || !ghost.name.StartsWith(piece.name))
+                {
+                    SetupGhost.Invoke(player, null);
+                    ghost = PlacementGhostField.GetValue(player) as GameObject;
+                }
+                if (!ghost || !ghost.GetComponent<Plant>())
+                {
+                    run.Skip(name, "no placement ghost of the test sapling");
+                    return null;
+                }
+                harmony.Patch(place, prefix: new HarmonyMethod(typeof(PlantingFeatureSmoke), nameof(InterceptPlacePiece)));
+                var steps = (int)PlaceRotationField.GetValue(player);
+                var degrees = (float)PlaceDegreesField.GetValue(player);
+                // Points the camera straight down at the point and runs one ghost update.
+                Func<Vector3, float, string> aim = (point, maxDistance) =>
+                {
+                    camera.SetPositionAndRotation(point + Vector3.up * 3f,
+                        Quaternion.LookRotation(Vector3.down, rotation * Vector3.forward));
+                    player.m_maxPlaceDistance = maxDistance;
+                    UpdateGhost.Invoke(player, new object[] { false });
+                    return PlacementStatusField.GetValue(player).ToString();
+                };
+                Func<Vector3, float> roomy = point => Vector3.Distance(player.m_eye.position, point) + 4f;
+                Func<Vector3, Vector3> ground = point =>
+                {
+                    point.y = ZoneSystem.instance.GetGroundHeight(point);
+                    return point;
+                };
+
+                if (!Grid.IsModifierHeld(player, FarmingConfig.GridPlantingKey))
+                    run.Skip(name, "release the alternative placement button to drive the real ghost");
+                else
+                {
+                    var status = aim(raw, roomy(raw));
+                    var restored = (int)PlaceRotationField.GetValue(player) == steps &&
+                                   Mathf.Approximately((float)PlaceDegreesField.GetValue(player), degrees);
+                    var freeCell = ground(centre + rotation * new Vector3(expectedCell.x * spacing, 0f, expectedCell.y * spacing));
+                    var problem = CellProblem(piece, piece.GetComponent<Plant>(), freeCell);
+                    if (status == "NoRayHits") run.Skip(name, "the camera ray hit nothing at the aimed point");
+                    else if (problem != null)
+                    {
+                        run.Skip(name, "the free lattice cell is not plantable here: " + problem);
+                        run.Skip(name + "_try_place", "the free lattice cell is not plantable here");
+                    }
+                    else
+                    {
+                        var pos = ghost.transform.position;
+                        var yaw = ghost.transform.eulerAngles.y;
+                        var onLattice = OnLattice(pos, centre, rotation, spacing, out var cell);
+                        var grounded = Mathf.Abs(pos.y - ZoneSystem.instance.GetGroundHeight(pos)) < 0.5f;
+                        var ok = onLattice && cell == expectedCell && YawOnLattice(yaw, rotation) && restored && grounded &&
+                                 status == "Valid";
+                        Check(run, name, ok,
+                            $"ghost cell={cell}/{expectedCell}, onLattice={onLattice}, yaw={yaw:F1} (grid {rotation.eulerAngles.y:F1}), " +
+                            $"rotation step restored={restored}, on ground={grounded}, vanilla status={status} (Valid expected)");
+                        if (ok)
+                        {
+                            result = new KeyValuePair<Vector3, float>(pos, yaw);
+                            CheckTryPlace(run, name + "_try_place", player, piece, true, pos, ghost.transform.rotation);
+                        }
+                        else run.Skip(name + "_try_place", "the snapped ghost at the free cell was not valid");
+                    }
+
+                    // A cell of the first grid: the ray under the lattice point meets that crop.
+                    var occupiedCell = new Vector2Int(Size / 2, 0);
+                    var occupant = first.FirstOrDefault(x => x && OnLattice(x.transform.position, centre, rotation, spacing, out var c) &&
+                                                             c == occupiedCell);
+                    if (!occupant) run.Skip(name + "_occupied", "the first grid has no crop in the cell next to the aim");
+                    else
+                    {
+                        var aimed = ground(centre + rotation * new Vector3((occupiedCell.x + 0.3f) * spacing, 0f, 0.25f * spacing));
+                        status = aim(aimed, roomy(aimed));
+                        if (status == "NoRayHits") run.Skip(name + "_occupied", "the camera ray hit nothing at the aimed point");
+                        else
+                        {
+                            var onLattice = OnLattice(ghost.transform.position, centre, rotation, spacing, out var cell);
+                            Check(run, name + "_occupied", onLattice && cell == occupiedCell && status != "Valid",
+                                $"ghost cell={cell}/{occupiedCell}, onLattice={onLattice}, vanilla status={status} (not Valid expected)");
+                            CheckTryPlace(run, name + "_occupied_try_place", player, piece, false,
+                                ghost.transform.position, ghost.transform.rotation);
+                        }
+                    }
+
+                    // The free cell's lattice point just beyond the reach, the aimed point just within.
+                    var lattice = ground(centre + rotation * new Vector3(expectedCell.x * spacing, 0f, expectedCell.y * spacing));
+                    var toward = player.m_eye.position - lattice;
+                    toward.y = 0f;
+                    var aimedNear = ground(lattice + toward.normalized * (0.4f * spacing));
+                    var nearCellOk = OnLattice(lattice, centre, rotation, spacing, out _) &&
+                                     NearestCell(aimedNear, centre, rotation, spacing) == expectedCell;
+                    var dAim = Vector3.Distance(player.m_eye.position, aimedNear);
+                    var dLattice = Vector3.Distance(player.m_eye.position, lattice);
+                    if (toward.sqrMagnitude < 0.01f || !nearCellOk || dLattice - dAim < 0.1f)
+                        run.Skip(name + "_beyond_reach", $"no aim whose lattice point is farther (aim {dAim:F2} m, lattice point {dLattice:F2} m)");
+                    else
+                    {
+                        var limit = (dAim + dLattice) * 0.5f - ghost.GetComponent<Piece>().m_extraPlacementDistance;
+                        status = aim(aimedNear, limit);
+                        var pos = ghost.transform.position;
+                        var moved = new Vector2(pos.x - aimedNear.x, pos.z - aimedNear.z).magnitude;
+                        var yawKept = Mathf.Abs(Mathf.DeltaAngle(ghost.transform.eulerAngles.y, degrees * steps)) < 0.5f;
+                        if (status == "NoRayHits") run.Skip(name + "_beyond_reach", "the camera ray hit nothing at the aimed point");
+                        else
+                            Check(run, name + "_beyond_reach", moved < 0.05f && yawKept,
+                                $"reach {limit:F2} m, aim {dAim:F2} m, lattice point {dLattice:F2} m: ghost {moved:F3} m from the aimed point, player rotation kept={yawKept}, vanilla status={status}");
+                    }
+                }
+
+                if (!SmokeSession.WriteSetting(run.RunId, keySetting, new KeyboardShortcut(KeyCode.LeftAlt), out var refusal))
+                    run.Skip(name + "_released", "could not bind Left Alt: " + refusal);
+                else if (Grid.IsModifierHeld(player, FarmingConfig.GridPlantingKey))
+                    run.Skip(name + "_released", "release Left Alt to check the real ghost without the modifier");
+                else
+                {
+                    var status = aim(raw, roomy(raw));
+                    var pos = ghost.transform.position;
+                    var moved = new Vector2(pos.x - raw.x, pos.z - raw.z).magnitude;
+                    var yawKept = Mathf.Abs(Mathf.DeltaAngle(ghost.transform.eulerAngles.y, degrees * steps)) < 0.5f;
+                    if (status == "NoRayHits") run.Skip(name + "_released", "the camera ray hit nothing at the aimed point");
+                    else
+                        Check(run, name + "_released", moved < 0.05f && yawKept,
+                            $"ghost {moved:F3} m from the aimed point, player rotation kept={yawKept}, vanilla status={status}");
+                }
+                if (!SmokeSession.WriteSetting(run.RunId, keySetting, new KeyboardShortcut(), out refusal))
+                    run.Fail(name + "_released", "could not unbind the key again: " + refusal);
+            }
+            finally
+            {
+                _interceptPlace = false;
+                Grid.ClearPending();
+                camera.SetPositionAndRotation(cameraPosition, cameraRotation);
+                player.m_maxPlaceDistance = reach;
+                if (BuildPiecesField.GetValue(player) as PieceTable == table)
+                {
+                    player.SetBuildCategory(category);
+                    table.SetSelected(index);
+                    SetupGhost.Invoke(player, null);
+                }
+                PlaceRotationField.SetValue(player, originalSteps);
+                PlaceDegreesField.SetValue(player, originalDegrees);
+            }
+            return result;
+        }
+
+        private static Vector2Int NearestCell(Vector3 pos, Vector3 centre, Quaternion rotation, float spacing)
+        {
+            OnLattice(pos, centre, rotation, spacing, out var cell);
+            return cell;
+        }
+
+        private static bool _interceptPlace;
+        private static int _placeCalls;
+        private static Vector3 _placedPosition;
+        private static Quaternion _placedRotation;
+
+        private static bool InterceptPlacePiece(Vector3 pos, Quaternion rot)
+        {
+            if (!_interceptPlace) return true;
+            _placeCalls++;
+            _placedPosition = pos;
+            _placedRotation = rot;
+            return false;
+        }
+
+        // Drives the real Player.TryPlacePiece at the current aim with PlacePiece intercepted, so
+        // nothing is placed. The player's no-cost toggle is on for the call, so vanilla counts the
+        // placement as cheated and grants no achievement progress; the build statistics it still
+        // increments are put back afterwards, and the grid request the placement records is dropped.
+        private static void CheckTryPlace(FeatureRun run, string name, Player player, Piece piece, bool expectPlaced,
+            Vector3 ghostPosition, Quaternion ghostRotation)
+        {
+            if (NoPlacementCost == null || PlayerProfile.s_bypassCheatChecks || !Game.instance ||
+                Game.instance.GetPlayerProfile() == null)
+            {
+                run.Skip(name, "cannot mark the placement as cheated, so it could count toward achievements");
+                return;
+            }
+            var stats = Game.instance.GetPlayerProfile().m_playerStats;
+            var builds = new Dictionary<int, float?>();
+            var placedStats = new Dictionary<int, float?>();
+            for (var i = 0; i < stats.Length; i++)
+            {
+                if (stats[i] == null) continue;
+                builds[i] = stats[i].m_stats.TryGetValue(PlayerStatType.Builds, out var b) ? b : (float?)null;
+                placedStats[i] = stats[i].m_piecesPlacedStats.TryGetValue(piece.m_name, out var p) ? p : (float?)null;
+            }
+            var noCost = (bool)NoPlacementCost.GetValue(player);
+            bool placed;
+            _placeCalls = 0;
+            NoPlacementCost.SetValue(player, true);
+            _interceptPlace = true;
+            try
+            {
+                placed = player.TryPlacePiece(piece);
+            }
+            finally
+            {
+                _interceptPlace = false;
+                NoPlacementCost.SetValue(player, noCost);
+                Grid.ClearPending();
+                foreach (var entry in builds)
+                {
+                    if (entry.Value.HasValue) stats[entry.Key].m_stats[PlayerStatType.Builds] = entry.Value.Value;
+                    else stats[entry.Key].m_stats.Remove(PlayerStatType.Builds);
+                }
+                foreach (var entry in placedStats)
+                {
+                    if (entry.Value.HasValue) stats[entry.Key].m_piecesPlacedStats[piece.m_name] = entry.Value.Value;
+                    else stats[entry.Key].m_piecesPlacedStats.Remove(piece.m_name);
+                }
+            }
+            if (expectPlaced)
+            {
+                var moved = Vector3.Distance(_placedPosition, ghostPosition);
+                var turned = Quaternion.Angle(_placedRotation, ghostRotation);
+                Check(run, name, placed && _placeCalls == 1 && moved < 0.01f && turned < 0.5f,
+                    $"placed={placed}, PlacePiece calls={_placeCalls}, {moved:F3} m and {turned:F1}° from the snapped ghost pose");
+            }
+            else
+                Check(run, name, !placed && _placeCalls == 0, $"placed={placed}, PlacePiece calls={_placeCalls} (rejected expected)");
+        }
+
         private static void PlantAwake(Plant __instance)
         {
-            if (_created == null || !__instance || __instance.gameObject.name != _prefabName + "(Clone)") return;
+            // A placement ghost is instantiated with network init disabled; it belongs to the player.
+            if (_created == null || !__instance || ZNetView.m_forceDisableInit ||
+                __instance.gameObject.name != _prefabName + "(Clone)") return;
             var go = __instance.gameObject;
             _created.Add(go);
             SmokeSession.TrackSpawn(go);

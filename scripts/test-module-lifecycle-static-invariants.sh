@@ -266,8 +266,10 @@ farming_smoke="smoke/Automatics.SmokeTest/LifecycleSmokeModules.cs"
 # accepted. They open with the bare Running and are checked by
 # require_hook_handlers_open_with_the_gate, as the Storage handler is.
 # Manual grid placement adds one gated postfix; automatic farming keeps its existing gates.
+# Lattice snapping adds the gated ghost-update prefix that opens its context.
 farming_entries=(
   "Patches.Player_TryPlacePiece_Postfix|$farming_patches|internal static void Player_TryPlacePiece_Postfix\\(|if (!Module.Running) return;"
+  "Patches.Player_UpdatePlacementGhost_Prefix|$farming_patches|internal static void Player_UpdatePlacementGhost_Prefix\\(|if (!Module.Running) return;"
   "Patches.Container_GetHoverText_Postfix|$farming_patches|private static void Container_GetHoverText_Postfix\\(|if (!Module.Running) return;"
   "AutomaticFarming.ClaimsCrop|$farming_core|public static bool ClaimsCrop\\(Player player, Pickable pickable\\)|if (!Module.Running) return false;"
 )
@@ -4649,14 +4651,15 @@ require_farming_never_rechecks_after_a_change() {
     fi
   done
 
-  # The manual-placement postfix adds its own module gate, outside any automatic pass.
+  # The manual-placement postfix and the lattice-snapping prefix add their own module gates, outside any automatic pass.
   # file@@reads of Module.@@occurrences of ClaimsCrop
   for row in \
     "$farming_module@@0@@0" \
-    "$farming_patches@@2@@0" \
+    "$farming_patches@@3@@0" \
     "$farming_core@@1@@3" \
     "$farming_planting@@0@@0" \
     "$farming_grid@@0@@0" \
+    "$farming_dir/LatticeSnapping.cs@@0@@0" \
     "$farming_seed_pool@@0@@0" \
     "$farming_containers@@0@@0" \
     "$farming_roles@@0@@0" \
@@ -4875,9 +4878,10 @@ require_farming_crop_claim_contract() {
   found="$(strip_code "$farming_patches" | count_hits '\[ *HarmonyPatch *\( *typeof *\(')"
   if lookup_failed "$found"; then
     fail "could not count the Farming patch targets; the check was not run"
-  # Manual grid planting adds Player.TryPlacePiece to the module-owned patch class.
-  elif ((found != 2)); then
-    fail "the Farming patch class must patch exactly Container.GetHoverText and Player.TryPlacePiece: found $found"
+  # Manual grid planting adds Player.TryPlacePiece; lattice snapping adds the ghost update's prefix
+  # and finalizer and the ray test's postfix.
+  elif ((found != 5)); then
+    fail "the Farming patch class must patch exactly Container.GetHoverText, Player.TryPlacePiece, Player.UpdatePlacementGhost (prefix and finalizer) and Player.PieceRayTest: found $found"
   fi
 }
 
@@ -5156,7 +5160,7 @@ require_module_has_no_component_machinery "$farming_module"
 require_hook_handlers_open_with_the_gate "$farming_module" \
   "private static void OnPlayerUpdate\\(" "private static void OnPlayerFixedUpdate\\("
 # Manual placement is the third external gated entry; the three hook subscriptions stay unchanged.
-require_item_entries_open_with_the_gate farming_entries "$farming_dir" "$farming_module" 3
+require_item_entries_open_with_the_gate farming_entries "$farming_dir" "$farming_module" 4
 require_farming_state_and_registration
 require_farming_never_rechecks_after_a_change
 require_farming_call_sites

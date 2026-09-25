@@ -575,6 +575,14 @@ in vanilla, seeds are not needed in free-build worlds. Invalid
 cells are skipped, and planting stops at the first unaffordable cell. `Seed Source`
 and `Seed Reserve` apply only to automatic farming, not these manual grids.
 
+While the modifier is held, the crop preview snaps to the lattice of the nearest
+growing crop of the same kind within one grid width: the same spacing and
+orientation, turned by the quarter turn closest to your own rotation. The hand-placed
+crop and its grid then line up with the earlier rows, so a grid planted next to
+an earlier one continues it. The snapped position goes through the game's usual
+placement checks (cultivated ground, slope, ward, reach). Grown crops do not
+count, and with no such crop nearby, placement is unchanged.
+
 Automatic farming harvests grown crops around the local player and replants the
 regrowing sapling at each harvested spot. It can run at the configured interval
 or only when `Attempt Farming` is pressed.

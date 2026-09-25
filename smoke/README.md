@@ -993,6 +993,37 @@ position plus the rotated lattice offsets), not taken from the mod. It checks:
   cell, two with stamina for two charges, and one with durability below one charge
 - a request is rejected when the right-hand tool is swapped before it runs
 - a second consume never replays a request
+- lattice snapping, after planting a first 3×3 grid: a point aimed past its edge
+  and off the lattice by a fraction of a cell, with a player rotation 100° from
+  the grid's, snaps to the expected lattice cell with a yaw a quarter turn from
+  the grid's; the same aim does not snap without the modifier, a point beyond the
+  search radius (one grid width) does not snap, and after both grids are
+  removed the same aim no longer snaps. The oracle is the check's own: a position
+  is on the lattice when its offset from the first grid's centre, turned back by
+  the first grid's rotation, is a whole number of cells (within 5 cm), and a yaw
+  when it differs from the grid's by whole quarter turns
+- the real `Player.UpdatePlacementGhost`: the section selects the test sapling in
+  the cultivator table (SKIP when its recipe is unknown), points the camera
+  straight down at an aimed point and widens the player's placement reach. With
+  the unbound key it checks that the ghost lies on the free lattice cell on the
+  ground with a lattice yaw, that vanilla's placement status is Valid (SKIP when
+  that cell fails the planting rules above) and that the player's rotation step is
+  back afterwards; aimed next to a cell of the first grid, the ghost snaps onto
+  that occupied cell and the status is not Valid; aimed so that the lattice point
+  lies just beyond the reach while the aimed point is within it, the ghost stays
+  at the aimed point with the player's rotation. Then, with Left Alt bound again
+  and released, the ghost stays at the aimed point with the player's rotation
+- the real `Player.TryPlacePiece` at the free and the occupied cell, with
+  `Player.PlacePiece` intercepted so nothing is placed: the free cell calls it
+  once at the snapped ghost pose, the occupied cell is rejected. The player's
+  no-cost toggle is on for each call, so vanilla counts the placement as cheated
+  and grants no achievement progress; the build statistics it increments are put
+  back and the grid request it records is dropped. The camera, the reach, the
+  table's selected piece and the rotation step are put back before the frame
+  ends, and the key is unbound again for the rest of the section
+- a second grid planted at the snapped ghost pose (or at the snapped pose when
+  the ghost could not be driven) puts every crop on the first grid's lattice
+  (SKIP when no cell of the second grid is plantable)
 
 The extra crops do not raise the Farming skill or the build statistics; only the
 hand-placed crop does, by design, so the section does not check either.

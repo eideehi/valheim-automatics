@@ -1494,7 +1494,7 @@ Hold the grid planting key while planting by hand to add a grid of the same crop
 - Default value: true
 
 ### Grid Planting Modifier / [grid_planting_key]
-Hold this key while placing a crop to plant a grid. An unbound key makes every manual crop placement plant a grid, except while alternate placement (AltPlace) is held. Left Alt does not conflict with vanilla alternate placement.
+Hold this key while placing a crop to plant a grid. While it is held, the crop preview also snaps to the rows of a growing crop of the same kind nearby (same spacing and orientation), so a new grid lines up with an earlier one. An unbound key makes every manual crop placement plant a grid, except while alternate placement (AltPlace) is held. Left Alt does not conflict with vanilla alternate placement.
 
 - Default value: LeftAlt
 
