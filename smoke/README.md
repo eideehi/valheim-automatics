@@ -280,7 +280,7 @@ counts and the minimap's icon tables.
 | `mapping_off_state_disabled` | The registry reports `Disabled` after the disable request |
 | `mapping_off_stopped_at_request` | Right after the disable request the module is still applied but no longer running, which is what every entry point checks, and the static scan's pass counter does not move until `Disabled`: the stop takes hold at the request, not at the teardown |
 | `mapping_off_patches_removed` | No patch is left under Mapping's Harmony id (SKIP when runtime patch removal is unavailable) |
-| `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode` or `AutomaticsNavigationOverlay` is left in the scene |
+| `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode`, `AutomaticsNavigationOverlay` or `AutomaticsNavigationGuide` is left in the scene |
 | `mapping_off_saved_pins_kept` | The saved pins are the ones there were before the run: type, name, position to 0.1 m, owner and checked flag. A vehicle pin's position is left out, because it follows its vehicle |
 | `mapping_off_unsaved_pins_removed` | None of the unsaved pins the module held just before the disable is on the map (SKIP when it held none) |
 | `mapping_on_state_enabled` | The registry reports `Enabled` after the enable request |
@@ -985,3 +985,34 @@ regeneration delay and the test cultivator's durability are restored within the
 same synchronous check. The
 real cultivator key input and vanilla manual placement remain a separate in-game
 check; this section drives the request path after a successful manual placement.
+
+#### `guide`
+
+Run `automatics_smoke_features guide` outdoors in a single-player world with
+Automatic Mapping enabled and `enable_navigation_guide` on (the section SKIPs
+otherwise, and indoors, where the swarm flies at your height). It adds one
+unsaved, unnamed test pin about 60 m behind the camera and starts navigation to
+it through the same call a map click makes, so the start message appears. Stand
+still while it runs. It changes one setting, for one check only:
+`enable_navigation_guide` is turned off for `guide_option_off_destroys` and put
+back before the next check.
+
+| Check | Asserts |
+|---|---|
+| `guide_material` | The swarm resolved a particle material whose shader the GPU supports and which blends additively: a fixed additive shader, or blend factors that add onto the background. The note names the source (a built-in additive shader, or a copy of a campfire or torch effect material), the renderer's shader and its blend factors. The mod also logs the source once a session |
+| `guide_swarm_alive` | After 1.5 s the guide object is a root object with exactly one particle system, one or two point lights and no `ZNetView`, at least 30 particles are alive, and the HUD label is hidden because the target is off-screen |
+| `guide_height_above_ground` | The mean height of the live particles above the terrain (or the sea surface where that is higher) under them is 0.5–1.5 m, and at least 80 % of them are within 0.5–1.5 m, measured by the check itself; the note gives the mean, minimum, median and maximum |
+| `guide_advances_toward_target` | Over 3 s the emitter sweeps from within 3 m of you to at least 12 m toward the target, never more than 0.5 m off the straight line, and particles reach at least 10 m toward the target but not past it |
+| `guide_hidden_on_large_map` | With the large map open the swarm is hidden, and it is shown again once the map closes; the map mode is put back (SKIP in a world without a map) |
+| `guide_no_spawn_on_arrival` | The test pin is moved in front of you and raised 3 m above the ground, so only a horizontal distance counts. At 5.5 m the swarm still spawns; at 4.5 m the emission rate is 0, and within 4 s no particle is left, both lights are at intensity 0 and the navigation stays on. The note gives what was observed |
+| `guide_resumes_after_leaving` | With the pin moved back, the swarm spawns again |
+| `guide_option_off_destroys` | With `enable_navigation_guide` off, no guide object is left in the scene |
+| `guide_settings_restored` | `enable_navigation_guide` is back at your value |
+| `guide_option_on_recreates` | With the option back on, the swarm is shown again |
+| `guide_destroyed_on_clear` | A frame after the navigation is cleared, no guide object is left |
+| `guide_navigation_restored` | The navigation you had before the section is set again, or none is left when you had none (SKIP when your target pin is no longer on the map) |
+
+The section removes only its own test pin and puts back the map mode and your
+navigation target, also through the session hand-back when a run is cut short.
+Whether the swarm looks like glowing insects, and its frame cost, remain an
+in-game judgement outside this section.

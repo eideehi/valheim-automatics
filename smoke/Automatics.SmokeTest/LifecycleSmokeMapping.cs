@@ -31,7 +31,7 @@ namespace Automatics.SmokeTest
     //     the predicate every entry point opens with, and the static scan makes no pass until the
     //     teardown;
     //   - while off, no patch is left under its Harmony id, no component of its own and no
-    //     navigation overlay is left in the scene, the saved pins are the ones there were before
+    //     navigation overlay or guide swarm is left in the scene, the saved pins are the ones there were before
     //     the run, and no unsaved pin the module held is left on the map;
     //   - while on, the patches are exactly the declared set, every eligible object in the scene
     //     carries its component from the running generation, the handler counts, component counts
@@ -61,6 +61,7 @@ namespace Automatics.SmokeTest
         private const float PinSettleSeconds = 4f;
 
         private const string NavigationOverlayName = "AutomaticsNavigationOverlay";
+        private const string NavigationGuideName = "AutomaticsNavigationGuide";
 
         private static IEnumerator RunMapping(Terminal context, int runId, string runner)
         {
@@ -349,9 +350,10 @@ namespace Automatics.SmokeTest
 
                 var kinds = CountComponents();
                 var overlays = CountNavigationOverlays();
-                Cycle(OffComponents, cycle, kinds.Sum(x => x.Total) == 0 && overlays == 0,
-                    "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode or navigation overlay is left in the scene",
-                    $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s) (AC-R4)");
+                var guides = CountNavigationGuides();
+                Cycle(OffComponents, cycle, kinds.Sum(x => x.Total) == 0 && overlays == 0 && guides == 0,
+                    "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode, navigation overlay or guide swarm is left in the scene",
+                    $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s), {guides} guide swarm(s) (AC-R4)");
 
                 var saved = SavedPins(_baseline.VehiclePins);
                 Cycle(OffSavedPins, cycle, saved.SequenceEqual(_baseline.SavedPins),
@@ -776,6 +778,11 @@ namespace Automatics.SmokeTest
             private static int CountNavigationOverlays()
             {
                 return FindAll<RectTransform>().Count(x => x.name == NavigationOverlayName);
+            }
+
+            private static int CountNavigationGuides()
+            {
+                return FindAll<Transform>().Count(x => x.name == NavigationGuideName);
             }
 
             private static int IconCount()

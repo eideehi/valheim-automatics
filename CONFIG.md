@@ -262,6 +262,16 @@ Specify the modifier key used to start navigation by left-clicking a pin on the 
 
 - Default value: LeftShift
 
+### Navigation Guide Swarm / [enable_navigation_guide]
+Specify whether a swarm of small glowing lights leads you toward the navigation target. It follows the ground in a straight line, stops spawning within 5 m of the target and is hidden while the large map is open.
+
+- Default value: true
+
+### Navigation Guide Color / [navigation_guide_color]
+Specify the HTML color code of the navigation guide swarm. Examples: #C6F27A, #C6F27AFF
+
+- Default value: #C6F27A
+
 ### Mapping Performance Log / [mapping_performance_log]
 Specify whether to output automatic mapping performance metrics to the BepInEx log. This bypasses Automatics' log level options.
 

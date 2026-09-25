@@ -37,6 +37,8 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<KeyboardShortcut> _pinObjectKey;
         private static ConfigEntry<float> _pinObjectRange;
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
+        private static ConfigEntry<bool> _enableNavigationGuide;
+        private static ConfigEntry<string> _navigationGuideColor;
         private static ConfigEntry<bool> _mappingPerformanceLog;
 
         /// <summary>
@@ -79,6 +81,17 @@ namespace Automatics.AutomaticMapping
         public static KeyboardShortcut PinObjectKey => _pinObjectKey.Value;
         public static float PinObjectRange => _pinObjectRange.Value;
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
+        public static bool EnableNavigationGuide => _enableNavigationGuide.Value;
+        internal static ConfigEntry<bool> EnableNavigationGuideEntry => _enableNavigationGuide;
+
+        private static readonly Color DefaultNavigationGuideColor = new Color32(0xC6, 0xF2, 0x7A, 0xFF);
+
+        /// <summary>
+        ///     The guide swarm's colour, parsed when the setting changes rather than every frame the
+        ///     swarm reads it. An unreadable value falls back to the default colour.
+        /// </summary>
+        public static Color NavigationGuideColor { get; private set; } = DefaultNavigationGuideColor;
+
         public static bool MappingPerformanceLog => _mappingPerformanceLog.Value;
 
         // Fish and Bird drive separate scan paths (FishCache / BirdCache) but
@@ -157,6 +170,8 @@ namespace Automatics.AutomaticMapping
             _pinObjectRange = config.Bind("pin_object_range", 100f, (10f, 300f));
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
+            _enableNavigationGuide = config.Bind("enable_navigation_guide", true);
+            _navigationGuideColor = config.Bind("navigation_guide_color", "#C6F27A");
             _mappingPerformanceLog = config.Bind("mapping_performance_log", false);
 
             // Bridge BepInEx SettingChanged events to StaticAllowlistChanged so that
@@ -166,6 +181,8 @@ namespace Automatics.AutomaticMapping
             // subscribers doing ReferenceEquals checks see the correct registry.
             RefreshAnimalListFlags();
             _allowPinningAnimal.SettingChanged += (_, __) => RefreshAnimalListFlags();
+            RefreshNavigationGuideColor();
+            _navigationGuideColor.SettingChanged += (_, __) => RefreshNavigationGuideColor();
             _hideUnexploredAutomaticMappingPins.SettingChanged += OnHideUnexploredPinsChanged;
 
             _allowPinningFlora.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Flora);
@@ -189,6 +206,26 @@ namespace Automatics.AutomaticMapping
         {
             if (!Module.Running) return;
             Map.RefreshPins();
+        }
+
+        private static void RefreshNavigationGuideColor()
+        {
+            NavigationGuideColor = TryParseColor(_navigationGuideColor?.Value, out var color)
+                ? color
+                : DefaultNavigationGuideColor;
+        }
+
+        private static bool TryParseColor(string value, out Color color)
+        {
+            color = default;
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var input = value.Trim();
+            if (!input.StartsWith("#", StringComparison.Ordinal))
+                input = "#" + input;
+
+            return ColorUtility.TryParseHtmlString(input, out color);
         }
 
         private static void RefreshAnimalListFlags()

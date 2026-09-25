@@ -83,6 +83,7 @@
     <Compile Include="Features\PinFeatureSmoke.cs" />
     <Compile Include="Features\MiningFeatureSmoke.cs" />
     <Compile Include="Features\PlantingFeatureSmoke.cs" />
+    <Compile Include="Features\GuideFeatureSmoke.cs" />
   </ItemGroup>
 
   <ItemGroup Label="BepInEx">
@@ -107,6 +108,11 @@
     <Reference Include="UnityEngine.CoreModule">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>$(UnityManagedDirectory)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UnityManagedDirectory)\UnityEngine.ParticleSystemModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.PhysicsModule">

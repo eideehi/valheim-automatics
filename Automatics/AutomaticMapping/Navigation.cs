@@ -17,6 +17,7 @@ namespace Automatics.AutomaticMapping
         private const float TextRight = 8f;
         private const float TextHeight = 18f;
         private const float ManualPinMapPlaneHeightEpsilon = 0.01f;
+        private const float GuideRetryDelay = 5f;
 
         // Resolve GameCamera.m_camera through a cached field-ref delegate; the navigation
         // overlay reads it every frame and a fresh Traverse lookup each frame is wasteful.
@@ -38,6 +39,8 @@ namespace Automatics.AutomaticMapping
         private static int _displayDistanceMeters = int.MinValue;
         private static bool _overlayWidthDirty;
         private static float _nextTargetPinValidationTime;
+        private static float _nextGuideAttemptTime;
+        private static bool _guideErrorLogged;
 
         public static void Cleanup()
         {
@@ -47,7 +50,10 @@ namespace Automatics.AutomaticMapping
             _displayDistanceMeters = int.MinValue;
             _overlayWidthDirty = false;
             _nextTargetPinValidationTime = 0f;
+            _nextGuideAttemptTime = 0f;
+            _guideErrorLogged = false;
             DestroyOverlay();
+            NavigationGuide.Dispose();
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
@@ -88,26 +94,36 @@ namespace Automatics.AutomaticMapping
 
         public static void Update(Player player)
         {
-            // Stopped: the overlay is hidden in the frame the stop is requested, and destroyed
-            // with the rest of the session when the module is turned off.
+            // Stopped: the overlay and the guide swarm are hidden in the frame the stop is
+            // requested, and destroyed with the rest of the session when the module is turned off.
             if (!Module.Running)
             {
                 SetVisible(false);
+                NavigationGuide.Hide();
                 return;
             }
 
             ValidateTargetPin();
 
+            // Turned off, the swarm goes whether or not navigation is shown this frame.
+            if (!Config.EnableNavigationGuide)
+                NavigationGuide.Destroy();
+
             if (!ShouldShow(player))
             {
                 SetVisible(false);
+                NavigationGuide.Hide();
                 return;
             }
+
+            // The guide swarm leads toward the target whether or not the target is on screen, so
+            // it is driven before the label's off-screen return.
+            var targetPos = GetNavigationTargetPosition(_targetPin);
+            UpdateGuide(player, targetPos);
 
             if (!EnsureOverlay())
                 return;
 
-            var targetPos = GetNavigationTargetPosition(_targetPin);
             if (!TryGetScreenPoint(targetPos, out var screenPoint))
             {
                 SetVisible(false);
@@ -120,6 +136,39 @@ namespace Automatics.AutomaticMapping
                 ResizeOverlay();
             UpdatePosition(screenPoint);
             SetVisible(true);
+        }
+
+        /// <summary>
+        ///     Drives the guide swarm inside its own boundary: a failure takes down only the swarm,
+        ///     which is tried again after a delay, and the label below still updates. The first
+        ///     failure of a session is logged.
+        /// </summary>
+        private static void UpdateGuide(Player player, Vector3 targetPos)
+        {
+            if (!Config.EnableNavigationGuide) return;
+            if (Time.unscaledTime < _nextGuideAttemptTime) return;
+
+            try
+            {
+                NavigationGuide.Update(player, targetPos);
+            }
+            catch (Exception e)
+            {
+                _nextGuideAttemptTime = Time.unscaledTime + GuideRetryDelay;
+                try
+                {
+                    NavigationGuide.Destroy();
+                }
+                catch (Exception)
+                {
+                    // The swarm is recreated from scratch at the next attempt either way.
+                }
+
+                if (_guideErrorLogged) return;
+                _guideErrorLogged = true;
+                Automatics.Logger.Error(
+                    $"Navigation guide failed and is retried every {GuideRetryDelay}s: {e}");
+            }
         }
 
         private static bool ShouldShow(Player player)
@@ -154,6 +203,7 @@ namespace Automatics.AutomaticMapping
             _overlayWidthDirty = false;
             _nextTargetPinValidationTime = 0f;
             SetVisible(false);
+            NavigationGuide.Destroy();
             if (showMessage)
                 ShowMessage(Automatics.L10N.Localize(
                     "@message_automatic_mapping_navigation_cleared"));
