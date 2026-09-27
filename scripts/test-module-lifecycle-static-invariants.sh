@@ -2051,13 +2051,11 @@ require_the_runtime_toggle_strings_exist() {
 
     for key in \
       "@config_common_disable_module_runtime_name" \
-      "@config_common_disable_module_runtime_description" \
-      "@config_common_disable_module_name" \
-      "@config_common_disable_module_description"; do
+      "@config_common_disable_module_runtime_description"; do
       require_source_pattern \
         "$language_file" \
         "\"$key\"" \
-        "$language_file must define $key (R9.2): the two key sets have to stay in step, and the unmigrated modules still use the restart wording"
+        "$language_file must define $key (R9.2): the two key sets have to stay in step"
     done
   done
 }

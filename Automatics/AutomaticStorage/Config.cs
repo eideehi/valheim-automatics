@@ -72,7 +72,14 @@ namespace Automatics.AutomaticStorage
                 {
                     x.CustomDrawer = ConfigurationCustomDrawer.MultiSelect(
                         GetAllItemTypeKeys,
-                        key => key);
+                        key =>
+                        {
+                            var translationKey = "config_automatic_storage_item_type_" + key;
+                            var label = Automatics.L10N.Translate("@" + translationKey);
+                            return label == Automatics.L10NPrefix + "_" + translationKey
+                                ? key
+                                : label;
+                        });
                 });
             _excludedItems = config.Bind("excluded_items", new StringList());
             _storeHotbarItems = config.Bind("store_hotbar_items", false);

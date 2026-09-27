@@ -17,57 +17,57 @@ Specify the log level that allows logging.
 
 ## [ #2 General ] / [general]
 ### User-defined Animal / [custom_animal]
-Any animal can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the animal. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the animal. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any animal can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the animal. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the animal. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Dungeon / [custom_dungeon]
-Any dungeon can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the dungeon. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the dungeon. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any dungeon can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the dungeon. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the dungeon. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Flora / [custom_flora]
-Any flora can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the flora. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the flora. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any flora can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the flora. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the flora. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Mineral / [custom_mineral]
-Any mineral can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the mineral. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the mineral. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any mineral can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the mineral. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the mineral. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Monster / [custom_monster]
-Any monster can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the monster. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the monster. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any monster can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the monster. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the monster. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Spawner / [custom_spawner]
-Any spawner can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the spawner. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the spawner. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any spawner can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the spawner. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the spawner. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Spot / [custom_spot]
-Any spot can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the spot. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the spot. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any spot can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the spot. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the spot. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Door / [custom_door]
-Any door can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the door. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the door. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any door can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the door. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the door. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Vehicle / [custom_vehicle]
-Any vehicle can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the vehicle. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the vehicle. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any vehicle can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the vehicle. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal name of the vehicle. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Other Object / [custom_other]
-Any object can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the object. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal or prefab name of the object. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any object can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the object. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal or prefab name of the object. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
 ### User-defined Container / [custom_container]
-Any container can be added. Identifier: a unique string that does not overlap with any other identifier. White spaces are not allowed. Label: The name of the container. Mainly used in GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal or prefab name of the container. Exact matches are evaluated. You can set a regular expression by concatenating r/ at the beginning.
+Any container can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the container. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the internal or prefab name of the container. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
@@ -107,7 +107,7 @@ Specify how close the player must be to the door in order for it to open automat
 - Acceptable value range: From 1 to 8
 
 ### Distance For Automatic Closing / [distance_for_automatic_closing]
-Specify how far the player must be from the door for the door to close automatically. (Unit: meter)
+Specify how far the player must be from the door for the door to close automatically. While automatic opening is active, a value smaller than Distance For Automatic Opening is replaced by that distance. (Unit: meter)
 
 - Default value: 2.5
 - Acceptable value range: From 1 to 8
@@ -131,75 +131,75 @@ You can disable this feature completely to avoid adding logic you don't need. Th
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Mapping / [enable_automatic_mapping]
-Specify whether to enable the feature that automatically pinning objects and locations to the map.
+Specify whether to enable the feature that automatically pins objects and locations to the map.
 
 - Default value: true
 
 ### Dynamic Object Search Range / [dynamic_object_mapping_range]
-Specify the range of dynamic objects to be explored. "Dynamic Object" are objects that change position, such as animals, monsters, etc. Set to 0 to disable pinning of dynamic objects. (Unit: meter)
+Specify the range of dynamic objects to be explored. "Dynamic objects" are objects that change position, such as animals and monsters. Set to 0 to disable pinning of dynamic objects. (Unit: meter)
 
 - Default value: 64
 - Acceptable value range: From 0 to 128
 
 ### Static Object Search Range / [static_object_mapping_range]
-Specify the range of static objects to be explored. "Static Object" are objects that do not change their position, such as flora, mineral, etc. Setting this to 0 disables pinning of static objects. (Unit: meter)
+Specify the range of static objects to be explored. "Static objects" are objects that do not change their position, such as flora and minerals. Setting this to 0 disables pinning of static objects, including portals and locations. (Unit: meter)
 
 - Default value: 32
 - Acceptable value range: From 0 to 128
 
 ### Location Search Range / [location_mapping_range]
-Specify the range of location to be explored. "Location" is a specific place, such as dungeon, fuling village, etc. Setting this to 0 disables location pinning. (Unit: meter)
+Specify the range of locations to be explored. A "location" is a specific place, such as a dungeon or a fuling village. Setting this to 0 disables location pinning. (Unit: meter)
 
 - Default value: 96
 - Acceptable value range: From 0 to 128
 
 ### Allow Pinning Animal / [allow_pinning_animal]
-Specify the animals to be automatic pinning.
+Specify the animals to pin automatically.
 
 - Default value: Boar, Piggy, Deer, Wolf, WolfCub, Lox, LoxCalf, Hen, Chicken, Hare, Bird, Fish, Asksvin, AsksvinHatchling, Moose, MooseCalf, Seal, BabySeal, RiktigFuling
 
 ### Allow Pinning Monster / [allow_pinning_monster]
-Specify the monsters to be automatic pinning.
+Specify the monsters to pin automatically.
 
 - Default value: Greyling, Neck, Ghost, Greydwarf, GreydwarfBrute, GreydwarfShaman, RancidRemains, Skeleton, Troll, Abomination, Blob, Draugr, DraugrElite, Leech, Oozer, Surtling, Wraith, Drake, Fenring, StoneGolem, Deathsquito, Fuling, FulingBerserker, FulingShaman, Growth, Serpent, Bat, FenringCultist, Ulv, DvergrRogue, DvergrMage, Tick, Seeker, SeekerBrood, Gjall, SeekerSoldier, CharredMelee, CharredArcher, CharredMage, CharredTwitcher, CharredGrunt, Morgen, Volture, BonemawSerpent, FallenValkyrie, Fader, SkeletonFire, FrostBlob, Bear, Vile, LavaBlob, Frysling, Gammeltroll, Krigen, Hexen, Barka, Kvastur, Elaking, EyelessOne, ShapelessPulp, TinyPulp, Shadow, Mistile, FallenWarrior
 
 ### Allow Pinning Flora / [allow_pinning_flora]
-Specify the flora to be automatic pinning.
+Specify the flora to pin automatically.
 
 - Default value: Mushroom, Raspberries, Blueberries, CarrotSeeds, Thistle, TurnipSeeds, Cloudberries, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds
 
 ### Allow Pinning Mineral / [allow_pinning_mineral]
-Specify the mineral to be automatic pinning.
+Specify the minerals to pin automatically.
 
 - Default value: CopperDeposit, TinDeposit, MudPile, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit, PetrifiedGammeltroll, SilverDeposit, AncientArmour, AncientSword
 
 ### Allow Pinning Spawner / [allow_pinning_spawner]
-Specify the spawners to be automatic pinning.
+Specify the spawners to pin automatically.
 
 - Default value:
 
 ### Allow Pinning Vehicle / [allow_pinning_vehicle]
-Specify the vehicles to be automatic pinning.
+Specify the vehicles to pin automatically.
 
 - Default value: Karve, Longship, Drakkar
 
 ### Allow Pinning Other Object / [allow_pinning_other]
-Specify the other objects to be automatic pinning.
+Specify the other objects to pin automatically.
 
 - Default value: WildBeehive
 
 ### Allow Pinning Dungeon / [allow_pinning_dungeon]
-Specify the dungeons to be automatic pinning.
+Specify the dungeons to pin automatically.
 
 - Default value: BurialChambers, TrollCave, SunkenCrypts, MountainCave, InfestedMine, MorgenHole, BearCave, Morkhalla, WindingTunnels, TombOfLordReto
 
 ### Allow Pinning Spot / [allow_pinning_spot]
-Specify the spots to be automatic pinning.
+Specify the spots to pin automatically.
 
 - Default value: InfestedTree, FireHole, DrakeNest, GoblinCamp, TarPit, DvergrExcavation, DvergrGuardTower, DvergrHarbour, DvergrLighthouse, PetrifiedBone, CharredFortress, LeviathanLava, BogWitchCamp
 
 ### Allow Pinning Portal / [allow_pinning_portal]
-Enable automatic pinning for the portal. Portal is treated as a static object.
+Enable automatic pinning of portals. Portals are treated as static objects.
 
 - Default value: true
 
@@ -209,7 +209,7 @@ Exclude tamed animals from automatic pinning.
 - Default value: true
 
 ### Static Object Mapping Interval / [static_object_mapping_interval]
-Specify the interval at which static object mapping. Setting to 0 disables periodic static object mapping. (Unit: second)
+Specify the interval at which static objects are mapped. Setting to 0 disables periodic static object mapping. (Unit: second)
 
 - Default value: 0.25
 - Acceptable value range: From 0 to 4
@@ -231,13 +231,13 @@ Specify whether or not to automatically remove pins of objects that have been de
 - Default value: true
 
 ### Flora Pins Merge Range / [flora_pins_merge_range]
-When pinning flora, it recursively searches for the same flora that exist within a specified range and merge them into a single pin. (Unit: meter)
+When pinning flora, it recursively searches for the same flora that exist within a specified range and merges them into a single pin. (Unit: meter)
 
 - Default value: 8
 - Acceptable value range: From 0 to 16
 
 ### Need To Equip Wishbone For Underground Minerals / [need_to_equip_wishbone_for_underground_minerals]
-Specify whether the wishbone needs to be equipped to attempt to pinning underground minerals.
+Specify whether the wishbone needs to be equipped to pin underground minerals.
 
 - Default value: true
 
@@ -273,7 +273,7 @@ Specify the HTML color code of the navigation guide swarm. Examples: #C6F27A, #C
 - Default value: #C6F27A
 
 ### Mapping Performance Log / [mapping_performance_log]
-Specify whether to output automatic mapping performance metrics to the BepInEx log. This bypasses Automatics' log level options.
+Specify whether to measure automatic mapping performance and write the metrics to the BepInEx log at the Info level. The metrics are written only when Logging is enabled and Log Level To Allow Logging includes Info.
 
 - Default value: false
 
@@ -285,7 +285,7 @@ You can disable this feature completely to avoid adding logic you don't need. Th
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Processing / [enable_automatic_processing]
-Specify whether to enable or disable the ability to automatically perform tasks such as cooking, refining, and refuel.
+Specify whether to enable the ability to automatically perform tasks such as cooking, refining, and refueling.
 
 - Default value: true
 
@@ -306,13 +306,13 @@ Specify the automatic processes to allow for Beehive. "Craft" produces items by 
 - Acceptable values: None, Store
 
 ### Beehive: Container Search Range / [container_search_range_by_piece_beehive]
-Specifies the maximum distance Beehive will search for containers. (Unit: meters)
+Specify the maximum distance Beehive will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Beehive: Container Reference Limit / [container_reference_limit_by_piece_beehive]
-Specifies the maximum number of nearby containers that Beehive will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Beehive will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -335,13 +335,13 @@ Specify the automatic processes to allow for Bonfire. "Craft" produces items by 
 - Acceptable values: None, Refuel
 
 ### Bonfire: Container Search Range / [container_search_range_by_piece_bonfire]
-Specifies the maximum distance Bonfire will search for containers. (Unit: meters)
+Specify the maximum distance Bonfire will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Bonfire: Container Reference Limit / [container_reference_limit_by_piece_bonfire]
-Specifies the maximum number of nearby containers that Bonfire will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Bonfire will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -365,13 +365,13 @@ Specify the automatic processes to allow for Blast furnace. "Craft" produces ite
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
 ### Blast furnace: Container Search Range / [container_search_range_by_piece_blastfurnace]
-Specifies the maximum distance Blast furnace will search for containers. (Unit: meters)
+Specify the maximum distance Blast furnace will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Blast furnace: Container Reference Limit / [container_reference_limit_by_piece_blastfurnace]
-Specifies the maximum number of nearby containers that Blast furnace will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Blast furnace will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -421,13 +421,13 @@ Specify the automatic processes to allow for Campfire. "Craft" produces items by
 - Acceptable values: None, Refuel
 
 ### Campfire: Container Search Range / [container_search_range_by_piece_firepit]
-Specifies the maximum distance Campfire will search for containers. (Unit: meters)
+Specify the maximum distance Campfire will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Campfire: Container Reference Limit / [container_reference_limit_by_piece_firepit]
-Specifies the maximum number of nearby containers that Campfire will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Campfire will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -451,13 +451,13 @@ Specify the automatic processes to allow for Charcoal kiln. "Craft" produces ite
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ### Charcoal kiln: Container Search Range / [container_search_range_by_piece_charcoalkiln]
-Specifies the maximum distance Charcoal kiln will search for containers. (Unit: meters)
+Specify the maximum distance Charcoal kiln will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Charcoal kiln: Container Reference Limit / [container_reference_limit_by_piece_charcoalkiln]
-Specifies the maximum number of nearby containers that Charcoal kiln will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Charcoal kiln will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -492,13 +492,13 @@ Specify the automatic processes to allow for Cooking station. "Craft" produces i
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ### Cooking station: Container Search Range / [container_search_range_by_piece_cookingstation]
-Specifies the maximum distance Cooking station will search for containers. (Unit: meters)
+Specify the maximum distance Cooking station will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Cooking station: Container Reference Limit / [container_reference_limit_by_piece_cookingstation]
-Specifies the maximum number of nearby containers that Cooking station will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Cooking station will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -533,13 +533,13 @@ Specify the automatic processes to allow for Fermenter. "Craft" produces items b
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ### Fermenter: Container Search Range / [container_search_range_by_piece_fermenter]
-Specifies the maximum distance Fermenter will search for containers. (Unit: meters)
+Specify the maximum distance Fermenter will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Fermenter: Container Reference Limit / [container_reference_limit_by_piece_fermenter]
-Specifies the maximum number of nearby containers that Fermenter will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Fermenter will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -573,13 +573,13 @@ Specify the automatic processes to allow for Hanging brazier. "Craft" produces i
 - Acceptable values: None, Refuel
 
 ### Hanging brazier: Container Search Range / [container_search_range_by_piece_brazierceiling01]
-Specifies the maximum distance Hanging brazier will search for containers. (Unit: meters)
+Specify the maximum distance Hanging brazier will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Hanging brazier: Container Reference Limit / [container_reference_limit_by_piece_brazierceiling01]
-Specifies the maximum number of nearby containers that Hanging brazier will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Hanging brazier will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -602,13 +602,13 @@ Specify the automatic processes to allow for Hearth. "Craft" produces items by a
 - Acceptable values: None, Refuel
 
 ### Hearth: Container Search Range / [container_search_range_by_piece_hearth]
-Specifies the maximum distance Hearth will search for containers. (Unit: meters)
+Specify the maximum distance Hearth will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Hearth: Container Reference Limit / [container_reference_limit_by_piece_hearth]
-Specifies the maximum number of nearby containers that Hearth will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Hearth will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -632,13 +632,13 @@ Specify the automatic processes to allow for Iron cooking station. "Craft" produ
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ### Iron cooking station: Container Search Range / [container_search_range_by_piece_cookingstation_iron]
-Specifies the maximum distance Iron cooking station will search for containers. (Unit: meters)
+Specify the maximum distance Iron cooking station will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Iron cooking station: Container Reference Limit / [container_reference_limit_by_piece_cookingstation_iron]
-Specifies the maximum number of nearby containers that Iron cooking station will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Iron cooking station will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -672,13 +672,13 @@ Specify the automatic processes to allow for Jack-o-turnip. "Craft" produces ite
 - Acceptable values: None, Refuel
 
 ### Jack-o-turnip: Container Search Range / [container_search_range_by_piece_jackoturnip]
-Specifies the maximum distance Jack-o-turnip will search for containers. (Unit: meters)
+Specify the maximum distance Jack-o-turnip will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Jack-o-turnip: Container Reference Limit / [container_reference_limit_by_piece_jackoturnip]
-Specifies the maximum number of nearby containers that Jack-o-turnip will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Jack-o-turnip will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -701,13 +701,13 @@ Specify the automatic processes to allow for Sconce. "Craft" produces items by a
 - Acceptable values: None, Refuel
 
 ### Sconce: Container Search Range / [container_search_range_by_piece_sconce]
-Specifies the maximum distance Sconce will search for containers. (Unit: meters)
+Specify the maximum distance Sconce will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Sconce: Container Reference Limit / [container_reference_limit_by_piece_sconce]
-Specifies the maximum number of nearby containers that Sconce will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Sconce will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -731,13 +731,13 @@ Specify the automatic processes to allow for Smelter. "Craft" produces items by 
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
 ### Smelter: Container Search Range / [container_search_range_by_piece_smelter]
-Specifies the maximum distance Smelter will search for containers. (Unit: meters)
+Specify the maximum distance Smelter will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Smelter: Container Reference Limit / [container_reference_limit_by_piece_smelter]
-Specifies the maximum number of nearby containers that Smelter will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Smelter will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -788,13 +788,13 @@ Specify the automatic processes to allow for Spinning wheel. "Craft" produces it
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ### Spinning wheel: Container Search Range / [container_search_range_by_piece_spinningwheel]
-Specifies the maximum distance Spinning wheel will search for containers. (Unit: meters)
+Specify the maximum distance Spinning wheel will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Spinning wheel: Container Reference Limit / [container_reference_limit_by_piece_spinningwheel]
-Specifies the maximum number of nearby containers that Spinning wheel will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Spinning wheel will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -828,13 +828,13 @@ Specify the automatic processes to allow for Standing blue-burning iron torch. "
 - Acceptable values: None, Refuel
 
 ### Standing blue-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchblue]
-Specifies the maximum distance Standing blue-burning iron torch will search for containers. (Unit: meters)
+Specify the maximum distance Standing blue-burning iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Standing blue-burning iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchblue]
-Specifies the maximum number of nearby containers that Standing blue-burning iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Standing blue-burning iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -857,13 +857,13 @@ Specify the automatic processes to allow for Standing brazier. "Craft" produces 
 - Acceptable values: None, Refuel
 
 ### Standing brazier: Container Search Range / [container_search_range_by_piece_brazierfloor01]
-Specifies the maximum distance Standing brazier will search for containers. (Unit: meters)
+Specify the maximum distance Standing brazier will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Standing brazier: Container Reference Limit / [container_reference_limit_by_piece_brazierfloor01]
-Specifies the maximum number of nearby containers that Standing brazier will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Standing brazier will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -886,13 +886,13 @@ Specify the automatic processes to allow for Standing green-burning iron torch. 
 - Acceptable values: None, Refuel
 
 ### Standing green-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchgreen]
-Specifies the maximum distance Standing green-burning iron torch will search for containers. (Unit: meters)
+Specify the maximum distance Standing green-burning iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Standing green-burning iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchgreen]
-Specifies the maximum number of nearby containers that Standing green-burning iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Standing green-burning iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -915,13 +915,13 @@ Specify the automatic processes to allow for Standing iron torch. "Craft" produc
 - Acceptable values: None, Refuel
 
 ### Standing iron torch: Container Search Range / [container_search_range_by_piece_groundtorch]
-Specifies the maximum distance Standing iron torch will search for containers. (Unit: meters)
+Specify the maximum distance Standing iron torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Standing iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorch]
-Specifies the maximum number of nearby containers that Standing iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Standing iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -944,13 +944,13 @@ Specify the automatic processes to allow for Standing wood torch. "Craft" produc
 - Acceptable values: None, Refuel
 
 ### Standing wood torch: Container Search Range / [container_search_range_by_piece_groundtorchwood]
-Specifies the maximum distance Standing wood torch will search for containers. (Unit: meters)
+Specify the maximum distance Standing wood torch will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Standing wood torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchwood]
-Specifies the maximum number of nearby containers that Standing wood torch will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Standing wood torch will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -974,13 +974,13 @@ Specify the automatic processes to allow for Stone oven. "Craft" produces items 
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
 ### Stone oven: Container Search Range / [container_search_range_by_piece_oven]
-Specifies the maximum distance Stone oven will search for containers. (Unit: meters)
+Specify the maximum distance Stone oven will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Stone oven: Container Reference Limit / [container_reference_limit_by_piece_oven]
-Specifies the maximum number of nearby containers that Stone oven will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Stone oven will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -1031,13 +1031,13 @@ Specify the automatic processes to allow for Windmill. "Craft" produces items by
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Store)
 
 ### Windmill: Container Search Range / [container_search_range_by_piece_windmill]
-Specifies the maximum distance Windmill will search for containers. (Unit: meters)
+Specify the maximum distance Windmill will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Windmill: Container Reference Limit / [container_reference_limit_by_piece_windmill]
-Specifies the maximum number of nearby containers that Windmill will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Windmill will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -1071,13 +1071,13 @@ Specify the automatic processes to allow for Wisp fountain. "Craft" produces ite
 - Acceptable values: None, Store
 
 ### Wisp fountain: Container Search Range / [container_search_range_by_piece_wisplure]
-Specifies the maximum distance Wisp fountain will search for containers. (Unit: meters)
+Specify the maximum distance Wisp fountain will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Wisp fountain: Container Reference Limit / [container_reference_limit_by_piece_wisplure]
-Specifies the maximum number of nearby containers that Wisp fountain will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Wisp fountain will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -1100,13 +1100,13 @@ Specify the automatic processes to allow for Sap extractor . "Craft" produces it
 - Acceptable values: None, Store
 
 ### Sap extractor : Container Search Range / [container_search_range_by_piece_sapcollector]
-Specifies the maximum distance Sap extractor  will search for containers. (Unit: meters)
+Specify the maximum distance Sap extractor  will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Sap extractor : Container Reference Limit / [container_reference_limit_by_piece_sapcollector]
-Specifies the maximum number of nearby containers that Sap extractor  will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Sap extractor  will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -1130,13 +1130,13 @@ Specify the automatic processes to allow for Eitr refinery. "Craft" produces ite
 - Multiple values can be set at the same time by separating them with , (e.g. Craft, Refuel)
 
 ### Eitr refinery: Container Search Range / [container_search_range_by_piece_eitrrefinery]
-Specifies the maximum distance Eitr refinery will search for containers. (Unit: meters)
+Specify the maximum distance Eitr refinery will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Eitr refinery: Container Reference Limit / [container_reference_limit_by_piece_eitrrefinery]
-Specifies the maximum number of nearby containers that Eitr refinery will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Eitr refinery will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -1186,13 +1186,13 @@ Specify the automatic processes to allow for Ballista. "Craft" produces items by
 - Acceptable values: None, Charge
 
 ### Ballista: Container Search Range / [container_search_range_by_piece_turret]
-Specifies the maximum distance Ballista will search for containers. (Unit: meters)
+Specify the maximum distance Ballista will search for containers. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
 
 ### Ballista: Container Reference Limit / [container_reference_limit_by_piece_turret]
-Specifies the maximum number of nearby containers that Ballista will reference in distance order. Set to 0 for unlimited. The default is 0.
+Specify the maximum number of nearby containers that Ballista will reference in distance order. Set to 0 for unlimited. The default is 0.
 
 - Default value: 0
 - Acceptable value range: From 0 to 999
@@ -1221,7 +1221,7 @@ Specify the range in which the animal searches for food. If set to 0, the defaul
 - Default value: 0
 - Acceptable value range: From 0 to 64
 
-### Need Get Close To Eat The Feed / [need_get_close_to_eat_the_feed]
+### Need To Get Close To Eat The Feed / [need_get_close_to_eat_the_feed]
 Specify whether the animal needs to approach the container or player to eat the feed.
 
 - Default value: false
@@ -1248,7 +1248,7 @@ You can disable this feature completely to avoid adding logic you don't need. Th
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Repair / [enable_automatic_repair]
-Specify whether to enable the feature that automatically repair items and pieces.
+Specify whether to enable the feature that automatically repairs items and pieces.
 
 - Default value: true
 
@@ -1259,7 +1259,7 @@ Specify the range to search for a crafting station to be used to repair items. S
 - Acceptable value range: From 0 to 64
 
 ### Repair Items When Accessing The Crafting Station / [repair_items_when_accessing_the_crafting_station]
-Specify whether or not to repair all items that can be repaired when the workbench GUI is opened.
+Specify whether or not to repair all items that can be repaired when a crafting station's GUI is opened.
 
 - Default value: false
 
@@ -1270,7 +1270,7 @@ Specify where the message is displayed when an item is repaired.
 - Acceptable values: None, Center, TopLeft
 
 ### Piece Search Range / [piece_search_range]
-Specify the range to search for a pieces to repair. Setting to 0 disables periodic pieces repairs. (Unit: meters)
+Specify the range to search for pieces to repair. Setting to 0 disables periodic piece repair. (Unit: meters)
 
 - Default value: 16
 - Acceptable value range: From 0 to 64
@@ -1289,7 +1289,7 @@ You can disable this feature completely to avoid adding logic you don't need. Th
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Mining / [enable_automatic_mining]
-Specify whether to enable the feature that mine minerals automatically.
+Specify whether to enable the feature that mines minerals automatically.
 
 - Default value: true
 
@@ -1300,7 +1300,7 @@ Specify the interval between mining attempts. (Unit: seconds)
 - Acceptable value range: From 0.1 to 4
 
 ### Mining Range / [mining_range]
-Specify the maximum distance to search for a mineral. Setting to 0 the pickaxe's attack range is used. (Unit: meters)
+Specify the maximum distance to search for a mineral. If set to 0, the pickaxe's attack range is used. (Unit: meters)
 
 - Default value: 3
 - Acceptable value range: From 0 to 32
@@ -1311,7 +1311,7 @@ Specify the minerals to be automatically mined.
 - Default value: CopperDeposit, TinDeposit, MudPile, ObsidianDeposit, SilverVein, PetrifiedBone, SoftTissue, FlametalDeposit, PetrifiedGammeltroll, SilverDeposit, AncientArmour, AncientSword
 
 ### Need To Equip Pickaxe For Mining / [need_to_equip_pickaxe]
-Specify whether a pickaxe needs to be equipped to attempt automatic mining. Disabling this option will use the most advanced pickaxe in the player's inventory. If there is no pickaxe in the player's inventory, automatic mining will not be attempted.
+Specify whether a pickaxe needs to be equipped to attempt automatic mining. Disabling this option uses the equipped pickaxe if it can mine the target, otherwise the lowest-tier pickaxe in the player's inventory that can. If no suitable pickaxe is found, automatic mining is not attempted.
 
 - Default value: true
 
@@ -1320,7 +1320,7 @@ Specify whether or not to allow mining underground minerals.
 
 - Default value: true
 
-### Need To Wishbone For Mining Underground Minerals / [need_to_equip_wishbone_for_mining_underground_minerals]
+### Need To Equip Wishbone For Mining Underground Minerals / [need_to_equip_wishbone_for_mining_underground_minerals]
 Specify whether or not to require a wishbone to mine underground minerals.
 
 - Default value: true
@@ -1410,19 +1410,19 @@ You can disable this feature completely to avoid adding logic you don't need. Th
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Pickup Range / [automatic_pickup_range]
-Specify the range within which objects are automatically pickup. (Unit: meters)
+Specify the range within which objects are automatically picked up. (Unit: meters)
 
 - Default value: 4
 - Acceptable value range: From 1 to 64
 
 ### Automatic Pickup Interval / [automatic_pickup_interval]
-Specify the interval within which objects are automatically pickup. Setting it to 0 disables periodic automatic pickup. (Unit: second)
+Specify the interval at which objects are automatically picked up. Setting it to 0 disables periodic automatic pickup. (Unit: second)
 
 - Default value: 0.5
 - Acceptable value range: From 0 to 4
 
 ### Pickup All Nearby / [pickup_all_nearby_key]
-Interacting with pickable objects using this key makes it possible to pick up the same object in a range at once. Periodic automatic pickup keeps running at its interval whether or not this key is assigned.
+Interacting with a pickable object using this key picks up all of the same objects within range at once. Periodic automatic pickup keeps running at its interval whether or not this key is assigned.
 
 - Default value: E + LeftShift
 
@@ -1434,7 +1434,7 @@ You can disable this feature completely to avoid adding logic you don't need. Th
 - Acceptable values: Enabled, Disabled
 
 ### Automatic Farming / [enable_automatic_farming]
-Specify whether to enable the feature that harvests grown crops around the player and replants the regrowing sapling at the harvested spot.
+Specify whether to enable the feature that harvests grown crops and replants the regrowing sapling at the harvested spot. With the Player Inventory seed source it works around the player; with Nearby Containers it works around the containers you designate.
 
 - Default value: true
 

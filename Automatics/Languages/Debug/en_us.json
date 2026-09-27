@@ -14,7 +14,7 @@
     "@command_printlocations_description": "Displays locations that exist in the world.",
     "@command_printlocations_option_include_description": "Only show locations where the prefab name contains this string",
     "@command_printlocations_option_exclude_description": "Locations with this string in the prefab name are excluded",
-    "@command_printlocations_option_count_description": "Specify how many locations to display. [Default: 8]",
+    "@command_printlocations_option_count_description": "Specify how many of the nearest locations to check. Unless verbose is set, locations with a duplicate prefab name are hidden, so fewer may be shown. [Default: 8]",
     "@command_printlocations_option_verbose_description": "Allow duplicate prefab name locations to be displayed"
   }
 }
