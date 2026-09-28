@@ -192,10 +192,16 @@ namespace Automatics.AutomaticProcessing
                         config.Bind(key, 1, (0, 999),
                             Initializer("material_count_of_suppress_processing", displayName));
 
-                    key = $"{rawName}_supply_only_when_materials_run_out";
-                    _supplyOnlyWhenMaterialsRunOut[processorName] =
-                        config.Bind(key, false,
-                            initializer: Initializer("supply_only_when_materials_run_out", displayName));
+                    // The fermenter accepts materials only while it is empty, so the option would
+                    // always be met there.
+                    if (processorName != "$piece_fermenter")
+                    {
+                        key = $"{rawName}_supply_only_when_materials_run_out";
+                        _supplyOnlyWhenMaterialsRunOut[processorName] =
+                            config.Bind(key, false,
+                                initializer: Initializer("supply_only_when_materials_run_out",
+                                    displayName));
+                    }
                 }
 
                 if (processes.Contains(Process.Craft) || processes.Contains(Process.Store))

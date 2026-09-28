@@ -20,48 +20,6 @@ namespace Automatics.AutomaticProcessing
             return !BeehiveProcess.Store(__instance, ___m_nview, i);
         }
 
-        [HarmonyTranspiler]
-        [HarmonyPatch(typeof(CookingStation), "UpdateFuel")]
-        public static IEnumerable<CodeInstruction> CookingStation_UpdateFuel_Transpiler(
-            IEnumerable<CodeInstruction> instructions, MethodBase original)
-        {
-            /*
-             *   float fuel = this.GetFuel();
-             *   ...
-             *   if (fuel < 0.0)
-             *     fuel = 0.0f;
-             * + fuel = CookingStationProcess.Refuel(this, this.m_nview, fuel);
-             *   this.SetFuel(fuel);
-             */
-            // The fuel local and the injection point are derived, and every check on them is made,
-            // by TranspilerLocals.DeriveOvenFuel. Whatever it cannot resolve ends the patch there,
-            // at patch time.
-            var codes = instructions.ToList();
-            var oven = TranspilerLocals.DeriveOvenFuel(original, ToIl(codes),
-                AccessTools.Method(typeof(CookingStation), "GetFuel"),
-                AccessTools.Method(typeof(CookingStation), "SetFuel"));
-
-            Automatics.Logger.Debug(() => $"CookingStation.UpdateFuel locals: fuel={oven.Fuel}");
-
-            // RefuelAt is right behind the ldarg.0 that starts SetFuel's arguments, because that
-            // ldarg.0 is a branch target: the jump over the `fuel = 0` clamp lands on it, and would
-            // skip anything inserted in front of it. So that ldarg.0 is Refuel's first argument,
-            // the block below pushes the other two, and it ends with a fresh ldarg.0 for SetFuel.
-            TranspilerLocals.InsertBackToFront(codes,
-                new TranspilerLocals.Insertion<CodeInstruction>(oven.RefuelAt, new[]
-                {
-                    new CodeInstruction(OpCodes.Ldarg_0),
-                    new CodeInstruction(OpCodes.Ldfld,
-                        AccessTools.Field(typeof(CookingStation), "m_nview")),
-                    ToCode(TranspilerLocals.LoadLocal(oven.Fuel)),
-                    new CodeInstruction(OpCodes.Call,
-                        AccessTools.Method(typeof(CookingStationProcess), "Refuel")),
-                    ToCode(TranspilerLocals.StoreLocal(oven.Fuel)),
-                    new CodeInstruction(OpCodes.Ldarg_0)
-                }));
-            return codes;
-        }
-
         /// <summary>
         ///     Returns the index of the only local variable of <paramref name="localType" />
         ///     declared by <paramref name="original" />.
@@ -188,6 +146,9 @@ namespace Automatics.AutomaticProcessing
         private static void CookingStation_UpdateCooking_Postfix(CookingStation __instance,
             ZNetView ___m_nview)
         {
+            // Refuel runs here rather than inside UpdateFuel: the game calls UpdateFuel only while
+            // the station still has fuel, so a station that has run out would never be refuelled.
+            CookingStationProcess.Refuel(__instance, ___m_nview);
             CookingStationProcess.Craft(__instance, ___m_nview);
         }
 

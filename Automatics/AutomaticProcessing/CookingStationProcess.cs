@@ -29,7 +29,10 @@ namespace Automatics.AutomaticProcessing
             if (!Logics.IsAllowProcessing(stationName, Process.Craft)) return;
 
             if (cookingStation.m_requireFire && !IsFireLit(cookingStation)) return;
-            if (cookingStation.m_useFuel && zNetView.GetZDO().GetFloat("fuel") <= 0f) return;
+            // A station without fuel takes materials only while Refuel can bring fuel to cook
+            // them; the game itself accepts materials whatever the fuel is.
+            if (cookingStation.m_useFuel && zNetView.GetZDO().GetFloat("fuel") <= 0f &&
+                !CanRefuelFromContainers(cookingStation, stationName)) return;
 
             var productCounts = new Dictionary<string, int>();
             var freeSlotCount = 0;
@@ -117,20 +120,37 @@ namespace Automatics.AutomaticProcessing
             }
         }
 
-        [UsedImplicitly]
-        public static float Refuel(CookingStation cookingStation, ZNetView zNetView, float fuel)
+        private static bool CanRefuelFromContainers(CookingStation cookingStation, string stationName)
         {
-            if (!Module.Running) return fuel;
-            if (!Config.EnableAutomaticProcessing) return fuel;
-            if (!Objects.HasValidOwnership(zNetView)) return fuel;
-            if (fuel > cookingStation.m_maxFuel - 1f) return fuel;
+            if (!cookingStation.m_fuelItem) return false;
+            if (!Logics.IsAllowProcessing(stationName, Process.Refuel)) return false;
+
+            var minFuelCount = Config.FuelCountOfSuppressProcessing(stationName);
+            var fuelName = cookingStation.m_fuelItem.m_itemData.m_shared.m_name;
+            return Logics.GetNearbyContainers(stationName, cookingStation.transform.position)
+                .Any(x => Inventories.HaveItem(x.container.GetInventory(), fuelName, 0,
+                    WorldLevelMatchMode.Ignore, minFuelCount + 1));
+        }
+
+        // Adds one fuel item from a nearby container, up to the amount the game itself accepts.
+        // Called once per cooking update, whatever the station's fuel is, so a station that has
+        // run out is refuelled too.
+        public static void Refuel(CookingStation cookingStation, ZNetView zNetView)
+        {
+            if (!Module.Running) return;
+            if (!Config.EnableAutomaticProcessing) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
+            if (!cookingStation.m_useFuel || !cookingStation.m_fuelItem) return;
+
+            var fuel = zNetView.GetZDO().GetFloat("fuel");
+            if (fuel > cookingStation.m_maxFuel - 1f) return;
 
             var stationName = cookingStation.m_name;
-            if (!Logics.IsAllowProcessing(stationName, Process.Refuel)) return fuel;
-            if (Config.RefuelOnlyWhenOutOfFuel(stationName) && fuel > 0f) return fuel;
+            if (!Logics.IsAllowProcessing(stationName, Process.Refuel)) return;
+            if (Config.RefuelOnlyWhenOutOfFuel(stationName) && fuel > 0f) return;
             if (Config.RefuelOnlyWhenMaterialsSupplied(stationName) &&
-                Reflections.InvokeMethod<int>(cookingStation, "GetFreeSlot") < 0)
-                return fuel;
+                !Reflections.InvokeMethod<bool>(cookingStation, "HaveUncookedItem"))
+                return;
 
             var minFuelCount = Config.FuelCountOfSuppressProcessing(stationName);
             var transform = cookingStation.transform;
@@ -144,15 +164,14 @@ namespace Automatics.AutomaticProcessing
                 if (!Logics.TryClaimContainer(container)) continue;
 
                 if (!Logics.TryRemoveItem(inventory, fuelName, minFuelCount, out _)) continue;
-                fuel += 1f;
-                cookingStation.m_fuelAddedEffects.Create(origin, transform.rotation, transform);
+                // CookingStation registers Register("RPC_AddFuel", RPC_AddFuel), which adds one
+                // fuel and plays the fuel-added effect.
+                zNetView.InvokeRPC("RPC_AddFuel");
 
                 Logics.RefuelLog(fuelName, 1, stationName, origin, container.m_name,
                     container.transform.position);
                 break;
             }
-
-            return fuel;
         }
 
         [UsedImplicitly]

@@ -43,10 +43,6 @@ namespace Automatics.AutomaticProcessing
         private const int SmelterFuelStore = 6;
         private const int SmelterQueuedOreStore = 9;
 
-        // Position of the fuel local inside CookingStationFuelRead and CookingStationFuelWrite.
-        private const int CookingStationFuelStore = 2;
-        private const int CookingStationFuelLoad = 1;
-
         internal static readonly Func<IlInstruction, bool> AnyLocalLoad = x => IsLocalLoad(x.OpCode);
         internal static readonly Func<IlInstruction, bool> AnyLocalStore = x => IsLocalStore(x.OpCode);
 
@@ -90,42 +86,6 @@ namespace Automatics.AutomaticProcessing
 
             return new SmelterLoopLocals(accumulator, fuel, queuedOre,
                 head + SmelterFuelStore + 1, head + SmelterQueuedOreStore + 1);
-        }
-
-        /// <summary>
-        ///     Derives the fuel local of CookingStation.UpdateFuel from <c>fuel = GetFuel();</c> and
-        ///     <c>SetFuel(fuel);</c>, and the position where the Refuel call goes.
-        /// </summary>
-        /// <remarks>
-        ///     Both locals of UpdateFuel are float32 (the per-frame burn and the fuel value), so the
-        ///     fuel local cannot be resolved by type. It is read from the store that follows GetFuel;
-        ///     the load that feeds SetFuel must refer to the same local, each of the two anchors must
-        ///     occur exactly once in the method, and the local must be declared as float.
-        /// </remarks>
-        internal static OvenFuelLocal DeriveOvenFuel(MethodBase original, IList<IlInstruction> code,
-            MethodInfo getFuel, MethodInfo setFuel)
-        {
-            const string where = "CookingStation.UpdateFuel";
-            var body = original?.GetMethodBody() ?? throw new InvalidOperationException(
-                $"{where}: method body is unavailable, cannot check the declared local types");
-            var localTypes = DeclaredLocalTypes(body.LocalVariables, where);
-
-            var read = FindSingle(code, CookingStationFuelRead(getFuel),
-                $"{where}: the GetFuel call storing into the fuel local");
-            var write = FindSingle(code, CookingStationFuelWrite(setFuel),
-                $"{where}: the SetFuel call taking the fuel local");
-            var fuel = RequireLocal(
-                RequireSameLocal(code, read + CookingStationFuelStore, write + CookingStationFuelLoad,
-                    $"{where}: fuel"),
-                localTypes, typeof(float), $"{where}: fuel");
-
-            // The Refuel call goes right behind the ldarg.0 that starts SetFuel's arguments, not in
-            // front of it. That ldarg.0 is where the jump over the `fuel = 0` clamp lands (a branch
-            // target in the 1.0.7 IL), and every jump to it would skip an instruction inserted in
-            // front of it, so the unclamped path would never refuel. Behind it, that ldarg.0 becomes
-            // Refuel's first argument and the injected block ends with a fresh ldarg.0 for SetFuel,
-            // which is the instruction stream this method was patched with before (f1e7d90).
-            return new OvenFuelLocal(fuel, write + 1);
         }
 
         /// <summary>
@@ -297,18 +257,6 @@ namespace Automatics.AutomaticProcessing
                 Is(OpCodes.Ldarg_0), Is(OpCodes.Call, getFuel), AnyLocalStore,
                 Is(OpCodes.Ldarg_0), Is(OpCodes.Call, getQueuedOre), AnyLocalStore
             };
-        }
-
-        /// <summary><c>fuel = this.GetFuel();</c></summary>
-        private static Func<IlInstruction, bool>[] CookingStationFuelRead(MethodInfo getFuel)
-        {
-            return new[] { Is(OpCodes.Ldarg_0), Is(OpCodes.Call, getFuel), AnyLocalStore };
-        }
-
-        /// <summary><c>this.SetFuel(fuel);</c></summary>
-        private static Func<IlInstruction, bool>[] CookingStationFuelWrite(MethodInfo setFuel)
-        {
-            return new[] { Is(OpCodes.Ldarg_0), AnyLocalLoad, Is(OpCodes.Call, setFuel) };
         }
 
         /// <summary>
@@ -509,24 +457,6 @@ namespace Automatics.AutomaticProcessing
 
             /// <summary>Right after the store of GetQueuedOre's result, before anything reads it.</summary>
             internal int QuickCraftAt { get; }
-        }
-
-        /// <summary>The fuel local of CookingStation.UpdateFuel and where the Refuel call goes.</summary>
-        internal sealed class OvenFuelLocal
-        {
-            internal OvenFuelLocal(int fuel, int refuelAt)
-            {
-                Fuel = fuel;
-                RefuelAt = refuelAt;
-            }
-
-            internal int Fuel { get; }
-
-            /// <summary>
-            ///     Right behind the ldarg.0 that starts SetFuel's arguments; see
-            ///     <see cref="DeriveOvenFuel" /> for why it is behind it and not in front of it.
-            /// </summary>
-            internal int RefuelAt { get; }
         }
     }
 }

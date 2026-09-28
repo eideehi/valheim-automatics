@@ -561,11 +561,6 @@ When the number of product item stacks stored in the container is about to excee
 - Default value: 0
 - Acceptable value range: From 0 to 99
 
-### Fermenter: Supply Only If Materials Run Out / [piece_fermenter_supply_only_when_materials_run_out]
-Supply one material item only when the materials supplied to Fermenter run out.
-
-- Default value: false
-
 ### Fermenter: Store Only If Product Exists In Container / [piece_fermenter_store_only_if_product_exists]
 Store only if the product item for Fermenter is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
 

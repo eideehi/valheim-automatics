@@ -350,7 +350,8 @@ namespace Automatics.AutomaticProcessing
             if (SkipRefuel.Contains(uid)) return;
 
             var fuel = zNetView.GetZDO().GetFloat("fuel");
-            if (fuel >= smelter.m_maxFuel - 1) return;
+            // The same limit as the game's own Smelter.OnAddFuel.
+            if (fuel > smelter.m_maxFuel - 1) return;
             if (Config.RefuelOnlyWhenOutOfFuel(smelterName) && fuel > 0f) return;
             if (Config.RefuelOnlyWhenMaterialsSupplied(smelterName) &&
                 zNetView.GetZDO().GetInt("queued") == 0)

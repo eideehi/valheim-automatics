@@ -1547,7 +1547,8 @@ namespace Automatics.SmokeTest
             }
 
             // CookingStationProcess.Craft returns before taking anything while a fire it needs
-            // is out or its fuel is empty; the test oven gets neither requirement in its way.
+            // is out, or while its fuel is empty and Refuel is not allowed; the test oven gets
+            // neither requirement in its way.
             public override void Prepare()
             {
                 if (_station.m_requireFire)

@@ -18,10 +18,10 @@ namespace Automatics.AutomaticProcessing
     ///     Processing transpilers use. The project compiles
     ///     <c>Automatics/AutomaticProcessing/TranspilerLocals.cs</c> directly and references
     ///     nothing but the base class library, so every case calls the same
-    ///     <c>TranspilerLocals.DeriveSmelterLoop</c> / <c>DeriveOvenFuel</c> /
-    ///     <c>InsertBackToFront</c> that the transpilers in Patches.cs call.
+    ///     <c>TranspilerLocals.DeriveSmelterLoop</c> / <c>InsertBackToFront</c> that the
+    ///     transpilers in Patches.cs call.
     ///     Most cases synthesise (opcode, operand) lists shaped like the Valheim 1.0.7 IL of
-    ///     Smelter.UpdateSmelter and CookingStation.UpdateFuel, spelled out here rather than
+    ///     Smelter.UpdateSmelter, spelled out here rather than
     ///     produced by the code under test, and declare the method's locals through a stand-in
     ///     MethodInfo. One case decodes the released game's own method bodies from
     ///     $VALHEIM_DIR/valheim_Data/Managed/assembly_valheim.dll, the install scripts/build.sh
@@ -35,7 +35,6 @@ namespace Automatics.AutomaticProcessing
         private static int _failures;
 
         private static readonly MethodInfo GetFuel = typeof(Game).GetMethod(nameof(Game.GetFuel));
-        private static readonly MethodInfo SetFuel = typeof(Game).GetMethod(nameof(Game.SetFuel));
 
         private static readonly MethodInfo GetQueuedOre =
             typeof(Game).GetMethod(nameof(Game.GetQueuedOre));
@@ -56,9 +55,6 @@ namespace Automatics.AutomaticProcessing
             typeof(double), typeof(float), typeof(float), typeof(float),
             typeof(string), typeof(float), typeof(float), typeof(float)
         };
-
-        // CookingStation.UpdateFuel in Valheim 1.0.7 declares [0] float32 (burn), [1] float32 (fuel).
-        private static readonly Type[] OvenLocals = { typeof(float), typeof(float) };
 
         private static int Main()
         {
@@ -86,8 +82,6 @@ namespace Automatics.AutomaticProcessing
                 EncodedLocalsRoundTrip);
             Run("LocalBuilder and LocalVariableInfo operands resolve to their LocalIndex",
                 ReflectionOperandsResolve);
-            Run("the oven fuel local resolves from GetFuel and SetFuel and must be one float local",
-                OvenFuelLocal);
             Run("declared local types are ordered by index and must be complete",
                 DeclaredLocalTypesAreIndexed);
             Run("a pattern built from a missing game method is refused",
@@ -234,12 +228,9 @@ namespace Automatics.AutomaticProcessing
         private static void MethodWithoutBodyIsRefused()
         {
             var smelter = SmelterMethod(ReleasedLoopHead(), 1, out _);
-            var oven = OvenMethod(I(OpCodes.Stloc_1), I(OpCodes.Ldloc_1), out _);
 
             ExpectRefusal(() => TranspilerLocals.DeriveSmelterLoop(FakeMethod.WithoutBody(), smelter, GetFuel, GetQueuedOre),
                 "Smelter.UpdateSmelter", "method body is unavailable");
-            ExpectRefusal(() => TranspilerLocals.DeriveOvenFuel(null, oven, GetFuel, SetFuel),
-                "CookingStation.UpdateFuel", "method body is unavailable");
         }
 
         // --- Opcode helpers --------------------------------------------------------------
@@ -290,24 +281,6 @@ namespace Automatics.AutomaticProcessing
             AssertEqual(4, TranspilerLocals.LocalIndexOf(OpCodes.Stloc_S, 4), "stloc.s int");
         }
 
-        // --- CookingStation.UpdateFuel ---------------------------------------------------
-
-        private static void OvenFuelLocal()
-        {
-            var code = OvenMethod(I(OpCodes.Stloc_1), I(OpCodes.Ldloc_1), out var setFuelArguments);
-            var oven = TranspilerLocals.DeriveOvenFuel(new FakeMethod(OvenLocals), code, GetFuel, SetFuel);
-            AssertEqual(1, oven.Fuel, "fuel");
-            AssertEqual(setFuelArguments + 1, oven.RefuelAt,
-                "Refuel goes right behind the ldarg.0 that starts SetFuel's arguments");
-
-            var otherLocal = OvenMethod(I(OpCodes.Stloc_1), I(OpCodes.Ldloc_0), out _);
-            ExpectRefusal(() => TranspilerLocals.DeriveOvenFuel(new FakeMethod(OvenLocals), otherLocal, GetFuel, SetFuel),
-                "fuel", "must refer to the same local");
-
-            ExpectRefusal(() => TranspilerLocals.DeriveOvenFuel(new FakeMethod(typeof(float), typeof(int)), code,
-                GetFuel, SetFuel), "fuel", "declared as Int32", "expected Single");
-        }
-
         // --- Declared locals, patterns and insertion -------------------------------------
 
         private static void DeclaredLocalTypesAreIndexed()
@@ -333,14 +306,10 @@ namespace Automatics.AutomaticProcessing
         {
             // What a reflection lookup returns for a game method that was renamed or removed.
             var smelter = SmelterMethod(ReleasedLoopHead(), 1, out _);
-            var oven = OvenMethod(I(OpCodes.Stloc_1), I(OpCodes.Ldloc_1), out _);
 
             ExpectThrows<ArgumentNullException>(
                 () => TranspilerLocals.DeriveSmelterLoop(new FakeMethod(SmelterLocals), smelter, null, GetQueuedOre),
                 "DeriveSmelterLoop without GetFuel");
-            ExpectThrows<ArgumentNullException>(
-                () => TranspilerLocals.DeriveOvenFuel(new FakeMethod(OvenLocals), oven, GetFuel, null),
-                "DeriveOvenFuel without SetFuel");
         }
 
         private static void InsertionsLandWhereTheyWereDerived()
@@ -397,15 +366,6 @@ namespace Automatics.AutomaticProcessing
             AssertTrue(!smelter.BranchTargets.Contains(loop.QuickRefuelAt) && !smelter.BranchTargets.Contains(loop.QuickCraftAt),
                 "No jump may land where the smelter calls are inserted, or it would skip them.");
 
-            var station = DecodedMethod.Read(assembly, "CookingStation", "UpdateFuel");
-            var oven = TranspilerLocals.DeriveOvenFuel(station.Method, station.Code, GetFuel, SetFuel);
-            AssertEqual(1, oven.Fuel, "1.0.7 CookingStation.UpdateFuel fuel");
-            AssertEqual(23, oven.RefuelAt, "1.0.7 CookingStation.UpdateFuel Refuel position");
-            AssertTrue(station.BranchTargets.Contains(oven.RefuelAt - 1),
-                "The ldarg.0 that starts SetFuel's arguments is expected to be a branch target in 1.0.7; " +
-                "that is why Refuel goes behind it.");
-            AssertTrue(!station.BranchTargets.Contains(oven.RefuelAt),
-                "No jump may land where Refuel is inserted, or it would skip it.");
         }
 
         // --- Method shapes ---------------------------------------------------------------
@@ -469,26 +429,6 @@ namespace Automatics.AutomaticProcessing
                 I(OpCodes.Ldarg_0), I(OpCodes.Call, GetFuel), I(OpCodes.Ldc_R4, 0f), I(OpCodes.Ceq), I(OpCodes.Pop),
                 I(OpCodes.Ldarg_0), I(OpCodes.Ldloc_1), I(OpCodes.Call, SetAccumulator), I(OpCodes.Ret)
             });
-            return code;
-        }
-
-        /// <summary>
-        ///     The outline of CookingStation.UpdateFuel:
-        ///     <c>burn = dt / m_secPerFuel; fuel = GetFuel(); fuel -= burn; if (fuel &lt; 0f) fuel = 0f; SetFuel(fuel);</c>
-        /// </summary>
-        private static List<IlInstruction> OvenMethod(IlInstruction fuelStore, IlInstruction fuelLoad,
-            out int setFuelArguments)
-        {
-            var code = new List<IlInstruction>
-            {
-                I(OpCodes.Ldarg_1), I(OpCodes.Ldarg_0), I(OpCodes.Nop), I(OpCodes.Div), I(OpCodes.Stloc_0),
-                I(OpCodes.Ldarg_0), I(OpCodes.Call, GetFuel), fuelStore,
-                I(OpCodes.Ldloc_1), I(OpCodes.Ldloc_0), I(OpCodes.Sub), I(OpCodes.Stloc_1),
-                I(OpCodes.Ldloc_1), I(OpCodes.Ldc_R4, 0f), I(OpCodes.Bge_Un_S, 0),
-                I(OpCodes.Ldc_R4, 0f), I(OpCodes.Stloc_1)
-            };
-            setFuelArguments = code.Count;
-            code.AddRange(new[] { I(OpCodes.Ldarg_0), fuelLoad, I(OpCodes.Call, SetFuel), I(OpCodes.Ret) });
             return code;
         }
 
@@ -631,7 +571,7 @@ namespace Automatics.AutomaticProcessing
         /// <summary>
         ///     A game method read straight from the released assembly with System.Reflection.Metadata:
         ///     its instructions as (opcode, operand) pairs, its declared local types, and the
-        ///     instructions some jump lands on. Calls to GetFuel, SetFuel and GetQueuedOre of the
+        ///     instructions some jump lands on. Calls to GetFuel and GetQueuedOre of the
         ///     method's own type become the stand-ins the derivation is given; every other operand
         ///     that the derivation does not read stays a placeholder.
         /// </summary>
@@ -645,7 +585,7 @@ namespace Automatics.AutomaticProcessing
 
             private static readonly Dictionary<string, MethodInfo> StandIns = new Dictionary<string, MethodInfo>
             {
-                ["GetFuel"] = GetFuel, ["SetFuel"] = SetFuel, ["GetQueuedOre"] = GetQueuedOre
+                ["GetFuel"] = GetFuel, ["GetQueuedOre"] = GetQueuedOre
             };
 
             public List<IlInstruction> Code { get; private set; }
@@ -855,10 +795,6 @@ namespace Automatics.AutomaticProcessing
             public static float GetFuel()
             {
                 return 0f;
-            }
-
-            public static void SetFuel(float fuel)
-            {
             }
 
             public static string GetQueuedOre()
