@@ -10,13 +10,14 @@ namespace Automatics.AutomaticFarming
     /// planting boxes near a planting location.
     /// </summary>
     /// <remarks>
-    /// In <see cref="SeedSource.Containers"/> mode the pool wraps a pre-filtered,
+    /// In the container modes (<see cref="SeedSource.Containers"/> and
+    /// <see cref="SeedSource.PlayerContainers"/>) the pool wraps a pre-filtered,
     /// nearest-first list of the matching-role planting boxes for a location
     /// (cultivation boxes for crop saplings, seed-harvest boxes for seed saplings),
     /// so the input for a spot comes only from same-role boxes near that spot and the
-    /// player inventory is never charged. In <see cref="SeedSource.Inventory"/> mode
-    /// no container is enumerated, read, or mutated, keeping the default behavior
-    /// byte-for-byte unchanged.
+    /// player inventory is never charged; its own source is then
+    /// <see cref="SeedSource.Containers"/>. In <see cref="SeedSource.Inventory"/> mode
+    /// no container is enumerated, read, or mutated.
     /// </remarks>
     internal sealed class SeedPool
     {

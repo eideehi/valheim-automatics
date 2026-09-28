@@ -262,7 +262,7 @@ namespace Automatics
         // file has been through. A pass runs once, on a file whose recorded revision is below its
         // number, so a pass added later still runs on a file the earlier passes are done with.
         internal const string SettingsRevisionKey = "settings_revision";
-        internal const int SettingsRevision = 4;
+        internal const int SettingsRevision = 5;
 
         private const string ProcessingSection = "automatic_processing";
 
@@ -776,8 +776,24 @@ namespace Automatics
             (1, GroupFirePieces),
             (2, RemoveFermenterSupplyOption),
             (3, FoldFeatureSwitchesIntoModules),
-            (4, KeepKeyOnlyRuns)
+            (4, KeepKeyOnlyRuns),
+            (5, CopyFarmingRangeToContainerRange)
         };
+
+        // Settings pass 5. Automatic Farming's range used to also set how far it looks for role
+        // containers; that is now Container Search Range. A config with a stored farming range
+        // gets the same value there once, so the containers farming uses stay the same.
+        private static void CopyFarmingRangeToContainerRange(List<string> lines)
+        {
+            const string section = "automatic_farming";
+            var entries = ReadEntries(lines);
+            if (!entries.TryGetValue((section, "farming_range"), out var range)) return;
+            if (entries.ContainsKey((section, "container_search_range"))) return;
+
+            AddEntry(lines, section, "container_search_range", range.Value);
+            Automatics.Logger.Message(
+                $"Keep the farming containers in reach: [{section}] container_search_range = {range.Value}");
+        }
 
         // The shortcuts that used to stop their module's periodic runs, and those intervals.
         private static readonly (string Section, string Key, string Interval)[] KeyedIntervals =

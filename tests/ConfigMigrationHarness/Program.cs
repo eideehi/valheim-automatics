@@ -95,6 +95,7 @@ namespace Automatics
             RunFireGroupMigrationTests();
             RunFeatureSwitchMigrationTests();
             RunKeyedIntervalMigrationTests();
+            RunFarmingRangeMigrationTests();
 
             return _failures == 0 ? 0 : 1;
         }

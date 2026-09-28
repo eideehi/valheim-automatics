@@ -1120,7 +1120,7 @@ Turn this module on or off. While it is off, Automatics adds none of its logic t
 - Acceptable values: Enabled, Disabled
 
 ### Harvest And Replant Automatically / [enable_automatic_farming]
-Specify whether to enable the feature that harvests grown crops and replants the regrowing sapling at the harvested spot. With the Player Inventory seed source it works around the player; with Nearby Containers it works around the containers you designate. The module's other features, such as grid planting, are not affected.
+Specify whether to enable the feature that harvests grown crops and replants the regrowing sapling at the harvested spot. Where it works depends on Farming Mode. The module's other features, such as grid planting, are not affected.
 
 - Default value: true
 
@@ -1131,7 +1131,13 @@ Specify the interval between farming attempts. Set to 0 to turn periodic farming
 - Acceptable value range: From 0 to 4
 
 ### Farming Range / [farming_range]
-Specify the maximum distance to search for crops to harvest. (Unit: meters)
+Specify how far farming harvests, replants and sows: around you in the Player Inventory and Player With Containers modes, and around each designated container in the Nearby Containers mode. (Unit: meters)
+
+- Default value: 8
+- Acceptable value range: From 1 to 64
+
+### Container Search Range / [container_search_range]
+Specify how far from a crop or a planting spot farming looks for the role containers it puts the harvest into and takes planting input from. Not used in the Player Inventory mode. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
@@ -1142,16 +1148,16 @@ Specify the crops to be automatically harvested and replanted. Crops that have n
 - Default value: Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flax, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr, Lingonberries, BlueMushroom
 
 ### Seed Reserve / [seed_reserve]
-Specify the number of each seed item to keep in the active seed source. Planting stops consuming a seed once its count would drop below this value.
+Specify the number of each planting input to keep in the containers or inventory farming uses. Sowing new ground stops at this reserve; replanting a harvested spot does not keep it.
 
 - Default value: 10
 - Acceptable value range: From 0 to 999
 
-### Seed Source / [seed_source]
-Specify where planting draws seeds from. Player Inventory keeps the original behavior: crops are searched, harvested, and replanted around you and seeds come from your inventory. Nearby Containers makes farming container-based: the search is anchored to the containers you designate (see Designate Container Role), each planting box draws its input only from same-role boxes within Farming Range, and harvested yield is deposited into storage boxes first, otherwise the matching planting box, never the player inventory. The Seed Reserve is kept within whichever pool is in use.
+### Farming Mode / [seed_source]
+Specify where farming works and where it keeps its items. Player Inventory: around you, putting the harvest into and taking seeds from your inventory. Player With Containers: around you, putting the harvest into and taking planting input from the role containers near each crop (see Designate Container Role and Container Search Range). Nearby Containers: around the containers you designate, with the same role containers; your inventory is never used.
 
 - Default value: Inventory
-- Acceptable values: Inventory, Containers
+- Acceptable values: Inventory, Containers, PlayerContainers
 
 ### Proactive Sowing / [enable_proactive_sowing]
 Specify whether to also sow seeds into nearby empty cultivated ground, in addition to replanting harvested spots.
@@ -1170,12 +1176,12 @@ Specify a shortcut key that attempts farming once each time it is pressed, whate
 - Default value:
 
 ### Designate Container Role / [designate_container_key]
-Specify a shortcut key that cycles the role of the container you are looking at between none, cultivation, seed harvest, and storage. When Seed Source is set to Nearby Containers, a cultivation box grows crops from the seeds it holds, a seed-harvest box grows seeds from the crops it holds, and harvested yield is deposited into nearby storage boxes first, otherwise back into the matching planting box. Changing a role claims ownership of the chest, so it only works on containers you can access.
+Specify a shortcut key that cycles the role of the container you are looking at between none, cultivation, seed harvest, and storage. In the Player With Containers and Nearby Containers farming modes, a cultivation box grows crops from the seeds it holds, a seed-harvest box grows seeds from the crops it holds, and harvested yield is deposited into nearby storage boxes first, otherwise back into the matching planting box. Changing a role claims ownership of the chest, so it only works on containers you can access.
 
 - Default value:
 
 ### Grid Planting / [enable_grid_planting]
-Hold the grid planting key while planting by hand to add a grid of the same crop. Each extra crop costs what a hand-placed crop costs: seeds from your inventory (and from nearby containers while Automatic Supply is running), stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of automatic farming, Seed Source and Seed Reserve.
+Hold the grid planting key while planting by hand to add a grid of the same crop. Each extra crop costs what a hand-placed crop costs: seeds from your inventory (and from nearby containers while Automatic Supply is running), stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of automatic farming, Farming Mode and Seed Reserve.
 
 - Default value: true
 

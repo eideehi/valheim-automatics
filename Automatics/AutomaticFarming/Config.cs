@@ -13,6 +13,7 @@ namespace Automatics.AutomaticFarming
         private static ConfigEntry<bool> _enableAutomaticFarming;
         private static ConfigEntry<float> _farmingInterval;
         private static ConfigEntry<int> _farmingRange;
+        private static ConfigEntry<int> _containerSearchRange;
         private static ConfigEntry<StringList> _allowFarmingCrop;
         private static ConfigEntry<int> _seedReserve;
         private static ConfigEntry<SeedSource> _seedSource;
@@ -36,6 +37,7 @@ namespace Automatics.AutomaticFarming
         public static bool EnableAutomaticFarming => _enableAutomaticFarming.Value;
         public static float FarmingInterval => _farmingInterval.Value;
         public static int FarmingRange => _farmingRange.Value;
+        public static int ContainerSearchRange => _containerSearchRange.Value;
         public static StringList AllowFarmingCrops => _allowFarmingCrop.Value;
         public static int SeedReserve => _seedReserve.Value;
         public static SeedSource SeedSource => _seedSource.Value;
@@ -62,6 +64,7 @@ namespace Automatics.AutomaticFarming
             _enableAutomaticFarming = config.Bind("enable_automatic_farming", true);
             _farmingInterval = config.Bind("farming_interval", 1.5f, (0f, 4f));
             _farmingRange = config.Bind("farming_range", 8, (1, 64));
+            _containerSearchRange = config.Bind("container_search_range", 8, (1, 64));
             _allowFarmingCrop = config.BindValheimObjectList("allow_farming_crop", ValheimObject.Flora);
             _seedReserve = config.Bind("seed_reserve", 10, (0, 999));
             _seedSource = config.Bind("seed_source", SeedSource.Inventory);
@@ -81,6 +84,9 @@ namespace Automatics.AutomaticFarming
         Inventory,
 
         [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_farming_seed_source_containers")]
-        Containers
+        Containers,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_farming_seed_source_player_containers")]
+        PlayerContainers
     }
 }
