@@ -138,8 +138,6 @@ namespace Automatics.AutomaticDoor
             if (!player) return;
 
             var openRange = Config.DistanceForAutomaticOpening;
-            if (openRange <= 0f) return;
-
             var searchRange = openRange + GetPredictionDistance(velocity);
             var searchRangeSquared = searchRange * searchRange;
 
@@ -160,8 +158,6 @@ namespace Automatics.AutomaticDoor
         {
             if (!Module.Running) return;
             var closeRange = Config.DistanceForAutomaticClosing;
-            if (closeRange <= 0f) return;
-
             var holdOpenRange = Config.IntervalToOpen >= 0.1f
                 ? Mathf.Max(closeRange, Config.DistanceForAutomaticOpening)
                 : closeRange;
@@ -175,7 +171,7 @@ namespace Automatics.AutomaticDoor
                     continue;
                 }
 
-                automaticDoor.TryClose(players, closeRange, holdOpenRange);
+                automaticDoor.TryClose(players, holdOpenRange);
             }
         }
 
@@ -221,47 +217,29 @@ namespace Automatics.AutomaticDoor
             _lastAutomaticOpenTime = Time.time;
         }
 
-        private void TryClose(IEnumerable<Player> players, float closeRange, float holdOpenRange)
+        // A player who could open the door holds it open while within reach, whether or not a
+        // piece stands between them and the door. Otherwise the door is closed: the game closes
+        // an open door whatever direction it is used from, and refuses on its own while the door
+        // is moving or cannot be closed.
+        private void TryClose(IEnumerable<Player> players, float holdOpenRange)
         {
             if (!IsValid()) return;
             if (!IsAllowAutomaticDoor()) return;
             if (!IsDoorOpen()) return;
             if (Time.time - _lastAutomaticOpenTime < CloseGracePeriod) return;
 
-            var closestInteractablePlayer = default(Player);
-            var closestDistanceSquared = float.MaxValue;
-            var closeRangeSquared = closeRange * closeRange;
             var holdOpenRangeSquared = holdOpenRange * holdOpenRange;
             var doorPosition = _transform.position;
 
             foreach (var player in players)
             {
                 if (!player) continue;
-
-                var distanceSquared = (player.transform.position - doorPosition).sqrMagnitude;
-                var canInteract = CanInteract(player);
-                if (distanceSquared <= closeRangeSquared &&
-                    canInteract &&
-                    CanOpen(player) &&
-                    !IsExistsObstaclesBetweenTo(player))
-                    return;
-
-                if (distanceSquared <= holdOpenRangeSquared &&
-                    canInteract &&
-                    CanOpen(player) &&
-                    !IsExistsObstaclesBetweenTo(player))
-                    return;
-
-                if (!canInteract) continue;
-                if (distanceSquared >= closestDistanceSquared) continue;
-
-                closestDistanceSquared = distanceSquared;
-                closestInteractablePlayer = player;
+                if ((player.transform.position - doorPosition).sqrMagnitude > holdOpenRangeSquared)
+                    continue;
+                if (CanInteract(player) && CanOpen(player)) return;
             }
 
-            if (!closestInteractablePlayer) return;
-
-            OpenDoor((closestInteractablePlayer.transform.position - doorPosition).normalized);
+            OpenDoor(_transform.forward);
         }
 
         private void OpenDoor(Vector3 direction)

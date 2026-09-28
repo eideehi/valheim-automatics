@@ -196,11 +196,12 @@ Key settings:
 Doors must be allowed by the door definition list. You can add extra door
 definitions with `User-defined Door` in the `General` section.
 
-Automatic closing closes every open allowed door once no player is near it,
-including doors you opened by hand. While automatic opening is on, a
-`Distance For Automatic Closing` smaller than `Distance For Automatic Opening` is
-replaced by the opening distance, so a door you walk up to does not close in
-front of you.
+Automatic closing closes every open allowed door once no player who could open it
+is near, including doors you opened by hand. A player within reach holds the door
+open even when a piece stands between them and the door. While automatic opening
+is on, a `Distance For Automatic Closing` smaller than `Distance For Automatic
+Opening` is replaced by the opening distance, so a door you walk up to does not
+close in front of you.
 
 Its `Module` option takes effect without a restart. New automatic opening,
 closing and shortcut handling stop right away, while an action already in progress
