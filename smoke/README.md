@@ -809,7 +809,7 @@ the file nor any setting.
 
 `automatics_smoke_features all` runs every section below, and
 `automatics_smoke_features <section>` runs one of them: `pickup`, `pin`,
-`mining`, `planting`, `guide` or `supply`. Run it from the in-game console while
+`mining`, `planting`, `farming`, `guide` or `supply`. Run it from the in-game console while
 a single-player world is loaded. Each section drives the real game code path of
 one feature against objects it spawns next to the player. The run ends with one
 `[Automatics Smoke] Summary: ...` line over every section it ran. A section that
@@ -1043,6 +1043,35 @@ regeneration delay and the test cultivator's durability are restored within the
 same synchronous check. The
 real cultivator key input and vanilla manual placement remain a separate in-game
 check; this section drives the request path after a successful manual placement.
+
+#### `farming`
+
+Run `automatics_smoke_features farming` in a single-player world with the Farming
+module on, standing beside an empty cultivated plot (about 3×3 m or larger). It
+uses the first crop in `Allow Farming Crop` that grows from one kind of seed on
+cultivated ground in your biome and has no growing or ripe plant of its kind
+within 6 m; crops from the Mistlands update onward are counted, not named. It
+SKIPs when a container with a farming role is within 13 m, or when fewer than
+three empty cultivated cells lie within 3 m of you.
+
+For the length of the section it sets `Player With Containers` mode, a farming
+interval of 0, a farming range of 4 m, a container search range of 8 m, the
+chosen crop as the only allowed crop and a spacing factor of 2.5, then restores
+them. It spawns two chests beside you and gives them the Storage and
+Cultivation roles through the real designation path, puts seeds into the
+Cultivation chest, and runs one farming pass per check:
+
+| Check | Pass condition |
+| --- | --- |
+| `farming_player_containers_harvest` | A ripe crop of that kind spawned on a free cell is picked, its yield goes into the Storage chest, it is replanted at the same spot with one seed from the Cultivation chest, and your inventory is unchanged |
+| `farming_replant_below_reserve` | With `Seed Reserve` above the seeds held and sowing on, the harvested spot is still replanted and nothing is sown on the free cells left |
+| `farming_sow_rotated_lattice` | Beside a growing crop of that kind turned 30°, every crop sown lies on that crop's rotated lattice and turned with it (SKIP when no lattice cell beside it is plantable) |
+| `farming_settings_restored` | Every changed setting is put back |
+
+Everything runs synchronously. Crops it plants are tracked and removed. The section takes out
+only the seeds it added and the yield it harvested; a chest that still holds
+anything else is left in the world and the log says where. No terrain is
+modified. A harvest may raise the pick skill, as a harvest by hand does.
 
 #### `guide`
 
