@@ -312,7 +312,7 @@ namespace Automatics
                 // The version passes share this read, so they wait for the next start too.
                 Automatics.Logger.Warning(
                     $"Could not read the config file {path} ({e.Message}). This session, every " +
-                    "module whose Disable Module entry the file lacks uses the new default, Disabled. " +
+                    "module whose Module entry the file lacks uses the new default, Disabled. " +
                     "The next start tries again.");
                 return;
             }
@@ -348,7 +348,7 @@ namespace Automatics
                         ? " Automatic Pickup keeps its stored interval this session, so periodic pickup may run beside the Pickup All Nearby key."
                         : "") +
                     (settingsChanged
-                        ? " Settings that this version moves or merges take their defaults this session, and a module whose own on/off switch was off runs until the file can be updated."
+                        ? " Settings that this version moves or merges take their defaults this session, and a module whose own on/off switch was off runs until the file can be updated, and mining, farming and static object mapping with a bound shortcut also run on their interval."
                         : "") +
                     " The next start tries again.");
                 return;
@@ -782,15 +782,19 @@ namespace Automatics
 
         // Settings pass 5. Automatic Farming's range used to also set how far it looks for role
         // containers; that is now Container Search Range. A config with a stored farming range
-        // gets the same value there once, so the containers farming uses stay the same.
+        // gets the same value there once, so the containers farming uses stay the same. The
+        // option is new with this pass, so a stored value is the default BepInEx wrote after a
+        // failed update, and it is overwritten.
         private static void CopyFarmingRangeToContainerRange(List<string> lines)
         {
             const string section = "automatic_farming";
             var entries = ReadEntries(lines);
             if (!entries.TryGetValue((section, "farming_range"), out var range)) return;
-            if (entries.ContainsKey((section, "container_search_range"))) return;
 
-            AddEntry(lines, section, "container_search_range", range.Value);
+            if (entries.ContainsKey((section, "container_search_range")))
+                RewriteEveryEntry(lines, section, "container_search_range", range.Value);
+            else
+                AddEntry(lines, section, "container_search_range", range.Value);
             Automatics.Logger.Message(
                 $"Keep the farming containers in reach: [{section}] container_search_range = {range.Value}");
         }

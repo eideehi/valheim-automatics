@@ -8,7 +8,7 @@ namespace Automatics
         {
             Run("a stored farming range is copied into the container search range", FarmingRangeIsCopied);
             Run("a config without a farming range gets no container search range", NoFarmingRangeNoCopy);
-            Run("an existing container search range is kept", ExistingContainerRangeIsKept);
+            Run("a container search range stored before the pass is overwritten", StoredContainerRangeIsOverwritten);
             Run("a file at settings revision 4 runs only pass 5", RevisionFourRunsOnlyPassFive);
         }
 
@@ -39,10 +39,13 @@ namespace Automatics
             AssertDoesNotContain(migrated, "container_search_range");
         }
 
-        private static void ExistingContainerRangeIsKept()
+        // BepInEx writes the default after a failed update; the retry at the next start copies the
+        // farming range over it.
+        private static void StoredContainerRangeIsOverwritten()
         {
-            var migrated = MigrateRaw(FarmingRangeLines("20", "5"));
-            AssertSingle(migrated, "automatic_farming", "container_search_range", "5");
+            var migrated = MigrateRaw(FarmingRangeLines("20", "8"));
+            AssertSingle(migrated, "automatic_farming", "container_search_range", "20");
+            AssertSettingsRevision(migrated);
         }
 
         private static void RevisionFourRunsOnlyPassFive()
