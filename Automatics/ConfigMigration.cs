@@ -262,7 +262,7 @@ namespace Automatics
         // file has been through. A pass runs once, on a file whose recorded revision is below its
         // number, so a pass added later still runs on a file the earlier passes are done with.
         internal const string SettingsRevisionKey = "settings_revision";
-        internal const int SettingsRevision = 1;
+        internal const int SettingsRevision = 2;
 
         private const string ProcessingSection = "automatic_processing";
 
@@ -773,7 +773,8 @@ namespace Automatics
         // records the highest pass a file has been through.
         private static readonly (int Revision, Action<List<string>> Pass)[] SettingsPasses =
         {
-            (1, GroupFirePieces)
+            (1, GroupFirePieces),
+            (2, RemoveFermenterSupplyOption)
         };
 
         // Runs every settings pass the file has not been through and records the revision in the
@@ -864,6 +865,17 @@ namespace Automatics
 
             Automatics.Logger.Message(
                 $"Merge the settings of the fire pieces: [{ProcessingSection}] {string.Join(", ", shared.Select(x => $"{x.Key} = {x.Value}"))}");
+        }
+
+        // Settings pass 2. The fermenter no longer has "Supply Only If Materials Run Out"; BepInEx
+        // would keep the stored line as an entry nothing reads, so it is removed.
+        private static void RemoveFermenterSupplyOption(List<string> lines)
+        {
+            const string key = "piece_fermenter_supply_only_when_materials_run_out";
+            if (!ReadEntries(lines).ContainsKey((ProcessingSection, key))) return;
+
+            RemoveEveryEntry(lines, ProcessingSection, new HashSet<string> { key });
+            Automatics.Logger.Message($"Remove config: {ProcessingSection} {key}");
         }
 
         private static IEnumerable<string> FireKeys(string piece)

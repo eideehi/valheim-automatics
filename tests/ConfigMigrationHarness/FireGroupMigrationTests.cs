@@ -36,6 +36,29 @@ namespace Automatics
             Run("old allow values count the way BepInEx read them", OldAllowValuesCountAsBepInExReadThem);
             Run("every copy of an old fire line is removed, repeated sections included", EveryCopyOfAnOldFireLineIsRemoved);
             Run("a rerun after a failed write rewrites the group lines BepInEx added", RerunRewritesTheGroupLines);
+            Run("the fermenter's supply-only line is removed", FermenterSupplyLineIsRemoved);
+            Run("a file at settings revision 1 runs only the later passes", RevisionOneRunsOnlyLaterPasses);
+        }
+
+        private const string FermenterSupplyLine = "piece_fermenter_supply_only_when_materials_run_out = true";
+
+        private static void FermenterSupplyLineIsRemoved()
+        {
+            var migrated = MigrateRaw(FireLines(new[] { FermenterSupplyLine, "piece_fermenter_store_only_if_product_exists = true" }));
+            AssertDoesNotContain(migrated, "piece_fermenter_supply_only_when_materials_run_out");
+            AssertContains(migrated, "piece_fermenter_store_only_if_product_exists = true");
+            AssertSettingsRevision(migrated);
+        }
+
+        private static void RevisionOneRunsOnlyLaterPasses()
+        {
+            // Pass 1 is done: the old fire lines left in this file stay, while pass 2 still runs.
+            var lines = FireLines(AllFireSettings().Concat(new[] { FermenterSupplyLine }), "1");
+            var migrated = MigrateRaw(lines);
+            AssertDoesNotContain(migrated, "piece_fermenter_supply_only_when_materials_run_out");
+            AssertContains(migrated, "container_search_range_by_piece_bonfire = 8");
+            AssertDoesNotContain(migrated, "refuel_fires");
+            AssertSettingsRevision(migrated);
         }
 
         private static void OldAllowValuesCountAsBepInExReadThem()
