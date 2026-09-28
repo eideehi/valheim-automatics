@@ -25,12 +25,11 @@ Start with the README for a short overview. Use this guide for practical usage
 notes, and use `CONFIG.md` when you need the exact option name, default value,
 or accepted value range.
 
-Automatics is split into feature modules. Each module has a `Disable Module`
-option, and most modules also have a separate on/off option for the feature
-behavior. Automatic door, automatic pickup, automatic processing, automatic
-mapping, automatic mining, automatic feeding, automatic farming, automatic
-repair, automatic storage and automatic supply all apply that option while the
-game is running.
+Automatics is split into feature modules. Each module has a `Module` option that
+turns it on or off, and every module applies that option while the game is
+running. Automatic mapping, automatic mining and automatic farming have several
+features each, so they also have a switch for their main automatic feature; see
+[Module disable options](#module-disable-options).
 
 ## Common configuration concepts
 
@@ -46,17 +45,17 @@ entries themselves, such as a renamed object, apply to every list.
 
 ### Module disable options
 
-Each feature section has a module disable entry. Use it when you do not want
+Each feature section has a `Module` entry. Turn it off when you do not want
 Automatics to patch or run that feature at all.
 
 A new install starts with every module turned off. Turn on the modules you want
-by setting each section's `Disable Module` option to `Enabled`; the settings
+by setting each section's `Module` option to `Enabled`; the settings
 inside each module keep their usual defaults, so turning the module on is
 normally all you need. Their other options remain available while the module is off.
 
 An existing configuration file keeps each module on or off as it was: a module
 you turned off stays off. If the file comes from an older version and has no
-`Disable Module` entry for a module, or one whose value Automatics cannot read,
+`Module` entry for a module, or one whose value Automatics cannot read,
 that module is turned on, as it would have been before this change. Automatics
 does this once, and records it in the hidden `defaults_revision` entry of the
 file. If it cannot write the file, it logs a warning naming the modules that
@@ -65,20 +64,20 @@ configuration file, the next start is a new install, with every module turned
 off.
 
 Automatic supply is the exception: it is new, so an existing configuration
-without its `Disable Module` entry keeps it off until you turn it on.
+without its `Module` entry keeps it off until you turn it on.
 
 | Module | Entry | When the change takes effect |
 | --- | --- | --- |
-| Automatic door | `Disable Module` | While the game is running. No restart. |
-| Automatic pickup | `Disable Module` | While the game is running. No restart. |
-| Automatic processing | `Disable Module` | While the game is running. No restart. |
-| Automatic mapping | `Disable Module` | While the game is running. No restart. |
-| Automatic mining | `Disable Module` | While the game is running. No restart. |
-| Automatic feeding | `Disable Module` | While the game is running. No restart. |
-| Automatic farming | `Disable Module` | While the game is running. No restart. |
-| Automatic storage | `Disable Module` | While the game is running. No restart. |
-| Automatic repair | `Disable Module` | While the game is running. No restart. |
-| Automatic supply | `Disable Module` | While the game is running. No restart. |
+| Automatic door | `Module` | While the game is running. No restart. |
+| Automatic pickup | `Module` | While the game is running. No restart. |
+| Automatic processing | `Module` | While the game is running. No restart. |
+| Automatic mapping | `Module` | While the game is running. No restart. |
+| Automatic mining | `Module` | While the game is running. No restart. |
+| Automatic feeding | `Module` | While the game is running. No restart. |
+| Automatic farming | `Module` | While the game is running. No restart. |
+| Automatic storage | `Module` | While the game is running. No restart. |
+| Automatic repair | `Module` | While the game is running. No restart. |
+| Automatic supply | `Module` | While the game is running. No restart. |
 
 When you turn automatic door, automatic pickup, automatic processing, automatic
 mapping, automatic mining, automatic feeding, automatic farming, automatic repair or automatic
@@ -116,9 +115,14 @@ turn it back on, it recognises the saved pins it added and adds the other pins
 again as their objects come into range. A vehicle that moved more than 8 meters
 while the module was off can get a second pin; delete the old one.
 
-Feature-specific enable options, such as `Automatic Door` or `Automatic
-Mapping`, only turn the feature behavior on or off while the module stays
-loaded.
+In automatic mapping, automatic mining and automatic farming, a second switch
+turns only the module's main automatic feature on or off: `Pin Nearby Objects
+Automatically`, `Mine Nearby Minerals Automatically` and `Harvest And Replant
+Automatically`. The module's other features, such as map navigation, area mining
+and grid planting, keep working while that switch is off. The other modules have
+only the `Module` option. Before this version they also had a switch of their own,
+such as `Automatic Door`; a configuration where that switch was off gets its
+module turned off once, and the switch is removed.
 
 ### User-defined objects
 
@@ -181,13 +185,12 @@ Key settings:
 
 | Setting | Effect |
 | --- | --- |
-| `Automatic Door` | Turns automatic opening and closing on or off. |
 | `Allow Automatic Door` | Selects which door definitions Automatics may open and close. |
 | `Interval To Open` | Controls how often Automatics checks for doors to open. Values below `0.1` disable automatic opening. |
 | `Interval To Close` | Controls how often Automatics checks for doors to close. Values below `0.1` disable automatic closing. |
 | `Distance For Automatic Opening` | Controls how close a player must be for a door to open. |
 | `Distance For Automatic Closing` | Controls how far players must be before an opened door can close. |
-| `Automatic Door Enable/Disable Toggle` | Optional shortcut to toggle the feature during play. |
+| `Automatic Door Enable/Disable Toggle` | Optional shortcut that turns the Automatic door module on and off during play. It works while the module is off too. |
 | `Automatic Door Enable/Disable Toggle Message` | Controls where the toggle message appears. |
 
 Doors must be allowed by the door definition list. You can add extra door
@@ -199,7 +202,7 @@ including doors you opened by hand. While automatic opening is on, a
 replaced by the opening distance, so a door you walk up to does not close in
 front of you.
 
-Its `Disable Module` option takes effect without a restart. New automatic opening,
+Its `Module` option takes effect without a restart. New automatic opening,
 closing and shortcut handling stop right away, while an action already in progress
 finishes. The switch itself completes over the next few frames. Turning the module
 off does not close doors or otherwise change their current open state. Turning it
@@ -217,7 +220,7 @@ apply once you turn the module back on in game.
 Automatic mapping adds map pins for nearby configured targets. It handles moving
 targets, static objects, locations, portals, and map navigation.
 
-Its `Disable Module` option takes effect without a restart. See
+Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options), which also describes what
 happens to its pins.
 
@@ -333,12 +336,12 @@ Automatic processing uses nearby allowed containers to operate supported pieces.
 Depending on the piece, Automatics can supply materials, add fuel, store
 products, or charge consumable items such as Ballista ammo.
 
-Its `Disable Module` option takes effect without a restart. See
+Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
 If you had automatic processing disabled, the first start of this version writes
 all of its settings, about 160 entries, to the configuration file. Earlier
-versions wrote only the `Disable Module` entry while the module was disabled.
+versions wrote only the `Module` entry while the module was disabled.
 The module stays disabled. Values you changed before you disabled it are kept if
 they are still in the file, and they apply once you turn the module back on in
 game.
@@ -356,7 +359,6 @@ Common settings:
 
 | Setting | Effect |
 | --- | --- |
-| `Automatic Processing` | Turns automatic processing on or off. |
 | `Allow Container` | Selects which container definitions Automatics may use. Private chests are excluded by default. |
 | `Storage Connection Effect Color` | Sets the color of the container connection effect shown while hovering supported processors. |
 | `<piece>: Allow Process` | Selects which available process types are enabled for that piece. |
@@ -428,7 +430,6 @@ Key settings:
 
 | Setting | Effect |
 | --- | --- |
-| `Automatic Feeding` | Turns automatic feeding on or off. |
 | `Feed Search Range` | Controls how far animals search for feed. `0` uses the animal's own search range. |
 | `Need Get Close To Eat The Feed` | Makes the animal move close to the container or player before eating. |
 | `Allow To Feed From Container` | Selects whether wild animals, tamed animals, both, or neither can eat from containers. |
@@ -451,12 +452,12 @@ to `Wild` feeds hungry wild animals near you from the food you carry, which also
 tames them; tamed animals keep eating from containers while `Allow To Feed From
 Container` includes `Tamed`.
 
-Its `Disable Module` option takes effect without a restart. See
+Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
 ## Automatic repair
 
-Its `Disable Module` option takes effect without a restart. Turning it off stops
+Its `Module` option takes effect without a restart. Turning it off stops
 new repair batches immediately; an accepted batch finishes its repairs and tool
 costs. The switch completes over the next few frames. Turning it back on keeps
 your settings and starts fresh one-second timers. See
@@ -499,7 +500,7 @@ are shown.
 Automatic mining damages the nearest allowed mineral around the player by using
 a usable pickaxe.
 
-Its `Disable Module` option takes effect without a restart. Turning it off stops
+Its `Module` option takes effect without a restart. Turning it off stops
 new mining immediately and lets a mining pass already in progress finish all of
 its selected hits. The module's patches, hooks and mineral components are
 removed over the next few frames. Turning it back on also completes over the
@@ -511,7 +512,7 @@ Key settings:
 
 | Setting | Effect |
 | --- | --- |
-| `Automatic Mining` | Turns automatic mining on or off. |
+| `Mine Nearby Minerals Automatically` | Turns automatic mining on or off. Area mining is not affected. |
 | `Mining Interval` | Controls how often mining is attempted when no mining shortcut is assigned. |
 | `Mining Range` | Controls the range used to search for mineral hit positions. `0` uses the pickaxe's attack range. |
 | `Allow Mining Mineral` | Selects which mineral definitions Automatics may mine. |
@@ -556,7 +557,6 @@ Key settings:
 
 | Setting | Effect |
 | --- | --- |
-| `Automatic Storage` | Turns hotkey storage on or off. |
 | `Store Items` | Shortcut that runs one storage pass. Empty means storage is disabled. |
 | `Storage Search Range` | Controls how far Automatics searches for containers. |
 | `Container Reference Limit` | Limits how many nearby containers are checked. `0` means unlimited. |
@@ -574,12 +574,12 @@ names. Plain entries use case-insensitive partial matching. Prefix an entry with
 Automatic storage checks the same container access rules used by Valheim for
 private chests, guard stones, and containers already in use.
 
-Its `Disable Module` option takes effect without a restart. See
+Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
 If you had automatic storage disabled, the first start of this version writes
 all of its settings to the configuration file. Earlier versions wrote only the
-`Disable Module` entry while the module was disabled. The module stays disabled.
+`Module` entry while the module was disabled. The module stays disabled.
 Values you changed before you disabled it are kept if they are still in the
 file, and they apply once you turn the module back on in game.
 
@@ -587,7 +587,7 @@ file, and they apply once you turn the module back on in game.
 
 Automatic pickup collects nearby items for the local player.
 
-Its `Disable Module` option takes effect without a restart. See
+Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
 Modes:
@@ -652,7 +652,7 @@ Key settings:
 
 | Setting | Effect |
 | --- | --- |
-| `Automatic Farming` | Turns farming on or off. |
+| `Harvest And Replant Automatically` | Turns automatic harvesting, replanting and sowing on or off. Grid planting is not affected. |
 | `Farming Interval` | Controls how often farming runs when no farming shortcut is assigned. |
 | `Attempt Farming` | Optional shortcut. When assigned, farming runs only when the shortcut is pressed and the interval is disabled. |
 | `Farming Range` | Controls how far Automatics searches for crops, cultivated ground, and designated containers. |
@@ -737,13 +737,13 @@ harvesting and replanting still use the full `Farming Range`.
 
 While Automatic farming is active, Automatic pickup stops periodically collecting
 the crops in `Allow Farming Crop` so farming can harvest and replant them.
-Turning the Automatic Farming module off, or turning off `Automatic Farming`,
+Turning the Automatic Farming module off, or turning off `Harvest And Replant Automatically`,
 returns those crops to periodic pickup right away; crops Automatic pickup
 collects while farming is off are not replanted. Container roles are kept while
 the module is off and apply again when you turn it back on. The targeted
 `Pickup All Nearby` shortcut still picks up those crops regardless of this.
 
-Its `Disable Module` option takes effect without a restart. See
+Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
 ## Automatic supply
@@ -783,7 +783,7 @@ hotbar are not supplied.
 | --- | --- |
 | `Supply Range` | How far from you containers are used, 10 m by default (1–64). |
 
-Its `Disable Module` option takes effect without a restart. See
+Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
 ## Console commands

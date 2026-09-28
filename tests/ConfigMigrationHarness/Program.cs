@@ -93,6 +93,7 @@ namespace Automatics
             RunObjectRevisionTests();
             RunPickupKeyMigrationTests();
             RunFireGroupMigrationTests();
+            RunFeatureSwitchMigrationTests();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -271,7 +272,7 @@ namespace Automatics
                 "custom_door = MyDoor, Custom door, MyDoorPrefab");
 
             AssertModule(migrated, "automatic_door", "Disabled");
-            AssertContains(migrated, "enable_automatic_door = false");
+            AssertFeatureSwitchFolded(migrated, "automatic_door");
             AssertContains(migrated, "interval_to_open = 1.25");
             AssertContains(migrated, "distance_for_automatic_closing = 7");
             AssertContains(migrated, "automatic_door_enable_disable_toggle = LeftAlt");
@@ -291,7 +292,7 @@ namespace Automatics
                 "allow_automatic_door = WoodDoor");
 
             AssertModule(migrated, "automatic_door", "Disabled");
-            AssertContains(migrated, "enable_automatic_door = false");
+            AssertFeatureSwitchFolded(migrated, "automatic_door");
             AssertContains(migrated, "distance_for_automatic_opening = 6");
             AssertContains(migrated, "automatic_door_enable_disable_toggle = F");
             AssertDoesNotContain(migrated, "automatic_door_enabled = false");
@@ -313,7 +314,6 @@ namespace Automatics
                 "## Plugin GUID: net.eidee.valheim.automatics",
                 "[automatic_door]",
                 "module = Disabled",
-                "enable_automatic_door = false",
                 "allow_automatic_door = WoodDoor, PieceHexagonalDoor",
                 "interval_to_open = 1.25",
                 "interval_to_close = 1.5",
@@ -733,7 +733,7 @@ namespace Automatics
                 "automatic_feeding_enabled = false",
                 "need_close_to_eat_the_feed = true");
 
-            AssertContains(migrated, "enable_automatic_feeding = false");
+            AssertFeatureSwitchFolded(migrated, "automatic_feeding");
             AssertContains(migrated, "need_get_close_to_eat_the_feed = true");
             AssertDoesNotContain(migrated, "automatic_feeding_enabled");
             AssertDoesNotContain(migrated, "need_close_to_eat_the_feed");
@@ -893,8 +893,11 @@ namespace Automatics
                 "[hidden]",
                 "NexusID = 1700");
 
-            foreach (var section in ModuleSections)
+            // Every module comes out Enabled, except that the door's switch, false, then turns
+            // the door module off.
+            foreach (var section in ModuleSections.Where(x => x != "automatic_door"))
                 AssertModule(migrated, section, "Enabled");
+            AssertFeatureSwitchFolded(migrated, "automatic_door");
             AssertMarker(migrated);
 
             // The marker comes last, after the sections added for the modules the file lacked, even
@@ -913,7 +916,7 @@ namespace Automatics
             // A section the file has gains the entry under its header; it is not written twice.
             AssertEqual(1, CountOccurrences(migrated, "[automatic_door]"), "The door section should appear once.");
             AssertEqual(1, CountOccurrences(migrated, "[automatic_mapping]"), "The mapping section should appear once.");
-            AssertContains(migrated, "enable_automatic_door = false");
+            AssertFeatureSwitchFolded(migrated, "automatic_door");
             AssertContains(migrated, "allow_pinning_mineral = CopperDeposit");
         }
 
@@ -968,10 +971,10 @@ namespace Automatics
                 "enable_automatic_door = false");
 
             AssertModule(migrated, "automatic_pickup", "Disabled");
-            foreach (var section in ModuleSections.Where(x => x != "automatic_pickup"))
+            foreach (var section in ModuleSections.Where(x => x != "automatic_pickup" && x != "automatic_door"))
                 AssertModule(migrated, section, "Enabled");
             AssertMarker(migrated);
-            AssertContains(migrated, "enable_automatic_door = false");
+            AssertFeatureSwitchFolded(migrated, "automatic_door");
         }
 
         private static void EmptyConfigGetsEveryModuleEnabled()
@@ -1333,8 +1336,8 @@ namespace Automatics
             var lines = new[] { "## Settings file was created by plugin Automatics v1.7.0",
                 "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = Disabled" };
             var migrated = Migrate(lines.Concat(values).ToArray());
-            AssertModule(migrated, "automatic_repair", "Disabled");
-            foreach (var value in values) AssertContains(migrated, value);
+            AssertFeatureSwitchFolded(migrated, "automatic_repair");
+            foreach (var value in values.Skip(1)) AssertContains(migrated, value);
         }
 
         private static void OldRepairKeysKeepModuleDisabled()
@@ -1343,7 +1346,7 @@ namespace Automatics
                 "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]",
                 "module = Disabled", "automatic_repair_enabled = false");
             AssertModule(migrated, "automatic_repair", "Disabled");
-            AssertContains(migrated, "enable_automatic_repair = false");
+            AssertFeatureSwitchFolded(migrated, "automatic_repair");
             AssertDoesNotContain(migrated, "automatic_repair_enabled");
         }
 
@@ -1365,7 +1368,7 @@ namespace Automatics
                 "automatic_repair_enabled = false");
 
             AssertContains(migrated, "[automatic_repair]");
-            AssertContains(migrated, "enable_automatic_repair = false");
+            AssertFeatureSwitchFolded(migrated, "automatic_repair");
             AssertDoesNotContain(migrated, "automatic_repair_enabled = false");
         }
 
@@ -1377,6 +1380,8 @@ namespace Automatics
                 "automatic_repair_enabled = false");
 
             AssertContains(migrated, "[automatic_feeding]");
+            // The renamed key stays where the old version wrote it; BepInEx never read it there,
+            // so settings pass 3 leaves it too.
             AssertContains(migrated, "enable_automatic_repair = false");
             AssertDoesNotContain(migrated, "automatic_repair_enabled = false");
         }
@@ -1426,7 +1431,7 @@ namespace Automatics
                 "[automatic_repair]",
                 "automatic_repair_enabled = false");
 
-            AssertContains(migrated, "enable_automatic_repair = false");
+            AssertFeatureSwitchFolded(migrated, "automatic_repair");
             AssertDoesNotContain(migrated, "automatic_repair_enabled = false");
         }
 
@@ -1516,6 +1521,14 @@ namespace Automatics
             }
 
             return count;
+        }
+
+        // A single-feature module's switch that was false has turned its module off, and the
+        // switch line is gone (settings pass 3).
+        private static void AssertFeatureSwitchFolded(string text, string section)
+        {
+            AssertModule(text, section, "Disabled");
+            AssertDoesNotContain(text, "enable_" + section);
         }
 
         private static void AssertContains(string value, string expected)

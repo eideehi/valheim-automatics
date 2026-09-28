@@ -40,10 +40,10 @@ namespace Automatics.SmokeTest
         private const string ConfigKeysCheck = "processing_config_section_matches_bound_entries";
         private const string ConfigModuleCheck = "processing_config_module_line_matches_setting";
 
-        // The entries Automatic Processing binds in this build: 4 of its own, 5 the fire pieces
+        // The entries Automatic Processing binds in this build: 3 of its own, 5 the fire pieces
         // share, and 100 across the other stations in Processor's list. The number changes with
         // that list.
-        private const int ExpectedProcessingEntries = 109;
+        private const int ExpectedProcessingEntries = 108;
 
         private static IEnumerator RunToggle(Terminal context, int runId, string runner)
         {
@@ -405,12 +405,6 @@ namespace Automatics.SmokeTest
 
             private void SetUpBench(Player player)
             {
-                if (!ProcessingConfig.EnableAutomaticProcessing)
-                {
-                    _fuel.Skip("enable_automatic_processing is off, so QuickRefuel returns before it could act");
-                    return;
-                }
-
                 if (ProcessingConfig.RefuelOnlyWhenMaterialsSupplied(_fuel.ObjectName))
                 {
                     _fuel.Skip(

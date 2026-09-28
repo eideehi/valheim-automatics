@@ -86,10 +86,6 @@ namespace Automatics.AutomaticDoor
                 h => Hooks.OnPlayerAwake += h,
                 h => Hooks.OnPlayerAwake -= h,
                 OnPlayerAwake);
-            scope.Subscribe<Action<Player, bool>>(
-                h => Hooks.OnPlayerUpdate += h,
-                h => Hooks.OnPlayerUpdate -= h,
-                OnPlayerUpdate);
             scope.Subscribe<Action<Player, float>>(
                 h => Hooks.OnPlayerFixedUpdate += h,
                 h => Hooks.OnPlayerFixedUpdate -= h,
@@ -119,6 +115,10 @@ namespace Automatics.AutomaticDoor
         private static void Initialize()
         {
             ModuleRegistry.Register(Instance);
+
+            // Subscribed once and never removed: the shortcut turns the module itself on and off,
+            // so it has to be read while the module is off too.
+            Hooks.OnPlayerUpdate += OnToggleShortcut;
         }
 
         /// <summary>
@@ -164,25 +164,25 @@ namespace Automatics.AutomaticDoor
             _closeTimer = 0f;
         }
 
-        private static void OnPlayerUpdate(Player player, bool takeInput)
+        // Writes the module setting; the registry applies the change like any other edit of it.
+        private static void OnToggleShortcut(Player player, bool takeInput)
         {
-            if (!Running) return;
-            if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
+            if (Player.m_localPlayer != player || !player.IsOwner()) return;
+            if (!Config.AutomaticDoorEnableDisableToggle.IsDown()) return;
 
-            if (Config.AutomaticDoorEnableDisableToggle.IsDown())
-            {
-                Config.EnableAutomaticDoor = !Config.EnableAutomaticDoor;
-                var messagePosition = Config.AutomaticDoorEnableDisableToggleMessage;
-                if (messagePosition != Message.None)
-                {
-                    var message = Automatics.L10N.Localize(
-                        "@message_automatic_door_enable_disable_toggle",
-                        Config.EnableAutomaticDoor ? "@enabled" : "@disabled");
-                    var type = messagePosition.ToMessageType();
-                    player.Message(type, message);
-                }
-            }
+            var entry = Config.ModuleEntry;
+            if (entry == null) return;
+
+            var enable = entry.Value != AutomaticsModule.Enabled;
+            entry.Value = enable ? AutomaticsModule.Enabled : AutomaticsModule.Disabled;
+
+            var messagePosition = Config.AutomaticDoorEnableDisableToggleMessage;
+            if (messagePosition == Message.None) return;
+
+            var message = Automatics.L10N.Localize("@message_automatic_door_enable_disable_toggle",
+                enable ? "@enabled" : "@disabled");
+            player.Message(messagePosition.ToMessageType(), message);
         }
 
         private static void OnDedicatedServerFixedUpdate(float delta)
@@ -210,7 +210,7 @@ namespace Automatics.AutomaticDoor
                 return;
             }
 
-            if (!Config.EnableAutomaticDoor || !AutomaticDoor.HasRegisteredDoor)
+            if (!AutomaticDoor.HasRegisteredDoor)
             {
                 ResetTimers();
                 return;

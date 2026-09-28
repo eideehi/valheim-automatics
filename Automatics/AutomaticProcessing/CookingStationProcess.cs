@@ -22,7 +22,6 @@ namespace Automatics.AutomaticProcessing
         public static void Craft(CookingStation cookingStation, ZNetView zNetView)
         {
             if (!Module.Running) return;
-            if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 
             var stationName = cookingStation.m_name;
@@ -133,7 +132,6 @@ namespace Automatics.AutomaticProcessing
         public static void Refuel(CookingStation cookingStation, ZNetView zNetView)
         {
             if (!Module.Running) return;
-            if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
             if (!cookingStation.m_useFuel || !cookingStation.m_fuelItem) return;
 
@@ -174,7 +172,6 @@ namespace Automatics.AutomaticProcessing
             CookingStation.ItemConversion conversion)
         {
             if (!Module.Running) return false;
-            if (!Config.EnableAutomaticProcessing) return false;
             if (!Objects.HasValidOwnership(zNetView)) return false;
 
             var stationName = cookingStation.m_name;

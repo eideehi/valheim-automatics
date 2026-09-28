@@ -14,7 +14,6 @@ namespace Automatics.AutomaticStorage
         private const string Section = "automatic_storage";
 
         private static ConfigEntry<AutomaticsModule> _module;
-        private static ConfigEntry<bool> _enableAutomaticStorage;
         private static ConfigEntry<int> _storageSearchRange;
         private static ConfigEntry<int> _containerReferenceLimit;
         private static ConfigEntry<StringList> _allowContainer;
@@ -31,8 +30,6 @@ namespace Automatics.AutomaticStorage
         ///     instead (R1.5).
         /// </summary>
         public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
-
-        public static bool EnableAutomaticStorage => _enableAutomaticStorage.Value;
         public static int StorageSearchRange => _storageSearchRange.Value;
         public static int ContainerReferenceLimit => _containerReferenceLimit.Value;
         public static StringList AllowContainer => _allowContainer.Value;
@@ -62,7 +59,6 @@ namespace Automatics.AutomaticStorage
             // SettingChanged bridge - so binding a disabled module costs nothing but the lines
             // it writes to the config file. Those lines also pick up any value the user set
             // before turning the module off, and that value applies as soon as it is turned on.
-            _enableAutomaticStorage = config.Bind("enable_automatic_storage", true);
             _storageSearchRange = config.Bind("storage_search_range", 8, (1, 64));
             _containerReferenceLimit = config.Bind("container_reference_limit", 0, (0, 999));
             _allowContainer = config.BindValheimObjectList("allow_container",

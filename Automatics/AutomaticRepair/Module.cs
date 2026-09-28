@@ -101,7 +101,6 @@ namespace Automatics.AutomaticRepair
         private static void OnPlayerFixedUpdate(Player player, float delta)
         {
             if (!Module.Running) return;
-            if (!Config.EnableAutomaticRepair) return;
             if (Game.IsPaused()) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
 

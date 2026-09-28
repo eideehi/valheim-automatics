@@ -8,7 +8,6 @@ namespace Automatics.AutomaticDoor
         private const string Section = "automatic_door";
 
         private static ConfigEntry<AutomaticsModule> _module;
-        private static ConfigEntry<bool> _enableAutomaticDoor;
         private static ConfigEntry<StringList> _allowAutomaticDoor;
         private static ConfigEntry<float> _intervalToOpen;
         private static ConfigEntry<float> _intervalToClose;
@@ -22,12 +21,6 @@ namespace Automatics.AutomaticDoor
         ///     changes; hot paths read the applied state on <see cref="Module" /> instead.
         /// </summary>
         public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
-
-        public static bool EnableAutomaticDoor
-        {
-            get => _enableAutomaticDoor.Value;
-            set => _enableAutomaticDoor.Value = value;
-        }
 
         public static StringList AllowAutomaticDoor => _allowAutomaticDoor.Value;
         public static float IntervalToOpen => _intervalToOpen.Value;
@@ -57,7 +50,6 @@ namespace Automatics.AutomaticDoor
             // Bound unconditionally because the module can be turned on while the game runs. The
             // two SettingChanged handlers belong to this process-lifetime config binding, not to
             // an activation, so they are installed once and also observe edits made while off.
-            _enableAutomaticDoor = config.Bind("enable_automatic_door", true);
             _allowAutomaticDoor = config.BindValheimObjectList("allow_automatic_door", Globals.Door, excludes: new[] { "WoodShutter" });
             _allowAutomaticDoor.SettingChanged += (_, __) => AutomaticDoor.MarkAllowAutomaticDoorDirty();
             _intervalToOpen = config.Bind("interval_to_open", 0.1f, (0f, 8f));

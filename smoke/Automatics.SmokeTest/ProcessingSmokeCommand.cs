@@ -188,16 +188,13 @@ namespace Automatics.SmokeTest
 
         // Whether Automatic Processing is running. This is the one place that decides it, and
         // it reads the applied state, not the setting: the registry's state for the module and
-        // Module.Running, which every Processing entry point checks first, then
-        // enable_automatic_processing.
+        // Module.Running, which every Processing entry point checks first.
         private static bool ProcessingRunning(out string reason)
         {
             reason = null;
             var state = ModuleRegistry.GetState(ProcessingModule.Instance.Name);
             if (state != ModuleState.Enabled || !ProcessingModule.Running)
                 reason = $"automatic_processing is not running (the module registry reports {state})";
-            else if (!ProcessingConfig.EnableAutomaticProcessing)
-                reason = "enable_automatic_processing is off";
             return reason == null;
         }
 

@@ -94,7 +94,8 @@ namespace Automatics.SmokeTest
                 Probes = new[]
                 {
                     Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
-                    Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
+                    // The toggle shortcut's handler stays subscribed while the module is off.
+                    Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 0),
                     Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
                     Probe.Handlers("Hooks.OnDedicatedServerFixedUpdate",
                         () => Hooks.OnDedicatedServerFixedUpdate, 1),
@@ -108,9 +109,9 @@ namespace Automatics.SmokeTest
                     Probe.Counter("door.OnPlayerAwake.handler",
                         () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(DoorModule), "OnPlayerAwake"),
                         OffExpectation.Zero, 0, () => 1),
-                    Probe.Counter("door.OnPlayerUpdate.handler",
-                        () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(DoorModule), "OnPlayerUpdate"),
-                        OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("door.OnToggleShortcut.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(DoorModule), "OnToggleShortcut"),
+                        OffExpectation.BelowBaseline, 0, () => 1),
                     Probe.Counter("door.OnPlayerFixedUpdate.handler",
                         () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(DoorModule),
                             "OnPlayerFixedUpdate"),

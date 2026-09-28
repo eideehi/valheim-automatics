@@ -21,8 +21,6 @@ namespace Automatics.AutomaticFeeding
             ref bool __result,
             Humanoid humanoid, float dt)
         {
-            if (!Config.EnableAutomaticFeeding) return;
-
             if (!__result && AutomaticFeeding.Feeding(__instance, humanoid, dt))
                 __result = true;
         }
@@ -34,7 +32,6 @@ namespace Automatics.AutomaticFeeding
             StaticTarget target)
         {
             if (!__result) return;
-            if (!Config.EnableAutomaticFeeding) return;
             if (AutomaticFeeding.CancelAttackOnFeedBox(__instance, target))
                 __result = false;
         }

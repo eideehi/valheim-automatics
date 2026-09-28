@@ -1,6 +1,6 @@
 # Configurations
 
-Every module is off on a new install; turn on the ones you want by setting their `Disable Module` entry to `Enabled`. An existing configuration file keeps each module on or off as it was; Automatic Supply, which is new, starts off there too. Only the default of `Disable Module` changed: the settings inside each module keep their defaults.
+Every module is off on a new install; turn on the ones you want by setting their `Module` entry to `Enabled`. An existing configuration file keeps each module on or off as it was; Automatic Supply, which is new, starts off there too. Only the default of `Module` changed: the settings inside each module keep their defaults.
 
 ## [ #1 System ] / [system]
 ### Logging / [enable_logging]
@@ -72,16 +72,11 @@ Any container can be added. Identifier: A unique string that does not overlap wi
 - Default value:
 
 ## [ #3 Automatic Door ] / [automatic_door]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
-
-### Automatic Door / [enable_automatic_door]
-Specify whether to enable the feature that automatically opens and closes the door.
-
-- Default value: true
 
 ### Allow Automatic Door / [allow_automatic_door]
 Specify which doors are allowed to open and close automatically.
@@ -113,25 +108,25 @@ Specify how far the player must be from the door for the door to close automatic
 - Acceptable value range: From 1 to 8
 
 ### Automatic Door Enable/Disable Toggle Message / [automatic_door_enable_disable_toggle_message]
-Specify where a message is displayed when the automatic door is enabled or disabled by a shortcut key.
+Specify where a message is displayed when the shortcut key turns the Automatic Door module on or off.
 
 - Default value: Center
 - Acceptable values: None, Center, TopLeft
 
 ### Automatic Door Enable/Disable Toggle / [automatic_door_enable_disable_toggle]
-Specify a shortcut key to enable/disable the automatic door.
+Specify a shortcut key that turns the Automatic Door module on and off.
 
 - Default value:
 
 ## [ #4 Automatic Mapping ] / [automatic_mapping]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
-### Automatic Mapping / [enable_automatic_mapping]
-Specify whether to enable the feature that automatically pins objects and locations to the map.
+### Pin Nearby Objects Automatically / [enable_automatic_mapping]
+Specify whether to enable the feature that automatically pins objects and locations to the map. The module's other features, such as map navigation and pinning the object you look at, are not affected.
 
 - Default value: true
 
@@ -283,16 +278,11 @@ Specify whether to measure automatic mapping performance and write the metrics t
 - Default value: false
 
 ## [ #5 Automatic Processing ] / [automatic_processing]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
-
-### Automatic Processing / [enable_automatic_processing]
-Specify whether to enable the ability to automatically perform tasks such as cooking, refining, and refueling.
-
-- Default value: true
 
 ### Storage Connection Effect Color / [storage_connection_effect_color]
 Specify the HTML color code used for the storage connection effect shown by automatic processing. Examples: #4FA9FF, #4FA9FFFF
@@ -915,16 +905,11 @@ When the number of items stored in the container is about to become less than th
 - Acceptable value range: From 0 to 999
 
 ## [ #6 Automatic Feeding ] / [automatic_feeding]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
-
-### Automatic Feeding / [enable_automatic_feeding]
-Specify whether to enable the feature for animals to automatically consume feed items from players and containers.
-
-- Default value: true
 
 ### Feed Search Range / [feed_search_range]
 Specify the range in which the animal searches for food. If set to 0, the default value for each animal will be used. (Unit: meter)
@@ -952,16 +937,11 @@ Specify the types of animals allowed to feed from the player inventory.
 - Multiple values can be set at the same time by separating them with , (e.g. Wild, Tamed)
 
 ## [ #7 Automatic Repair ] / [automatic_repair]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
-
-### Automatic Repair / [enable_automatic_repair]
-Specify whether to enable the feature that automatically repairs items and pieces.
-
-- Default value: true
 
 ### Crafting Station Search Range / [crafting_station_search_range]
 Specify the range to search for a crafting station to be used to repair items. Setting to 0 disables periodic item repair. (Unit: meters)
@@ -993,14 +973,14 @@ Specify where the message is displayed when a piece is repaired.
 - Acceptable values: None, Center, TopLeft
 
 ## [ #8 Automatic Mining ] / [automatic_mining]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
-### Automatic Mining / [enable_automatic_mining]
-Specify whether to enable the feature that mines minerals automatically.
+### Mine Nearby Minerals Automatically / [enable_automatic_mining]
+Specify whether to mine nearby minerals automatically. The module's other features, such as area mining, are not affected.
 
 - Default value: true
 
@@ -1059,16 +1039,11 @@ Specify the maximum number of extra minerals or rock sections one swing can hit.
 - Acceptable value range: From 1 to 32
 
 ## [ #9 Automatic Storage ] / [automatic_storage]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
-
-### Automatic Storage / [enable_automatic_storage]
-Specify whether to enable the feature that stores player inventory items into nearby containers when the storage shortcut is pressed.
-
-- Default value: true
 
 ### Storage Search Range / [storage_search_range]
 Specify the maximum distance to search for containers. (Unit: meters)
@@ -1114,8 +1089,8 @@ Specify where the message is displayed after items are stored.
 - Acceptable values: None, Center, TopLeft
 
 ## [ #10 Automatic Pickup ] / [automatic_pickup]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
@@ -1138,14 +1113,14 @@ Interacting with a pickable object using this key picks up all of the same objec
 - Default value: E + LeftShift
 
 ## [ #11 Automatic Farming ] / [automatic_farming]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
-### Automatic Farming / [enable_automatic_farming]
-Specify whether to enable the feature that harvests grown crops and replants the regrowing sapling at the harvested spot. With the Player Inventory seed source it works around the player; with Nearby Containers it works around the containers you designate.
+### Harvest And Replant Automatically / [enable_automatic_farming]
+Specify whether to enable the feature that harvests grown crops and replants the regrowing sapling at the harvested spot. With the Player Inventory seed source it works around the player; with Nearby Containers it works around the containers you designate. The module's other features, such as grid planting, are not affected.
 
 - Default value: true
 
@@ -1216,8 +1191,8 @@ Number of cells per side, including the manually planted crop. Set to 1 to disab
 - Acceptable value range: From 1 to 9
 
 ## [ #12 Automatic Supply ] / [automatic_supply]
-### Disable Module / [module]
-You can disable this feature completely to avoid adding logic you don't need. This module applies the change while the game is running, so no restart is needed.
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
 
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled

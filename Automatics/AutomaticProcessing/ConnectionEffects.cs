@@ -58,7 +58,7 @@ namespace Automatics.AutomaticProcessing
 
         public static void Update(Player player)
         {
-            if (!Config.EnableAutomaticProcessing || Game.IsPaused())
+            if (Game.IsPaused())
             {
                 Cleanup();
                 return;

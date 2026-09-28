@@ -7,7 +7,6 @@ namespace Automatics.AutomaticRepair
         private const string Section = "automatic_repair";
 
         private static ConfigEntry<AutomaticsModule> _module;
-        private static ConfigEntry<bool> _enableAutomaticRepair;
         private static ConfigEntry<int> _craftingStationSearchRange;
         private static ConfigEntry<bool> _repairItemsWhenAccessingTheCraftingStation;
         private static ConfigEntry<Message> _itemRepairMessage;
@@ -15,7 +14,6 @@ namespace Automatics.AutomaticRepair
         private static ConfigEntry<Message> _pieceRepairMessage;
 
         public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
-        public static bool EnableAutomaticRepair => _enableAutomaticRepair.Value;
         public static int CraftingStationSearchRange => _craftingStationSearchRange.Value;
 
         public static bool RepairItemsWhenAccessingTheCraftingStation =>
@@ -35,8 +33,6 @@ namespace Automatics.AutomaticRepair
                 x.DispName = Automatics.L10N.Translate("@config_common_disable_module_runtime_name");
                 x.Description = Automatics.L10N.Translate("@config_common_disable_module_runtime_description");
             });
-
-            _enableAutomaticRepair = config.Bind("enable_automatic_repair", true);
             _craftingStationSearchRange = config.Bind("crafting_station_search_range", 16, (0, 64));
             _repairItemsWhenAccessingTheCraftingStation = config.Bind("repair_items_when_accessing_the_crafting_station", false);
             _itemRepairMessage = config.Bind("item_repair_message", Message.None);

@@ -94,7 +94,6 @@ namespace Automatics.AutomaticRepair
         {
             if (!Module.Running) return;
             if (player == null || player != Player.m_localPlayer || !Objects.HasValidOwnership(player)) return;
-            if (!Config.EnableAutomaticRepair) return;
             if (!Config.RepairItemsWhenAccessingTheCraftingStation) return;
 
             var count = RepairAll(player, station);

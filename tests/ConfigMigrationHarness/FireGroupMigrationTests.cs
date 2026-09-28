@@ -113,7 +113,7 @@ namespace Automatics
                 "[automatic_processing]",
                 "",
                 "module = Enabled",
-                "enable_automatic_processing = true"
+                "storage_connection_effect_color = #4FA9FF"
             };
             lines.AddRange(processing);
             lines.AddRange(new[] { "allow_processing_by_piece_smelter = All", "", "[hidden]", "", "defaults_revision = 2", "pickup_key_decoupled = 1" });
@@ -170,7 +170,7 @@ namespace Automatics
             AssertSingle(migrated, "automatic_processing", "fires_refuel_only_when_out_of_fuel", "false");
             AssertNoOldFireLines(migrated);
             AssertContains(migrated, "allow_processing_by_piece_smelter = All");
-            AssertContains(migrated, "enable_automatic_processing = true");
+            AssertContains(migrated, "storage_connection_effect_color = #4FA9FF");
             AssertSettingsRevision(migrated);
         }
 

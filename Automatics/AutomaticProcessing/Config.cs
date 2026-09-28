@@ -14,7 +14,6 @@ namespace Automatics.AutomaticProcessing
         private const string Section = "automatic_processing";
 
         private static ConfigEntry<AutomaticsModule> _module;
-        private static ConfigEntry<bool> _enableAutomaticProcessing;
         private static ConfigEntry<string> _storageConnectionEffectColor;
         private static ConfigEntry<StringList> _allowContainer;
         private static Dictionary<string, ConfigEntry<Process>> _allowProcessing;
@@ -41,8 +40,6 @@ namespace Automatics.AutomaticProcessing
         ///     instead (R1.5).
         /// </summary>
         public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
-
-        public static bool EnableAutomaticProcessing => _enableAutomaticProcessing.Value;
         public static Color StorageConnectionEffectColor
         {
             get
@@ -157,7 +154,6 @@ namespace Automatics.AutomaticProcessing
             // SettingChanged bridge - so binding a disabled module costs nothing but the lines
             // it writes to the config file. Those lines also pick up any value the user set
             // before turning the module off, and that value applies as soon as it is turned on.
-            _enableAutomaticProcessing = config.Bind("enable_automatic_processing", true);
             _storageConnectionEffectColor = config.Bind("storage_connection_effect_color",
                 "#4FA9FF", initializer: x =>
                 {

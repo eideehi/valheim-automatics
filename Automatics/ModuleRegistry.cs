@@ -16,7 +16,8 @@ namespace Automatics
     ///     the machine drives, and the single rule they all answer to - a teardown counts as done
     ///     only when <see cref="TeardownIsClean" /> says so.
     ///     Two of the entry points below are reached from a game call stack: the setting handler
-    ///     runs from the config UI and from a config file reload, and <see cref="Pump" /> runs
+    ///     runs from the config UI, from a config file reload and from a module's toggle shortcut
+    ///     (read in Player.Update), and <see cref="Pump" /> runs
     ///     from <c>Update</c>. Nothing may be thrown at either, so both are contained at their
     ///     boundary, and the containment itself is written so that an exception whose description
     ///     throws cannot escape through the report of it.

@@ -264,8 +264,6 @@ namespace Automatics.SmokeTest
             if (ModuleRegistry.GetState(global::Automatics.AutomaticStorage.Module.Instance.Name) !=
                 ModuleState.Enabled || !global::Automatics.AutomaticStorage.Module.Running)
                 return CheckResult.Skip("automatic_storage module is not running");
-            if (!global::Automatics.AutomaticStorage.Config.EnableAutomaticStorage)
-                return CheckResult.Skip("enable_automatic_storage is off");
             if (global::Automatics.AutomaticStorage.Config.StorageSearchRange < 2)
                 return CheckResult.Skip("storage_search_range too small to reach a spawned chest");
 
@@ -531,8 +529,6 @@ namespace Automatics.SmokeTest
             if (ModuleRegistry.GetState("automatic-door") != ModuleState.Enabled ||
                 !global::Automatics.AutomaticDoor.Module.Running)
                 return CheckResult.Skip("automatic_door module disabled");
-            if (!global::Automatics.AutomaticDoor.Config.EnableAutomaticDoor)
-                return CheckResult.Skip("enable_automatic_door is off");
             if (global::Automatics.AutomaticDoor.Config.DistanceForAutomaticOpening <= 0f)
                 return CheckResult.Skip("distance_for_automatic_opening <= 0");
             if (!global::Automatics.AutomaticDoor.Config.AllowAutomaticDoor.Contains("WoodDoor"))
@@ -822,8 +818,6 @@ namespace Automatics.SmokeTest
             if (ModuleRegistry.GetState(global::Automatics.AutomaticProcessing.Module.Instance.Name) !=
                 ModuleState.Enabled || !global::Automatics.AutomaticProcessing.Module.Running)
                 return CheckResult.Skip("automatic_processing module is not running");
-            if (!global::Automatics.AutomaticProcessing.Config.EnableAutomaticProcessing)
-                return CheckResult.Skip("enable_automatic_processing is off");
             if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(Smelter, Process.Refuel))
                 return CheckResult.Skip("Refuel not allowed for smelter in config");
 

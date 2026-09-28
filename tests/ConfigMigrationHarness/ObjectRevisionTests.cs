@@ -476,11 +476,12 @@ namespace Automatics
                 "[automatic_repair]", "module = unreadable", "automatic_repair_enabled = false",
                 "[automatic_farming]", "allow_farming_crop = Flex" }).ToArray();
             var result = Migrate(oldLines);
-            AssertContains(result, "enable_automatic_repair = false");
+            // The renamed switch, false, turns the module off (settings pass 3).
+            AssertDoesNotContain(result, "enable_automatic_repair");
             AssertDoesNotContain(result, "automatic_repair_enabled");
             AssertList(result, f, "WoodDoor, PieceHexagonalDoor, AshwoodDoor, FlametalGate, DvergrDoor");
             AssertContains(result, "allow_farming_crop = Flex");
-            AssertModule(result, "automatic_repair", "unreadable");
+            AssertModule(result, "automatic_repair", "Disabled");
             AssertEqual(1, CountOccurrences(result, "module ="), "A present marker keeps module handling unchanged.");
             if (ValuesOf(result, "hidden", "defaults_revision").Single() != marker)
                 throw new Exception("The unsupported marker must remain unchanged while version migrations run.");

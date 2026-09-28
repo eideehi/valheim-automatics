@@ -64,7 +64,6 @@ namespace Automatics.AutomaticProcessing
             if (!Module.Running) return ore;
             if (loopCount < 1f) return ore;
             if (!string.IsNullOrEmpty(ore)) return ore;
-            if (!Config.EnableAutomaticProcessing) return ore;
             if (!Objects.HasValidOwnership(zNetView)) return ore;
 
             if (Time.time - _lastQuickCraftReset > 1f)
@@ -159,7 +158,6 @@ namespace Automatics.AutomaticProcessing
         public static void Craft(Smelter smelter, ZNetView zNetView)
         {
             if (!Module.Running) return;
-            if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 
             var smelterName = smelter.m_name;
@@ -264,7 +262,6 @@ namespace Automatics.AutomaticProcessing
             if (!Module.Running) return fuel;
             if (loopCount < 1f) return fuel;
             if (fuel > 0f) return fuel;
-            if (!Config.EnableAutomaticProcessing) return fuel;
             if (!Objects.HasValidOwnership(zNetView)) return fuel;
 
             if (Time.time - _lastQuickRefuelReset > 1f)
@@ -325,7 +322,6 @@ namespace Automatics.AutomaticProcessing
         public static void Refuel(Smelter smelter, ZNetView zNetView)
         {
             if (!Module.Running) return;
-            if (!Config.EnableAutomaticProcessing) return;
             if (!Objects.HasValidOwnership(zNetView)) return;
 
             var smelterName = smelter.m_name;
@@ -376,7 +372,6 @@ namespace Automatics.AutomaticProcessing
         public static bool Store(Smelter smelter, string ore, int stack)
         {
             if (!Module.Running) return false;
-            if (!Config.EnableAutomaticProcessing) return false;
             if (!Objects.HasValidOwnership(smelter, out var zNetView)) return false;
 
             var smelterName = smelter.m_name;

@@ -9,7 +9,6 @@ namespace Automatics.AutomaticProcessing
         public static bool Store(SapCollector sapCollector, ZNetView zNetView, int increaseCount)
         {
             if (!Module.Running) return false;
-            if (!Config.EnableAutomaticProcessing) return false;
             if (!Objects.HasValidOwnership(zNetView)) return false;
 
             var sapCollectorName = sapCollector.m_name;

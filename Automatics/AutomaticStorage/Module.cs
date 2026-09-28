@@ -100,7 +100,6 @@ namespace Automatics.AutomaticStorage
             // caller fetched before the removal, can still call a handler that is no longer
             // subscribed.
             if (!Running) return;
-            if (!Config.EnableAutomaticStorage) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
             if (Game.IsPaused()) return;

@@ -262,7 +262,7 @@ namespace Automatics
         // file has been through. A pass runs once, on a file whose recorded revision is below its
         // number, so a pass added later still runs on a file the earlier passes are done with.
         internal const string SettingsRevisionKey = "settings_revision";
-        internal const int SettingsRevision = 2;
+        internal const int SettingsRevision = 3;
 
         private const string ProcessingSection = "automatic_processing";
 
@@ -348,7 +348,7 @@ namespace Automatics
                         ? " Automatic Pickup keeps its stored interval this session, so periodic pickup may run beside the Pickup All Nearby key."
                         : "") +
                     (settingsChanged
-                        ? " Settings that this version moves or merges take their defaults this session."
+                        ? " Settings that this version moves or merges take their defaults this session, and a module whose own on/off switch was off runs until the file can be updated."
                         : "") +
                     " The next start tries again.");
                 return;
@@ -774,7 +774,8 @@ namespace Automatics
         private static readonly (int Revision, Action<List<string>> Pass)[] SettingsPasses =
         {
             (1, GroupFirePieces),
-            (2, RemoveFermenterSupplyOption)
+            (2, RemoveFermenterSupplyOption),
+            (3, FoldFeatureSwitchesIntoModules)
         };
 
         // Runs every settings pass the file has not been through and records the revision in the
@@ -876,6 +877,43 @@ namespace Automatics
 
             RemoveEveryEntry(lines, ProcessingSection, new HashSet<string> { key });
             Automatics.Logger.Message($"Remove config: {ProcessingSection} {key}");
+        }
+
+        // The single-feature modules and the feature switch each used to have beside its module
+        // switch.
+        private static readonly (string Section, string Key)[] FeatureSwitches =
+        {
+            ("automatic_door", "enable_automatic_door"),
+            ("automatic_feeding", "enable_automatic_feeding"),
+            ("automatic_repair", "enable_automatic_repair"),
+            ("automatic_storage", "enable_automatic_storage"),
+            ("automatic_processing", "enable_automatic_processing")
+        };
+
+        // Settings pass 3. A module that has one feature no longer has a switch for it beside the
+        // module switch. A feature switch BepInEx read as false turns its module off, which stops
+        // the same work; its line is removed either way. A value BepInEx could not read took the
+        // default, true, and changes nothing.
+        private static void FoldFeatureSwitchesIntoModules(List<string> lines)
+        {
+            foreach (var (section, key) in FeatureSwitches)
+            {
+                var entries = ReadEntries(lines);
+                if (!entries.TryGetValue((section, key), out var entry)) continue;
+
+                if (bool.TryParse(entry.Value, out var enabled) && !enabled)
+                {
+                    if (entries.ContainsKey((section, ModuleKey)))
+                        RewriteEveryEntry(lines, section, ModuleKey, "Disabled");
+                    else
+                        AddEntry(lines, section, ModuleKey, "Disabled");
+                    Automatics.Logger.Message(
+                        $"Turn the module off for its disabled feature: [{section}] {key} = {entry.Value} => {ModuleKey} = Disabled");
+                }
+
+                RemoveEveryEntry(lines, section, new HashSet<string> { key });
+                Automatics.Logger.Message($"Remove config: {section} {key}");
+            }
         }
 
         private static IEnumerable<string> FireKeys(string piece)
