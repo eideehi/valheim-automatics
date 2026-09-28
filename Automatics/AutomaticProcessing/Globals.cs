@@ -234,15 +234,26 @@ namespace Automatics.AutomaticProcessing
             return Mathf.Max(0, inventory.CountItems(itemName) - itemCountBefore);
         }
 
-        public static int GetProductStackLimitedAmount(Inventory inventory, string itemName,
-            int maxStackSize, int maxProductStacks, int amount)
+        // The product stack limit counts the product in every container a station uses, plus
+        // what the station already holds for it. A limit of 0 or less means no limit.
+        public static int GetProductCapacity(IEnumerable<Inventory> inventories, string itemName,
+            int maxStackSize, int maxProductStacks, int pending = 0)
         {
-            if (inventory == null || amount <= 0) return 0;
-            if (maxProductStacks <= 0) return amount;
+            if (maxProductStacks <= 0) return int.MaxValue;
 
-            var maxProductCount = maxProductStacks * Mathf.Max(1, maxStackSize);
-            var remainingCapacity = maxProductCount - inventory.CountItems(itemName);
-            return Mathf.Clamp(remainingCapacity, 0, amount);
+            var total = pending + inventories.Where(x => x != null).Sum(x => x.CountItems(itemName));
+            return Mathf.Max(0, maxProductStacks * Mathf.Max(1, maxStackSize) - total);
+        }
+
+        // Whether a crafting station may take one more material: the product in range stays
+        // under the limit and some container has room for what the material produces.
+        public static bool CanTakeMoreProduct(IList<Inventory> inventories,
+            ItemDrop.ItemData product, int pending, int producedAmount, int maxProductStacks)
+        {
+            var shared = product.m_shared;
+            return GetProductCapacity(inventories, shared.m_name, shared.m_maxStackSize,
+                       maxProductStacks, pending) > 0 &&
+                   inventories.Any(x => x != null && x.CanAddItem(product, producedAmount));
         }
 
         public static IEnumerable<(Container container, float distance)> GetNearbyContainers(

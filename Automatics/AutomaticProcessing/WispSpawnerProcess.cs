@@ -1,5 +1,7 @@
-﻿using JetBrains.Annotations;
+﻿using System.Linq;
+using JetBrains.Annotations;
 using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -27,13 +29,17 @@ namespace Automatics.AutomaticProcessing
 
             var maxProductStacks = Config.ProductStacksOfSuppressProcessing(wispSpawnerName);
             var origin = wispSpawner.transform.position;
-            foreach (var (container, _) in Logics.GetNearbyContainers(wispSpawnerName, origin))
+            var containers = Logics.GetNearbyContainers(wispSpawnerName, origin)
+                .Select(x => x.container).ToList();
+            // The product stack limit covers every container in range together.
+            var capacity = Logics.GetProductCapacity(containers.Select(x => x.GetInventory()),
+                wispName, wispData.m_maxStackSize, maxProductStacks);
+            foreach (var container in containers)
             {
                 var inventory = container.GetInventory();
 
-                var amount = Logics.GetProductStackLimitedAmount(inventory, wispName,
-                    wispData.m_maxStackSize, maxProductStacks, 1);
-                if (amount <= 0) continue;
+                var amount = Mathf.Min(capacity, 1);
+                if (amount <= 0) break;
 
                 if (Config.StoreOnlyIfProductExists(wispSpawnerName) &&
                     !Inventories.HaveItem(inventory, wispName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
@@ -41,6 +47,7 @@ namespace Automatics.AutomaticProcessing
                 var storedItemCount =
                     Logics.AddItemAndGetCountDelta(inventory, wispItem.gameObject, wispName, 1);
                 if (storedItemCount <= 0) continue;
+                capacity -= storedItemCount;
 
                 zNetView.GetZDO().Set("LastSpawn", ZNet.instance.GetTime().Ticks);
                 Logics.StoreLog(wispName, storedItemCount, container.m_name,

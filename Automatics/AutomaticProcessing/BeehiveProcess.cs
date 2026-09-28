@@ -1,4 +1,5 @@
-﻿using ModUtils;
+﻿using System.Linq;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -24,15 +25,19 @@ namespace Automatics.AutomaticProcessing
             var maxProductStacks = Config.ProductStacksOfSuppressProcessing(beehiveName);
             var origin = beehive.transform.position;
             var honeyRemaining = honeyCount;
-            foreach (var (container, _) in Logics.GetNearbyContainers(beehiveName, origin))
+            var containers = Logics.GetNearbyContainers(beehiveName, origin)
+                .Select(x => x.container).ToList();
+            // The product stack limit covers every container in range together.
+            var capacity = Logics.GetProductCapacity(containers.Select(x => x.GetInventory()),
+                honeyName, honeyData.m_maxStackSize, maxProductStacks);
+            foreach (var container in containers)
             {
                 if (honeyRemaining <= 0) break;
 
                 var inventory = container.GetInventory();
 
-                var amount = Logics.GetProductStackLimitedAmount(inventory, honeyName,
-                    honeyData.m_maxStackSize, maxProductStacks, honeyRemaining);
-                if (amount <= 0) continue;
+                var amount = Mathf.Min(capacity, honeyRemaining);
+                if (amount <= 0) break;
 
                 if (Config.StoreOnlyIfProductExists(beehiveName) &&
                     !Inventories.HaveItem(inventory, honeyName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
@@ -41,6 +46,7 @@ namespace Automatics.AutomaticProcessing
                 var storedHoneyCount = Logics.AddItemAndGetCountDelta(inventory,
                     honeyItem.gameObject, honeyName, amount);
                 if (storedHoneyCount <= 0) continue;
+                capacity -= storedHoneyCount;
 
                 Logics.StoreLog(honeyName, storedHoneyCount, container.m_name,
                     container.transform.position, beehiveName, origin);

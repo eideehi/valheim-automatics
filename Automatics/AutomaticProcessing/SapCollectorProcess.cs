@@ -1,4 +1,5 @@
-﻿using ModUtils;
+﻿using System.Linq;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
@@ -24,15 +25,19 @@ namespace Automatics.AutomaticProcessing
             var maxProductStacks = Config.ProductStacksOfSuppressProcessing(sapCollectorName);
             var origin = sapCollector.transform.position;
             var sapRemaining = sapCount;
-            foreach (var (container, _) in Logics.GetNearbyContainers(sapCollectorName, origin))
+            var containers = Logics.GetNearbyContainers(sapCollectorName, origin)
+                .Select(x => x.container).ToList();
+            // The product stack limit covers every container in range together.
+            var capacity = Logics.GetProductCapacity(containers.Select(x => x.GetInventory()),
+                sapName, sapData.m_maxStackSize, maxProductStacks);
+            foreach (var container in containers)
             {
                 if (sapRemaining <= 0) break;
 
                 var inventory = container.GetInventory();
 
-                var amount = Logics.GetProductStackLimitedAmount(inventory, sapName,
-                    sapData.m_maxStackSize, maxProductStacks, sapRemaining);
-                if (amount <= 0) continue;
+                var amount = Mathf.Min(capacity, sapRemaining);
+                if (amount <= 0) break;
 
                 if (Config.StoreOnlyIfProductExists(sapCollectorName) &&
                     !Inventories.HaveItem(inventory, sapName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
@@ -41,6 +46,7 @@ namespace Automatics.AutomaticProcessing
                 var storedSapCount = Logics.AddItemAndGetCountDelta(inventory,
                     sapItem.gameObject, sapName, amount);
                 if (storedSapCount <= 0) continue;
+                capacity -= storedSapCount;
 
                 Logics.StoreLog(sapName, storedSapCount, container.m_name,
                     container.transform.position, sapCollectorName, origin);

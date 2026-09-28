@@ -323,7 +323,7 @@ Specify the maximum number of nearby containers that Beehive will reference in d
 - Acceptable value range: From 0 to 999
 
 ### Beehive: Number Of Product Stacks To Stop Processing / [piece_beehive_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Beehive will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Beehive once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -388,7 +388,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Blast furnace: Number Of Product Stacks To Stop Processing / [piece_blastfurnace_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Blast furnace will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Blast furnace once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -474,7 +474,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Charcoal kiln: Number Of Product Stacks To Stop Processing / [piece_charcoalkiln_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Charcoal kiln will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Charcoal kiln once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -515,7 +515,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Cooking station: Number Of Product Stacks To Stop Processing / [piece_cookingstation_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Cooking station will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Cooking station once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -556,7 +556,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Fermenter: Number Of Product Stacks To Stop Processing / [piece_fermenter_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Fermenter will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Fermenter once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -650,7 +650,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Iron cooking station: Number Of Product Stacks To Stop Processing / [piece_cookingstation_iron_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Iron cooking station will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Iron cooking station once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -749,7 +749,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Smelter: Number Of Product Stacks To Stop Processing / [piece_smelter_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Smelter will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Smelter once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -806,7 +806,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Spinning wheel: Number Of Product Stacks To Stop Processing / [piece_spinningwheel_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Spinning wheel will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Spinning wheel once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -992,7 +992,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Stone oven: Number Of Product Stacks To Stop Processing / [piece_oven_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Stone oven will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Stone oven once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -1049,7 +1049,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Windmill: Number Of Product Stacks To Stop Processing / [piece_windmill_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Windmill will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Windmill once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -1083,7 +1083,7 @@ Specify the maximum number of nearby containers that Wisp fountain will referenc
 - Acceptable value range: From 0 to 999
 
 ### Wisp fountain: Number Of Product Stacks To Stop Processing / [piece_wisplure_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Wisp fountain will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Wisp fountain once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -1112,7 +1112,7 @@ Specify the maximum number of nearby containers that Sap extractor  will referen
 - Acceptable value range: From 0 to 999
 
 ### Sap extractor : Number Of Product Stacks To Stop Processing / [piece_sapcollector_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Sap extractor  will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Sap extractor  once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99
@@ -1148,7 +1148,7 @@ When the number of material items stored in the container is about to become les
 - Acceptable value range: From 0 to 999
 
 ### Eitr refinery: Number Of Product Stacks To Stop Processing / [piece_eitrrefinery_product_stacks_of_suppress_processing]
-When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by Eitr refinery will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.
+Stops Eitr refinery once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.
 
 - Default value: 0
 - Acceptable value range: From 0 to 99

@@ -139,7 +139,7 @@
     "@config_automatic_processing_fuel_count_of_suppress_processing_name": "$1: Number Of Fuels To Stop Refuel",
     "@config_automatic_processing_fuel_count_of_suppress_processing_description": "When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to $1 will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.",
     "@config_automatic_processing_product_stacks_of_suppress_processing_name": "$1: Number Of Product Stacks To Stop Processing",
-    "@config_automatic_processing_product_stacks_of_suppress_processing_description": "When the number of product item stacks stored in the container is about to exceed the specified quantity, processing by $1 will be stopped. If set to 0, stopping processing based on the number of product items will be disabled.",
+    "@config_automatic_processing_product_stacks_of_suppress_processing_description": "Stops $1 once the containers it uses hold this many stacks of its product in total; a station that crafts also counts what it is still making. A station that crafts stops taking materials; a station that only stores its product stops moving it into containers. If set to 0, there is no limit.",
     "@config_automatic_processing_refuel_only_when_materials_supplied_name": "$1: Refuel Only When Materials Supplied",
     "@config_automatic_processing_refuel_only_when_materials_supplied_description": "Refuel only when material items are supplied to $1.",
     "@config_automatic_processing_refuel_only_when_out_of_fuel_name": "$1: Refuel Only If Fuels Run Out",

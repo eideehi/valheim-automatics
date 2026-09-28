@@ -67,11 +67,11 @@ namespace Automatics.AutomaticProcessing
             var containersWithInventory = Logics
                 .GetNearbyContainers(stationName, origin)
                 .Select(x => (x.container, x.container.GetInventory())).ToList();
+            var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
             foreach (var conversion in cookingStation.m_conversion)
             {
                 var materialContainers = new List<Container>();
-                var productContainerFound = false;
 
                 var materialItem = conversion.m_from.m_itemData;
                 var materialData = materialItem.m_shared;
@@ -87,18 +87,13 @@ namespace Automatics.AutomaticProcessing
                     if (Inventories.HaveItem(inventory, materialData.m_name,
                             0, WorldLevelMatchMode.Ignore, minMaterialCount + 1))
                         materialContainers.Add(container);
-
-                    if (maxProductStacks > 0 && !productContainerFound)
-                    {
-                        if (!productCounts.TryGetValue(productData.m_name, out var cookingCount))
-                            cookingCount = 0;
-
-                        var productCount = inventory.CountItems(productData.m_name) + cookingCount;
-                        var stacks = productCount / productData.m_maxStackSize;
-                        if (stacks < maxProductStacks)
-                            productContainerFound = inventory.CanAddItem(productItem, 1);
-                    }
                 }
+
+                // Products already queued or cooking count toward the limit too.
+                productCounts.TryGetValue(productData.m_name, out var pending);
+                var productContainerFound = maxProductStacks > 0 && materialContainers.Count > 0 &&
+                    Logics.CanTakeMoreProduct(inventories,
+                        productItem, pending, 1, maxProductStacks);
 
                 if (materialContainers.Count > 0 &&
                     (maxProductStacks == 0 || productContainerFound))

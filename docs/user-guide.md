@@ -364,7 +364,7 @@ Common settings:
 | `<piece>: Container Reference Limit` | Limits how many nearby containers are checked. `0` means unlimited. |
 | `<piece>: Number Of Materials To Stop Supplying` | Keeps at least that many material items in containers before stopping supply. |
 | `<piece>: Number Of Fuels To Stop Refuel` | Keeps at least that many fuel items in containers before stopping refuel. |
-| `<piece>: Number Of Product Stacks To Stop Craft` | Stops crafting when enough product stacks are already stored. |
+| `<piece>: Number Of Product Stacks To Stop Processing` | Stops the piece once all containers it uses together hold that many stacks of its product; a crafting piece also counts what it is still making. A crafting piece stops taking materials; a piece that only stores its product stops moving it into containers. `0` means no limit. |
 | `<piece>: Supply Only If Materials Run Out` | Supplies a material only when the processor has no material queued. |
 | `<piece>: Refuel Only If Fuels Run Out` | Refuels only when the processor has no fuel. |
 | `<piece>: Refuel Only When Materials Supplied` | Refuels only when a material was supplied. |
