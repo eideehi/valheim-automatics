@@ -135,7 +135,7 @@ namespace Automatics.AutomaticFeeding
             if (!Logics.IsAllowToFeedFromContainer(animalType)) return false;
 
             var container = target.GetComponentInChildren<Container>();
-            if (container == null) return false;
+            if (container == null || ContainerAccess.IsGrave(container)) return false;
             // Owner-side feeding also runs on dedicated servers where there is no
             // local player, so only enforce the player access model when a local
             // player exists; otherwise fall through to the owner-only mutation
@@ -284,6 +284,7 @@ namespace Automatics.AutomaticFeeding
                 var distance = Vector3.Distance(position, origin);
 
                 if (distance > range || distance >= closest) continue;
+                if (ContainerAccess.IsGrave(container)) continue;
                 if (needGetClose && !HavePath(position)) continue;
                 var localPlayer = Player.m_localPlayer;
                 if (localPlayer != null && !ContainerAccess.CanUseContainer(localPlayer, container))

@@ -444,7 +444,7 @@ target when the box contains edible food.
 
 Feeding uses every nearby container you could open yourself; it does not use the
 `Allow Container` lists of Automatic processing or Automatic storage. Warded,
-private and in-use containers you cannot open are skipped.
+private and in-use containers you cannot open are skipped, and so are graves.
 
 The wild and tamed choices can be combined for taming. Setting `Allow To Feed
 From Container` to `All` (or `Wild`) lets wild animals eat from a feed box, which
@@ -712,14 +712,15 @@ In this mode each pass:
   the matching-role boxes near the spot. With no matching-role box in range, the spot
   is not replanted.
 
-Designating, sourcing, and depositing only touch containers this client owns and can
-open, so a chest behind a ward you lack access to, or one another player is using, is
-read for its role but never modified. Roles persist with the save and are visible to
-other players. Because the game can only act on loaded objects, the area around the
-designated boxes must be loaded (you nearby, or the field otherwise kept loaded);
-unloaded or remote fields are not farmed. When two same-role boxes' ranges overlap they
-may both sow the shared tiles, which is harmless (they plant the same kind of sapling);
-space the boxes by `Farming Range` if you want separate fields.
+A grave cannot be given a role. Designating, sourcing, and depositing only touch
+containers this client owns and can open, so a chest behind a ward you lack access
+to, or one another player is using, is read for its role but never modified. Roles
+persist with the save and are visible to other players. Because the game can only
+act on loaded objects, the area around the designated boxes must be loaded (you
+nearby, or the field otherwise kept loaded); unloaded or remote fields are not
+farmed. When two same-role boxes' ranges overlap they may both sow the shared
+tiles, which is harmless (they plant the same kind of sapling); space the boxes by
+`Farming Range` if you want separate fields.
 
 Self-seeding crops (for example `Barley` and `Flax`) have no
 separate seed, so only a cultivation box plants them, from the crop itself. `Vineberry`
@@ -738,7 +739,12 @@ radius nearest the origin rather than the full range, to keep each pass cheap;
 harvesting and replanting still use the full `Farming Range`.
 
 While Automatic farming is active, Automatic pickup stops periodically collecting
-the crops in `Allow Farming Crop` so farming can harvest and replant them.
+the crops in `Allow Farming Crop` that farming would harvest itself, so farming
+can harvest and replant them: crops your game controls within `Farming Range` of
+you (`Player Inventory`) or of a designated box (`Nearby Containers`). Periodic
+pickup still collects the others, such as wild berries farther away. In
+multiplayer, a crop another player's game controls is left to pickup and is not
+replanted.
 Turning the Automatic Farming module off, or turning off `Harvest And Replant Automatically`,
 returns those crops to periodic pickup right away; crops Automatic pickup
 collects while farming is off are not replanted. Container roles are kept while

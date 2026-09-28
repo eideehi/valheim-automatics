@@ -51,8 +51,17 @@ namespace Automatics.AutomaticFarming
             if (!Config.EnableAutomaticFarming) return false;
 
             if (!TryGetCropIdentifier(pickable, out var identifier)) return false;
-            if (Config.SeedSource == SeedSource.Inventory) return true;
             if (player == null) return false;
+
+            // Farming harvests only crops this peer owns; any other is left to pickup.
+            if (!Objects.GetZNetView(pickable, out var zNetView) || !zNetView.IsValid() ||
+                !zNetView.IsOwner())
+                return false;
+
+            // The player-centred pass harvests only within Farming Range of the player.
+            if (Config.SeedSource == SeedSource.Inventory)
+                return Vector3.Distance(player.transform.position, pickable.transform.position) <=
+                       Config.FarmingRange;
 
             var containers = FarmingContainers.Resolve(player);
             if (!containers.HasAnchors) return false;

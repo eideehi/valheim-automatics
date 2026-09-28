@@ -76,7 +76,7 @@ namespace Automatics.AutomaticFarming
 
             foreach (var container in ContainerCache.GetAllInstance())
             {
-                if (container == null) continue;
+                if (container == null || ContainerAccess.IsGrave(container)) continue;
 
                 var role = ContainerRoles.GetRole(container);
                 if (role == ContainerRole.None) continue;

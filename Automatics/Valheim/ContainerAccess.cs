@@ -18,9 +18,17 @@ namespace Automatics.Valheim
                    allowedIdentifiers.Contains(identifier);
         }
 
+        // A grave holds a dead player's items; no module stores into it, takes from it or gives it
+        // a role.
+        public static bool IsGrave(Container container)
+        {
+            return container != null && container.GetComponent<TombStone>();
+        }
+
         public static bool CanUseContainer(Player player, Container container)
         {
             if (player == null || container == null) return false;
+            if (IsGrave(container)) return false;
             if (!Objects.GetZNetView(container, out var nview)) return false;
             if (nview == null || !nview.IsValid() || nview.GetZDO() == null) return false;
             if (container.GetInventory() == null) return false;
@@ -61,7 +69,8 @@ namespace Automatics.Valheim
         {
             return player != null
                 ? TryPrepareContainerMutation(player, container)
-                : TryClaimContainer(container) && TryPrepareOwnedContainerMutation(container);
+                : !IsGrave(container) && TryClaimContainer(container) &&
+                  TryPrepareOwnedContainerMutation(container);
         }
 
         // Container.CheckAccess is private, but it is the vanilla ownership

@@ -37,7 +37,6 @@ namespace Automatics.AutomaticSupply
                 .Where(x => x)
                 .Select(x => new { Container = x, Distance = Vector3.Distance(origin, x.transform.position) })
                 .Where(x => x.Distance <= range)
-                .Where(x => !x.Container.GetComponent<TombStone>())
                 .Where(x => ContainerAccess.CanUseContainer(player, x.Container))
                 .OrderBy(x => x.Distance)
                 .Select(x => x.Container)
