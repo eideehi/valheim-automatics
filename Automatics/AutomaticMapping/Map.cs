@@ -398,10 +398,17 @@ namespace Automatics.AutomaticMapping
             return name.Replace("\n", "");
         }
 
+        // The name a pin added through AddPin is stored with: an Automatics token (@...) is written
+        // as the $automatics_... key the game's localization resolves.
+        public static string StoredPinName(string name)
+        {
+            return name.StartsWith("@") ? "$automatics_" + name.Substring(1) : name;
+        }
+
         private static Minimap.PinData AddPin(Vector3 pos, Minimap.PinType type, string name,
             bool save)
         {
-            if (name.StartsWith("@")) name = "$automatics_" + name.Substring(1);
+            name = StoredPinName(name);
             var pinData = ValheimMap.AddPin(pos, type, name, save, false);
             MarkAutomaticPin(pinData);
             Automatics.Logger.Debug(() =>

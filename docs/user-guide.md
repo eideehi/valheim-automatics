@@ -282,7 +282,7 @@ Key settings:
 | `Static Object Caching Interval` | Controls how often the static object cache is rebuilt. |
 | `Static Object Mapping` | Optional shortcut that runs static mapping once per key press, whatever the interval is. |
 | `Save Static Object Pins` | Controls whether static object pins are saved map pins. |
-| `Remove Pins Of Destroyed Object` | Removes Automatics-owned static pins when the source object is destroyed. |
+| `Remove Pins Of Destroyed Object` | Removes Automatics-owned static pins when the source object is destroyed. A saved pin is recognized again when you come back to it, reload the world or turn the module off and on, so it is removed too. |
 | `Flora Pins Merge Range` | Groups nearby matching flora into one pin. |
 | `Need To Equip Wishbone For Underground Minerals` | Requires Wishbone for pinning underground minerals. |
 | `Mapping Performance Log` | Writes mapping performance metrics to the BepInEx log. |

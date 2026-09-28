@@ -1218,6 +1218,14 @@ namespace Automatics.AutomaticMapping
             }
 
             var pos = network.Center;
+            if (TryFindAutomaticPin(pos, CreateTarget(component.gameObject, displayName), displayName,
+                    true, out var adopted))
+            {
+                CachePin(FloraNodesBuffer, adopted, PinKind.Flora, data.Identifier, sourceToken,
+                    PinSourceDomain.Component);
+                return true;
+            }
+
             if (Map.GetClosestPin(pos,
                     includeInactive: true) != null)
                 return true;
@@ -1339,6 +1347,14 @@ namespace Automatics.AutomaticMapping
             Vector3 pos;
             float maxHeight;
             if (!TryGetMineralPosition(component, out pos, out maxHeight)) return true;
+
+            if (TryFindAutomaticPin(pos, CreateTarget(component.gameObject, name), name, false,
+                    out var adopted))
+            {
+                CachePin(identify, adopted, PinKind.Mineral, data.Identifier, sourceToken,
+                    PinSourceDomain.Component);
+                return true;
+            }
 
             if (Map.GetClosestPin(pos,
                     includeInactive: true) != null)
@@ -1467,8 +1483,12 @@ namespace Automatics.AutomaticMapping
                 name = label;
 
             var position = component.transform.position;
-            if (Map.GetClosestPin(position,
-                    includeInactive: true) == null)
+            if (TryFindAutomaticPin(position, CreateTarget(component.gameObject, name), name, false,
+                    out var adopted))
+                CachePin(identify, adopted, PinKind.Spawner, data.Identifier, sourceToken,
+                    PinSourceDomain.Component);
+            else if (Map.GetClosestPin(position,
+                         includeInactive: true) == null)
                 AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name),
                     PinKind.Spawner, data.Identifier, sourceToken, PinSourceDomain.Component);
 
@@ -1492,8 +1512,12 @@ namespace Automatics.AutomaticMapping
                 name = label;
 
             var position = component.transform.position;
-            if (Map.GetClosestPin(position,
-                    includeInactive: true) == null)
+            if (TryFindAutomaticPin(position, CreateTarget(component.gameObject, name), name, false,
+                    out var adopted))
+                CachePin(identify, adopted, PinKind.Other, data.Identifier, sourceToken,
+                    PinSourceDomain.Component);
+            else if (Map.GetClosestPin(position,
+                         includeInactive: true) == null)
                 AddPin(uniqueId, position, name, CreateTarget(component.gameObject, name),
                     PinKind.Other, data.Identifier, sourceToken, PinSourceDomain.Component);
 
@@ -1523,10 +1547,42 @@ namespace Automatics.AutomaticMapping
             }
 
             var pos = component.transform.position;
+            if (TryFindAutomaticPin(pos, CreateTarget(component.gameObject, name), pinName, false,
+                    out var adopted))
+            {
+                CachePin(identify, adopted, PinKind.Portal, string.Empty, name,
+                    PinSourceDomain.Component);
+                return true;
+            }
+
             AddPin(uniqueId, pos, pinName, true, CreateTarget(component.gameObject, name),
                 PinKind.Portal, string.Empty, name, PinSourceDomain.Component);
 
             return true;
+        }
+
+        // A saved pin this module added earlier but no longer tracks - its object left the scan
+        // range, or the world was reloaded or the module turned off and on - is taken back into
+        // the cache instead of being skipped or pinned again, so the destroyed-object rule and
+        // tag updates reach it. Only a pin Automatics recognizes as its own is taken: pins the
+        // player placed or saved by clicking, and pins shared by others, are left alone, and so
+        // are pins another object or a creature still holds. An unsaved pin is removed from the
+        // map when it leaves the cache, so only saved pins can be waiting here. The pin must also
+        // be the object's own - the same icon and the name it would be added with (a prefix for a
+        // flora cluster, whose name carries a count) - so a location or creature pin that happens
+        // to lie within reach is never taken. A portal whose tag changed while it was not tracked
+        // is not recognized and gets a pin of its own, as before.
+        private static bool TryFindAutomaticPin(Vector3 pos, Target target, string name, bool prefix,
+            out Minimap.PinData pinData)
+        {
+            var type = IconPack.GetPinType(target);
+            var stored = Map.StoredPinName(name);
+            pinData = Map.GetClosestPin(pos, 1f,
+                x => x.m_save && x.m_type == type &&
+                     (prefix ? x.m_name.StartsWith(stored, StringComparison.Ordinal) : x.m_name == stored) &&
+                     !OwnsPin(x) && !DynamicObjectMapping.OwnsPin(x) && Map.IsAutomaticPin(x),
+                includeInactive: true);
+            return pinData != null;
         }
 
         private static bool DungeonMapping(ZoneSystem.LocationInstance instance)
