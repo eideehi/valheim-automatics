@@ -9,7 +9,7 @@ Specify whether to enable log output. System initialization logs for Automatics 
 - Default value: false
 
 ### Log Level To Allow Logging / [log_level_to_allow_logging]
-Specify the log level that allows logging.
+Specify the log level that allows logging. Configuration Manager lists this entry only when advanced settings are shown.
 
 - Default value: Fatal, Error, Warning, Message
 - Acceptable values: None, Fatal, Error, Warning, Message, Info, Debug, All
@@ -107,13 +107,13 @@ Specify how far the player must be from the door for the door to close automatic
 - Default value: 2.5
 - Acceptable value range: From 1 to 8
 
-### Automatic Door Enable/Disable Toggle Message / [automatic_door_enable_disable_toggle_message]
+### Module Toggle Message / [automatic_door_enable_disable_toggle_message]
 Specify where a message is displayed when the shortcut key turns the Automatic Door module on or off.
 
 - Default value: Center
 - Acceptable values: None, Center, TopLeft
 
-### Automatic Door Enable/Disable Toggle / [automatic_door_enable_disable_toggle]
+### Module Toggle Key / [automatic_door_enable_disable_toggle]
 Specify a shortcut key that turns the Automatic Door module on and off.
 
 - Default value:
@@ -215,7 +215,7 @@ Specify the interval at which static objects are mapped. Setting to 0 disables p
 - Acceptable value range: From 0 to 4
 
 ### Static Object Caching Interval / [static_object_caching_interval]
-Specify the interval at which static objects will be cached. Mapping of static objects uses this cache. (Unit: second)
+Specify the interval at which static objects will be cached. Mapping of static objects uses this cache. (Unit: second) Configuration Manager lists this entry only when advanced settings are shown.
 
 - Default value: 3
 - Acceptable value range: From 1 to 8
@@ -236,17 +236,17 @@ When pinning flora, it recursively searches for the same flora that exist within
 - Default value: 8
 - Acceptable value range: From 0 to 16
 
-### Need To Equip Wishbone For Underground Minerals / [need_to_equip_wishbone_for_underground_minerals]
+### Need To Equip Wishbone For Pinning Underground Minerals / [need_to_equip_wishbone_for_underground_minerals]
 Specify whether the wishbone needs to be equipped to pin underground minerals.
 
 - Default value: true
 
-### Static Object Mapping / [static_object_mapping_key]
+### Static Object Mapping Key / [static_object_mapping_key]
 Specify a shortcut key that maps static objects once each time it is pressed, whatever the interval is. To map them only with the key, set Static Object Mapping Interval to 0.
 
 - Default value:
 
-### Pin Looked-at Object / [pin_object_key]
+### Pin Looked-at Object Key / [pin_object_key]
 Press this shortcut to save a map pin for the object you are looking at, using its display name and icon-pack icon. A location’s structure, the ground within its loaded area (also when looking through water or tar) and a dungeon’s interior get one pin at the location with the name and icon Automatic Mapping recognizes. World-generated pieces inside a loaded location’s area also pin the location, even when detached from its hierarchy. Overlapping areas use the nearest containing location; when that location is not recognized, the usual object or ground pin applies. Player-built pieces, creatures, trees, deposits, loose items and other objects such as rune stones keep their own pins. Other bare terrain gets an unnamed pin. Unbound by default; requires the module to be running.
 
 - Default value: unbound
@@ -273,7 +273,7 @@ Specify the HTML color code of the navigation guide swarm. Examples: #C6F27A, #C
 - Default value: #C6F27A
 
 ### Mapping Performance Log / [mapping_performance_log]
-Specify whether to measure automatic mapping performance and write the metrics to the BepInEx log at the Info level. The metrics are written only when Logging is enabled and Log Level To Allow Logging includes Info.
+Specify whether to measure automatic mapping performance and write the metrics to the BepInEx log at the Info level. The metrics are written only when Logging is enabled and Log Level To Allow Logging includes Info. Configuration Manager lists this entry only when advanced settings are shown.
 
 - Default value: false
 
@@ -313,7 +313,7 @@ Specify the maximum number of nearby containers that Fires and lights will refer
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Fires and lights: Number Of Fuels To Stop Refuel / [fires_fuel_count_of_suppress_processing]
+### Fires and lights: Fuel To Keep In Containers / [fires_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Fires and lights will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
@@ -372,7 +372,7 @@ Specify the maximum number of nearby containers that Blast furnace will referenc
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Blast furnace: Number Of Materials To Stop Supplying / [piece_blastfurnace_material_count_of_suppress_processing]
+### Blast furnace: Materials To Keep In Containers / [piece_blastfurnace_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Blast furnace will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -389,7 +389,7 @@ Supply one material item only when the materials supplied to Blast furnace run o
 
 - Default value: false
 
-### Blast furnace: Number Of Fuels To Stop Refuel / [piece_blastfurnace_fuel_count_of_suppress_processing]
+### Blast furnace: Fuel To Keep In Containers / [piece_blastfurnace_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Blast furnace will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
@@ -429,7 +429,7 @@ Specify the maximum number of nearby containers that Charcoal kiln will referenc
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Charcoal kiln: Number Of Materials To Stop Supplying / [piece_charcoalkiln_material_count_of_suppress_processing]
+### Charcoal kiln: Materials To Keep In Containers / [piece_charcoalkiln_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Charcoal kiln will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -470,7 +470,7 @@ Specify the maximum number of nearby containers that Cooking station will refere
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Cooking station: Number Of Materials To Stop Supplying / [piece_cookingstation_material_count_of_suppress_processing]
+### Cooking station: Materials To Keep In Containers / [piece_cookingstation_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Cooking station will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -511,7 +511,7 @@ Specify the maximum number of nearby containers that Fermenter will reference in
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Fermenter: Number Of Materials To Stop Supplying / [piece_fermenter_material_count_of_suppress_processing]
+### Fermenter: Materials To Keep In Containers / [piece_fermenter_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Fermenter will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -547,7 +547,7 @@ Specify the maximum number of nearby containers that Iron cooking station will r
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Iron cooking station: Number Of Materials To Stop Supplying / [piece_cookingstation_iron_material_count_of_suppress_processing]
+### Iron cooking station: Materials To Keep In Containers / [piece_cookingstation_iron_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Iron cooking station will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -588,7 +588,7 @@ Specify the maximum number of nearby containers that Smelter will reference in d
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Smelter: Number Of Materials To Stop Supplying / [piece_smelter_material_count_of_suppress_processing]
+### Smelter: Materials To Keep In Containers / [piece_smelter_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Smelter will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -605,7 +605,7 @@ Supply one material item only when the materials supplied to Smelter run out.
 
 - Default value: false
 
-### Smelter: Number Of Fuels To Stop Refuel / [piece_smelter_fuel_count_of_suppress_processing]
+### Smelter: Fuel To Keep In Containers / [piece_smelter_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Smelter will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
@@ -645,7 +645,7 @@ Specify the maximum number of nearby containers that Spinning wheel will referen
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Spinning wheel: Number Of Materials To Stop Supplying / [piece_spinningwheel_material_count_of_suppress_processing]
+### Spinning wheel: Materials To Keep In Containers / [piece_spinningwheel_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Spinning wheel will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -686,7 +686,7 @@ Specify the maximum number of nearby containers that Stone oven will reference i
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Stone oven: Number Of Materials To Stop Supplying / [piece_oven_material_count_of_suppress_processing]
+### Stone oven: Materials To Keep In Containers / [piece_oven_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Stone oven will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -703,7 +703,7 @@ Supply one material item only when the materials supplied to Stone oven run out.
 
 - Default value: false
 
-### Stone oven: Number Of Fuels To Stop Refuel / [piece_oven_fuel_count_of_suppress_processing]
+### Stone oven: Fuel To Keep In Containers / [piece_oven_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Stone oven will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
@@ -743,7 +743,7 @@ Specify the maximum number of nearby containers that Windmill will reference in 
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Windmill: Number Of Materials To Stop Supplying / [piece_windmill_material_count_of_suppress_processing]
+### Windmill: Materials To Keep In Containers / [piece_windmill_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Windmill will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -842,7 +842,7 @@ Specify the maximum number of nearby containers that Eitr refinery will referenc
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Eitr refinery: Number Of Materials To Stop Supplying / [piece_eitrrefinery_material_count_of_suppress_processing]
+### Eitr refinery: Materials To Keep In Containers / [piece_eitrrefinery_material_count_of_suppress_processing]
 When the number of material items stored in the container is about to become less than the specified quantity, the supply of materials to Eitr refinery will be stopped. If set to 0, stopping the material supply based on the number of material items will be disabled.
 
 - Default value: 1
@@ -859,7 +859,7 @@ Supply one material item only when the materials supplied to Eitr refinery run o
 
 - Default value: false
 
-### Eitr refinery: Number Of Fuels To Stop Refuel / [piece_eitrrefinery_fuel_count_of_suppress_processing]
+### Eitr refinery: Fuel To Keep In Containers / [piece_eitrrefinery_fuel_count_of_suppress_processing]
 When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Eitr refinery will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
 
 - Default value: 1
@@ -898,7 +898,7 @@ Specify the maximum number of nearby containers that Ballista will reference in 
 - Default value: 0
 - Acceptable value range: From 0 to 999
 
-### Ballista: Number Of Items To Stop Charge / [piece_turret_number_of_items_to_stop_charge]
+### Ballista: Charge Items To Keep In Containers / [piece_turret_number_of_items_to_stop_charge]
 When the number of items stored in the container is about to become less than the specified quantity, charge to Ballista will be stopped. If set to 0, stopping charge based on the number of items will be disabled.
 
 - Default value: 1
@@ -1016,7 +1016,7 @@ Specify whether or not to require a wishbone to mine underground minerals.
 
 - Default value: true
 
-### Attempt Mining / [mining_key]
+### Attempt Mining Key / [mining_key]
 Specify a shortcut key that attempts mining once each time it is pressed, whatever the interval is. To mine only with the key, set Mining Interval to 0.
 
 - Default value:
@@ -1077,15 +1077,15 @@ Specify whether items in the hotbar row can be stored automatically.
 
 - Default value: false
 
-### Store Items / [store_items_key]
+### Store Items Key / [store_items_key]
 Specify the shortcut key that stores eligible inventory items into nearby containers once. If no key is assigned, automatic storage does not run.
 
 - Default value:
 
 ### Storage Message / [storage_message]
-Specify where the message is displayed after items are stored.
+Specify where the message is displayed after items are stored. An existing configuration keeps its value.
 
-- Default value: None
+- Default value: Center
 - Acceptable values: None, Center, TopLeft
 
 ## [ #10 Automatic Pickup ] / [automatic_pickup]
@@ -1107,7 +1107,7 @@ Specify the interval at which objects are automatically picked up. Setting it to
 - Default value: 0.5
 - Acceptable value range: From 0 to 4
 
-### Pickup All Nearby / [pickup_all_nearby_key]
+### Pickup All Nearby Key / [pickup_all_nearby_key]
 Interacting with a pickable object using this key picks up all of the same objects within range at once. Periodic automatic pickup keeps running at its interval whether or not this key is assigned.
 
 - Default value: E + LeftShift
@@ -1154,7 +1154,7 @@ Specify the number of each planting input to keep in the containers or inventory
 - Acceptable value range: From 0 to 999
 
 ### Farming Mode / [seed_source]
-Specify where farming works and where it keeps its items. Player Inventory: around you, putting the harvest into and taking seeds from your inventory. Player With Containers: around you, putting the harvest into and taking planting input from the role containers near each crop (see Designate Container Role and Container Search Range). Nearby Containers: around the containers you designate, with the same role containers; your inventory is never used.
+Specify where farming works and where it keeps its items. Player Inventory: around you, putting the harvest into and taking seeds from your inventory. Player With Containers: around you, putting the harvest into and taking planting input from the role containers near each crop (see Designate Container Role Key and Container Search Range). Nearby Containers: around the containers you designate, with the same role containers; your inventory is never used.
 
 - Default value: Inventory
 - Acceptable values: Inventory, Containers, PlayerContainers
@@ -1170,12 +1170,12 @@ Specify the multiplier applied to each sapling's grow radius to derive the sowin
 - Default value: 1
 - Acceptable value range: From 0.5 to 4
 
-### Attempt Farming / [farming_key]
+### Attempt Farming Key / [farming_key]
 Specify a shortcut key that attempts farming once each time it is pressed, whatever the interval is. To farm only with the key, set Farming Interval to 0.
 
 - Default value:
 
-### Designate Container Role / [designate_container_key]
+### Designate Container Role Key / [designate_container_key]
 Specify a shortcut key that cycles the role of the container you are looking at between none, cultivation, seed harvest, and storage. In the Player With Containers and Nearby Containers farming modes, a cultivation box grows crops from the seeds it holds, a seed-harvest box grows seeds from the crops it holds, and harvested yield is deposited into nearby storage boxes first, otherwise back into the matching planting box. Changing a role claims ownership of the chest, so it only works on containers you can access.
 
 - Default value:

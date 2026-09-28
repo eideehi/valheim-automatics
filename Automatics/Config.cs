@@ -109,7 +109,7 @@ namespace Automatics
             Instance.ChangeSection("system");
             _logEnabled = Instance.Bind("enable_logging", false);
             _allowedLogLevel = Instance.Bind("log_level_to_allow_logging",
-                LogLevel.All ^ (LogLevel.Debug | LogLevel.Info));
+                LogLevel.All ^ (LogLevel.Debug | LogLevel.Info), initializer: x => x.IsAdvanced = true);
 
             Instance.ChangeSection("general");
             Instance.BindCustomValheimObject("custom_animal", ValheimObject.Animal);

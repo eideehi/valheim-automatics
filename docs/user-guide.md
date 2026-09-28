@@ -85,7 +85,7 @@ storage off, it stops starting new automatic actions, such as door movement,
 pickups, item transfers, pin updates, mining passes, feeding, harvests,
 replanting and sowing, repairs, and storage passes, right away, and lets an action that is
 already in progress finish. For automatic
-storage, `Store Items` does nothing from then on, and a storage pass that has
+storage, `Store Items Key` does nothing from then on, and a storage pass that has
 already started still moves every item it selected. For automatic mining, a
 pass that has already started completes all of its selected hits, including
 damage, pickaxe durability, noise and skill updates. For automatic feeding, an
@@ -190,8 +190,8 @@ Key settings:
 | `Interval To Close` | Controls how often Automatics checks for doors to close. Values below `0.1` disable automatic closing. |
 | `Distance For Automatic Opening` | Controls how close a player must be for a door to open. |
 | `Distance For Automatic Closing` | Controls how far players must be before an opened door can close. |
-| `Automatic Door Enable/Disable Toggle` | Optional shortcut that turns the Automatic door module on and off during play. It works while the module is off too. |
-| `Automatic Door Enable/Disable Toggle Message` | Controls where the toggle message appears. |
+| `Module Toggle Key` | Optional shortcut that turns the Automatic door module on and off during play. It works while the module is off too. |
+| `Module Toggle Message` | Controls where the toggle message appears. |
 
 Doors must be allowed by the door definition list. You can add extra door
 definitions with `User-defined Door` in the `General` section.
@@ -232,7 +232,7 @@ Module` entry while the module was disabled. The module stays disabled. Values
 you changed before you disabled it are kept if they are still in the file, and
 they apply once you turn the module back on in game.
 
-Bind `Pin Looked-at Object` (unbound by default) to pin what you look at within
+Bind `Pin Looked-at Object Key` (unbound by default) to pin what you look at within
 `Object Pin Range` (100 meters, configurable from 10 to 300). Objects use their
 localized name and icon-pack icon. A location’s structure, the ground within
 its loaded exterior area (also when you look through water or tar) and a
@@ -277,15 +277,15 @@ Key settings:
 | Setting | Effect |
 | --- | --- |
 | `Static Object Search Range` | Controls the static object scan range. Set it to `0` to stop static object, portal and location pinning and remove the unsaved pins it added. Saved pins, including portal pins, stay. |
-| `Location Search Range` | Controls the dungeon and spot scan range. Locations are scanned together with static objects, so they follow `Static Object Mapping Interval` and the `Static Object Mapping` shortcut. |
+| `Location Search Range` | Controls the dungeon and spot scan range. Locations are scanned together with static objects, so they follow `Static Object Mapping Interval` and `Static Object Mapping Key`. |
 | `Hide Pins Outside Explored Area` | Hides automatic pins outside the explored part of the map. Saved pins are hidden, not deleted; pins that are not saved are not added there at all until the area is explored. |
 | `Static Object Mapping Interval` | Controls periodic static mapping. Set it to `0` to map only with the shortcut. |
 | `Static Object Caching Interval` | Controls how often the static object cache is rebuilt. |
-| `Static Object Mapping` | Optional shortcut that runs static mapping once per key press, whatever the interval is. |
+| `Static Object Mapping Key` | Optional shortcut that runs static mapping once per key press, whatever the interval is. |
 | `Save Static Object Pins` | Controls whether static object pins are saved map pins. |
 | `Remove Pins Of Destroyed Object` | Removes Automatics-owned static pins when the source object is destroyed. A saved pin is recognized again when you come back to it, reload the world or turn the module off and on, so it is removed too. |
 | `Flora Pins Merge Range` | Groups nearby matching flora into one pin. |
-| `Need To Equip Wishbone For Underground Minerals` | Requires Wishbone for pinning underground minerals. |
+| `Need To Equip Wishbone For Pinning Underground Minerals` | Requires Wishbone for pinning underground minerals. |
 | `Mapping Performance Log` | Writes mapping performance metrics to the BepInEx log. |
 
 `Allow Pinning Flora`, `Allow Pinning Mineral`, `Allow Pinning Spawner`, `Allow
@@ -365,14 +365,14 @@ Common settings:
 | `<piece>: Allow Process` | Selects which available process types are enabled for that piece. |
 | `<piece>: Container Search Range` | Controls how far that piece searches for containers. |
 | `<piece>: Container Reference Limit` | Limits how many nearby containers are checked. `0` means unlimited. |
-| `<piece>: Number Of Materials To Stop Supplying` | Keeps at least that many material items in containers before stopping supply. |
-| `<piece>: Number Of Fuels To Stop Refuel` | Keeps at least that many fuel items in containers before stopping refuel. |
+| `<piece>: Materials To Keep In Containers` | Keeps at least that many material items in containers before stopping supply. |
+| `<piece>: Fuel To Keep In Containers` | Keeps at least that many fuel items in containers before stopping refuel. |
 | `<piece>: Number Of Product Stacks To Stop Processing` | Stops the piece once all containers it uses together hold that many stacks of its product; a crafting piece also counts what it is still making. A crafting piece stops taking materials; a piece that only stores its product stops moving it into containers. `0` means no limit. |
 | `<piece>: Supply Only If Materials Run Out` | Supplies a material only when the processor has no material queued. |
 | `<piece>: Refuel Only If Fuels Run Out` | Refuels only when the processor has no fuel. |
 | `<piece>: Refuel Only When Materials Supplied` | Refuels only when a material was supplied. |
 | `<piece>: Store Only If Product Exists In Container` | Stores only into containers that already contain the product. If no matching container is found, the normal output behavior continues. |
-| `<piece>: Number Of Items To Stop Charge` | Keeps at least that many charge items in containers before stopping charge. |
+| `<piece>: Charge Items To Keep In Containers` | Keeps at least that many charge items in containers before stopping charge. |
 
 Supported pieces:
 
@@ -520,7 +520,7 @@ Key settings:
 | `Need To Equip Pickaxe For Mining` | Requires the pickaxe to be equipped. If disabled, Automatics can use a pickaxe from the inventory. |
 | `Allow Mining Underground Minerals` | Allows underground minerals to be mined. |
 | `Need To Equip Wishbone For Mining Underground Minerals` | Requires Wishbone for underground mineral mining. |
-| `Attempt Mining` | Optional shortcut that attempts mining once per key press, whatever the interval is. |
+| `Attempt Mining Key` | Optional shortcut that attempts mining once per key press, whatever the interval is. |
 | `Area Mining` | When your own pickaxe swing hits an allowed mineral, also hits other allowed minerals and rock sections near the hit. On by default. |
 | `Area Mining Radius` | How far from the hit area mining reaches (3 meters by default, 1 to 10). |
 | `Area Mining Max Targets` | How many extra minerals or rock sections one swing can hit (8 by default, 1 to 32). |
@@ -545,7 +545,7 @@ running.
 ## Automatic storage
 
 Automatic storage moves eligible items from the local player's inventory into
-nearby allowed containers when `Store Items` is pressed. If `Store Items` is
+nearby allowed containers when `Store Items Key` is pressed. If `Store Items Key` is
 empty, storage does not run.
 
 Storage order:
@@ -558,7 +558,7 @@ Key settings:
 
 | Setting | Effect |
 | --- | --- |
-| `Store Items` | Shortcut that runs one storage pass. Empty means storage is disabled. |
+| `Store Items Key` | Shortcut that runs one storage pass. Empty means storage is disabled. |
 | `Storage Search Range` | Controls how far Automatics searches for containers. |
 | `Container Reference Limit` | Limits how many nearby containers are checked. `0` means unlimited. |
 | `Allow Container` | Selects which container definitions Automatics may use. Private chests are excluded by default. |
@@ -595,8 +595,8 @@ Modes:
 
 | Mode | Behavior |
 | --- | --- |
-| Periodic pickup | Runs at `Automatic Pickup Interval` whether or not a `Pickup All Nearby` shortcut is assigned. Set the interval to `0` to turn it off. |
-| `Pickup All Nearby` shortcut (Left Shift + E by default) | Hold the shortcut while interacting with a pickable object or item to pick up matching nearby objects. |
+| Periodic pickup | Runs at `Automatic Pickup Interval` whether or not `Pickup All Nearby Key` is assigned. Set the interval to `0` to turn it off. |
+| `Pickup All Nearby Key` (Left Shift + E by default) | Hold the shortcut while interacting with a pickable object or item to pick up matching nearby objects. |
 
 Key settings:
 
@@ -604,7 +604,7 @@ Key settings:
 | --- | --- |
 | `Automatic Pickup Range` | Controls how far Automatics searches for pickup targets. |
 | `Automatic Pickup Interval` | Controls periodic pickup. Set it to `0` to disable periodic pickup. |
-| `Pickup All Nearby` | Shortcut for targeted pickup. Clear it to turn targeted pickup off. |
+| `Pickup All Nearby Key` | Shortcut for targeted pickup. Clear it to turn targeted pickup off. |
 
 Periodic pickup includes pickable world objects, pickable item objects, and item
 drops that allow automatic pickup. Targeted pickup matches the hovered object's
@@ -637,7 +637,7 @@ count, and with no such crop nearby, placement is unchanged.
 
 Automatic farming harvests grown crops around the local player and replants the
 regrowing sapling at each harvested spot. It runs at the configured interval, and
-once each time `Attempt Farming` is pressed; set the interval to `0` to farm only
+once each time `Attempt Farming Key` is pressed; set the interval to `0` to farm only
 with the key.
 
 Each pass:
@@ -658,7 +658,7 @@ Key settings:
 | --- | --- |
 | `Harvest And Replant Automatically` | Turns automatic harvesting, replanting and sowing on or off. Grid planting is not affected. |
 | `Farming Interval` | Controls how often farming runs. Set it to `0` to farm only with the shortcut. |
-| `Attempt Farming` | Optional shortcut that runs farming once per key press, whatever the interval is. |
+| `Attempt Farming Key` | Optional shortcut that runs farming once per key press, whatever the interval is. |
 | `Farming Range` | How far farming harvests, replants and sows: around you, or around each designated container in `Nearby Containers` mode. |
 | `Container Search Range` | How far from a crop or planting spot farming looks for role containers (`Player With Containers` and `Nearby Containers` modes). An existing configuration starts with its `Farming Range` value. |
 | `Allow Farming Crop` | Selects which crops are harvested and replanted. Crops without a plantable sapling are harvested only. |
@@ -666,7 +666,7 @@ Key settings:
 | `Farming Mode` | Selects where farming works and keeps its items: `Player Inventory`, `Player With Containers` or `Nearby Containers`. |
 | `Proactive Sowing` | Also sows into nearby empty cultivated ground, continuing the rows of a growing crop of the same kind nearby. |
 | `Sowing Spacing Factor` | Multiplies each sapling's grow radius to set the sowing grid spacing. Raise it if sown saplings are too crowded. |
-| `Designate Container Role` | Optional shortcut that cycles the role of the container you are looking at (`Player With Containers` and `Nearby Containers` modes; see below). |
+| `Designate Container Role Key` | Optional shortcut that cycles the role of the container you are looking at (`Player With Containers` and `Nearby Containers` modes; see below). |
 
 ### Player Inventory mode
 
@@ -690,7 +690,7 @@ take its yield is left standing. Your inventory is never used.
 
 Set `Farming Mode` to `Nearby Containers` to make farming container-based. Instead of
 centering on the player, farming is anchored to containers you designate with the
-`Designate Container Role` shortcut. Look at a chest and press the key to cycle its
+`Designate Container Role Key` shortcut. Look at a chest and press the key to cycle its
 role:
 
 | Role | Purpose |
@@ -770,7 +770,7 @@ Turning the Automatic Farming module off, or turning off `Harvest And Replant Au
 returns those crops to periodic pickup right away; crops Automatic pickup
 collects while farming is off are not replanted. Container roles are kept while
 the module is off and apply again when you turn it back on. The targeted
-`Pickup All Nearby` shortcut still picks up those crops regardless of this.
+`Pickup All Nearby Key` shortcut still picks up those crops regardless of this.
 
 Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).

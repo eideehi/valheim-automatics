@@ -160,7 +160,8 @@ namespace Automatics.AutomaticMapping
             _allowPinningPortal = config.Bind("allow_pinning_portal", true);
             _notPinningTamedAnimals = config.Bind("not_pinning_tamed_animals", true);
             _staticObjectMappingInterval = config.Bind("static_object_mapping_interval", 0.25f, (0f, 4f));
-            _staticObjectCachingInterval = config.Bind("static_object_caching_interval", 3, (1, 8));
+            _staticObjectCachingInterval = config.Bind("static_object_caching_interval", 3, (1, 8),
+                x => x.IsAdvanced = true);
             _saveStaticObjectPins = config.Bind("save_static_object_pins", false);
             _removePinsOfDestroyedObject = config.Bind("remove_pins_of_destroyed_object", true);
             _floraPinMergeRange = config.Bind("flora_pins_merge_range", 8, (0, 16));
@@ -172,7 +173,8 @@ namespace Automatics.AutomaticMapping
                 new KeyboardShortcut(KeyCode.LeftShift));
             _enableNavigationGuide = config.Bind("enable_navigation_guide", true);
             _navigationGuideColor = config.Bind("navigation_guide_color", "#C6F27A");
-            _mappingPerformanceLog = config.Bind("mapping_performance_log", false);
+            _mappingPerformanceLog = config.Bind("mapping_performance_log", false,
+                initializer: x => x.IsAdvanced = true);
 
             // Bridge BepInEx SettingChanged events to StaticAllowlistChanged so that
             // subscribers (e.g. targeted pin invalidation) do not need access to the

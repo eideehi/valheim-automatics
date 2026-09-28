@@ -80,7 +80,7 @@ namespace Automatics.AutomaticStorage
             _excludedItems = config.Bind("excluded_items", new StringList());
             _storeHotbarItems = config.Bind("store_hotbar_items", false);
             _storeItemsKey = config.Bind("store_items_key", new KeyboardShortcut());
-            _storageMessage = config.Bind("storage_message", Message.None);
+            _storageMessage = config.Bind("storage_message", Message.Center);
         }
 
         public static bool IsAllowedItemType(ItemDrop.ItemData.ItemType itemType)
