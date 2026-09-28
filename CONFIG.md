@@ -153,6 +153,11 @@ Specify the range of locations to be explored. A "location" is a specific place,
 - Default value: 96
 - Acceptable value range: From 0 to 128
 
+### Hide Pins Outside Explored Area / [hide_unexplored_automatic_mapping_pins]
+Hide Automatic Mapping pins whose position is outside the explored map. Saved pins are hidden, not deleted.
+
+- Default value: false
+
 ### Allow Pinning Animal / [allow_pinning_animal]
 Specify the animals to pin automatically.
 

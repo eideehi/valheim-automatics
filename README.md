@@ -37,7 +37,7 @@ Allows configured tamable creatures to eat valid food from nearby containers, th
 
 ### Automatic repair
 
-Automatically repairs items when the player is near usable crafting stations or, if enabled, when the crafting station GUI is opened. It can also repair nearby pieces while a build tool such as a hammer is equipped.
+Automatically repairs items when the player is near usable crafting stations or, if enabled, when the crafting station GUI is opened. It can also repair nearby pieces while a build tool such as a hammer is in your hand with its repair action selected.
 
 ### Automatic mining
 
@@ -45,7 +45,7 @@ Automatically mines allowed minerals around the player. Mining can run at the co
 
 ### Automatic storage
 
-Stores eligible player inventory items into nearby allowed containers when the storage shortcut is pressed. It fills existing item stacks first, then prefers containers that already hold the same Valheim item type, and finally uses other containers with space. Hotbar, equipped, quest, and configured excluded items are kept in the player inventory by default.
+Stores eligible player inventory items into nearby allowed containers when the storage shortcut is pressed. It fills existing item stacks first, then prefers containers that already hold the same Valheim item type, then empty containers, and finally other containers with space. Hotbar, equipped, quest, and configured excluded items are kept in the player inventory by default.
 
 ### Automatic pickup
 

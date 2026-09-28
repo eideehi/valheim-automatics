@@ -111,7 +111,7 @@ objects. Saved pins stay on the map: vehicle and portal pins, static object pins
 saved by `Save Static Object Pins`, pins you saved by clicking them, your own
 pins, and pins shared by other players. A vehicle pin is first moved to where its
 vehicle is. While automatic mapping is off it adds, moves, hides and removes no
-pin, so `Hide Unexplored Automatic Mapping Pins` does not apply either. When you
+pin, so `Hide Pins Outside Explored Area` does not apply either. When you
 turn it back on, it recognises the saved pins it added and adds the other pins
 again as their objects come into range. A vehicle that moved more than 8 meters
 while the module was off can get a second pin; delete the old one.
@@ -193,6 +193,12 @@ Key settings:
 Doors must be allowed by the door definition list. You can add extra door
 definitions with `User-defined Door` in the `General` section.
 
+Automatic closing closes every open allowed door once no player is near it,
+including doors you opened by hand. While automatic opening is on, a
+`Distance For Automatic Closing` smaller than `Distance For Automatic Opening` is
+replaced by the opening distance, so a door you walk up to does not close in
+front of you.
+
 Its `Disable Module` option takes effect without a restart. New automatic opening,
 closing and shortcut handling stop right away, while an action already in progress
 finishes. The switch itself completes over the next few frames. Turning the module
@@ -266,8 +272,9 @@ Key settings:
 
 | Setting | Effect |
 | --- | --- |
-| `Static Object Search Range` | Controls the static object scan range. Set it to `0` to remove static pins and stop static object pinning. |
-| `Location Search Range` | Controls the dungeon and spot scan range. |
+| `Static Object Search Range` | Controls the static object scan range. Set it to `0` to stop static object, portal and location pinning and remove the unsaved pins it added. Saved pins, including portal pins, stay. |
+| `Location Search Range` | Controls the dungeon and spot scan range. Locations are scanned together with static objects, so they follow `Static Object Mapping Interval` and the `Static Object Mapping` shortcut. |
+| `Hide Pins Outside Explored Area` | Hides automatic pins outside the explored part of the map. Saved pins are hidden, not deleted; pins that are not saved are not added there at all until the area is explored. |
 | `Static Object Mapping Interval` | Controls periodic static mapping when no static mapping shortcut is assigned. |
 | `Static Object Caching Interval` | Controls how often the static object cache is rebuilt. |
 | `Static Object Mapping` | Optional shortcut that runs static mapping once per key press instead of using the interval. |
@@ -281,8 +288,14 @@ Key settings:
 Pinning Other Object`, `Allow Pinning Dungeon`, `Allow Pinning Spot`, and
 `Allow Pinning Portal` choose what can be pinned.
 
-Portal pins use the portal tag as the pin name when available. Dungeons use the
+Portal pins use the portal tag as the pin name when available and are always
+saved map pins, whatever `Save Static Object Pins` is set to. Dungeons use the
 entrance position when Automatics can find an entrance.
+
+To keep an automatic pin that is not saved, left-click it on the large map. It
+becomes a saved pin that Automatics no longer tracks, and a short message confirms
+it; automatic mapping no longer moves or removes it. For a creature, the saved pin
+stays where the creature was, and a new automatic pin follows the creature.
 
 ### User-defined mapping targets
 
@@ -420,6 +433,17 @@ player's inventory. When a wild animal is allowed to feed from containers,
 Automatics also prevents that animal from treating a feed box as an attack
 target when the box contains edible food.
 
+Feeding uses every nearby container you could open yourself; it does not use the
+`Allow Container` lists of Automatic processing or Automatic storage. Warded,
+private and in-use containers you cannot open are skipped.
+
+The wild and tamed choices can be combined for taming. Setting `Allow To Feed
+From Container` to `All` (or `Wild`) lets wild animals eat from a feed box, which
+tames them just as food on the ground does. Setting `Allow To Feed From Player`
+to `Wild` feeds hungry wild animals near you from the food you carry, which also
+tames them; tamed animals keep eating from containers while `Allow To Feed From
+Container` includes `Tamed`.
+
 Its `Disable Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
@@ -432,14 +456,16 @@ your settings and starts fresh one-second timers. See
 [Module disable options](#module-disable-options).
 
 Automatic repair repairs worn items near usable crafting stations and damaged
-pieces when the player has a build tool and meets access or station
-requirements.
+pieces while you hold a build tool with its repair action selected, when you have
+access to the piece and meet its crafting-station requirement.
 
 ### Item repair
 
 Automatics checks item repair once per second while the feature is enabled. It
 repairs worn items when a usable crafting station is within `Crafting Station
-Search Range`. Set that range to `0` to disable periodic item repair.
+Search Range`. Set that range to `0` to disable periodic item repair. With the
+no-cost cheat on, items are repaired every second without a crafting station, even
+when the range is `0`.
 
 `Repair Items When Accessing The Crafting Station` also repairs items when the
 crafting station GUI is opened.
@@ -449,9 +475,13 @@ crafting station GUI is opened.
 ### Piece repair
 
 Automatics checks nearby pieces once per second while the feature is enabled.
-Piece repair requires a build tool, such as a hammer, in the player's hand or
-current weapon slot. `Piece Search Range` controls the search range; set it to
-`0` to disable periodic piece repair.
+Piece repair requires a build tool, such as a hammer, in your right hand with its
+repair action selected, as when you repair by hand. `Piece Search Range` controls
+the search range; set it to `0` to disable periodic piece repair.
+
+Each repaired piece costs what a repair by hand costs: stamina and the other costs
+of the tool's repair action, and the tool's durability at the world's rate. The
+repair animation plays once for each batch.
 
 Automatics respects private-area access and crafting-station requirements before
 repairing a piece. `Piece Repair Message` controls whether repaired piece counts
@@ -476,11 +506,11 @@ Key settings:
 | --- | --- |
 | `Automatic Mining` | Turns automatic mining on or off. |
 | `Mining Interval` | Controls how often mining is attempted when no mining shortcut is assigned. |
-| `Mining Range` | Controls the range used to search for mineral hit positions. |
+| `Mining Range` | Controls the range used to search for mineral hit positions. `0` uses the pickaxe's attack range. |
 | `Allow Mining Mineral` | Selects which mineral definitions Automatics may mine. |
 | `Need To Equip Pickaxe For Mining` | Requires the pickaxe to be equipped. If disabled, Automatics can use a pickaxe from the inventory. |
 | `Allow Mining Underground Minerals` | Allows underground minerals to be mined. |
-| `Need To Wishbone For Mining Underground Minerals` | Requires Wishbone for underground mineral mining. |
+| `Need To Equip Wishbone For Mining Underground Minerals` | Requires Wishbone for underground mineral mining. |
 | `Attempt Mining` | Optional shortcut. When assigned, mining runs only when the shortcut is pressed. |
 | `Area Mining` | When your own pickaxe swing hits an allowed mineral, also hits other allowed minerals and rock sections near the hit. On by default. |
 | `Area Mining Radius` | How far from the hit area mining reaches (3 meters by default, 1 to 10). |
@@ -736,7 +766,7 @@ update never turns it on for you.
   container they came from; anything that cannot go back stays in your inventory.
   Nothing is dropped or created.
 - **Access.** Warded, private or group-restricted containers, containers another
-  player has open and containers on a wagon in use are never used.
+  player has open, containers on a wagon in use and graves are never used.
 
 Recipes where you choose one of several ingredients work as in vanilla, and
 eating, ammunition, repair, the fermenter and items used directly from the
@@ -819,8 +849,8 @@ the module on.
 Usage: `removemappins (OPTIONS...)`
 
 Removes map pins that match the specified conditions. By default, it runs in
-safe mode and removes only duplicate pins. Temporarily disable Automatic mapping
-before using this command.
+safe mode and removes only duplicate pins: when several pins share exactly the
+same position, one stays and the others are removed. Temporarily disable Automatic mapping before using this command.
 
 | Option | Description |
 | --- | --- |
