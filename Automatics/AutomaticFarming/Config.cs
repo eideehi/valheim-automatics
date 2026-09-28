@@ -60,7 +60,7 @@ namespace Automatics.AutomaticFarming
             });
 
             _enableAutomaticFarming = config.Bind("enable_automatic_farming", true);
-            _farmingInterval = config.Bind("farming_interval", 1.5f, (0.1f, 4f));
+            _farmingInterval = config.Bind("farming_interval", 1.5f, (0f, 4f));
             _farmingRange = config.Bind("farming_range", 8, (1, 64));
             _allowFarmingCrop = config.BindValheimObjectList("allow_farming_crop", ValheimObject.Flora);
             _seedReserve = config.Bind("seed_reserve", 10, (0, 999));

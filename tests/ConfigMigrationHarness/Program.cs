@@ -94,6 +94,7 @@ namespace Automatics
             RunPickupKeyMigrationTests();
             RunFireGroupMigrationTests();
             RunFeatureSwitchMigrationTests();
+            RunKeyedIntervalMigrationTests();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -640,7 +641,8 @@ namespace Automatics
 
             AssertModule(migrated, "automatic_mining", "Disabled");
             AssertContains(migrated, "enable_automatic_mining = false");
-            AssertContains(migrated, "mining_interval = 2.5");
+            // The bound key kept mining on the key only; settings pass 4 keeps it so.
+            AssertSingle(migrated, "automatic_mining", "mining_interval", "0");
             AssertContains(migrated, "mining_range = 17");
             AssertContains(migrated, "need_to_equip_pickaxe = false");
             AssertContains(migrated, "allow_mining_underground_minerals = false");

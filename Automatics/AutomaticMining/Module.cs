@@ -151,11 +151,12 @@ namespace Automatics.AutomaticMining
             if (!Config.EnableAutomaticMining) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
-            if (Config.MiningInterval < 0.1f) return;
             if (Config.MiningKey.MainKey == KeyCode.None) return;
+            if (!Config.MiningKey.IsDown()) return;
 
-            if (Config.MiningKey.IsDown())
-                AutomaticMining.TryMining(player);
+            // The key runs one pass whatever the interval is, and the interval starts over.
+            MiningTimers[player.GetPlayerID()] = 0f;
+            AutomaticMining.TryMining(player);
         }
 
         private static void OnPlayerFixedUpdate(Player player, float delta)
@@ -163,8 +164,8 @@ namespace Automatics.AutomaticMining
             if (!Module.Running) return;
             if (!Config.EnableAutomaticMining) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
-            if (Config.MiningInterval < 0.1f) return;
-            if (Config.MiningKey.MainKey != KeyCode.None) return;
+            // An interval of 0 turns the periodic passes off; the key still works.
+            if (Config.MiningInterval <= 0f) return;
 
             var id = player.GetPlayerID();
             if (!MiningTimers.TryGetValue(id, out var timer))

@@ -812,8 +812,6 @@ namespace Automatics.SmokeTest
                     return "enable_automatic_mapping is off, so the scans stop before they run and their resume cannot be seen";
                 if (MappingConfig.StaticObjectMappingRange <= 0)
                     return "static_object_mapping_range is 0, so the static scan does not run";
-                if (MappingConfig.StaticObjectMappingKey.MainKey != KeyCode.None)
-                    return "static_object_mapping_key is set, so the static scan runs only when that key is pressed";
                 if (MappingConfig.StaticObjectMappingInterval <= 0)
                     return "static_object_mapping_interval is 0, so the static scan does not run on its own";
                 return null;

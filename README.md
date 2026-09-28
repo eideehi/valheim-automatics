@@ -41,7 +41,7 @@ Automatically repairs items when the player is near usable crafting stations or,
 
 ### Automatic mining
 
-Automatically mines allowed minerals around the player. Mining can run at the configured interval or only when the mining shortcut is pressed, and it can require a pickaxe or wishbone for underground minerals. With `Area Mining` (on by default), a pickaxe swing at an allowed mineral also hits other allowed minerals and rock sections nearby, wearing the pickaxe once per extra target.
+Automatically mines allowed minerals around the player. Mining runs at the configured interval (0 turns it off) and each time the mining shortcut is pressed, and it can require a pickaxe or wishbone for underground minerals. With `Area Mining` (on by default), a pickaxe swing at an allowed mineral also hits other allowed minerals and rock sections nearby, wearing the pickaxe once per extra target.
 
 ### Automatic storage
 
@@ -55,7 +55,7 @@ Automatically picks up nearby items at the configured interval; an interval of 0
 
 Hold Left Alt while planting with the cultivator to add a grid of the same crop (5×5 by default), each extra crop costing what a hand-placed crop costs: inventory seeds (plus nearby containers while Automatic supply runs), stamina and cultivator durability (no seeds in free-build worlds, as in vanilla). Invalid cells are skipped; planting stops when you cannot pay for another crop. While Left Alt is held, the crop preview snaps to the rows of a growing crop of the same kind nearby, so a new grid lines up with an earlier one.
 
-Harvests grown crops around the player and replants the regrowing sapling at each harvested spot, keeping a configurable reserve of every planting input. It can also sow into nearby empty cultivated ground on a spacing grid so the saplings settle healthy. Planting can draw from the player inventory, or from containers you designate by role — cultivation boxes to grow crops, seed-harvest boxes to multiply seeds, and storage boxes to receive the yield — so whole fields can run from chests without ever planting the wrong stock. Farming can run at the configured interval or only when the farming shortcut is pressed. While farming is active, Automatic pickup leaves allowlisted crops for farming to harvest and replant.
+Harvests grown crops around the player and replants the regrowing sapling at each harvested spot, keeping a configurable reserve of every planting input. It can also sow into nearby empty cultivated ground on a spacing grid so the saplings settle healthy. Planting can draw from the player inventory, or from containers you designate by role — cultivation boxes to grow crops, seed-harvest boxes to multiply seeds, and storage boxes to receive the yield — so whole fields can run from chests without ever planting the wrong stock. Farming runs at the configured interval (0 turns it off) and each time the farming shortcut is pressed. While farming is active, Automatic pickup leaves allowlisted crops for farming to harvest and replant.
 
 ### Automatic supply
 

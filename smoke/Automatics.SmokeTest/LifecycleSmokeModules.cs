@@ -376,7 +376,7 @@ namespace Automatics.SmokeTest
             if (!FarmsOnAnInterval())
             {
                 record.CycleSkip(name, cycle,
-                    "farming runs on a key or is turned off in the settings, so it keeps no interval timer");
+                    "farming_interval is 0 or farming is turned off in the settings, so it keeps no interval timer");
                 yield break;
             }
 
@@ -432,8 +432,7 @@ namespace Automatics.SmokeTest
         // The guards of Module.OnPlayerFixedUpdate that decide whether it keeps a timer at all.
         private static bool FarmsOnAnInterval()
         {
-            return FarmingConfig.EnableAutomaticFarming && FarmingConfig.FarmingInterval >= 0.1f &&
-                   FarmingConfig.FarmingKey.MainKey == KeyCode.None;
+            return FarmingConfig.EnableAutomaticFarming && FarmingConfig.FarmingInterval > 0f;
         }
 
         private static int CountClaimedCrops()
@@ -631,7 +630,7 @@ namespace Automatics.SmokeTest
             if (!MinesOnAnInterval())
             {
                 record.CycleSkip(name, cycle,
-                    "mining runs on a key or is turned off in the settings, so it keeps no interval timer");
+                    "mining_interval is 0 or mining is turned off in the settings, so it keeps no interval timer");
                 yield break;
             }
 
@@ -716,8 +715,7 @@ namespace Automatics.SmokeTest
         // The guards of Module.OnPlayerFixedUpdate that decide whether it keeps a timer at all.
         private static bool MinesOnAnInterval()
         {
-            return MiningConfig.EnableAutomaticMining && MiningConfig.MiningInterval >= 0.1f &&
-                   MiningConfig.MiningKey.MainKey == KeyCode.None;
+            return MiningConfig.EnableAutomaticMining && MiningConfig.MiningInterval > 0f;
         }
 
         // Automatic Storage moves items only when its key is pressed, and the check never presses

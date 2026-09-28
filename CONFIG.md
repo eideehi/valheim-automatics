@@ -242,7 +242,7 @@ Specify whether the wishbone needs to be equipped to pin underground minerals.
 - Default value: true
 
 ### Static Object Mapping / [static_object_mapping_key]
-Specify shortcut keys for mapping static objects. Setting this item disables the static object mapping at regular intervals, so that it is performed only once each time the shortcut key is pressed.
+Specify a shortcut key that maps static objects once each time it is pressed, whatever the interval is. To map them only with the key, set Static Object Mapping Interval to 0.
 
 - Default value:
 
@@ -985,10 +985,10 @@ Specify whether to mine nearby minerals automatically. The module's other featur
 - Default value: true
 
 ### Mining Interval / [mining_interval]
-Specify the interval between mining attempts. (Unit: seconds)
+Specify the interval between mining attempts. Set to 0 to turn periodic mining off. (Unit: seconds)
 
 - Default value: 1.5
-- Acceptable value range: From 0.1 to 4
+- Acceptable value range: From 0 to 4
 
 ### Mining Range / [mining_range]
 Specify the maximum distance to search for a mineral. If set to 0, the pickaxe's attack range is used. (Unit: meters)
@@ -1017,7 +1017,7 @@ Specify whether or not to require a wishbone to mine underground minerals.
 - Default value: true
 
 ### Attempt Mining / [mining_key]
-Specify a shortcut key to attempt mining. If a valid shortcut key is assigned to this option, mining at regular intervals is disabled.
+Specify a shortcut key that attempts mining once each time it is pressed, whatever the interval is. To mine only with the key, set Mining Interval to 0.
 
 - Default value:
 
@@ -1125,10 +1125,10 @@ Specify whether to enable the feature that harvests grown crops and replants the
 - Default value: true
 
 ### Farming Interval / [farming_interval]
-Specify the interval between farming attempts. (Unit: seconds)
+Specify the interval between farming attempts. Set to 0 to turn periodic farming off. (Unit: seconds)
 
 - Default value: 1.5
-- Acceptable value range: From 0.1 to 4
+- Acceptable value range: From 0 to 4
 
 ### Farming Range / [farming_range]
 Specify the maximum distance to search for crops to harvest. (Unit: meters)
@@ -1165,7 +1165,7 @@ Specify the multiplier applied to each sapling's grow radius to derive the sowin
 - Acceptable value range: From 0.5 to 4
 
 ### Attempt Farming / [farming_key]
-Specify a shortcut key to attempt farming. If a valid shortcut key is assigned to this option, farming at regular intervals is disabled.
+Specify a shortcut key that attempts farming once each time it is pressed, whatever the interval is. To farm only with the key, set Farming Interval to 0.
 
 - Default value:
 

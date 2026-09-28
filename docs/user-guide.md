@@ -278,9 +278,9 @@ Key settings:
 | `Static Object Search Range` | Controls the static object scan range. Set it to `0` to stop static object, portal and location pinning and remove the unsaved pins it added. Saved pins, including portal pins, stay. |
 | `Location Search Range` | Controls the dungeon and spot scan range. Locations are scanned together with static objects, so they follow `Static Object Mapping Interval` and the `Static Object Mapping` shortcut. |
 | `Hide Pins Outside Explored Area` | Hides automatic pins outside the explored part of the map. Saved pins are hidden, not deleted; pins that are not saved are not added there at all until the area is explored. |
-| `Static Object Mapping Interval` | Controls periodic static mapping when no static mapping shortcut is assigned. |
+| `Static Object Mapping Interval` | Controls periodic static mapping. Set it to `0` to map only with the shortcut. |
 | `Static Object Caching Interval` | Controls how often the static object cache is rebuilt. |
-| `Static Object Mapping` | Optional shortcut that runs static mapping once per key press instead of using the interval. |
+| `Static Object Mapping` | Optional shortcut that runs static mapping once per key press, whatever the interval is. |
 | `Save Static Object Pins` | Controls whether static object pins are saved map pins. |
 | `Remove Pins Of Destroyed Object` | Removes Automatics-owned static pins when the source object is destroyed. |
 | `Flora Pins Merge Range` | Groups nearby matching flora into one pin. |
@@ -513,13 +513,13 @@ Key settings:
 | Setting | Effect |
 | --- | --- |
 | `Mine Nearby Minerals Automatically` | Turns automatic mining on or off. Area mining is not affected. |
-| `Mining Interval` | Controls how often mining is attempted when no mining shortcut is assigned. |
+| `Mining Interval` | Controls how often mining is attempted. Set it to `0` to mine only with the shortcut. |
 | `Mining Range` | Controls the range used to search for mineral hit positions. `0` uses the pickaxe's attack range. |
 | `Allow Mining Mineral` | Selects which mineral definitions Automatics may mine. |
 | `Need To Equip Pickaxe For Mining` | Requires the pickaxe to be equipped. If disabled, Automatics can use a pickaxe from the inventory. |
 | `Allow Mining Underground Minerals` | Allows underground minerals to be mined. |
 | `Need To Equip Wishbone For Mining Underground Minerals` | Requires Wishbone for underground mineral mining. |
-| `Attempt Mining` | Optional shortcut. When assigned, mining runs only when the shortcut is pressed. |
+| `Attempt Mining` | Optional shortcut that attempts mining once per key press, whatever the interval is. |
 | `Area Mining` | When your own pickaxe swing hits an allowed mineral, also hits other allowed minerals and rock sections near the hit. On by default. |
 | `Area Mining Radius` | How far from the hit area mining reaches (3 meters by default, 1 to 10). |
 | `Area Mining Max Targets` | How many extra minerals or rock sections one swing can hit (8 by default, 1 to 32). |
@@ -635,8 +635,9 @@ placement checks (cultivated ground, slope, ward, reach). Grown crops do not
 count, and with no such crop nearby, placement is unchanged.
 
 Automatic farming harvests grown crops around the local player and replants the
-regrowing sapling at each harvested spot. It can run at the configured interval
-or only when `Attempt Farming` is pressed.
+regrowing sapling at each harvested spot. It runs at the configured interval, and
+once each time `Attempt Farming` is pressed; set the interval to `0` to farm only
+with the key.
 
 Each pass:
 
@@ -653,8 +654,8 @@ Key settings:
 | Setting | Effect |
 | --- | --- |
 | `Harvest And Replant Automatically` | Turns automatic harvesting, replanting and sowing on or off. Grid planting is not affected. |
-| `Farming Interval` | Controls how often farming runs when no farming shortcut is assigned. |
-| `Attempt Farming` | Optional shortcut. When assigned, farming runs only when the shortcut is pressed and the interval is disabled. |
+| `Farming Interval` | Controls how often farming runs. Set it to `0` to farm only with the shortcut. |
+| `Attempt Farming` | Optional shortcut that runs farming once per key press, whatever the interval is. |
 | `Farming Range` | Controls how far Automatics searches for crops, cultivated ground, and designated containers. |
 | `Allow Farming Crop` | Selects which crops are harvested and replanted. Crops without a plantable sapling are harvested only. |
 | `Seed Reserve` | Keeps at least this many of each planting input in the active source; planting stops at the reserve. |

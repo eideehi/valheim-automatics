@@ -240,8 +240,7 @@ namespace Automatics.SmokeTest
         // the swings run. It is turned off for the section, through the session.
         private static bool TryPauseAutomaticMining(FeatureRun run)
         {
-            if (!MiningConfig.EnableAutomaticMining || MiningConfig.MiningInterval < 0.1f ||
-                MiningConfig.MiningKey.MainKey != KeyCode.None)
+            if (!MiningConfig.EnableAutomaticMining || MiningConfig.MiningInterval <= 0f)
                 return true;
 
             var entry = MiningConfig.EnableAutomaticMiningEntry;

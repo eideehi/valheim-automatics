@@ -160,11 +160,12 @@ namespace Automatics.AutomaticFarming
             // whether farming runs on a key or on an interval.
             TryDesignateContainer(player);
 
-            if (Config.FarmingInterval < 0.1f) return;
             if (Config.FarmingKey.MainKey == KeyCode.None) return;
+            if (!Config.FarmingKey.IsDown()) return;
 
-            if (Config.FarmingKey.IsDown())
-                AutomaticFarming.TryFarming(player);
+            // The key runs one pass whatever the interval is, and the interval starts over.
+            FarmingTimers[player.GetPlayerID()] = 0f;
+            AutomaticFarming.TryFarming(player);
         }
 
         // Cycles the role of the container the player is looking at. Doing nothing
@@ -202,8 +203,8 @@ namespace Automatics.AutomaticFarming
             if (!Running) return;
             if (!Config.EnableAutomaticFarming) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
-            if (Config.FarmingInterval < 0.1f) return;
-            if (Config.FarmingKey.MainKey != KeyCode.None) return;
+            // An interval of 0 turns the periodic passes off; the key still works.
+            if (Config.FarmingInterval <= 0f) return;
 
             var id = player.GetPlayerID();
             if (!FarmingTimers.TryGetValue(id, out var timer))

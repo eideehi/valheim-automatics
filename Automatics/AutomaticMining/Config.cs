@@ -47,7 +47,7 @@ namespace Automatics.AutomaticMining
             });
 
             _enableAutomaticMining = config.Bind("enable_automatic_mining", true);
-            _miningInterval = config.Bind("mining_interval", 1.5f, (0.1f, 4f));
+            _miningInterval = config.Bind("mining_interval", 1.5f, (0f, 4f));
             _miningRange = config.Bind("mining_range", 3, (0, 32));
             _allowMiningMineral = config.BindValheimObjectList("allow_mining_mineral", ValheimObject.Mineral, excludes: new[] { "Rock" });
             _needToEquipPickaxe = config.Bind("need_to_equip_pickaxe", true);

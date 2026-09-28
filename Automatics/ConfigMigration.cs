@@ -262,7 +262,7 @@ namespace Automatics
         // file has been through. A pass runs once, on a file whose recorded revision is below its
         // number, so a pass added later still runs on a file the earlier passes are done with.
         internal const string SettingsRevisionKey = "settings_revision";
-        internal const int SettingsRevision = 3;
+        internal const int SettingsRevision = 4;
 
         private const string ProcessingSection = "automatic_processing";
 
@@ -775,8 +775,50 @@ namespace Automatics
         {
             (1, GroupFirePieces),
             (2, RemoveFermenterSupplyOption),
-            (3, FoldFeatureSwitchesIntoModules)
+            (3, FoldFeatureSwitchesIntoModules),
+            (4, KeepKeyOnlyRuns)
         };
+
+        // The shortcuts that used to stop their module's periodic runs, and those intervals.
+        private static readonly (string Section, string Key, string Interval)[] KeyedIntervals =
+        {
+            ("automatic_mining", "mining_key", "mining_interval"),
+            ("automatic_farming", "farming_key", "farming_interval"),
+            ("automatic_mapping", "static_object_mapping_key", "static_object_mapping_interval")
+        };
+
+        // Settings pass 4. A bound shortcut used to stop the periodic runs of automatic mining,
+        // farming and static mapping; it no longer does, and an interval of 0 does instead. A
+        // config whose key BepInEx reads as bound gets that interval set to 0, so it keeps
+        // running on the key only. A missing interval took its default, which would run, so
+        // the 0 is added.
+        private static void KeepKeyOnlyRuns(List<string> lines)
+        {
+            foreach (var (section, key, interval) in KeyedIntervals)
+            {
+                var entries = ReadEntries(lines);
+                if (!entries.TryGetValue((section, key), out var shortcut) || !IsBoundShortcut(shortcut.Value))
+                    continue;
+
+                if (entries.TryGetValue((section, interval), out var current))
+                {
+                    // BepInEx reads the interval with float.Parse in the invariant culture; a value
+                    // it reads as 0 or less already stops the periodic runs.
+                    if (float.TryParse(current.Value, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var seconds) &&
+                        seconds <= 0f)
+                        continue;
+                    RewriteEveryEntry(lines, section, interval, "0");
+                }
+                else
+                {
+                    AddEntry(lines, section, interval, "0");
+                }
+
+                Automatics.Logger.Message(
+                    $"Keep {section} on its key only: [{section}] {interval} = {(current.Value ?? "(missing)")} => 0");
+            }
+        }
 
         // Runs every settings pass the file has not been through and records the revision in the
         // same write. If the write fails, the next start runs the passes again. Returns whether

@@ -145,8 +145,13 @@ namespace Automatics.AutomaticMapping
 
         private static bool CanMapping(float delta, bool takeInput)
         {
-            if (Config.StaticObjectMappingKey.MainKey != KeyCode.None)
-                return takeInput && Config.StaticObjectMappingKey.IsDown();
+            // The key runs one pass whatever the interval is, and the interval starts over.
+            if (takeInput && Config.StaticObjectMappingKey.MainKey != KeyCode.None &&
+                Config.StaticObjectMappingKey.IsDown())
+            {
+                _mappingTimer = 0f;
+                return true;
+            }
 
             if (Config.StaticObjectMappingInterval <= 0) return false;
 
