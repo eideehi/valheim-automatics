@@ -28,6 +28,11 @@ namespace Automatics.AutomaticProcessing
         private static Dictionary<string, ConfigEntry<bool>> _refuelOnlyWhenOutOfFuel;
         private static Dictionary<string, ConfigEntry<bool>> _storeOnlyIfProductExists;
         private static Dictionary<string, ConfigEntry<int>> _numberOfItemsToStopCharge;
+        private static ConfigEntry<FirePiece> _refuelFires;
+        private static ConfigEntry<int> _firesContainerSearchRange;
+        private static ConfigEntry<int> _firesContainerReferenceLimit;
+        private static ConfigEntry<int> _firesFuelCountOfSuppressProcessing;
+        private static ConfigEntry<bool> _firesRefuelOnlyWhenOutOfFuel;
 
         /// <summary>
         ///     The toggle the module registry follows. It is exposed so the registry can read the
@@ -51,8 +56,17 @@ namespace Automatics.AutomaticProcessing
 
         public static StringList AllowContainer => _allowContainer.Value;
 
+        // The fire pieces read the settings they share; every other processor has its own.
+        private static bool IsFire(string processor, out FirePiece piece)
+        {
+            return FirePieces.ByProcessor.TryGetValue(processor, out piece);
+        }
+
         public static Process AllowProcessing(string processor)
         {
+            if (IsFire(processor, out var piece))
+                return (_refuelFires.Value & piece) != 0 ? Process.Refuel : Process.None;
+
             return _allowProcessing.TryGetValue(processor, out var entry)
                 ? entry.Value
                 : Process.None;
@@ -60,11 +74,13 @@ namespace Automatics.AutomaticProcessing
 
         public static int ContainerSearchRange(string processor)
         {
+            if (IsFire(processor, out _)) return _firesContainerSearchRange.Value;
             return _containerSearchRange.TryGetValue(processor, out var entry) ? entry.Value : 0;
         }
 
         public static int ContainerReferenceLimit(string processor)
         {
+            if (IsFire(processor, out _)) return _firesContainerReferenceLimit.Value;
             return _containerReferenceLimit.TryGetValue(processor, out var entry)
                 ? entry.Value
                 : 0;
@@ -85,6 +101,7 @@ namespace Automatics.AutomaticProcessing
 
         public static int FuelCountOfSuppressProcessing(string processor)
         {
+            if (IsFire(processor, out _)) return _firesFuelCountOfSuppressProcessing.Value;
             return _fuelCountOfSuppressProcessing.TryGetValue(processor, out var entry)
                 ? entry.Value
                 : 0;
@@ -105,6 +122,7 @@ namespace Automatics.AutomaticProcessing
 
         public static bool RefuelOnlyWhenOutOfFuel(string processor)
         {
+            if (IsFire(processor, out _)) return _firesRefuelOnlyWhenOutOfFuel.Value;
             return _refuelOnlyWhenOutOfFuel.TryGetValue(processor, out var entry) && entry.Value;
         }
 
@@ -162,9 +180,35 @@ namespace Automatics.AutomaticProcessing
             _storeOnlyIfProductExists = new Dictionary<string, ConfigEntry<bool>>();
             _numberOfItemsToStopCharge = new Dictionary<string, ConfigEntry<int>>();
 
+            // The fire pieces refuel only, and share these settings.
+            var firesName = Automatics.L10N.Translate("@config_automatic_processing_fires");
+            _refuelFires = config.Bind("refuel_fires", FirePiece.All,
+                // None first: AcceptableValueEnum accepts only combinations of the values it is
+                // given and clamps anything else to the first one.
+                new AcceptableValueEnum<FirePiece>(new[] { FirePiece.None }
+                    .Concat(FirePieces.ByProcessor.Values).ToArray()),
+                x =>
+                {
+                    x.DispName = Automatics.L10N.Translate(
+                        "@config_automatic_processing_refuel_fires_name");
+                    x.Description = Automatics.L10N.Translate(
+                        "@config_automatic_processing_refuel_fires_description");
+                });
+            _firesContainerSearchRange = config.Bind("fires_container_search_range", 8, (1, 64),
+                Initializer("container_search_range_by", firesName));
+            _firesContainerReferenceLimit = config.Bind("fires_container_reference_limit", 0,
+                (0, 999), Initializer("container_reference_limit_by", firesName));
+            _firesFuelCountOfSuppressProcessing = config.Bind(
+                "fires_fuel_count_of_suppress_processing", 1, (0, 999),
+                Initializer("fuel_count_of_suppress_processing", firesName));
+            _firesRefuelOnlyWhenOutOfFuel = config.Bind("fires_refuel_only_when_out_of_fuel", false,
+                initializer: Initializer("refuel_only_when_out_of_fuel", firesName));
+
             foreach (var processor in Processor.GetAllInstance())
             {
                 var processorName = processor.name;
+                if (FirePieces.ByProcessor.ContainsKey(processorName)) continue;
+
                 var displayName = Automatics.L10N.Translate(processorName);
                 var rawName = processorName.Substring(1);
                 var defaultAllowedProcesses = processor.defaultAllowedProcesses;

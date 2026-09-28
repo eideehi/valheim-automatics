@@ -290,7 +290,7 @@ namespace Automatics
 
                 File.SetAttributes(path, FileAttributes.Normal);
                 ConfigMigration.Migration(new ConfigFile(path));
-                var retried = File.ReadAllText(path);
+                var retried = ReadWithoutSettingsRevision(path);
                 AssertInterval(retried, "0");
                 AssertPickupGate(retried);
             }
@@ -355,13 +355,13 @@ namespace Automatics
             try
             {
                 ConfigMigration.Migration(new ConfigFile(path));
-                var first = File.ReadAllText(path);
+                var first = ReadWithoutSettingsRevision(path);
                 AssertInterval(first, "0");
 
                 var edited = first.Replace("automatic_pickup_interval = 0", "automatic_pickup_interval = 1.5");
                 File.WriteAllText(path, edited);
                 ConfigMigration.Migration(new ConfigFile(path));
-                var second = File.ReadAllText(path);
+                var second = ReadWithoutSettingsRevision(path);
                 if (second != edited)
                     throw new Exception($"The interval set after the pass must survive. Expected:\n{edited}\nGot:\n{second}");
             }

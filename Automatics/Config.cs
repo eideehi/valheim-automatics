@@ -95,6 +95,17 @@ namespace Automatics
                         "Automatics writes this entry; do not change it.";
                 });
 
+            // The same shape for the settings revision: "0" lets a failed write retry.
+            Instance.Bind(ConfigMigration.DefaultsRevisionSection, ConfigMigration.SettingsRevisionKey,
+                "0", initializer: x =>
+                {
+                    x.Browsable = false;
+                    x.ReadOnly = true;
+                    x.Description =
+                        "The revision of the settings changes this file has been through. " +
+                        "Automatics writes this entry; do not change it.";
+                });
+
             Instance.ChangeSection("system");
             _logEnabled = Instance.Bind("enable_logging", false);
             _allowedLogLevel = Instance.Bind("log_level_to_allow_logging",

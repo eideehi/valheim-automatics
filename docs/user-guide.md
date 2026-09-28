@@ -401,6 +401,13 @@ Supported pieces:
 | Eitr refinery | Craft, Refuel, Store | Store |
 | Ballista | Charge | Charge |
 
+The fires and lights that only refuel (the bonfire, campfire, hearth, sconce,
+jack-o-turnip, braziers and standing torches in the table) share one group of
+settings instead of a set each: `Fires And Lights To Refuel` picks which of them
+are refuelled (all by default), and the `Fires and lights:` entries (container
+search range, container reference limit, fuel to keep, refuel only when out of
+fuel) apply to all of them.
+
 The connection effect appears when you hover a processor that Automatics can
 identify for source processing and that processor has a positive container
 search range.

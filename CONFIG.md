@@ -304,6 +304,36 @@ Specify containers that allow automatic operations such as item supply and stora
 
 - Default value: PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred, PieceChestBarrel, PieceChestGrausten, PieceChestWardrobe
 
+### Fires And Lights To Refuel / [refuel_fires]
+Specify the fires and lights that are refuelled from nearby containers. They share the settings whose names start with "Fires and lights:".
+
+- Default value: All
+- Acceptable values: None, Bonfire, Campfire, HangingBrazier, Hearth, JackOTurnip, Sconce, StandingBlueBurningIronTorch, StandingBrazier, StandingGreenBurningIronTorch, StandingIronTorch, StandingWoodTorch, All
+- Multiple values can be set at the same time by separating them with , (e.g. Bonfire, Campfire)
+
+### Fires and lights: Container Search Range / [fires_container_search_range]
+Specify the maximum distance Fires and lights will search for containers. (Unit: meters)
+
+- Default value: 8
+- Acceptable value range: From 1 to 64
+
+### Fires and lights: Container Reference Limit / [fires_container_reference_limit]
+Specify the maximum number of nearby containers that Fires and lights will reference in distance order. Set to 0 for unlimited. The default is 0.
+
+- Default value: 0
+- Acceptable value range: From 0 to 999
+
+### Fires and lights: Number Of Fuels To Stop Refuel / [fires_fuel_count_of_suppress_processing]
+When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Fires and lights will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
+
+- Default value: 1
+- Acceptable value range: From 0 to 999
+
+### Fires and lights: Refuel Only If Fuels Run Out / [fires_refuel_only_when_out_of_fuel]
+Refuel only when the fuel for Fires and lights runs out.
+
+- Default value: false
+
 ### Beehive: Allow Process / [allow_processing_by_piece_beehive]
 Specify the automatic processes to allow for Beehive. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
@@ -330,35 +360,6 @@ Stops Beehive once the containers it uses hold this many stacks of its product i
 
 ### Beehive: Store Only If Product Exists In Container / [piece_beehive_store_only_if_product_exists]
 Store only if the product item for Beehive is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
-
-- Default value: false
-
-### Bonfire: Allow Process / [allow_processing_by_piece_bonfire]
-Specify the automatic processes to allow for Bonfire. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Bonfire: Container Search Range / [container_search_range_by_piece_bonfire]
-Specify the maximum distance Bonfire will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Bonfire: Container Reference Limit / [container_reference_limit_by_piece_bonfire]
-Specify the maximum number of nearby containers that Bonfire will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Bonfire: Number Of Fuels To Stop Refuel / [piece_bonfire_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Bonfire will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Bonfire: Refuel Only If Fuels Run Out / [piece_bonfire_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Bonfire runs out.
 
 - Default value: false
 
@@ -416,35 +417,6 @@ Refuel only when material items are supplied to Blast furnace.
 
 ### Blast furnace: Store Only If Product Exists In Container / [piece_blastfurnace_store_only_if_product_exists]
 Store only if the product item for Blast furnace is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
-
-- Default value: false
-
-### Campfire: Allow Process / [allow_processing_by_piece_firepit]
-Specify the automatic processes to allow for Campfire. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Campfire: Container Search Range / [container_search_range_by_piece_firepit]
-Specify the maximum distance Campfire will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Campfire: Container Reference Limit / [container_reference_limit_by_piece_firepit]
-Specify the maximum number of nearby containers that Campfire will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Campfire: Number Of Fuels To Stop Refuel / [piece_firepit_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Campfire will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Campfire: Refuel Only If Fuels Run Out / [piece_firepit_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Campfire runs out.
 
 - Default value: false
 
@@ -566,64 +538,6 @@ Store only if the product item for Fermenter is already stored in the container.
 
 - Default value: false
 
-### Hanging brazier: Allow Process / [allow_processing_by_piece_brazierceiling01]
-Specify the automatic processes to allow for Hanging brazier. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Hanging brazier: Container Search Range / [container_search_range_by_piece_brazierceiling01]
-Specify the maximum distance Hanging brazier will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Hanging brazier: Container Reference Limit / [container_reference_limit_by_piece_brazierceiling01]
-Specify the maximum number of nearby containers that Hanging brazier will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Hanging brazier: Number Of Fuels To Stop Refuel / [piece_brazierceiling01_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Hanging brazier will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Hanging brazier: Refuel Only If Fuels Run Out / [piece_brazierceiling01_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Hanging brazier runs out.
-
-- Default value: false
-
-### Hearth: Allow Process / [allow_processing_by_piece_hearth]
-Specify the automatic processes to allow for Hearth. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Hearth: Container Search Range / [container_search_range_by_piece_hearth]
-Specify the maximum distance Hearth will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Hearth: Container Reference Limit / [container_reference_limit_by_piece_hearth]
-Specify the maximum number of nearby containers that Hearth will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Hearth: Number Of Fuels To Stop Refuel / [piece_hearth_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Hearth will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Hearth: Refuel Only If Fuels Run Out / [piece_hearth_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Hearth runs out.
-
-- Default value: false
-
 ### Iron cooking station: Allow Process / [allow_processing_by_piece_cookingstation_iron]
 Specify the automatic processes to allow for Iron cooking station. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
 
@@ -662,64 +576,6 @@ Supply one material item only when the materials supplied to Iron cooking statio
 
 ### Iron cooking station: Store Only If Product Exists In Container / [piece_cookingstation_iron_store_only_if_product_exists]
 Store only if the product item for Iron cooking station is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
-
-- Default value: false
-
-### Jack-o-turnip: Allow Process / [allow_processing_by_piece_jackoturnip]
-Specify the automatic processes to allow for Jack-o-turnip. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Jack-o-turnip: Container Search Range / [container_search_range_by_piece_jackoturnip]
-Specify the maximum distance Jack-o-turnip will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Jack-o-turnip: Container Reference Limit / [container_reference_limit_by_piece_jackoturnip]
-Specify the maximum number of nearby containers that Jack-o-turnip will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Jack-o-turnip: Number Of Fuels To Stop Refuel / [piece_jackoturnip_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Jack-o-turnip will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Jack-o-turnip: Refuel Only If Fuels Run Out / [piece_jackoturnip_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Jack-o-turnip runs out.
-
-- Default value: false
-
-### Sconce: Allow Process / [allow_processing_by_piece_sconce]
-Specify the automatic processes to allow for Sconce. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Sconce: Container Search Range / [container_search_range_by_piece_sconce]
-Specify the maximum distance Sconce will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Sconce: Container Reference Limit / [container_reference_limit_by_piece_sconce]
-Specify the maximum number of nearby containers that Sconce will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Sconce: Number Of Fuels To Stop Refuel / [piece_sconce_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Sconce will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Sconce: Refuel Only If Fuels Run Out / [piece_sconce_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Sconce runs out.
 
 - Default value: false
 
@@ -818,151 +674,6 @@ Supply one material item only when the materials supplied to Spinning wheel run 
 
 ### Spinning wheel: Store Only If Product Exists In Container / [piece_spinningwheel_store_only_if_product_exists]
 Store only if the product item for Spinning wheel is already stored in the container. If there is no container in the range that stores product items, items are produced as usual.
-
-- Default value: false
-
-### Standing blue-burning iron torch: Allow Process / [allow_processing_by_piece_groundtorchblue]
-Specify the automatic processes to allow for Standing blue-burning iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Standing blue-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchblue]
-Specify the maximum distance Standing blue-burning iron torch will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Standing blue-burning iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchblue]
-Specify the maximum number of nearby containers that Standing blue-burning iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Standing blue-burning iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorchblue_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing blue-burning iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Standing blue-burning iron torch: Refuel Only If Fuels Run Out / [piece_groundtorchblue_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Standing blue-burning iron torch runs out.
-
-- Default value: false
-
-### Standing brazier: Allow Process / [allow_processing_by_piece_brazierfloor01]
-Specify the automatic processes to allow for Standing brazier. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Standing brazier: Container Search Range / [container_search_range_by_piece_brazierfloor01]
-Specify the maximum distance Standing brazier will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Standing brazier: Container Reference Limit / [container_reference_limit_by_piece_brazierfloor01]
-Specify the maximum number of nearby containers that Standing brazier will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Standing brazier: Number Of Fuels To Stop Refuel / [piece_brazierfloor01_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing brazier will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Standing brazier: Refuel Only If Fuels Run Out / [piece_brazierfloor01_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Standing brazier runs out.
-
-- Default value: false
-
-### Standing green-burning iron torch: Allow Process / [allow_processing_by_piece_groundtorchgreen]
-Specify the automatic processes to allow for Standing green-burning iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Standing green-burning iron torch: Container Search Range / [container_search_range_by_piece_groundtorchgreen]
-Specify the maximum distance Standing green-burning iron torch will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Standing green-burning iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchgreen]
-Specify the maximum number of nearby containers that Standing green-burning iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Standing green-burning iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorchgreen_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing green-burning iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Standing green-burning iron torch: Refuel Only If Fuels Run Out / [piece_groundtorchgreen_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Standing green-burning iron torch runs out.
-
-- Default value: false
-
-### Standing iron torch: Allow Process / [allow_processing_by_piece_groundtorch]
-Specify the automatic processes to allow for Standing iron torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Standing iron torch: Container Search Range / [container_search_range_by_piece_groundtorch]
-Specify the maximum distance Standing iron torch will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Standing iron torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorch]
-Specify the maximum number of nearby containers that Standing iron torch will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Standing iron torch: Number Of Fuels To Stop Refuel / [piece_groundtorch_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing iron torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Standing iron torch: Refuel Only If Fuels Run Out / [piece_groundtorch_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Standing iron torch runs out.
-
-- Default value: false
-
-### Standing wood torch: Allow Process / [allow_processing_by_piece_groundtorchwood]
-Specify the automatic processes to allow for Standing wood torch. "Craft" produces items by automatically consuming the required materials. "Refuel" automatically supplies fuel items. "Store" automatically stores the produced items in containers. "Charge" automatically replenishes consumable items such as ammo.
-
-- Default value: Refuel
-- Acceptable values: None, Refuel
-
-### Standing wood torch: Container Search Range / [container_search_range_by_piece_groundtorchwood]
-Specify the maximum distance Standing wood torch will search for containers. (Unit: meters)
-
-- Default value: 8
-- Acceptable value range: From 1 to 64
-
-### Standing wood torch: Container Reference Limit / [container_reference_limit_by_piece_groundtorchwood]
-Specify the maximum number of nearby containers that Standing wood torch will reference in distance order. Set to 0 for unlimited. The default is 0.
-
-- Default value: 0
-- Acceptable value range: From 0 to 999
-
-### Standing wood torch: Number Of Fuels To Stop Refuel / [piece_groundtorchwood_fuel_count_of_suppress_processing]
-When the number of fuel items stored in the container is about to become less than the specified quantity, refuel to Standing wood torch will be stopped. If set to 0, stopping refuel based on the number of fuel items will be disabled.
-
-- Default value: 1
-- Acceptable value range: From 0 to 999
-
-### Standing wood torch: Refuel Only If Fuels Run Out / [piece_groundtorchwood_refuel_only_when_out_of_fuel]
-Refuel only when the fuel for Standing wood torch runs out.
 
 - Default value: false
 

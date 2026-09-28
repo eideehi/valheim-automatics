@@ -143,6 +143,69 @@ namespace Automatics.AutomaticProcessing
         }
     }
 
+    // The pieces whose only process is Refuel. They share one group of settings instead of a
+    // set each; FirePieces maps each flag to its processor.
+    [Flags]
+    internal enum FirePiece : long
+    {
+        None = 0,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_bonfire")]
+        Bonfire = 1L << 0,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_firepit")]
+        Campfire = 1L << 1,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_brazierceiling01")]
+        HangingBrazier = 1L << 2,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_hearth")]
+        Hearth = 1L << 3,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_jackoturnip")]
+        JackOTurnip = 1L << 4,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_sconce")]
+        Sconce = 1L << 5,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_groundtorchblue")]
+        StandingBlueBurningIronTorch = 1L << 6,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_brazierfloor01")]
+        StandingBrazier = 1L << 7,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_groundtorchgreen")]
+        StandingGreenBurningIronTorch = 1L << 8,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_groundtorch")]
+        StandingIronTorch = 1L << 9,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "$piece_groundtorchwood")]
+        StandingWoodTorch = 1L << 10,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "@select_all")]
+        All = (1L << 11) - 1
+    }
+
+    internal static class FirePieces
+    {
+        public static readonly IReadOnlyDictionary<string, FirePiece> ByProcessor =
+            new Dictionary<string, FirePiece>
+            {
+                { Processor.Bonfire.name, FirePiece.Bonfire },
+                { Processor.Campfire.name, FirePiece.Campfire },
+                { Processor.HangingBrazier.name, FirePiece.HangingBrazier },
+                { Processor.Hearth.name, FirePiece.Hearth },
+                { Processor.JackOTurnip.name, FirePiece.JackOTurnip },
+                { Processor.Sconce.name, FirePiece.Sconce },
+                { Processor.StandingBlueBurningIronTorch.name, FirePiece.StandingBlueBurningIronTorch },
+                { Processor.StandingBrazier.name, FirePiece.StandingBrazier },
+                { Processor.StandingGreenBurningIronTorch.name, FirePiece.StandingGreenBurningIronTorch },
+                { Processor.StandingIronTorch.name, FirePiece.StandingIronTorch },
+                { Processor.StandingWoodTorch.name, FirePiece.StandingWoodTorch }
+            };
+    }
+
     [Flags]
     internal enum Process : long
     {

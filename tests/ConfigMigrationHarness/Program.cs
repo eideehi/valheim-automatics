@@ -92,6 +92,7 @@ namespace Automatics
 
             RunObjectRevisionTests();
             RunPickupKeyMigrationTests();
+            RunFireGroupMigrationTests();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -111,7 +112,36 @@ namespace Automatics
             }
         }
 
-        private static string Migrate(params string[] lines)
+        // The settings revision marker is checked by the settings pass cases; every other case
+        // compares the file without it, so adding a settings pass leaves those cases unchanged.
+        private static string ReadWithoutSettingsRevision(string path)
+        {
+            return RemoveSettingsRevision(File.ReadAllText(path));
+        }
+
+        private static string RemoveSettingsRevision(string text)
+        {
+            // A marker on the last line of a file without a final newline takes the line break
+            // before it; anywhere else it takes its own.
+            var marker = ConfigMigration.SettingsRevisionKey + " = [^\\r\\n]*";
+            text = System.Text.RegularExpressions.Regex.Replace(text, "\\r?\\n" + marker + "\\z", "");
+            return System.Text.RegularExpressions.Regex.Replace(text, "^" + marker + "(\\r?\\n|\\z)", "",
+                System.Text.RegularExpressions.RegexOptions.Multiline);
+        }
+
+        // The bytes with the settings revision line removed, keeping the BOM and line endings.
+        private static byte[] RemoveSettingsRevision(byte[] bytes)
+        {
+            var preamble = System.Text.Encoding.UTF8.GetPreamble();
+            var hasBom = bytes.Length >= preamble.Length && bytes.Take(preamble.Length).SequenceEqual(preamble);
+            var text = System.Text.Encoding.UTF8.GetString(bytes, hasBom ? preamble.Length : 0,
+                bytes.Length - (hasBom ? preamble.Length : 0));
+            var body = System.Text.Encoding.UTF8.GetBytes(RemoveSettingsRevision(text));
+            return hasBom ? preamble.Concat(body).ToArray() : body;
+        }
+
+        // The same as Migrate, but the settings revision marker is kept.
+        private static string MigrateRaw(params string[] lines)
         {
             var directory = Path.Combine(Path.GetTempPath(), "automatics-config-migration-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
@@ -123,6 +153,25 @@ namespace Automatics
             {
                 ConfigMigration.Migration(new ConfigFile(path));
                 return File.ReadAllText(path);
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        private static string Migrate(params string[] lines)
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "automatics-config-migration-tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+
+            var path = Path.Combine(directory, "Automatics.cfg");
+            File.WriteAllLines(path, lines);
+
+            try
+            {
+                ConfigMigration.Migration(new ConfigFile(path));
+                return ReadWithoutSettingsRevision(path);
             }
             finally
             {
@@ -142,7 +191,7 @@ namespace Automatics
             try
             {
                 ConfigMigration.Migration(new ConfigFile(path));
-                return File.Exists(path) ? File.ReadAllText(path) : null;
+                return File.Exists(path) ? ReadWithoutSettingsRevision(path) : null;
             }
             finally
             {
@@ -162,9 +211,9 @@ namespace Automatics
             try
             {
                 ConfigMigration.Migration(new ConfigFile(path));
-                var first = File.ReadAllText(path);
+                var first = ReadWithoutSettingsRevision(path);
                 ConfigMigration.Migration(new ConfigFile(path));
-                return (first, File.ReadAllText(path));
+                return (first, ReadWithoutSettingsRevision(path));
             }
             finally
             {
@@ -1074,7 +1123,7 @@ namespace Automatics
             {
                 ConfigMigration.Migration(new ConfigFile(path));
 
-                AssertMarker(File.ReadAllText(path));
+                AssertMarker(ReadWithoutSettingsRevision(path));
                 var entries = Directory.GetFileSystemEntries(directory).Select(Path.GetFileName).ToArray();
                 if (entries.Length != 1 || entries[0] != "Automatics.cfg")
                     throw new Exception($"Only the config file should remain, got: {string.Join(", ", entries)}");
@@ -1162,7 +1211,7 @@ namespace Automatics
 
                 if (error == null)
                     throw new Exception("A reload that keeps failing must stop the start.");
-                var written = File.ReadAllText(path);
+                var written = ReadWithoutSettingsRevision(path);
                 AssertModule(written, "automatic_door", "Disabled");
                 AssertMarker(written);
             }
@@ -1209,7 +1258,7 @@ namespace Automatics
             try
             {
                 ConfigMigration.Migration(new ConfigFile(path));
-                return File.ReadAllBytes(path);
+                return RemoveSettingsRevision(File.ReadAllBytes(path));
             }
             finally
             {

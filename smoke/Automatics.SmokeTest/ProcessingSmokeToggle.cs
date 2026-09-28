@@ -40,9 +40,10 @@ namespace Automatics.SmokeTest
         private const string ConfigKeysCheck = "processing_config_section_matches_bound_entries";
         private const string ConfigModuleCheck = "processing_config_module_line_matches_setting";
 
-        // The entries Automatic Processing binds in this build: 4 of its own and 156 across the
-        // stations in Processor's list. The number changes with that list.
-        private const int ExpectedProcessingEntries = 160;
+        // The entries Automatic Processing binds in this build: 4 of its own, 5 the fire pieces
+        // share, and 100 across the other stations in Processor's list. The number changes with
+        // that list.
+        private const int ExpectedProcessingEntries = 109;
 
         private static IEnumerator RunToggle(Terminal context, int runId, string runner)
         {

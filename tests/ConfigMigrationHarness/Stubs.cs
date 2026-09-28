@@ -181,8 +181,11 @@ namespace Automatics
 
     internal sealed class TestLogger
     {
+        public List<string> Messages { get; } = new List<string>();
+
         public void Message(string message)
         {
+            Messages.Add(message);
         }
 
         public List<string> Warnings { get; } = new List<string>();

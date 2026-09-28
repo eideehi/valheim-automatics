@@ -258,6 +258,32 @@ namespace Automatics
         internal const string PickupKeyDecoupledKey = "pickup_key_decoupled";
         internal const int PickupKeyDecoupled = 1;
 
+        // A hidden entry recording which of the numbered settings passes (SettingsPasses) a config
+        // file has been through. A pass runs once, on a file whose recorded revision is below its
+        // number, so a pass added later still runs on a file the earlier passes are done with.
+        internal const string SettingsRevisionKey = "settings_revision";
+        internal const int SettingsRevision = 1;
+
+        private const string ProcessingSection = "automatic_processing";
+
+        // The Automatic Processing pieces whose only process is Refuel: the piece's key part and
+        // its flag name in the fires list. They used to have five settings each and now share
+        // one group.
+        private static readonly (string Piece, string Flag)[] FirePieces =
+        {
+            ("piece_bonfire", "Bonfire"),
+            ("piece_firepit", "Campfire"),
+            ("piece_brazierceiling01", "HangingBrazier"),
+            ("piece_hearth", "Hearth"),
+            ("piece_jackoturnip", "JackOTurnip"),
+            ("piece_sconce", "Sconce"),
+            ("piece_groundtorchblue", "StandingBlueBurningIronTorch"),
+            ("piece_brazierfloor01", "StandingBrazier"),
+            ("piece_groundtorchgreen", "StandingGreenBurningIronTorch"),
+            ("piece_groundtorch", "StandingIronTorch"),
+            ("piece_groundtorchwood", "StandingWoodTorch")
+        };
+
         private const string PickupSection = "automatic_pickup";
         private const string PickupKeyKey = "pickup_all_nearby_key";
         private const string PickupIntervalKey = "automatic_pickup_interval";
@@ -297,7 +323,8 @@ namespace Automatics
             var keptRunning = KeepModulesRunning(file.Lines);
             var defaultsChanged = recognizedRevision && MigrateObjectDefaults(file.Lines, revision);
             var pickupChanged = DecouplePickupKey(file.Lines);
-            if (!versionsChanged && !defaultsChanged && !pickupChanged)
+            var settingsChanged = MigrateSettings(file.Lines);
+            if (!versionsChanged && !defaultsChanged && !pickupChanged && !settingsChanged)
                 return;
 
             try
@@ -320,6 +347,9 @@ namespace Automatics
                     (pickupChanged
                         ? " Automatic Pickup keeps its stored interval this session, so periodic pickup may run beside the Pickup All Nearby key."
                         : "") +
+                    (settingsChanged
+                        ? " Settings that this version moves or merges take their defaults this session."
+                        : "") +
                     " The next start tries again.");
                 return;
             }
@@ -337,6 +367,7 @@ namespace Automatics
             var lines = new List<string>();
             AppendSection(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
             lines.Add($"{PickupKeyDecoupledKey} = {FormatPickupKeyDecoupled()}");
+            lines.Add($"{SettingsRevisionKey} = {FormatSettingsRevision()}");
             var created = new ConfigText(lines, new UTF8Encoding(false), Environment.NewLine, true);
 
             try
@@ -738,6 +769,211 @@ namespace Automatics
             return true;
         }
 
+        // The numbered settings passes, in order. Each changes stored settings once; the marker
+        // records the highest pass a file has been through.
+        private static readonly (int Revision, Action<List<string>> Pass)[] SettingsPasses =
+        {
+            (1, GroupFirePieces)
+        };
+
+        // Runs every settings pass the file has not been through and records the revision in the
+        // same write. If the write fails, the next start runs the passes again. Returns whether
+        // the lines changed, the marker alone included.
+        private static bool MigrateSettings(List<string> lines)
+        {
+            var entries = ReadEntries(lines);
+            var hasMarker = entries.TryGetValue((DefaultsRevisionSection, SettingsRevisionKey), out var marker);
+            var done = 0;
+            if (hasMarker)
+            {
+                if (!int.TryParse(marker.Value, System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out done) || done < 0)
+                {
+                    Automatics.Logger.Warning(
+                        $"Unrecognized settings revision '{marker.Value}'; skipping the settings passes and leaving the marker unchanged.");
+                    return false;
+                }
+
+                // 0 is the value BepInEx saves when the write that should have recorded the passes failed.
+                if (done >= SettingsRevision) return false;
+            }
+
+            foreach (var (revision, pass) in SettingsPasses)
+                if (revision > done)
+                    pass(lines);
+
+            // A new marker goes after the other markers, or at the end of the file when there is none.
+            entries = ReadEntries(lines);
+            if (hasMarker)
+                RewriteEveryEntry(lines, DefaultsRevisionSection, SettingsRevisionKey, FormatSettingsRevision());
+            else if (entries.TryGetValue((DefaultsRevisionSection, PickupKeyDecoupledKey), out var pickup))
+                lines.Insert(pickup.Index + 1, $"{SettingsRevisionKey} = {FormatSettingsRevision()}");
+            else if (entries.TryGetValue((DefaultsRevisionSection, DefaultsRevisionKey), out var defaults))
+                lines.Insert(defaults.Index + 1, $"{SettingsRevisionKey} = {FormatSettingsRevision()}");
+            else
+                AppendSection(lines, DefaultsRevisionSection, SettingsRevisionKey, FormatSettingsRevision());
+            Automatics.Logger.Message($"Record the settings revision {FormatSettingsRevision()}");
+            return true;
+        }
+
+        // Settings pass 1. The eleven Automatic Processing fire pieces had five settings each; they
+        // now share one group. The fires list holds each piece whose allowed processes included
+        // Refuel. Each shared value is the one most pieces had; a tie goes to the default when it
+        // is among the tied values, otherwise to the smallest. Pieces that had another value are
+        // logged. The old lines are removed. A missing or unreadable old value counts as its
+        // default, which is what BepInEx would have used.
+        private static void GroupFirePieces(List<string> lines)
+        {
+            var entries = ReadEntries(lines);
+            var oldKeys = FirePieces.SelectMany(x => FireKeys(x.Piece)).ToList();
+            if (!oldKeys.Any(x => entries.ContainsKey((ProcessingSection, x)))) return;
+
+            var refuelled = FirePieces
+                .Where(x => !entries.TryGetValue((ProcessingSection, $"allow_processing_by_{x.Piece}"), out var allow) ||
+                            AllowsRefuel(allow.Value))
+                .Select(x => x.Flag)
+                .ToList();
+            var fires = refuelled.Count == FirePieces.Length ? "All"
+                : refuelled.Count == 0 ? "None"
+                : string.Join(", ", refuelled);
+
+            var shared = new List<(string Key, string Value)>
+            {
+                ("refuel_fires", fires),
+                ("fires_container_search_range",
+                    SharedValue(entries, "container_search_range_by_{0}", "fires_container_search_range", 8, 1, 64)),
+                ("fires_container_reference_limit",
+                    SharedValue(entries, "container_reference_limit_by_{0}", "fires_container_reference_limit", 0, 0, 999)),
+                ("fires_fuel_count_of_suppress_processing",
+                    SharedValue(entries, "{0}_fuel_count_of_suppress_processing", "fires_fuel_count_of_suppress_processing", 1, 0, 999)),
+                ("fires_refuel_only_when_out_of_fuel",
+                    SharedFlag(entries, "{0}_refuel_only_when_out_of_fuel", "fires_refuel_only_when_out_of_fuel"))
+            };
+
+            RemoveEveryEntry(lines, ProcessingSection, new HashSet<string>(oldKeys));
+
+            var current = ReadEntries(lines);
+            foreach (var (key, value) in Enumerable.Reverse(shared))
+            {
+                if (current.ContainsKey((ProcessingSection, key)))
+                    RewriteEveryEntry(lines, ProcessingSection, key, value);
+                else
+                    AddEntry(lines, ProcessingSection, key, value);
+                current = ReadEntries(lines);
+            }
+
+            Automatics.Logger.Message(
+                $"Merge the settings of the fire pieces: [{ProcessingSection}] {string.Join(", ", shared.Select(x => $"{x.Key} = {x.Value}"))}");
+        }
+
+        private static IEnumerable<string> FireKeys(string piece)
+        {
+            yield return $"allow_processing_by_{piece}";
+            yield return $"container_search_range_by_{piece}";
+            yield return $"container_reference_limit_by_{piece}";
+            yield return $"{piece}_fuel_count_of_suppress_processing";
+            yield return $"{piece}_refuel_only_when_out_of_fuel";
+        }
+
+        // Removes every line of the section that holds one of the keys, repeated sections included.
+        private static void RemoveEveryEntry(List<string> lines, string section, ISet<string> keys)
+        {
+            var current = string.Empty;
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var line = lines[i].Trim();
+                if (line.StartsWith("#")) continue;
+                if (line.StartsWith("[") && line.EndsWith("]"))
+                {
+                    current = line.Substring(1, line.Length - 2);
+                    continue;
+                }
+
+                var split = line.Split(KeyValueSeparator, 2);
+                if (current != section || split.Length != 2 || !keys.Contains(split[0].Trim())) continue;
+                lines.RemoveAt(i);
+                i--;
+            }
+        }
+
+        // Whether BepInEx ran Refuel for a fire piece with this stored Process value. It parses a
+        // comma-separated list of names (any case) or a number; a value it cannot parse takes the
+        // default, Refuel. The fire pieces accepted only None and Refuel, and any other parsed
+        // value was clamped to the first acceptable value, None.
+        private static bool AllowsRefuel(string value)
+        {
+            if (long.TryParse(value, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var number))
+                return number == 2L;
+
+            var flags = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "None", 0 }, { "Craft", 1 }, { "Refuel", 2 }, { "Store", 4 }, { "Charge", 8 }, { "All", 15 }
+            };
+            var mask = 0L;
+            foreach (var part in value.Split(','))
+            {
+                if (!flags.TryGetValue(part.Trim(), out var flag)) return true;
+                mask |= flag;
+            }
+
+            return mask == 2L;
+        }
+
+        private static string SharedValue(Dictionary<(string Section, string Key), (int Index, string Value)> entries,
+            string keyFormat, string sharedKey, int defaultValue, int min, int max)
+        {
+            var values = FirePieces.Select(x =>
+            {
+                var value = defaultValue;
+                if (entries.TryGetValue((ProcessingSection, string.Format(keyFormat, x.Piece)), out var entry) &&
+                    int.TryParse(entry.Value, System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                    value = Math.Min(max, Math.Max(min, parsed));
+                return (x.Piece, value);
+            }).ToList();
+            var chosen = MostCommon(values.Select(x => x.value), defaultValue);
+            LogDiffering(sharedKey, chosen.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                values.Where(x => x.value != chosen)
+                    .Select(x => (x.Piece, x.value.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+            return chosen.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static string SharedFlag(Dictionary<(string Section, string Key), (int Index, string Value)> entries,
+            string keyFormat, string sharedKey)
+        {
+            var values = FirePieces.Select(x =>
+            {
+                var value = false;
+                if (entries.TryGetValue((ProcessingSection, string.Format(keyFormat, x.Piece)), out var entry) &&
+                    bool.TryParse(entry.Value, out var parsed))
+                    value = parsed;
+                return (x.Piece, value ? 1 : 0);
+            }).ToList();
+            var chosen = MostCommon(values.Select(x => x.Item2), 0) != 0;
+            var text = chosen ? "true" : "false";
+            LogDiffering(sharedKey, text,
+                values.Where(x => x.Item2 != 0 != chosen).Select(x => (x.Piece, x.Item2 != 0 ? "true" : "false")));
+            return text;
+        }
+
+        // The most common value; a tie goes to the default when it is among the tied values,
+        // otherwise to the smallest.
+        private static int MostCommon(IEnumerable<int> values, int defaultValue)
+        {
+            var counts = values.GroupBy(x => x).Select(x => (Value: x.Key, Count: x.Count())).ToList();
+            var top = counts.Max(x => x.Count);
+            var tied = counts.Where(x => x.Count == top).Select(x => x.Value).ToList();
+            return tied.Contains(defaultValue) ? defaultValue : tied.Min();
+        }
+
+        private static void LogDiffering(string sharedKey, string chosen, IEnumerable<(string Piece, string Value)> differing)
+        {
+            foreach (var (piece, value) in differing)
+                Automatics.Logger.Message(
+                    $"Fire piece setting merged: [{ProcessingSection}] {sharedKey} = {chosen}; {piece} had {value}");
+        }
+
         // Whether BepInEx reads the stored shortcut as bound, decided the way its
         // KeyboardShortcut.Deserialize reads it: the value is split on the shortcut separators
         // with empty parts dropped, and every part goes through Enum.Parse for KeyCode, case
@@ -961,6 +1197,11 @@ namespace Automatics
         private static string FormatPickupKeyDecoupled()
         {
             return PickupKeyDecoupled.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatSettingsRevision()
+        {
+            return SettingsRevision.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private static void MigrationFor130(List<string> lines)
