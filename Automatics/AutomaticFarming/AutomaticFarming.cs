@@ -448,14 +448,26 @@ namespace Automatics.AutomaticFarming
 
             var sown = 0;
             var rangeSqr = range * range;
-            var maxX = origin.x + range;
-            var maxZ = origin.z + range;
-            var startX = Mathf.Ceil((origin.x - range) / step) * step;
-            var startZ = Mathf.Ceil((origin.z - range) / step) * step;
             var zone = ZoneSystem.instance;
             // Without ZoneSystem the ground height is unknown; probing at the origin's y
             // (player or container height) would mis-sample cultivation, so skip the pass.
             if (zone == null) return sown;
+
+            // The grid follows the rows of a growing crop of the same kind within the range, with
+            // its spacing origin and orientation, so sown crops line up with hand-planted grids;
+            // without one it is aligned to the world axes.
+            // The world-axis grid is anchored at the world origin, so it stays put as you move.
+            if (!LatticeSnapping.TryFindLattice(Objects.GetPrefabName(sapling.gameObject), origin, range,
+                    out var latticeOrigin, out var lattice))
+            {
+                latticeOrigin = Vector3.zero;
+                lattice = Quaternion.identity;
+            }
+            var local = Quaternion.Inverse(lattice) * (origin - latticeOrigin);
+            var startX = Mathf.Ceil((local.x - range) / step) * step;
+            var startZ = Mathf.Ceil((local.z - range) / step) * step;
+            var maxX = local.x + range;
+            var maxZ = local.z + range;
 
             for (var x = startX; x <= maxX; x += step)
             for (var z = startZ; z <= maxZ; z += step)
@@ -463,17 +475,17 @@ namespace Automatics.AutomaticFarming
                 // Cheapest checks first: a horizontal squared-distance disc cull,
                 // then cultivated ground, then the seed reserve, before the
                 // physics-heavy plantability check in TryPlant.
-                var dx = x - origin.x;
-                var dz = z - origin.z;
+                var dx = x - local.x;
+                var dz = z - local.z;
                 if (dx * dx + dz * dz > rangeSqr) continue;
 
-                var pos = new Vector3(x, origin.y, z);
+                var pos = latticeOrigin + lattice * new Vector3(x, 0f, z);
                 pos.y = zone.GetGroundHeight(pos);
                 if (!CropPlanting.IsCultivated(pos)) continue;
                 if (cellAllowed != null && !cellAllowed(pos)) continue;
                 if (!CropPlanting.CanAffordPlanting(seedPool, sapling, reserve)) return sown;
 
-                if (CropPlanting.TryPlant(player, sapling, plant, seedPool, pos, Quaternion.identity,
+                if (CropPlanting.TryPlant(player, sapling, plant, seedPool, pos, lattice,
                         reserve, out _))
                     sown++;
             }

@@ -664,7 +664,7 @@ Key settings:
 | `Allow Farming Crop` | Selects which crops are harvested and replanted. Crops without a plantable sapling are harvested only. |
 | `Seed Reserve` | Keeps at least this many of each planting input where farming takes it from; sowing new ground stops at the reserve. Replanting a harvested spot does not keep it. |
 | `Farming Mode` | Selects where farming works and keeps its items: `Player Inventory`, `Player With Containers` or `Nearby Containers`. |
-| `Proactive Sowing` | Also sows into nearby empty cultivated ground. |
+| `Proactive Sowing` | Also sows into nearby empty cultivated ground, continuing the rows of a growing crop of the same kind nearby. |
 | `Sowing Spacing Factor` | Multiplies each sapling's grow radius to set the sowing grid spacing. Raise it if sown saplings are too crowded. |
 | `Designate Container Role` | Optional shortcut that cycles the role of the container you are looking at (`Player With Containers` and `Nearby Containers` modes; see below). |
 
@@ -749,7 +749,10 @@ and sowing are skipped where the player lacks guard-stone build access.
 
 Proactive sowing scans a grid around the planting origin (the player in the
 `Player Inventory` and `Player With Containers` modes, each planting box in
-`Nearby Containers` mode). When
+`Nearby Containers` mode). When a growing crop of the same kind is within the
+range, the grid takes its position and orientation (at the `Sowing Spacing Factor`
+spacing), so sown crops line up with a grid you planted by hand; otherwise it is
+aligned to the world axes. When
 `Farming Range` is large relative to a crop's spacing, sowing covers a bounded
 radius nearest the origin rather than the full range, to keep each pass cheap;
 harvesting and replanting still use the full `Farming Range`.

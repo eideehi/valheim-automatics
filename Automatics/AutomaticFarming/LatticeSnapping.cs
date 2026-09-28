@@ -138,6 +138,20 @@ namespace Automatics.AutomaticFarming
             return true;
         }
 
+        // The lattice of the nearest growing crop of the prefab within the radius: that crop's
+        // position and its yaw. Proactive sowing uses it to continue the rows already planted.
+        internal static bool TryFindLattice(string prefabName, Vector3 centre, float radius, out Vector3 origin,
+            out Quaternion rotation)
+        {
+            origin = centre;
+            rotation = Quaternion.identity;
+            if (!TryFindAnchor(prefabName, centre, radius, out var anchor)) return false;
+
+            origin = anchor.transform.position;
+            rotation = Quaternion.Euler(0f, anchor.transform.rotation.eulerAngles.y, 0f);
+            return true;
+        }
+
         // The nearest growing crop of the prefab within the radius, measured on the ground plane.
         // A crop that has grown is a different object with a randomized yaw, so it anchors nothing.
         private static bool TryFindAnchor(string prefabName, Vector3 centre, float radius, out Plant anchor)
