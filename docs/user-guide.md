@@ -341,7 +341,7 @@ Its `Module` option takes effect without a restart. See
 [Module disable options](#module-disable-options).
 
 If you had automatic processing disabled, the first start of this version writes
-all of its settings, about 160 entries, to the configuration file. Earlier
+all of its settings, about 110 entries, to the configuration file. Earlier
 versions wrote only the `Module` entry while the module was disabled.
 The module stays disabled. Values you changed before you disabled it are kept if
 they are still in the file, and they apply once you turn the module back on in
@@ -368,9 +368,9 @@ Common settings:
 | `<piece>: Materials To Keep In Containers` | Keeps at least that many material items in containers before stopping supply. |
 | `<piece>: Fuel To Keep In Containers` | Keeps at least that many fuel items in containers before stopping refuel. |
 | `<piece>: Number Of Product Stacks To Stop Processing` | Stops the piece once all containers it uses together hold that many stacks of its product; a crafting piece also counts what it is still making. A crafting piece stops taking materials; a piece that only stores its product stops moving it into containers. `0` means no limit. |
-| `<piece>: Supply Only If Materials Run Out` | Supplies a material only when the processor has no material queued. |
+| `<piece>: Supply Only If Materials Run Out` | Supplies a material only when the processor has no material queued. The fermenter has no such option: it only takes materials while empty. |
 | `<piece>: Refuel Only If Fuels Run Out` | Refuels only when the processor has no fuel. |
-| `<piece>: Refuel Only When Materials Supplied` | Refuels only when a material was supplied. |
+| `<piece>: Refuel Only When Materials Supplied` | Refuels only while the piece holds materials waiting to be processed (for the stone oven, food waiting to be cooked). A piece that has run out of fuel, the stone oven included, is refuelled from containers either way. |
 | `<piece>: Store Only If Product Exists In Container` | Stores only into containers that already contain the product. If no matching container is found, the normal output behavior continues. |
 | `<piece>: Charge Items To Keep In Containers` | Keeps at least that many charge items in containers before stopping charge. |
 
@@ -660,7 +660,7 @@ Key settings:
 | `Farming Interval` | Controls how often farming runs. Set it to `0` to farm only with the shortcut. |
 | `Attempt Farming Key` | Optional shortcut that runs farming once per key press, whatever the interval is. |
 | `Farming Range` | How far farming harvests, replants and sows: around you, or around each designated container in `Nearby Containers` mode. |
-| `Container Search Range` | How far from a crop or planting spot farming looks for role containers (`Player With Containers` and `Nearby Containers` modes). An existing configuration starts with its `Farming Range` value. |
+| `Container Search Range` | How far farming looks for role containers (`Player With Containers` and `Nearby Containers` modes): from each crop, and when sowing, from the designated container or from you. An existing configuration starts with its `Farming Range` value. |
 | `Allow Farming Crop` | Selects which crops are harvested and replanted. Crops without a plantable sapling are harvested only. |
 | `Seed Reserve` | Keeps at least this many of each planting input where farming takes it from; sowing new ground stops at the reserve. Replanting a harvested spot does not keep it. |
 | `Farming Mode` | Selects where farming works and keeps its items: `Player Inventory`, `Player With Containers` or `Nearby Containers`. |

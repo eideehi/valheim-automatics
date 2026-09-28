@@ -401,7 +401,7 @@ Refuel only when the fuel for Blast furnace runs out.
 - Default value: false
 
 ### Blast furnace: Refuel Only When Materials Supplied / [piece_blastfurnace_refuel_only_when_materials_supplied]
-Refuel only when material items are supplied to Blast furnace.
+Refuel Blast furnace only while it holds materials waiting to be processed.
 
 - Default value: false
 
@@ -617,7 +617,7 @@ Refuel only when the fuel for Smelter runs out.
 - Default value: false
 
 ### Smelter: Refuel Only When Materials Supplied / [piece_smelter_refuel_only_when_materials_supplied]
-Refuel only when material items are supplied to Smelter.
+Refuel Smelter only while it holds materials waiting to be processed.
 
 - Default value: false
 
@@ -715,7 +715,7 @@ Refuel only when the fuel for Stone oven runs out.
 - Default value: false
 
 ### Stone oven: Refuel Only When Materials Supplied / [piece_oven_refuel_only_when_materials_supplied]
-Refuel only when material items are supplied to Stone oven.
+Refuel Stone oven only while it holds materials waiting to be processed.
 
 - Default value: false
 
@@ -871,7 +871,7 @@ Refuel only when the fuel for Eitr refinery runs out.
 - Default value: false
 
 ### Eitr refinery: Refuel Only When Materials Supplied / [piece_eitrrefinery_refuel_only_when_materials_supplied]
-Refuel only when material items are supplied to Eitr refinery.
+Refuel Eitr refinery only while it holds materials waiting to be processed.
 
 - Default value: false
 
@@ -1137,7 +1137,7 @@ Specify how far farming harvests, replants and sows: around you in the Player In
 - Acceptable value range: From 1 to 64
 
 ### Container Search Range / [container_search_range]
-Specify how far from a crop or a planting spot farming looks for the role containers it puts the harvest into and takes planting input from. Not used in the Player Inventory mode. (Unit: meters)
+Specify how far farming looks for the role containers it puts the harvest into and takes planting input from: from each crop, and when sowing, from the designated container (Nearby Containers) or from you (Player With Containers). Not used in the Player Inventory mode. (Unit: meters)
 
 - Default value: 8
 - Acceptable value range: From 1 to 64
