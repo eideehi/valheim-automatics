@@ -21,11 +21,10 @@ It replaces the deleted headless harnesses
 running the same behaviour against real game state plus additional checks for the
 mod's main features.
 
-The fast static-invariant checks that `test-object-validation.sh` ran alongside
-the harness (all-files object-data JSON schema validation, the Runestone matcher,
-the no-duplicate-exact-matchers guarantee, and the object/icon source-pattern
-guards) were not in-game behaviour and were preserved as
-`scripts/test-object-data-static-invariants.sh`, not deleted.
+The fast data checks that `test-object-validation.sh` ran alongside the harness
+(all-files object-data JSON schema validation, the Runestone matcher and the
+no-duplicate-exact-matchers guarantee) were not in-game behaviour and were
+preserved as `scripts/test-object-data-static-invariants.sh`, not deleted.
 
 Because the in-game logger has no capture buffer, the harnesses' warning-text
 assertions (invalid object data skipped, duplicate exact matcher, null/invalid
@@ -958,8 +957,8 @@ To uninstall the smoke plugin, remove the dedicated deploy directory:
 rm -r /mnt/g/steam/steamapps/common/Valheim/BepInEx/plugins/AutomaticsSmoke
 ```
 
-The smoke project is optional developer tooling. The fast static-invariant grep
-scripts under `scripts/` are unaffected by this plugin.
+The smoke project is optional developer tooling. The data checks under
+`scripts/` are unaffected by this plugin.
 
 #### `planting`
 

@@ -32,9 +32,7 @@ namespace Automatics.AutomaticProcessing
     ///         A local slot may be spelled as a short-form opcode (ldloc.0-3, stloc.0-3) or as a
     ///         literal operand only inside the five opcode helpers <see cref="IsLocalLoad" />,
     ///         <see cref="IsLocalStore" />, <see cref="LocalIndexOf" />, <see cref="LoadLocal" />
-    ///         and <see cref="StoreLocal" />. scripts/test-transpiler-static-invariants.sh
-    ///         exempts them by name and rejects those forms everywhere else in the transpiler
-    ///         files, so renaming or adding a helper is a deliberate change to that list.
+    ///         and <see cref="StoreLocal" />.
     ///     </para>
     /// </remarks>
     internal static class TranspilerLocals

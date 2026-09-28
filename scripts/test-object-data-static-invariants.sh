@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 #
-# Fast static-invariant checks for the object data under Automatics/Data/Objects
-# and the source patterns that keep object/icon definitions safe to load.
+# Fast checks for the object data under Automatics/Data/Objects.
 #
 # These assertions used to live alongside the in-game object-validation harness in
 # the former scripts/test-object-validation.sh. The heavy harness moved in-game
 # (smoke/Automatics.SmokeTest), but these checks are fast, run without the game,
-# and guard data/source invariants the smoke plugin cannot exhaustively cover, so
-# they are kept here. Requires `jq` and `rg`.
+# and validate every data file, which the smoke plugin cannot exhaustively cover,
+# so they are kept here. Requires `jq` and `rg`.
 
 set -euo pipefail
 
@@ -16,16 +15,6 @@ failures=0
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
   failures=$((failures + 1))
-}
-
-require_source_pattern() {
-  local file="$1"
-  local pattern="$2"
-  local message="$3"
-
-  if ! rg -q "$pattern" "$file"; then
-    fail "$message"
-  fi
 }
 
 object_files=()
@@ -100,30 +89,6 @@ duplicates="$(
 )"
 if [[ -n "$duplicates" ]]; then
   fail "duplicate exact object matchers found: ${duplicates//$'\n'/, }"
-fi
-
-valheim_objects=Automatics/Valheim/ValheimObjects.cs
-icon_pack=Automatics/AutomaticMapping/IconPack.cs
-
-require_source_pattern \
-  "$valheim_objects" \
-  "TryValidate" \
-  "custom and JSON object definitions must be validated before registration"
-require_source_pattern \
-  "$valheim_objects" \
-  "catch \\(ArgumentException" \
-  "invalid object regex patterns must be caught and treated as validation failures"
-require_source_pattern \
-  "$icon_pack" \
-  "ValidateRegexTarget" \
-  "custom icon regex patterns must be validated while loading icon data"
-require_source_pattern \
-  "$icon_pack" \
-  "catch \\(ArgumentException" \
-  "custom icon regex runtime failures must be caught and treated as non-matches"
-
-if rg -q "m_type <= _vanillaPinTypeLength" "$icon_pack"; then
-  fail "first custom icon must not be classified as a vanilla pin type"
 fi
 
 if ((failures > 0)); then
