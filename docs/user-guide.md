@@ -432,7 +432,7 @@ Key settings:
 | Setting | Effect |
 | --- | --- |
 | `Feed Search Range` | Controls how far animals search for feed. `0` uses the animal's own search range. |
-| `Need Get Close To Eat The Feed` | Makes the animal move close to the container or player before eating. |
+| `Need To Get Close To Eat The Feed` | Makes the animal move close to the container or player before eating. |
 | `Allow To Feed From Container` | Selects whether wild animals, tamed animals, both, or neither can eat from containers. |
 | `Allow To Feed From Player` | Selects whether wild animals, tamed animals, both, or neither can eat from the local player's inventory. |
 
