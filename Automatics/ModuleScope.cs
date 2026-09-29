@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 using UnityEngine;
 
@@ -31,8 +32,23 @@ namespace Automatics
         /// </summary>
         private static readonly HashSet<string> PermanentPatches = new HashSet<string>();
 
-        private readonly List<Component> _components = new List<Component>();
+        /// <summary>
+        ///     Tracked components by identity, each with the ledger handles of its two entries.
+        ///     Keyed by reference rather than by the engine's equality, under which every
+        ///     destroyed component compares equal to every other.
+        /// </summary>
+        private readonly Dictionary<Component, TrackedEntries> _components =
+            new Dictionary<Component, TrackedEntries>(IdentityComparer.Instance);
+
         private readonly TeardownLedger _ledger = new TeardownLedger();
+
+        /// <summary>
+        ///     The tracked count at which <see cref="Track" /> next drops components the engine
+        ///     has already destroyed. See <see cref="PruneDestroyed" />.
+        /// </summary>
+        private int _pruneAt = MinimumPruneAt;
+
+        private const int MinimumPruneAt = 64;
 
         /// <summary>
         ///     True while a teardown walk is running, so that an undo which calls
@@ -344,30 +360,62 @@ namespace Automatics
             if (component == null) return;
             if (IsTracked(component)) return;
 
-            _components.Add(component);
+            var entries = new TrackedEntries();
+            _components.Add(component, entries);
 
             // The destroy entry names a different release for the refusal path: a refusal
             // releases immediately, and releasing a component means the hook first and the
             // destruction second, which is the very order the two entries exist to produce.
             var label = component.GetType().Name;
-            RegisterOrRelease($"destroy {label}", () => DestroyTracked(component),
+            entries.Destroy = RegisterOrRelease($"destroy {label}", () => DestroyTracked(component),
                 () => DetachThenDestroy(component));
-            RegisterOrRelease($"detach {label}", () => DetachTracked(component));
+            entries.Detach = RegisterOrRelease($"detach {label}", () => DetachTracked(component));
+
+            // Reached only when the ledger took both entries, so no teardown has started and
+            // no undo is running: nothing can be holding a position in either collection.
+            if (_components.Count >= _pruneAt) PruneDestroyed();
         }
 
         /// <summary>
-        ///     Gives up ownership without destroying anything. Both registrations stay in the
-        ///     ledger and complete as no-ops, since the ledger has no way to withdraw an entry
-        ///     and giving it one would put mutable bookkeeping back into the layer that is
-        ///     actually proven.
+        ///     Stops tracking every component the engine has destroyed on its own - a zone that
+        ///     unloaded, a rock that was mined out - and withdraws their ledger entries. Both
+        ///     entries of such a component are already no-ops, since the hook and the
+        ///     destruction each return early on a destroyed component, so dropping them changes
+        ///     no teardown; it only stops a long session from holding every component it ever
+        ///     attached. Run when the tracked count has doubled since the last prune, which keeps
+        ///     the cost amortised constant per <see cref="Track" />.
+        /// </summary>
+        private void PruneDestroyed()
+        {
+            var destroyed = new List<Component>();
+            foreach (var component in _components.Keys)
+                if (component == null)
+                    destroyed.Add(component);
+
+            foreach (var component in destroyed)
+            {
+                var entries = _components[component];
+                _components.Remove(component);
+                _ledger.Withdraw(entries.Destroy);
+                _ledger.Withdraw(entries.Detach);
+            }
+
+            _pruneAt = Math.Max(MinimumPruneAt, _components.Count * 2);
+        }
+
+        /// <summary>
+        ///     Gives up ownership without destroying anything. Both registrations are withdrawn
+        ///     from the ledger; once a teardown has started the ledger refuses that, and they
+        ///     stay and complete as no-ops instead.
         /// </summary>
         public void Forget(Component component)
         {
             if (component == null) return;
+            if (!_components.TryGetValue(component, out var entries)) return;
 
-            for (var i = _components.Count - 1; i >= 0; i--)
-                if (ReferenceEquals(_components[i], component))
-                    _components.RemoveAt(i);
+            _components.Remove(component);
+            _ledger.Withdraw(entries.Destroy);
+            _ledger.Withdraw(entries.Detach);
         }
 
         /// <summary>
@@ -408,12 +456,11 @@ namespace Automatics
         ///     entries when they run in their intended order, and a refusal has no entries left
         ///     to order.
         /// </summary>
-        private void RegisterOrRelease(string label, Action undo, Action releaseOnRefusal = null)
+        private object RegisterOrRelease(string label, Action undo, Action releaseOnRefusal = null)
         {
             try
             {
-                _ledger.Add(label, undo);
-                return;
+                return _ledger.Add(label, undo);
             }
             catch
             {
@@ -545,18 +592,13 @@ namespace Automatics
         }
 
         /// <summary>
-        ///     Identity, not engine equality, and resolved afresh on every call. Holding a list
-        ///     position across the execution of a module's own callback would be wrong: that
-        ///     callback is free to call <see cref="Forget" />, and a stale index then names a
-        ///     different component or none at all.
+        ///     Identity, not engine equality, and resolved afresh on every call. Holding a
+        ///     lookup result across the execution of a module's own callback would be wrong:
+        ///     that callback is free to call <see cref="Forget" />.
         /// </summary>
         private bool IsTracked(Component component)
         {
-            for (var i = 0; i < _components.Count; i++)
-                if (ReferenceEquals(_components[i], component))
-                    return true;
-
-            return false;
+            return component is object && _components.ContainsKey(component);
         }
 
         private void RecordFailureSafely(string what, Exception e)
@@ -600,6 +642,35 @@ namespace Automatics
             catch
             {
                 // Losing a debug line is preferable to losing the containment around it.
+            }
+        }
+
+        /// <summary>
+        ///     The ledger handles of one tracked component's two entries. A handle stays null
+        ///     when the ledger refused that entry.
+        /// </summary>
+        private sealed class TrackedEntries
+        {
+            public object Destroy;
+            public object Detach;
+        }
+
+        /// <summary>
+        ///     Reference identity for components. <c>ReferenceEqualityComparer</c> is not
+        ///     available on this target framework.
+        /// </summary>
+        private sealed class IdentityComparer : IEqualityComparer<Component>
+        {
+            public static readonly IdentityComparer Instance = new IdentityComparer();
+
+            public bool Equals(Component x, Component y)
+            {
+                return ReferenceEquals(x, y);
+            }
+
+            public int GetHashCode(Component obj)
+            {
+                return RuntimeHelpers.GetHashCode(obj);
             }
         }
 

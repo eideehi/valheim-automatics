@@ -52,6 +52,10 @@ namespace Automatics
             Run("ledger: a failure that cannot describe itself is contained", LedgerContainsHostileFailure);
             Run("ledger: externally recorded failures surface and can be cleared", LedgerRecordsExternalFailures);
             Run("ledger: registrations are refused once teardown started", LedgerRefusesLateRegistrations);
+            Run("ledger: a withdrawn registration is never undone", LedgerWithdrawnIsNeverUndone);
+            Run("ledger: compacting withdrawn registrations keeps the order", LedgerCompactionKeepsOrder);
+            Run("ledger: withdrawing is refused once teardown started", LedgerRefusesLateWithdrawal);
+            Run("ledger: a foreign or spent handle cannot withdraw", LedgerRefusesForeignHandles);
 
             Run("token: dispose removes the handler exactly once", TokenRemovesHandlerExactlyOnce);
             Run("MAJOR-7: a removal that throws leaves the token outstanding", TokenStaysOutstandingWhenRemovalThrows);
@@ -795,6 +799,89 @@ namespace Automatics
             }
 
             AssertTrue(refused, "A registration after teardown would never be undone.");
+        }
+
+        private static void LedgerWithdrawnIsNeverUndone()
+        {
+            var order = new List<string>();
+            var ledger = new TeardownLedger();
+            ledger.Add("first", () => order.Add("first"));
+            var second = ledger.Add("second", () => order.Add("second"));
+            ledger.Add("third", () => order.Add("third"));
+
+            AssertTrue(ledger.Withdraw(second), "A registration can be withdrawn before teardown.");
+            ledger.Dispose();
+
+            AssertSequence(order, "third", "first");
+            AssertTrue(ledger.IsDisposed, "A withdrawn registration is not outstanding.");
+            AssertEqual(0, ledger.Failures.Count, "A withdrawn registration reports no failure.");
+        }
+
+        private static void LedgerCompactionKeepsOrder()
+        {
+            var order = new List<string>();
+            var ledger = new TeardownLedger();
+            var handles = new List<object>();
+            for (var i = 0; i < 10; i++)
+            {
+                var name = i.ToString();
+                handles.Add(ledger.Add(name, () => order.Add(name)));
+            }
+
+            // Withdrawing more than half forces at least one compaction part way through.
+            for (var i = 0; i < 10; i++)
+                if (i != 2 && i != 5 && i != 9)
+                    AssertTrue(ledger.Withdraw(handles[i]), $"Withdrawing {i} should succeed.");
+
+            ledger.Add("late", () => order.Add("late"));
+            ledger.Dispose();
+
+            AssertSequence(order, "late", "9", "5", "2");
+            AssertTrue(ledger.IsDisposed, "The remaining registrations should be undone.");
+        }
+
+        private static void LedgerRefusesLateWithdrawal()
+        {
+            var order = new List<string>();
+            var fail = true;
+            var ledger = new TeardownLedger();
+            var first = ledger.Add("first", () => order.Add("first"));
+            var failing = ledger.Add("second", () =>
+            {
+                order.Add("second");
+                AssertFalse(ledger.Withdraw(first), "No withdrawal while the walk runs.");
+                if (fail) throw new InvalidOperationException("second failed");
+            });
+
+            ledger.Dispose();
+            AssertFalse(ledger.Withdraw(failing),
+                "An outstanding registration cannot be withdrawn after a teardown.");
+            AssertEqual(1, ledger.Failures.Count, "The failure should still be reported.");
+
+            fail = false;
+            ledger.Dispose();
+
+            AssertSequence(order, "second", "first", "second");
+            AssertTrue(ledger.IsDisposed, "The retry should complete the teardown.");
+        }
+
+        private static void LedgerRefusesForeignHandles()
+        {
+            var ran = false;
+            var ledger = new TeardownLedger();
+            var other = new TeardownLedger();
+            var handle = ledger.Add("only", () => ran = true);
+            var foreign = other.Add("foreign", () => { });
+
+            AssertFalse(ledger.Withdraw(foreign), "Another ledger's handle must be refused.");
+            AssertFalse(ledger.Withdraw(null), "A null handle must be refused.");
+            AssertFalse(ledger.Withdraw(new object()), "An arbitrary object must be refused.");
+            AssertTrue(ledger.Withdraw(handle), "The own handle should withdraw.");
+            AssertFalse(ledger.Withdraw(handle), "A spent handle must be refused.");
+
+            ledger.Dispose();
+            AssertFalse(ran, "The withdrawn registration must not run.");
+            AssertTrue(ledger.IsDisposed, "Nothing should remain outstanding.");
         }
 
         // --- SubscriptionToken -----------------------------------------------------------

@@ -367,6 +367,12 @@ namespace Automatics
 
         private bool _teardownStarted;
 
+        /// <summary>
+        ///     Registrations marked by <see cref="Withdraw" /> but not yet removed from the list.
+        ///     Always zero once a teardown has started.
+        /// </summary>
+        private int _withdrawn;
+
         /// <summary>True once a teardown ran and every registration is undone.</summary>
         public bool IsDisposed
         {
@@ -411,7 +417,14 @@ namespace Automatics
         /// </summary>
         public void Dispose()
         {
-            _teardownStarted = true;
+            if (!_teardownStarted)
+            {
+                _teardownStarted = true;
+
+                // Only the first call compacts. A re-entrant call arrives while the walk below
+                // holds an index into the list, and must not move the entries under it.
+                if (_withdrawn > 0) Compact();
+            }
 
             for (var i = _registrations.Count - 1; i >= 0; i--)
             {
@@ -445,15 +458,41 @@ namespace Automatics
         ///     honour that, since it acquires (patches, subscribes, attaches) before it
         ///     registers.
         /// </summary>
-        public void Add(string label, Action dispose)
+        public object Add(string label, Action dispose)
         {
             if (dispose == null) throw new ArgumentNullException(nameof(dispose));
             if (_teardownStarted)
                 throw new ObjectDisposedException(nameof(TeardownLedger),
                     "The ledger is being torn down and cannot take new registrations.");
 
-            _registrations.Add(new Registration(string.IsNullOrEmpty(label) ? "<unnamed>" : label,
-                dispose));
+            var registration = new Registration(this,
+                string.IsNullOrEmpty(label) ? "<unnamed>" : label, dispose);
+            _registrations.Add(registration);
+            return registration;
+        }
+
+        /// <summary>
+        ///     Drops a registration that has become moot, identified by the handle
+        ///     <see cref="Add" /> returned, so that neither the entry nor what its undo captures
+        ///     is held any longer. Returns false, and changes nothing, once a teardown has
+        ///     started: from then on an entry may be outstanding, running or carrying a failure,
+        ///     and only its own undo is allowed to settle it. Before that point no entry has run,
+        ///     so withdrawing one cannot affect the order, the retries or the failures of the
+        ///     rest. A handle from another ledger, or one already withdrawn, is also refused.
+        ///     Withdrawn entries are removed in batches once they outnumber the live ones, which
+        ///     keeps both this call and the list's growth amortised constant.
+        /// </summary>
+        public bool Withdraw(object handle)
+        {
+            if (_teardownStarted) return false;
+            if (!(handle is Registration registration) || registration.Owner != this ||
+                registration.Withdrawn)
+                return false;
+
+            registration.Withdrawn = true;
+            _withdrawn++;
+            if (_withdrawn * 2 > _registrations.Count) Compact();
+            return true;
         }
 
         /// <summary>
@@ -475,6 +514,12 @@ namespace Automatics
             _recordedFailures.Clear();
         }
 
+        private void Compact()
+        {
+            _registrations.RemoveAll(registration => registration.Withdrawn);
+            _withdrawn = 0;
+        }
+
         /// <summary>
         ///     Isolation is worthless if describing the failure can itself throw.
         /// </summary>
@@ -494,13 +539,18 @@ namespace Automatics
         {
             private readonly Action _dispose;
 
-            public Registration(string label, Action dispose)
+            public Registration(TeardownLedger owner, string label, Action dispose)
             {
+                Owner = owner;
                 Label = label;
                 _dispose = dispose;
             }
 
+            public TeardownLedger Owner { get; }
+
             public string Label { get; }
+
+            public bool Withdrawn { get; set; }
 
             public bool Disposed { get; set; }
 
