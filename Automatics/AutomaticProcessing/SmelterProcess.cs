@@ -40,6 +40,23 @@ namespace Automatics.AutomaticProcessing
             return smelter.m_conversion.FirstOrDefault(x => x.m_from.gameObject.name == queuedOre);
         }
 
+        // Smelter.QueueProcessed holds finished product back in the "SpawnOre"/"SpawnAmount"
+        // ZDO values (ZDOVars.s_spawnOre/s_spawnAmount), one per processed ore, until a full
+        // stack or an empty queue releases it through SpawnProcessed as the conversion's m_to.
+        private static void CountHeldProduct(Smelter smelter, ZDO zdo,
+            Dictionary<string, int> productCounts)
+        {
+            var amount = zdo.GetInt("SpawnAmount");
+            if (amount <= 0) return;
+
+            var conversion = GetItemConversion(smelter, zdo.GetString("SpawnOre"));
+            if (conversion == null) return;
+
+            var productName = conversion.m_to.m_itemData.m_shared.m_name;
+            productCounts[productName] =
+                productCounts.TryGetValue(productName, out var count) ? count + amount : amount;
+        }
+
         public static void Cleanup()
         {
             SkipQuickCraft.Clear();
@@ -94,6 +111,9 @@ namespace Automatics.AutomaticProcessing
                 .ToList();
             var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
+            var productCounts = new Dictionary<string, int>();
+            CountHeldProduct(smelter, zNetView.GetZDO(), productCounts);
+
             var oreAdded = false;
             foreach (var conversion in smelter.m_conversion)
             {
@@ -115,9 +135,11 @@ namespace Automatics.AutomaticProcessing
                         materialContainers.Add(container);
                 }
 
+                // Finished product the station still holds counts toward the limit too.
+                productCounts.TryGetValue(productData.m_name, out var pending);
                 var productContainerFound = maxProductStacks > 0 && materialContainers.Count > 0 &&
                     Logics.CanTakeMoreProduct(inventories,
-                        productItem, 0, 1, maxProductStacks);
+                        productItem, pending, 1, maxProductStacks);
 
                 if (materialContainers.Count > 0 &&
                     (maxProductStacks == 0 || productContainerFound))
@@ -191,6 +213,7 @@ namespace Automatics.AutomaticProcessing
                 productCounts[productName] =
                     productCounts.TryGetValue(productName, out var count) ? count + 1 : 1;
             }
+            CountHeldProduct(smelter, zNetView.GetZDO(), productCounts);
 
             conversions.Reverse();
             conversions.AddRange(smelter.m_conversion.Where(x => !conversions.Contains(x)));
@@ -225,7 +248,7 @@ namespace Automatics.AutomaticProcessing
                         materialContainers.Add(container);
                 }
 
-                // Products already queued or cooking count toward the limit too.
+                // Products already queued, cooking or held for release count toward the limit too.
                 productCounts.TryGetValue(productData.m_name, out var pending);
                 var productContainerFound = maxProductStacks > 0 && materialContainers.Count > 0 &&
                     Logics.CanTakeMoreProduct(inventories,
