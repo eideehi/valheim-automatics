@@ -9,7 +9,7 @@
 
 - `Automatics/Libraries/mod-utils` is a read-only library dependency. Do not edit files under this directory unless the task is explicitly to update the submodule.
 - When preparing a release, create the Git tag that matches the release/package version so versioned README and Thunderstore links resolve correctly.
-- Keep `docs/` for end-user-facing documentation. Do not place implementation plans, internal audits, research notes, or other non-end-user documents under `docs/`.
+- `docs/` holds end-user-facing documentation, which is tracked. Local-only working documents live in fixed subdirectories of `docs/` that are gitignored and never committed: `docs/specs/` (requirements and specifications), `docs/plans/` (implementation plans), `docs/reports/` (audits, research notes and findings; deferred findings go in `docs/reports/findings/`) and `docs/decisions/` (decision records). Do not put other non-end-user documents directly under `docs/`, and do not create `plans/`, `specs/` or `.plans/` at the repository root.
 
 ## Required local dependencies
 - .NET SDK 8.0 or newer

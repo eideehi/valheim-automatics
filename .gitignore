@@ -14,5 +14,10 @@ riderModule.iml
 .claude/
 .codex
 .plans/
-plans/
 skills-lock.json
+
+# Local-only working documents (end-user docs elsewhere in docs/ stay tracked)
+/docs/specs/
+/docs/plans/
+/docs/reports/
+/docs/decisions/
