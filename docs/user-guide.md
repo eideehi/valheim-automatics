@@ -766,7 +766,8 @@ container near the crop (`Nearby Containers`). Periodic
 pickup still collects the others, such as wild berries farther away. In
 multiplayer, a crop another player's game controls is left to pickup and is not
 replanted.
-Turning the Automatic Farming module off, or turning off `Harvest And Replant Automatically`,
+Turning the Automatic Farming module off, turning off `Harvest And Replant Automatically`,
+or setting `Farming Interval` to `0` while `Attempt Farming Key` is unbound
 returns those crops to periodic pickup right away; crops Automatic pickup
 collects while farming is off are not replanted. Container roles are kept while
 the module is off and apply again when you turn it back on. The targeted

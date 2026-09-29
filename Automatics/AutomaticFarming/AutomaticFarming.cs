@@ -57,6 +57,9 @@ namespace Automatics.AutomaticFarming
             if (!pickable) return false;
             if (!Config.EnableAutomaticFarming) return false;
 
+            // With no periodic runs and no key, farming never harvests, so pickup takes the crops.
+            if (Config.FarmingInterval <= 0f && Config.FarmingKey.MainKey == KeyCode.None) return false;
+
             if (!TryGetCropIdentifier(pickable, out var identifier)) return false;
             if (player == null) return false;
 
