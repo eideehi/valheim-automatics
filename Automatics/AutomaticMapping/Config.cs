@@ -84,7 +84,7 @@ namespace Automatics.AutomaticMapping
         public static bool EnableNavigationGuide => _enableNavigationGuide.Value;
         internal static ConfigEntry<bool> EnableNavigationGuideEntry => _enableNavigationGuide;
 
-        private static readonly Color DefaultNavigationGuideColor = new Color32(0xC6, 0xF2, 0x7A, 0xFF);
+        private static readonly Color DefaultNavigationGuideColor = new Color32(0xFF, 0x30, 0xC8, 0xFF);
 
         /// <summary>
         ///     The guide swarm's colour, parsed when the setting changes rather than every frame the
@@ -172,7 +172,7 @@ namespace Automatics.AutomaticMapping
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
             _enableNavigationGuide = config.Bind("enable_navigation_guide", true);
-            _navigationGuideColor = config.Bind("navigation_guide_color", "#C6F27A");
+            _navigationGuideColor = config.Bind("navigation_guide_color", "#FF30C8");
             _mappingPerformanceLog = config.Bind("mapping_performance_log", false,
                 initializer: x => x.IsAdvanced = true);
 

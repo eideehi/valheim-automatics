@@ -114,7 +114,7 @@
     "@config_automatic_mapping_enable_navigation_guide_name": "ナビゲーションの光の群れ",
     "@config_automatic_mapping_enable_navigation_guide_description": "ナビゲーション先へ導く小さな光の群れを表示するかどうかを指定します。光は地面に沿って目標へまっすぐ進み、目標から 5m 以内では新たに現れず、全体マップを開いている間は非表示になります。",
     "@config_automatic_mapping_navigation_guide_color_name": "ナビゲーションの光の色",
-    "@config_automatic_mapping_navigation_guide_color_description": "ナビゲーションの光の群れの色を HTML カラーコードで指定します。例: #C6F27A, #C6F27AFF",
+    "@config_automatic_mapping_navigation_guide_color_description": "ナビゲーションの光の群れの色を HTML カラーコードで指定します。例: #FF30C8, #FF30C8FF",
     "@config_automatic_mapping_mapping_performance_log_name": "マッピングパフォーマンスログ",
     "@config_automatic_mapping_mapping_performance_log_description": "自動マッピングのパフォーマンスを計測し、計測値を Info レベルで BepInEx ログに出力するかどうかを指定します。計測値は「ログ出力」が有効で、「ログ出力を許可するレベル」に Info が含まれている場合にのみ出力されます。",
     "@config_automatic_processing_section": "[ #5 自動作業 ]",

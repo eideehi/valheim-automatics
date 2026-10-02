@@ -268,9 +268,9 @@ Specify whether a swarm of small glowing lights leads you toward the navigation 
 - Default value: true
 
 ### Navigation Guide Color / [navigation_guide_color]
-Specify the HTML color code of the navigation guide swarm. Examples: #C6F27A, #C6F27AFF
+Specify the HTML color code of the navigation guide swarm. Examples: #FF30C8, #FF30C8FF
 
-- Default value: #C6F27A
+- Default value: #FF30C8
 
 ### Mapping Performance Log / [mapping_performance_log]
 Specify whether to measure automatic mapping performance and write the metrics to the BepInEx log at the Info level. The metrics are written only when Logging is enabled and Log Level To Allow Logging includes Info. Configuration Manager lists this entry only when advanced settings are shown.
