@@ -1,8 +1,8 @@
 ﻿using System;
+using System.Reflection;
 using HarmonyLib;
 using ModUtils;
 using UnityEngine;
-using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace Automatics.AutomaticMapping
@@ -10,14 +10,8 @@ namespace Automatics.AutomaticMapping
     internal static class Navigation
     {
         private const float TargetPinValidationInterval = 0.5f;
-        private const float OverlayMinWidth = 120f;
-        private const float OverlayHeight = 44f;
-        private const float EdgeMargin = 40f;
         private const float ObjectTopMargin = 0.4f;
         private const float UnresolvedTargetHeight = 2f;
-        private const float TextLeft = 8f;
-        private const float TextRight = 8f;
-        private const float TextHeight = 18f;
         private const float ManualPinMapPlaneHeightEpsilon = 0.01f;
         private const float GuideRetryDelay = 5f;
 
@@ -26,20 +20,26 @@ namespace Automatics.AutomaticMapping
         private static readonly AccessTools.FieldRef<GameCamera, Camera> CameraRef =
             AccessTools.FieldRefAccess<GameCamera, Camera>("m_camera");
 
+        private static readonly Type EnemyHudNameType =
+            AccessTools.Field(AccessTools.Inner(typeof(EnemyHud), "HudData"), "m_name").FieldType;
+
+        private static readonly PropertyInfo EnemyHudNameTextProperty =
+            AccessTools.Property(EnemyHudNameType, "text");
+
         private static Minimap.PinData _targetPin;
         private static GameObject _overlayObject;
-        private static RectTransform _overlayRect;
-        private static Canvas _overlayCanvas;
-        private static Text _nameText;
-        private static Text _distanceText;
+        private static EnemyHud _overlayHud;
+        private static Component _nameText;
+        private static GuiBar _healthFast;
+        private static GuiBar _healthSlow;
+        private static GuiBar _healthFastFriendly;
         private static string _displayName = string.Empty;
         // Raw (unlocalized) pin name reference last seen, so UpdateName can skip
         // re-localizing every frame when the source m_name reference is unchanged.
         private static string _rawPinName;
-        // Cached as the rounded integer the overlay actually displays, so UpdateDistance
-        // can skip rebuilding the "{n}m" string every frame when the value is unchanged.
+        // Cache the rounded distance so UpdateName skips rebuilding the combined label
+        // when both the pin name and the displayed distance are unchanged.
         private static int _displayDistanceMeters = int.MinValue;
-        private static bool _overlayWidthDirty;
         private static float _nextTargetPinValidationTime;
         private static float _nextGuideAttemptTime;
         private static bool _guideErrorLogged;
@@ -52,7 +52,6 @@ namespace Automatics.AutomaticMapping
             _displayName = string.Empty;
             _rawPinName = null;
             _displayDistanceMeters = int.MinValue;
-            _overlayWidthDirty = false;
             _nextTargetPinValidationTime = 0f;
             _nextGuideAttemptTime = 0f;
             _guideErrorLogged = false;
@@ -146,10 +145,8 @@ namespace Automatics.AutomaticMapping
                 return;
             }
 
-            UpdateName();
-            UpdateDistance(player, targetPos);
-            if (_overlayWidthDirty)
-                ResizeOverlay();
+            UpdateName(player, targetPos);
+            UpdateColor();
             UpdatePosition(screenPoint);
             SetVisible(true);
         }
@@ -260,7 +257,6 @@ namespace Automatics.AutomaticMapping
             _displayName = string.Empty;
             _rawPinName = null;
             _displayDistanceMeters = int.MinValue;
-            _overlayWidthDirty = true;
             _nextTargetPinValidationTime = 0f;
             _boundsInstance = null;
             ShowStartMessage(pinData);
@@ -272,10 +268,9 @@ namespace Automatics.AutomaticMapping
             _displayName = string.Empty;
             _rawPinName = null;
             _displayDistanceMeters = int.MinValue;
-            _overlayWidthDirty = false;
             _nextTargetPinValidationTime = 0f;
             _boundsInstance = null;
-            SetVisible(false);
+            DestroyOverlay();
             NavigationGuide.Destroy();
             if (showMessage)
                 ShowMessage(Automatics.L10N.Localize(
@@ -290,154 +285,73 @@ namespace Automatics.AutomaticMapping
 
         private static bool EnsureOverlay()
         {
-            if (_overlayObject && _overlayRect && _nameText && _distanceText)
+            var enemyHud = EnemyHud.instance;
+            if (_overlayObject && _overlayHud == enemyHud && enemyHud)
                 return true;
 
             DestroyOverlay();
+            if (!enemyHud) return false;
 
-            var parent = GetOverlayParent();
-            if (!parent) return false;
+            _overlayHud = enemyHud;
+            _overlayObject = Object.Instantiate(enemyHud.m_baseHud, enemyHud.m_hudRoot.transform);
+            _overlayObject.name = "AutomaticsNavigationOverlay";
+            _overlayObject.SetActive(true);
+            var overlay = _overlayObject.transform;
+            overlay.Find("level_2").gameObject.SetActive(false);
+            overlay.Find("level_3").gameObject.SetActive(false);
+            overlay.Find("Alerted").gameObject.SetActive(false);
+            overlay.Find("Aware").gameObject.SetActive(false);
+            _nameText = overlay.Find("Name").GetComponent(EnemyHudNameType);
+            _healthFast = overlay.Find("Health/health_fast").GetComponent<GuiBar>();
+            _healthSlow = overlay.Find("Health/health_slow").GetComponent<GuiBar>();
+            _healthFast.gameObject.SetActive(true);
+            _healthFast.SetValue(1f);
+            _healthSlow.SetValue(1f);
+            var friendly = overlay.Find("Health/health_fast_friendly");
+            if (friendly)
+            {
+                _healthFastFriendly = friendly.GetComponent<GuiBar>();
+                _healthFastFriendly.SetValue(1f);
+                friendly.gameObject.SetActive(false);
+            }
 
-            _overlayObject = new GameObject("AutomaticsNavigationOverlay", typeof(RectTransform),
-                typeof(CanvasRenderer), typeof(Image));
-            _overlayRect = _overlayObject.GetComponent<RectTransform>();
-            _overlayRect.SetParent(parent, false);
-            _overlayCanvas = _overlayRect.GetComponentInParent<Canvas>();
-            _overlayRect.anchorMin = new Vector2(0.5f, 0.5f);
-            _overlayRect.anchorMax = new Vector2(0.5f, 0.5f);
-            _overlayRect.pivot = new Vector2(0.5f, 0.5f);
-            _overlayRect.sizeDelta = new Vector2(OverlayMinWidth, OverlayHeight);
-            _overlayRect.SetAsLastSibling();
-
-            var background = _overlayObject.GetComponent<Image>();
-            background.color = new Color(0f, 0f, 0f, 0.45f);
-            background.raycastTarget = false;
-
-            _nameText = CreateNameText(_overlayRect);
-            _distanceText = CreateDistanceText(_overlayRect);
             SetVisible(false);
             return true;
         }
 
-        private static RectTransform GetOverlayParent()
+        private static void UpdateName(Player player, Vector3 targetPos)
         {
-            if (!Hud.instance) return null;
-
-            var parent = Hud.instance.transform as RectTransform;
-            if (parent) return parent;
-
-            var canvas = Hud.instance.GetComponentInChildren<Canvas>();
-            return canvas ? canvas.transform as RectTransform : null;
-        }
-
-        private static Text CreateDistanceText(Transform parent)
-        {
-            var textObject = new GameObject("Distance", typeof(RectTransform),
-                typeof(CanvasRenderer), typeof(Text), typeof(Outline));
-            var textRect = textObject.GetComponent<RectTransform>();
-            textRect.SetParent(parent, false);
-            textRect.anchorMin = new Vector2(0f, 0.5f);
-            textRect.anchorMax = new Vector2(1f, 0.5f);
-            textRect.pivot = new Vector2(0f, 0.5f);
-            textRect.anchoredPosition = new Vector2(TextLeft, -10f);
-            textRect.sizeDelta = new Vector2(-(TextLeft + TextRight), TextHeight);
-
-            var text = textObject.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            text.fontSize = 14;
-            text.fontStyle = FontStyle.Bold;
-            text.alignment = TextAnchor.MiddleLeft;
-            text.color = Color.white;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-
-            var outline = textObject.GetComponent<Outline>();
-            outline.effectColor = new Color(0f, 0f, 0f, 0.9f);
-            outline.effectDistance = new Vector2(1f, -1f);
-            return text;
-        }
-
-        private static Text CreateNameText(Transform parent)
-        {
-            var textObject = new GameObject("Name", typeof(RectTransform),
-                typeof(CanvasRenderer), typeof(Text), typeof(Outline));
-            var textRect = textObject.GetComponent<RectTransform>();
-            textRect.SetParent(parent, false);
-            textRect.anchorMin = new Vector2(0f, 0.5f);
-            textRect.anchorMax = new Vector2(1f, 0.5f);
-            textRect.pivot = new Vector2(0f, 0.5f);
-            textRect.anchoredPosition = new Vector2(TextLeft, 10f);
-            textRect.sizeDelta = new Vector2(-(TextLeft + TextRight), TextHeight);
-
-            var text = textObject.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            text.fontSize = 14;
-            text.fontStyle = FontStyle.Bold;
-            text.alignment = TextAnchor.MiddleLeft;
-            text.color = Color.white;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-
-            var outline = textObject.GetComponent<Outline>();
-            outline.effectColor = new Color(0f, 0f, 0f, 0.9f);
-            outline.effectDistance = new Vector2(1f, -1f);
-            return text;
-        }
-
-        private static void UpdateName()
-        {
-            // Skip the Replace/Trim/Localize work when the source m_name reference
-            // is unchanged; static pins assign m_name once and dynamic pins only on
-            // the scan interval, so the reference is stable between frames.
             var raw = _targetPin?.m_name;
-            if (ReferenceEquals(raw, _rawPinName)) return;
-            _rawPinName = raw;
-
-            var name = GetDisplayPinName(_targetPin);
-            if (_displayName == name) return;
-
-            _displayName = name;
-            _nameText.text = name;
-            _overlayWidthDirty = true;
-        }
-
-        private static void UpdateDistance(Player player, Vector3 targetPos)
-        {
             var meters = Mathf.RoundToInt(Utils.DistanceXZ(player.transform.position, targetPos));
-            if (meters == _displayDistanceMeters) return;
+            if (ReferenceEquals(raw, _rawPinName) && meters == _displayDistanceMeters) return;
+
+            // Localize only when the source pin name changes.
+            if (!ReferenceEquals(raw, _rawPinName))
+            {
+                _rawPinName = raw;
+                _displayName = GetDisplayPinName(_targetPin);
+            }
 
             _displayDistanceMeters = meters;
-            _distanceText.text = meters + "m";
-            _overlayWidthDirty = true;
+            EnemyHudNameTextProperty.SetValue(_nameText, _displayName + " " + meters + "m");
         }
 
-        private static void UpdatePosition(Vector2 screenPoint)
+        private static void UpdateColor()
         {
-            var parent = _overlayRect.parent as RectTransform;
-            if (!parent) return;
-
-            var canvas = _overlayCanvas;
-            var uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera
-                : null;
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screenPoint,
-                    uiCamera, out var anchoredPosition))
-            {
-                var parentHalfWidth = parent.rect.width * 0.5f;
-                var parentHalfHeight = parent.rect.height * 0.5f;
-                var overlayHalfWidth = _overlayRect.rect.width * 0.5f;
-                var overlayHalfHeight = _overlayRect.rect.height * 0.5f;
-                var xLimit = Mathf.Max(0f, parentHalfWidth - overlayHalfWidth - EdgeMargin);
-                var yLimit = Mathf.Max(0f, parentHalfHeight - overlayHalfHeight - EdgeMargin);
-                anchoredPosition.x = Mathf.Clamp(anchoredPosition.x, -xLimit, xLimit);
-                anchoredPosition.y = Mathf.Clamp(anchoredPosition.y, -yLimit, yLimit);
-                _overlayRect.anchoredPosition = anchoredPosition;
-            }
+            var color = Color.white;
+            _healthFast.SetColor(color);
+            // GuiBar colours each layer independently, including the slow bar behind the fast bar.
+            _healthSlow.SetColor(color);
+            if (_healthFastFriendly)
+                _healthFastFriendly.SetColor(color);
         }
 
-        private static bool TryGetScreenPoint(Vector3 targetPos, out Vector2 screenPoint)
+        private static void UpdatePosition(Vector3 screenPoint)
+        {
+            _overlayObject.transform.position = screenPoint;
+        }
+
+        private static bool TryGetScreenPoint(Vector3 targetPos, out Vector3 screenPoint)
         {
             screenPoint = default;
             var camera = GetWorldCamera();
@@ -448,11 +362,7 @@ namespace Automatics.AutomaticMapping
             if (viewport.x < 0f || viewport.x > 1f) return false;
             if (viewport.y < 0f || viewport.y > 1f) return false;
 
-            var marginX = Screen.width <= 0f ? 0f : EdgeMargin / Screen.width;
-            var marginY = Screen.height <= 0f ? 0f : EdgeMargin / Screen.height;
-            viewport.x = Mathf.Clamp(viewport.x, marginX, 1f - marginX);
-            viewport.y = Mathf.Clamp(viewport.y, marginY, 1f - marginY);
-            screenPoint = new Vector2(viewport.x * Screen.width, viewport.y * Screen.height);
+            screenPoint = camera.WorldToScreenPointScaled(targetPos);
             return true;
         }
 
@@ -473,10 +383,12 @@ namespace Automatics.AutomaticMapping
                 Object.Destroy(_overlayObject);
 
             _overlayObject = null;
-            _overlayRect = null;
-            _overlayCanvas = null;
+            _overlayHud = null;
             _nameText = null;
-            _distanceText = null;
+            _healthFast = null;
+            _healthSlow = null;
+            _healthFastFriendly = null;
+            _displayDistanceMeters = int.MinValue;
         }
 
         private static void ShowStartMessage(Minimap.PinData pinData)
@@ -492,17 +404,6 @@ namespace Automatics.AutomaticMapping
         private static void ShowMessage(string message)
         {
             Player.m_localPlayer?.Message(MessageHud.MessageType.Center, message);
-        }
-
-        private static void ResizeOverlay()
-        {
-            var preferredTextWidth = Mathf.Max(_nameText.preferredWidth, _distanceText.preferredWidth);
-            var width = Mathf.Max(OverlayMinWidth, TextLeft + TextRight + preferredTextWidth);
-            if (Screen.width > 0)
-                width = Mathf.Min(width, Mathf.Max(OverlayMinWidth, Screen.width - EdgeMargin * 2f));
-
-            _overlayRect.sizeDelta = new Vector2(width, OverlayHeight);
-            _overlayWidthDirty = false;
         }
 
         private static void ValidateTargetPin()

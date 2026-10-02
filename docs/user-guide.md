@@ -324,10 +324,12 @@ same action on the current target pin to clear navigation.
 While navigation is active and the large map is closed, a loaded non-boss
 creature target shows Valheim's health and awareness HUD with the horizontal
 distance added to its name, even from farther away. Bosses keep their usual HUD
-behaviour and use the navigation label. Other targets show a name and distance
-label above the object when Automatics can resolve its loaded instance; otherwise
-the label appears about 2 m above the pin position. Navigation labels are hidden
-while the game is paused or the HUD is hidden.
+behaviour and use the navigation label. Non-creature targets and bosses show a
+status-bar-style label with their name, distance and a full white decorative bar.
+The label appears above the object when Automatics can resolve its loaded
+instance; otherwise it appears about 2 m above the pin
+position. Navigation labels are hidden while the game is paused or the HUD is
+hidden.
 
 A swarm of small glowing lights also leads you toward the target while you
 navigate, whether the target is on screen or not. It gathers around you and
