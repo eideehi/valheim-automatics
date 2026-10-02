@@ -5,11 +5,8 @@ using UnityEngine;
 namespace Automatics.AutomaticStorage
 {
     /// <summary>
-    ///     Automatic Storage on the module lifecycle. A scope owns its one hook subscription, so
-    ///     turning the module off removes it instead of leaving it installed. It applies no patch
-    ///     and attaches no component to anything in the scene, so an activation has nothing to
-    ///     reconcile: the store key is read again on the first player update after the
-    ///     subscription is back (R4.2).
+    ///     Automatic Storage on the module lifecycle. A scope owns its inventory patches and
+    ///     player-update subscription. The slot icons are hidden when the module stops.
     /// </summary>
     internal sealed class Module : IAutomaticsModule
     {
@@ -61,12 +58,12 @@ namespace Automatics.AutomaticStorage
         }
 
         /// <summary>
-        ///     Acquisition order is the caller's half of the framework contract (R4.3). This module
-        ///     acquires one thing, its subscription: it applies no patch and creates no component,
-        ///     so there is neither a patch removal to put last nor a scene to go through.
+        ///     Patches are acquired before the subscription so the scope removes them last.
         /// </summary>
         public void Enable(ModuleScope scope)
         {
+            scope.PatchAll(typeof(Patches));
+
             // A named method, never a lambda: the delegate that is removed has to be the delegate
             // that was added.
             scope.Subscribe<Action<Player, bool>>(
@@ -85,6 +82,7 @@ namespace Automatics.AutomaticStorage
         public void Disable(ModuleScope scope)
         {
             Active = false;
+            SlotLocks.HideIcons();
             AutomaticStorage.ResetSession();
         }
 

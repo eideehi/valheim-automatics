@@ -385,10 +385,9 @@ namespace Automatics.SmokeTest
         {
             storedCounts = null;
 
-            // Hotbar guard: store_hotbar_items default false rejects row-0 items.
-            if (!global::Automatics.AutomaticStorage.Config.StoreHotbarItems &&
-                !HasTestItemOffHotbar(playerInventory, sample))
-                return CheckResult.Skip("test item landed on hotbar and store_hotbar_items is off");
+            // The sample has to be in a slot that Automatic Storage can take from.
+            if (!HasEligibleTestItem(player, playerInventory, sample))
+                return CheckResult.Skip("test item is in a hotbar or locked slot");
 
             var beforeCount = PickableHarvester.CountExactItems(playerInventory, sample);
 
@@ -1124,12 +1123,17 @@ namespace Automatics.SmokeTest
             }
         }
 
-        private static bool HasTestItemOffHotbar(Inventory inventory, ItemDrop.ItemData sample)
+        private static bool HasEligibleTestItem(Player player, Inventory inventory,
+            ItemDrop.ItemData sample)
         {
+            var lockedSlots = global::Automatics.AutomaticStorage.SlotLocks.GetLockedSlots(player);
             foreach (var item in inventory.GetAllItems())
             {
                 if (item.m_shared.m_name != sample.m_shared.m_name) continue;
-                if (item.m_gridPos.y != 0) return true;
+                if (!global::Automatics.AutomaticStorage.Config.StoreHotbarItems &&
+                    item.m_gridPos.y == 0) continue;
+                if (lockedSlots.Contains(item.m_gridPos)) continue;
+                return true;
             }
 
             return false;

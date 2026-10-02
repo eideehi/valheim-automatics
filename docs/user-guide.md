@@ -572,9 +572,14 @@ Key settings:
 | `Allowed Item Types` | Selects which Valheim item types can be stored. |
 | `Excluded Items` | Keeps matching items in the player inventory. |
 | `Store Hotbar Items` | Allows hotbar-row items to be stored when enabled. |
+| `Slot Lock Key` | Hold this key (Left Alt by default) and left-click a player inventory slot to toggle its lock. |
 | `Storage Message` | Controls whether a nonzero storage result is shown. |
 
 Equipped items, quest items, and hotbar-row items are skipped by default.
+With the inventory open, you can lock even an empty slot. Items in locked slots are never
+stored, and a lock icon marks each locked slot while Automatic Storage runs. Locks are saved
+with the character and remain saved if the module is turned off.
+
 `Excluded Items` matches internal item names, prefab names, and localized display
 names. Plain entries use case-insensitive partial matching. Prefix an entry with
 `r/` to use a regular expression.

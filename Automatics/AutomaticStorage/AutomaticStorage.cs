@@ -42,9 +42,11 @@ namespace Automatics.AutomaticStorage
             if (containers.Count == 0) return result;
 
             var exclusions = ItemExclusionMatcher.Create(Config.ExcludedItems);
+            var lockedSlots = SlotLocks.GetLockedSlots(player);
             var touchedContainers = new HashSet<int>();
             foreach (var item in playerInventory.GetAllItemsInGridOrder().ToList())
             {
+                if (lockedSlots.Contains(item.m_gridPos)) continue;
                 if (!CanStoreItem(player, item, exclusions)) continue;
 
                 var remaining = item.m_stack;

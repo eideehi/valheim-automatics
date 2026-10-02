@@ -12,6 +12,13 @@ namespace Automatics
     internal static class Patches
     {
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(FejdStartup), "Start")]
+        private static void FejdStartup_Start_Postfix()
+        {
+            AutomaticStorage.SlotLocks.CaptureSprite();
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(Player), "Awake")]
         private static void Player_Awake_Postfix(Player __instance)
         {

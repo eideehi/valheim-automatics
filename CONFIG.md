@@ -1077,6 +1077,11 @@ Specify whether items in the hotbar row can be stored automatically.
 
 - Default value: false
 
+### Slot Lock Key / [slot_lock_key]
+Specify the key used to toggle player inventory slot locks. While the inventory is open, hold this key and left-click a player inventory slot to toggle its lock. Locked slots keep their items during automatic storage and show a lock icon while the module runs. Empty slots can also be locked. Locks are saved with the character and remain saved while the module is off.
+
+- Default value: LeftAlt
+
 ### Store Items Key / [store_items_key]
 Specify the shortcut key that stores eligible inventory items into nearby containers once. If no key is assigned, automatic storage does not run.
 
