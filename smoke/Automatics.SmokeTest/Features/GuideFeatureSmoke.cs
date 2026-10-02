@@ -31,8 +31,8 @@ namespace Automatics.SmokeTest
         private const float WarmUpSeconds = 1.5f;
         private const float SweepWatchSeconds = 3f;
         private const float FadeTimeoutSeconds = 4f;
-        private const float MinHeightAboveGround = 0.5f;
-        private const float MaxHeightAboveGround = 1.5f;
+        private const float MinHeightAboveGround = NavigationGuide.HoverHeight - 0.5f;
+        private const float MaxHeightAboveGround = NavigationGuide.HoverHeight + 0.5f;
         private const float RequiredShareInBand = 0.8f;
 
         private static readonly FieldInfo TargetPinField = AccessTools.Field(typeof(Navigation), "_targetPin");

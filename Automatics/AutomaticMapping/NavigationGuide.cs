@@ -29,7 +29,7 @@ namespace Automatics.AutomaticMapping
         internal const float ArrivalDistance = 5f;
 
         /// <summary>The emitter's height above the sampled ground.</summary>
-        internal const float HoverHeight = 1f;
+        internal const float HoverHeight = 1.5f;
 
         private const float TrailLength = 18f;
         private const float TrailStart = 0.8f;

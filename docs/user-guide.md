@@ -333,7 +333,7 @@ hidden.
 
 A swarm of small glowing lights also leads you toward the target while you
 navigate, whether the target is on screen or not. It gathers around you and
-streams ahead in a straight line a little above the ground, stops appearing
+streams ahead in a straight line about 1.5 m above the ground, stops appearing
 within 5 m of the target, and is hidden while the large map is open. It is only
 drawn for you and adds nothing to the world. Turn it off with
 `Navigation Guide Swarm`, or change its colour with `Navigation Guide Color`.
