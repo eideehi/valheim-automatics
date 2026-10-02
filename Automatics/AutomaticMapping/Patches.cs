@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
@@ -25,6 +26,76 @@ namespace Automatics.AutomaticMapping
     [HarmonyPatch]
     internal static class Patches
     {
+        private static readonly FieldInfo EnemyHudHudsField =
+            AccessTools.Field(typeof(EnemyHud), "m_huds");
+
+        private static readonly FieldInfo EnemyHudHoverTimerField =
+            AccessTools.Field(AccessTools.Inner(typeof(EnemyHud), "HudData"), "m_hoverTimer");
+
+        private static readonly FieldInfo EnemyHudNameField =
+            AccessTools.Field(AccessTools.Inner(typeof(EnemyHud), "HudData"), "m_name");
+
+        private static readonly PropertyInfo EnemyHudNameTextProperty =
+            AccessTools.Property(EnemyHudNameField.FieldType, "text");
+
+        private struct HudHoverState
+        {
+            public object Data;
+            public float Timer;
+        }
+
+        private static object GetTargetHudData(EnemyHud enemyHud, Character character)
+        {
+            if (!character) return null;
+            var huds = EnemyHudHudsField.GetValue(enemyHud) as IDictionary;
+            return huds != null && huds.Contains(character) ? huds[character] : null;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EnemyHud), "TestShow")]
+        private static void EnemyHud_TestShow_Postfix(Character c, ref bool __result)
+        {
+            if (!__result && Navigation.GetHudTarget() == c)
+                __result = true;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EnemyHud), "UpdateHuds")]
+        private static void EnemyHud_UpdateHuds_Prefix(EnemyHud __instance, Player player,
+            out HudHoverState __state)
+        {
+            __state = default;
+            var target = Navigation.GetHudTarget();
+            var data = GetTargetHudData(__instance, target);
+            if (data == null) return;
+
+            __state.Data = data;
+            __state.Timer = player && player.GetHoverCreature() == target
+                ? 0f
+                : (float)EnemyHudHoverTimerField.GetValue(data);
+            EnemyHudHoverTimerField.SetValue(data, 0f);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EnemyHud), "UpdateHuds")]
+        private static void EnemyHud_UpdateHuds_Postfix(float dt, HudHoverState __state)
+        {
+            if (__state.Data == null) return;
+
+            // Vanilla updates the health, awareness, placement and name first. Restore the
+            // natural hover timer so a cleared target returns to normal on the next frame.
+            EnemyHudHoverTimerField.SetValue(__state.Data, __state.Timer + dt);
+            var target = Navigation.GetHudTarget();
+            if (!target) return;
+            var name = EnemyHudNameField.GetValue(__state.Data) as UnityEngine.Object;
+            if (!name) return;
+
+            var meters = Mathf.RoundToInt(Utils.DistanceXZ(
+                Player.m_localPlayer.transform.position, target.transform.position));
+            var text = (string)EnemyHudNameTextProperty.GetValue(name);
+            EnemyHudNameTextProperty.SetValue(name, text + " " + meters + "m");
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Fish), "Start")]
         private static void Fish_Start_Postfix(Fish __instance, ZNetView ___m_nview)

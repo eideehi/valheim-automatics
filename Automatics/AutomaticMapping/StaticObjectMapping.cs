@@ -1841,6 +1841,18 @@ namespace Automatics.AutomaticMapping
             return pinData != null && PinKeyCache.ContainsKey(pinData);
         }
 
+        internal static GameObject FindLiveInstance(Minimap.PinData pinData)
+        {
+            if (pinData == null || !ZNetScene.instance ||
+                !PinKeyCache.TryGetValue(pinData, out var keys) || keys.Count != 1)
+                return null;
+
+            foreach (var key in keys)
+                return key.IsUniqueId() ? ZNetScene.instance.FindInstance(key.UniqueId) : null;
+
+            return null;
+        }
+
         private static void RemovePinKey(Minimap.PinData pinData, MapPinIdentify identify)
         {
             if (!PinKeyCache.TryGetValue(pinData, out var keys)) return;

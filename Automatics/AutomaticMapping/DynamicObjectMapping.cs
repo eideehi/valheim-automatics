@@ -862,6 +862,17 @@ namespace Automatics.AutomaticMapping
                     VehiclePinKeyCache.ContainsKey(pinData));
         }
 
+        internal static GameObject FindLiveInstance(Minimap.PinData pinData)
+        {
+            if (pinData == null || !ZNetScene.instance) return null;
+
+            if (!PinKeyCache.TryGetValue(pinData, out var uniqueId) &&
+                !VehiclePinKeyCache.TryGetValue(pinData, out uniqueId))
+                return null;
+
+            return ZNetScene.instance.FindInstance(uniqueId);
+        }
+
         private static void UpdatePin(ZDOID uniqueId, Minimap.PinData pinData, string pinName, Vector3 pos,
             float delta)
         {

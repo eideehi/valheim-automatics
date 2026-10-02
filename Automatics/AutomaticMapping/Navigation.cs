@@ -13,6 +13,8 @@ namespace Automatics.AutomaticMapping
         private const float OverlayMinWidth = 120f;
         private const float OverlayHeight = 44f;
         private const float EdgeMargin = 40f;
+        private const float ObjectTopMargin = 0.4f;
+        private const float UnresolvedTargetHeight = 2f;
         private const float TextLeft = 8f;
         private const float TextRight = 8f;
         private const float TextHeight = 18f;
@@ -41,6 +43,8 @@ namespace Automatics.AutomaticMapping
         private static float _nextTargetPinValidationTime;
         private static float _nextGuideAttemptTime;
         private static bool _guideErrorLogged;
+        private static GameObject _boundsInstance;
+        private static float _boundsTopOffset;
 
         public static void Cleanup()
         {
@@ -52,6 +56,7 @@ namespace Automatics.AutomaticMapping
             _nextTargetPinValidationTime = 0f;
             _nextGuideAttemptTime = 0f;
             _guideErrorLogged = false;
+            _boundsInstance = null;
             DestroyOverlay();
             NavigationGuide.Dispose();
         }
@@ -121,6 +126,17 @@ namespace Automatics.AutomaticMapping
             var targetPos = GetNavigationTargetPosition(_targetPin);
             UpdateGuide(player, targetPos);
 
+            var targetInstance = ResolveTargetInstance();
+            if (CanUseEnemyHud(targetInstance ? targetInstance.GetComponent<Character>() : null))
+            {
+                SetVisible(false);
+                return;
+            }
+
+            targetPos = targetInstance
+                ? GetOverlayPosition(targetInstance)
+                : targetPos + Vector3.up * UnresolvedTargetHeight;
+
             if (!EnsureOverlay())
                 return;
 
@@ -179,8 +195,63 @@ namespace Automatics.AutomaticMapping
                    player.IsOwner() &&
                    !Game.IsPaused() &&
                    Hud.instance &&
+                   !Hud.IsUserHidden() &&
                    Minimap.instance &&
                    Minimap.instance.m_mode != Minimap.MapMode.Large;
+        }
+
+        internal static Character GetHudTarget()
+        {
+            if (!Module.Running || !ShouldShow(Player.m_localPlayer) || !EnemyHud.instance)
+                return null;
+
+            var instance = ResolveTargetInstance();
+            var character = instance ? instance.GetComponent<Character>() : null;
+            return CanUseEnemyHud(character) ? character : null;
+        }
+
+        private static GameObject ResolveTargetInstance()
+        {
+            var instance = DynamicObjectMapping.FindLiveInstance(_targetPin);
+            if (!instance)
+                instance = StaticObjectMapping.FindLiveInstance(_targetPin);
+            return instance;
+        }
+
+        private static bool CanUseEnemyHud(Character character)
+        {
+            return character && !character.IsBoss() && !character.m_hideHud &&
+                   character != Player.m_localPlayer && EnemyHud.instance;
+        }
+
+        private static Vector3 GetOverlayPosition(GameObject instance)
+        {
+            if (!ReferenceEquals(instance, _boundsInstance))
+            {
+                _boundsInstance = instance;
+                _boundsTopOffset = UnresolvedTargetHeight;
+
+                // Visual bounds cover child meshes even when the pin is attached to the root.
+                var renderers = instance.GetComponentsInChildren<Renderer>();
+                var found = false;
+                var bounds = new Bounds();
+                foreach (var renderer in renderers)
+                {
+                    if (!renderer.enabled || renderer is ParticleSystemRenderer) continue;
+                    if (!found)
+                    {
+                        bounds = renderer.bounds;
+                        found = true;
+                    }
+                    else
+                        bounds.Encapsulate(renderer.bounds);
+                }
+
+                if (found)
+                    _boundsTopOffset = bounds.max.y - instance.transform.position.y + ObjectTopMargin;
+            }
+
+            return instance.transform.position + Vector3.up * _boundsTopOffset;
         }
 
         private static void SetTarget(Minimap.PinData pinData)
@@ -191,6 +262,7 @@ namespace Automatics.AutomaticMapping
             _displayDistanceMeters = int.MinValue;
             _overlayWidthDirty = true;
             _nextTargetPinValidationTime = 0f;
+            _boundsInstance = null;
             ShowStartMessage(pinData);
         }
 
@@ -202,6 +274,7 @@ namespace Automatics.AutomaticMapping
             _displayDistanceMeters = int.MinValue;
             _overlayWidthDirty = false;
             _nextTargetPinValidationTime = 0f;
+            _boundsInstance = null;
             SetVisible(false);
             NavigationGuide.Destroy();
             if (showMessage)
