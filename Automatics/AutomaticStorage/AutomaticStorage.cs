@@ -85,6 +85,18 @@ namespace Automatics.AutomaticStorage
                 }
             }
 
+            if (Config.SortContainersAfterStoring)
+            {
+                foreach (var index in touchedContainers)
+                {
+                    var target = containers[index];
+                    if (!ContainerAccess.CanDirectlyMutateContainer(player, target.Container))
+                        continue;
+
+                    ContainerSorter.Sort(target.Inventory);
+                }
+            }
+
             result.TouchedContainers = touchedContainers.Count;
             return result;
         }

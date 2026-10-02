@@ -566,6 +566,10 @@ Enable `Store Into Any Container` to restore the broader routing: fill matching
 stacks first, then use containers holding the same Valheim item type, empty
 containers, and other containers with space.
 
+After storing, only containers that received items are sorted by item type, then
+localized display name, with matching partial stacks merged and rows filled from
+the top-left; `Sort Containers After Storing` controls this and is on by default.
+
 Key settings:
 
 | Setting | Effect |
@@ -578,6 +582,7 @@ Key settings:
 | `Excluded Items` | Keeps matching items in the player inventory. |
 | `Store Hotbar Items` | Allows hotbar-row items to be stored when enabled. |
 | `Store Into Any Container` | Allows storage into containers that do not already hold the same item. Off by default. |
+| `Sort Containers After Storing` | Sorts containers that received items and merges matching partial stacks. On by default. |
 | `Slot Lock Key` | Hold this key (Left Alt by default) and left-click a player inventory slot to toggle its lock. |
 | `Storage Message` | Controls whether a nonzero storage result is shown. |
 

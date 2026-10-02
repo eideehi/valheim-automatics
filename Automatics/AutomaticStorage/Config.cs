@@ -21,6 +21,7 @@ namespace Automatics.AutomaticStorage
         private static ConfigEntry<StringList> _excludedItems;
         private static ConfigEntry<bool> _storeHotbarItems;
         private static ConfigEntry<bool> _storeIntoAnyContainer;
+        private static ConfigEntry<bool> _sortContainersAfterStoring;
         private static ConfigEntry<KeyboardShortcut> _slotLockKey;
         private static ConfigEntry<KeyboardShortcut> _storeItemsKey;
         private static ConfigEntry<Message> _storageMessage;
@@ -39,6 +40,7 @@ namespace Automatics.AutomaticStorage
         public static StringList ExcludedItems => _excludedItems.Value;
         public static bool StoreHotbarItems => _storeHotbarItems.Value;
         public static bool StoreIntoAnyContainer => _storeIntoAnyContainer.Value;
+        public static bool SortContainersAfterStoring => _sortContainersAfterStoring.Value;
         public static KeyboardShortcut SlotLockKey => _slotLockKey.Value;
         public static KeyboardShortcut StoreItemsKey => _storeItemsKey.Value;
         public static Message StorageMessage => _storageMessage.Value;
@@ -84,6 +86,7 @@ namespace Automatics.AutomaticStorage
             _excludedItems = config.Bind("excluded_items", new StringList());
             _storeHotbarItems = config.Bind("store_hotbar_items", false);
             _storeIntoAnyContainer = config.Bind("store_into_any_container", false);
+            _sortContainersAfterStoring = config.Bind("sort_containers_after_storing", true);
             _slotLockKey = config.Bind("slot_lock_key", new KeyboardShortcut(KeyCode.LeftAlt));
             _storeItemsKey = config.Bind("store_items_key", new KeyboardShortcut());
             _storageMessage = config.Bind("storage_message", Message.Center);

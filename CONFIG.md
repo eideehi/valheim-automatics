@@ -1082,6 +1082,11 @@ Specify whether items can be stored into containers that do not already hold the
 
 - Default value: false
 
+### Sort Containers After Storing / [sort_containers_after_storing]
+Specify whether containers that received items are sorted by item type and localized name after storing. Matching partial stacks are merged and items fill rows from the top-left.
+
+- Default value: true
+
 ### Slot Lock Key / [slot_lock_key]
 Specify the key used to toggle player inventory slot locks. While the inventory is open, hold this key and left-click a player inventory slot to toggle its lock. Locked slots keep their items during automatic storage and show a lock icon while the module runs. Empty slots can also be locked. Locks are saved with the character and remain saved while the module is off.
 
