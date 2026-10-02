@@ -145,7 +145,7 @@ namespace Automatics.SmokeTest
                 Container(2, emptySlots: 4)
             };
 
-            var routes = StoragePlanner.Plan(source, containers);
+            var routes = StoragePlanner.Plan(source, containers, storeIntoAnyContainer: true);
 
             AssertRoute(routes[0], 0, StorageRouteKind.ExactStack);
             AssertBefore(routes, StorageRouteKind.ExactStack, StorageRouteKind.CategoryAffinity);
@@ -163,7 +163,7 @@ namespace Automatics.SmokeTest
                 Container(2, emptySlots: 4)
             };
 
-            var routes = StoragePlanner.Plan(source, containers);
+            var routes = StoragePlanner.Plan(source, containers, storeIntoAnyContainer: true);
 
             AssertRoute(routes[0], 1, StorageRouteKind.CategoryAffinity);
             AssertBefore(routes, StorageRouteKind.CategoryAffinity, StorageRouteKind.Empty);
@@ -180,7 +180,7 @@ namespace Automatics.SmokeTest
                 Container(1, emptySlots: 4)
             };
 
-            var routes = StoragePlanner.Plan(source, containers);
+            var routes = StoragePlanner.Plan(source, containers, storeIntoAnyContainer: true);
 
             AssertRoute(routes[0], 1, StorageRouteKind.Empty);
             AssertBefore(routes, StorageRouteKind.Empty, StorageRouteKind.Other);
@@ -197,7 +197,8 @@ namespace Automatics.SmokeTest
                 Container(2, emptySlots: 4, Item("$item_wood", itemType: 1, stack: 45, maxStackSize: 50))
             };
 
-            var routes = StoragePlanner.Plan(source, containers, referenceLimit: 1);
+            var routes = StoragePlanner.Plan(source, containers, referenceLimit: 1,
+                storeIntoAnyContainer: true);
 
             Expect(routes.All(x => x.ContainerIndex == 0),
                 "reference limit should prevent routes to containers outside the nearest limit");
@@ -210,17 +211,30 @@ namespace Automatics.SmokeTest
             var containers = new[]
             {
                 Container(0, emptySlots: 0, Item("$item_wood", itemType: 1, stack: 45, maxStackSize: 50)),
-                Container(1, emptySlots: 0, Item("$item_wood", itemType: 1, stack: 40, maxStackSize: 50)),
-                Container(2, emptySlots: 4)
+                Container(1, emptySlots: 4, Item("$item_wood", itemType: 1, stack: 40, maxStackSize: 50)),
+                Container(2, emptySlots: 4),
+                Container(3, emptySlots: 4, Item("$item_stone", itemType: 1)),
+                Container(4, emptySlots: 4, Item("$item_wood", itemType: 1, stack: 50,
+                    maxStackSize: 50, quality: 2, worldLevel: 1)),
+                Container(5, emptySlots: 4, Item("$item_wood", itemType: 1, stack: 50, maxStackSize: 50)),
+                Container(6, emptySlots: 0, Item("$item_wood", itemType: 1, stack: 50, maxStackSize: 50))
             };
 
-            var exactRoutes = StoragePlanner.Plan(source, containers)
+            var routes = StoragePlanner.Plan(source, containers);
+            var exactRoutes = routes
                 .Where(x => x.Kind == StorageRouteKind.ExactStack)
                 .ToList();
 
             Expect(exactRoutes.Count == 2, "expected two exact-stack routes");
             AssertRoute(exactRoutes[0], 0, StorageRouteKind.ExactStack);
             AssertRoute(exactRoutes[1], 1, StorageRouteKind.ExactStack);
+            Expect(routes.Count == 5,
+                "default routing should only use matching stacks and free slots in same-item containers");
+            AssertRoute(routes[0], 0, StorageRouteKind.ExactStack);
+            AssertRoute(routes[1], 1, StorageRouteKind.ExactStack);
+            AssertRoute(routes[2], 1, StorageRouteKind.SameItem);
+            AssertRoute(routes[3], 4, StorageRouteKind.SameItem);
+            AssertRoute(routes[4], 5, StorageRouteKind.SameItem);
             return CheckResult.Pass();
         }
 

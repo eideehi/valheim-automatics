@@ -320,8 +320,8 @@ namespace Automatics.SmokeTest
                     return CheckResult.Skip(
                         "spawned chest not registered in ContainerCache this frame; cannot drive Store");
 
-                // Store moves every eligible item in the player's inventory into every
-                // allowed container in range, not only the test Wood into this chest. What
+                // Store can move eligible items other than the test Wood into allowed
+                // containers in range, depending on their contents and routing settings. What
                 // reached another container would stay there after the check, so it only
                 // runs where this chest is the one container Store can reach.
                 var otherTargets = CountOtherStorageTargets(player, chest);
@@ -348,6 +348,15 @@ namespace Automatics.SmokeTest
                 string storedCounts = null;
                 try
                 {
+                    // Default routing needs the chest to already hold Wood. This extra test
+                    // item is included in the cleanup count after the chest is handed back.
+                    if (!global::Automatics.AutomaticStorage.Config.StoreIntoAnyContainer)
+                    {
+                        var seeded = AddItemsLooped(chestInventory, woodPrefab, 1);
+                        added += seeded;
+                        Expect(seeded == 1, "could not seed test Wood in the chest");
+                    }
+
                     result = StoreAndAssert(player, playerInventory, chestInventory, sample,
                         out storedCounts);
                 }
@@ -390,17 +399,19 @@ namespace Automatics.SmokeTest
                 return CheckResult.Skip("test item is in a hotbar or locked slot");
 
             var beforeCount = PickableHarvester.CountExactItems(playerInventory, sample);
+            var beforeChestCount = chestInventory.GetAllItems().Sum(item => item.m_stack);
+            var beforeWoodInChest = PickableHarvester.CountExactItems(chestInventory, sample);
 
             var result = global::Automatics.AutomaticStorage.AutomaticStorage.Store(player);
 
             var afterCount = PickableHarvester.CountExactItems(playerInventory, sample);
             var moved = beforeCount - afterCount;
 
-            // The chest started empty and is the only container Store could reach, so
-            // everything Store reports as stored is in it - the player's own eligible items
-            // included, which is why this is not compared with the Wood delta.
-            var storedInChest = chestInventory.GetAllItems().Sum(item => item.m_stack);
-            var woodInChest = PickableHarvester.CountExactItems(chestInventory, sample);
+            // The chest is the only container Store could reach. Exclude any seed Wood from
+            // the counts; all newly stored items include the player's own eligible items,
+            // which is why the total is not compared with the Wood delta.
+            var storedInChest = chestInventory.GetAllItems().Sum(item => item.m_stack) - beforeChestCount;
+            var woodInChest = PickableHarvester.CountExactItems(chestInventory, sample) - beforeWoodInChest;
             storedCounts =
                 $"stored in the chest: {storedInChest}, result.StoredItems: {result.StoredItems}";
 
@@ -420,7 +431,7 @@ namespace Automatics.SmokeTest
             Expect(moved > 0,
                 $"Store should move at least one Wood out of the player inventory ({storedCounts})");
             Expect(woodInChest == moved,
-                $"the chest should hold the {moved} Wood that left the player (it holds {woodInChest}; {storedCounts})");
+                $"the chest should have gained the {moved} Wood that left the player (it gained {woodInChest}; {storedCounts})");
 
             return CheckResult.Pass();
         }

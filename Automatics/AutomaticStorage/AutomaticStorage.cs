@@ -117,7 +117,8 @@ namespace Automatics.AutomaticStorage
             var containerSnapshots = containers.Where(IsValidTarget)
                                                .Select(CreateSnapshot)
                                                .ToList();
-            return StoragePlanner.Plan(itemSnapshot, containerSnapshots);
+            return StoragePlanner.Plan(itemSnapshot, containerSnapshots,
+                storeIntoAnyContainer: Config.StoreIntoAnyContainer);
         }
 
         private static IEnumerable<ContainerTarget> GetNearbyContainers(Player player)

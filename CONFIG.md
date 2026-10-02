@@ -1077,6 +1077,11 @@ Specify whether items in the hotbar row can be stored automatically.
 
 - Default value: false
 
+### Store Into Any Container / [store_into_any_container]
+Specify whether items can be stored into containers that do not already hold the same item. By default, only containers holding the same item name are used: matching stacks are filled first, then free slots in those containers are used in distance order. Quality and world level only determine which stacks can be joined. When enabled, fill matching stacks first, then use containers with the same item type, empty containers, and other containers with space.
+
+- Default value: false
+
 ### Slot Lock Key / [slot_lock_key]
 Specify the key used to toggle player inventory slot locks. While the inventory is open, hold this key and left-click a player inventory slot to toggle its lock. Locked slots keep their items during automatic storage and show a lock icon while the module runs. Empty slots can also be locked. Locks are saved with the character and remain saved while the module is off.
 

@@ -555,11 +555,16 @@ Automatic storage moves eligible items from the local player's inventory into
 nearby allowed containers when `Store Items Key` is pressed. If `Store Items Key` is
 empty, storage does not run.
 
-Storage order:
+By default, items go only into containers that already hold the same item name.
+Quality and world level only determine which stacks can be joined. Storage order:
 
-1. Fill existing stacks of the same item.
-2. Prefer containers that already contain the same Valheim item type.
-3. Use empty containers, then other containers with space.
+1. Fill matching existing stacks first.
+2. Use free slots in containers holding the same item, nearest first.
+
+Empty containers and containers holding only unrelated items are not used by default.
+Enable `Store Into Any Container` to restore the broader routing: fill matching
+stacks first, then use containers holding the same Valheim item type, empty
+containers, and other containers with space.
 
 Key settings:
 
@@ -572,6 +577,7 @@ Key settings:
 | `Allowed Item Types` | Selects which Valheim item types can be stored. |
 | `Excluded Items` | Keeps matching items in the player inventory. |
 | `Store Hotbar Items` | Allows hotbar-row items to be stored when enabled. |
+| `Store Into Any Container` | Allows storage into containers that do not already hold the same item. Off by default. |
 | `Slot Lock Key` | Hold this key (Left Alt by default) and left-click a player inventory slot to toggle its lock. |
 | `Storage Message` | Controls whether a nonzero storage result is shown. |
 

@@ -6,6 +6,7 @@ namespace Automatics.AutomaticStorage
     internal enum StorageRouteKind
     {
         ExactStack,
+        SameItem,
         CategoryAffinity,
         Empty,
         Other
@@ -73,6 +74,11 @@ namespace Automatics.AutomaticStorage
             return item != null && Items.Any(x => x.ItemType == item.ItemType);
         }
 
+        public bool HasSameItem(StorageItemSnapshot item)
+        {
+            return item != null && Items.Any(x => x.Name == item.Name);
+        }
+
         public bool HasCapacityFor(StorageItemSnapshot item)
         {
             return ExactFreeStackSpace(item) > 0 || EmptySlots > 0;
@@ -100,13 +106,21 @@ namespace Automatics.AutomaticStorage
         }
 
         public static List<StorageRoute> Plan(StorageItemSnapshot item,
-            IEnumerable<StorageContainerSnapshot> containers, int referenceLimit = 0)
+            IEnumerable<StorageContainerSnapshot> containers, int referenceLimit = 0,
+            bool storeIntoAnyContainer = false)
         {
             var limited = ApplyReferenceLimit(containers, referenceLimit);
             var routes = new List<StorageRoute>();
 
             AddRoutes(routes, limited.Where(x => x.ExactFreeStackSpace(item) > 0),
                 StorageRouteKind.ExactStack);
+            if (!storeIntoAnyContainer)
+            {
+                AddRoutes(routes, limited.Where(x => x.EmptySlots > 0 && x.HasSameItem(item)),
+                    StorageRouteKind.SameItem);
+                return routes;
+            }
+
             AddRoutes(routes, limited.Where(x => x.HasCapacityFor(item) && x.HasCategory(item)),
                 StorageRouteKind.CategoryAffinity);
             AddRoutes(routes, limited.Where(x => x.HasCapacityFor(item) && x.IsEmpty),

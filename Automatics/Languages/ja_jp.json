@@ -232,6 +232,8 @@
     "@config_automatic_storage_excluded_items_description": "自動収納せずプレイヤーのインベントリに残すアイテムを指定します。通常の項目は内部名、プレハブ名、ローカライズ済み表示名に対する大文字小文字を区別しない部分一致です。先頭に r/ を付けると正規表現として扱われます。",
     "@config_automatic_storage_store_hotbar_items_name": "ホットバーのアイテムを収納する",
     "@config_automatic_storage_store_hotbar_items_description": "ホットバー行にあるアイテムを自動収納の対象にするかどうかを指定します。",
+    "@config_automatic_storage_store_into_any_container_name": "同じアイテムがないコンテナにも収納する",
+    "@config_automatic_storage_store_into_any_container_description": "同じアイテムが入っていないコンテナにも収納するかどうかを指定します。初期設定では同じアイテムが入っているコンテナだけを使用します。有効にすると、既存のスタックを補充した後、同じアイテム種別が入っているコンテナ、空のコンテナ、空き容量のあるその他のコンテナの順に収納します。",
     "@config_automatic_storage_slot_lock_key_name": "スロットをロックするキー",
     "@config_automatic_storage_slot_lock_key_description": "インベントリを開き、このキーを押しながらプレイヤーインベントリのスロットを左クリックするとロックを切り替えます。ロックしたスロットのアイテムは自動収納されず、モジュールの動作中は鍵アイコンが表示されます。",
     "@config_automatic_storage_store_items_key_name": "アイテムを収納するキー",

@@ -232,6 +232,8 @@
     "@config_automatic_storage_excluded_items_description": "Specify items that automatic storage must keep in the player inventory. Plain entries are case-insensitive partial matches against internal names, prefab names, and localized display names. Prefix an entry with r/ to use a regular expression.",
     "@config_automatic_storage_store_hotbar_items_name": "Store Hotbar Items",
     "@config_automatic_storage_store_hotbar_items_description": "Specify whether items in the hotbar row can be stored automatically.",
+    "@config_automatic_storage_store_into_any_container_name": "Store Into Any Container",
+    "@config_automatic_storage_store_into_any_container_description": "Specify whether items can be stored into containers that do not already hold the same item. By default, only containers holding the same item are used. When enabled, fill matching stacks first, then use containers with the same item type, empty containers, and other containers with space.",
     "@config_automatic_storage_slot_lock_key_name": "Slot Lock Key",
     "@config_automatic_storage_slot_lock_key_description": "Specify the key used to toggle player inventory slot locks. While the inventory is open, hold this key and left-click a player inventory slot to toggle its lock. Locked slots keep their items during automatic storage and show a lock icon while the module runs.",
     "@config_automatic_storage_store_items_key_name": "Store Items Key",
