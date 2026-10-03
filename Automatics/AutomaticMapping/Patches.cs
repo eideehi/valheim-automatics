@@ -40,9 +40,12 @@ namespace Automatics.AutomaticMapping
 
         private struct HudHoverState
         {
+            public Character Character;
             public object Data;
             public float Timer;
         }
+
+        private static readonly List<HudHoverState> HudHoverStates = new List<HudHoverState>(2);
 
         private static object GetTargetHudData(EnemyHud enemyHud, Character character)
         {
@@ -55,45 +58,58 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(EnemyHud), "TestShow")]
         private static void EnemyHud_TestShow_Postfix(Character c, ref bool __result)
         {
-            if (!__result && Navigation.GetHudTarget() == c)
+            if (!__result && (Navigation.GetHudTarget() == c || AimedObjectBar.GetHudTarget() == c))
                 __result = true;
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EnemyHud), "UpdateHuds")]
         private static void EnemyHud_UpdateHuds_Prefix(EnemyHud __instance, Player player,
-            out HudHoverState __state)
+            out List<HudHoverState> __state)
         {
-            __state = default;
-            var target = Navigation.GetHudTarget();
-            var data = GetTargetHudData(__instance, target);
-            if (data == null) return;
+            __state = null;
+            HudHoverStates.Clear();
+            var navigation = Navigation.GetHudTarget();
+            var aimed = AimedObjectBar.GetHudTarget();
+            if (!navigation && !aimed) return;
+            __state = HudHoverStates;
+            SaveHoverTimer(__instance, player, navigation, __state);
+            if (aimed != navigation) SaveHoverTimer(__instance, player, aimed, __state);
+        }
 
-            __state.Data = data;
-            __state.Timer = player && player.GetHoverCreature() == target
-                ? 0f
-                : (float)EnemyHudHoverTimerField.GetValue(data);
+        private static void SaveHoverTimer(EnemyHud enemyHud, Player player, Character character,
+            List<HudHoverState> states)
+        {
+            var data = GetTargetHudData(enemyHud, character);
+            if (data == null) return;
+            states.Add(new HudHoverState
+            {
+                Character = character,
+                Data = data,
+                Timer = player && player.GetHoverCreature() == character
+                    ? 0f : (float)EnemyHudHoverTimerField.GetValue(data)
+            });
             EnemyHudHoverTimerField.SetValue(data, 0f);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EnemyHud), "UpdateHuds")]
-        private static void EnemyHud_UpdateHuds_Postfix(float dt, HudHoverState __state)
+        private static void EnemyHud_UpdateHuds_Postfix(float dt, List<HudHoverState> __state)
         {
-            if (__state.Data == null) return;
-
-            // Vanilla updates the health, awareness, placement and name first. Restore the
-            // natural hover timer so a cleared target returns to normal on the next frame.
-            EnemyHudHoverTimerField.SetValue(__state.Data, __state.Timer + dt);
-            var target = Navigation.GetHudTarget();
-            if (!target) return;
-            var name = EnemyHudNameField.GetValue(__state.Data) as UnityEngine.Object;
-            if (!name) return;
-
-            var meters = Mathf.RoundToInt(Utils.DistanceXZ(
-                Player.m_localPlayer.transform.position, target.transform.position));
-            var text = (string)EnemyHudNameTextProperty.GetValue(name);
-            EnemyHudNameTextProperty.SetValue(name, text + " " + meters + "m");
+            if (__state == null) return;
+            foreach (var state in __state)
+            {
+                // Vanilla updates health, placement and names first. Preserve the natural timer
+                // so releasing either target returns its bar to vanilla visibility next frame.
+                EnemyHudHoverTimerField.SetValue(state.Data, state.Timer + dt);
+                var name = EnemyHudNameField.GetValue(state.Data) as UnityEngine.Object;
+                if (!name || !state.Character) continue;
+                var meters = Mathf.RoundToInt(Utils.DistanceXZ(
+                    Player.m_localPlayer.transform.position, state.Character.transform.position));
+                var text = (string)EnemyHudNameTextProperty.GetValue(name);
+                EnemyHudNameTextProperty.SetValue(name, text + " " + meters + "m");
+            }
+            __state.Clear();
         }
 
         [HarmonyPostfix]

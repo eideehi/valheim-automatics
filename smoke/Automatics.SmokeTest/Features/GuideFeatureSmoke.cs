@@ -36,7 +36,6 @@ namespace Automatics.SmokeTest
         private const float RequiredShareInBand = 0.8f;
 
         private static readonly FieldInfo TargetPinField = AccessTools.Field(typeof(Navigation), "_targetPin");
-        private static readonly FieldInfo OverlayField = AccessTools.Field(typeof(Navigation), "_overlayObject");
         private static readonly MethodInfo SetTargetMethod = AccessTools.Method(typeof(Navigation), "SetTarget");
 
         public static IEnumerator Run(FeatureRun run)
@@ -70,9 +69,9 @@ namespace Automatics.SmokeTest
                 run.Skip("guide_section", "the game is paused, so navigation is not shown");
                 yield break;
             }
-            if (TargetPinField == null || OverlayField == null || SetTargetMethod == null)
+            if (TargetPinField == null || SetTargetMethod == null)
             {
-                run.Fail("guide_section", "Navigation's target, overlay or SetTarget could not be found by reflection");
+                run.Fail("guide_section", "Navigation's target or SetTarget could not be found by reflection");
                 yield break;
             }
 
@@ -207,7 +206,7 @@ namespace Automatics.SmokeTest
         {
             var root = NavigationGuide.Root;
             var particles = NavigationGuide.Particles;
-            var overlay = OverlayField.GetValue(null) as GameObject;
+            var overlay = Navigation.Label;
             if (!root || !particles)
             {
                 run.Fail("guide_swarm_alive", "the guide swarm is gone");

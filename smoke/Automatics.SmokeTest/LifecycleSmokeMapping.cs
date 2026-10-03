@@ -10,6 +10,7 @@ using HarmonyLib;
 using ModUtils;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using AimedObjectBar = Automatics.AutomaticMapping.AimedObjectBar;
 using Navigation = Automatics.AutomaticMapping.Navigation;
 using MappingMap = Automatics.AutomaticMapping.Map;
 using BirdCache = Automatics.AutomaticMapping.BirdCache;
@@ -33,8 +34,8 @@ namespace Automatics.SmokeTest
     //     the predicate every entry point opens with, and the static scan makes no pass until the
     //     teardown;
     //   - while off, no patch is left under its Harmony id, no component of its own and no
-    //     navigation overlay or guide swarm is left in the scene, the saved pins are the ones there were before
-    //     the run, and no unsaved pin the module held is left on the map;
+    //     navigation overlay, aimed label or guide swarm is left in the scene, the saved pins
+    //     are the ones there were before the run, and no unsaved pin the module held is left on the map;
     //   - while on, the patches are exactly the declared set, every eligible object in the scene
     //     carries its component from the running generation, the handler counts, component counts
     //     and minimap icon tables are what they were before the run, the scans run again, and the
@@ -42,8 +43,8 @@ namespace Automatics.SmokeTest
     // A vehicle pin is a saved pin that follows its vehicle, and a disable moves it to where its
     // vehicle is, so the saved-pin comparison leaves the position of the vehicle pins out.
     //
-    // It spawns nothing and writes only the toggle, through SmokeSession, under the lifecycle
-    // command's rules. It only ever turns Automatic Mapping off and back on: when the module is
+    // It spawns nothing and records the module toggle and aimed-bar settings through SmokeSession,
+    // under the lifecycle command's rules. It only ever turns Automatic Mapping off and back on: when the module is
     // off in the user's settings, every check SKIPs and nothing is written.
     internal static partial class LifecycleSmokeCommand
     {
@@ -63,6 +64,7 @@ namespace Automatics.SmokeTest
         private const float PinSettleSeconds = 4f;
 
         private const string NavigationOverlayName = "AutomaticsNavigationOverlay";
+        private const string AimedOverlayName = "AutomaticsAimedObjectOverlay";
         private const string NavigationGuideName = "AutomaticsNavigationGuide";
 
         private static IEnumerator RunMapping(Terminal context, int runId, string runner)
@@ -246,6 +248,17 @@ namespace Automatics.SmokeTest
                 };
                 SmokeSession.TrackHandBack(_navigationHandBack);
 
+                if (!SmokeSession.BeginSetting(RunId, MappingConfig.EnableAimedObjectBarEntry,
+                        out var aimedEnabled, out var aimedRefusal) ||
+                    !SmokeSession.BeginSetting(RunId, MappingConfig.AimedObjectBarRangeEntry,
+                        out var aimedRange, out aimedRefusal) ||
+                    !SmokeSession.WriteSetting(RunId, aimedEnabled, true, out aimedRefusal) ||
+                    !SmokeSession.WriteSetting(RunId, aimedRange, 50f, out aimedRefusal))
+                {
+                    Stopped("aimed-label setting precondition failed: " + aimedRefusal);
+                    yield break;
+                }
+
                 for (_cycle = 1; _cycle <= MappingCycles; _cycle++)
                 {
                     var off = TurnOff(_cycle);
@@ -290,6 +303,12 @@ namespace Automatics.SmokeTest
 
                 if (_navigationHandBack != null && _navigationHandBack("mapping lifecycle smoke"))
                     SmokeSession.ReleaseHandBack(_navigationHandBack);
+                AimedObjectBar.Cleanup();
+                var aimedRestored = SmokeSession.RestoreSettings(RunId);
+                var aimedFailures = aimedRestored.Where(x => x.Key != SmokeSession.ToggleOutcome.Restored &&
+                    x.Key != SmokeSession.ToggleOutcome.NothingWritten).ToList();
+                if (aimedFailures.Count > 0)
+                    Settle(CheckStatus.Fail, Restored, string.Join("; ", aimedFailures.Select(x => x.Value)));
                 if (_errors.Started) JudgeLog();
                 SmokeSession.ReleaseHandBack(_observerHandBack);
             }
@@ -321,6 +340,7 @@ namespace Automatics.SmokeTest
                     CreatureId = ZDOID.None,
                     AimedId = ZDOID.None
                 });
+                var aimedActive = AimBarFeatureSmoke.ActivateExistingLabel(Player.m_localPlayer, out var aimedPrecondition);
                 var marker = Navigation.TemporaryMarker;
                 var markerActive = marker != null && !marker.m_save && AllPins().Contains(marker);
 
@@ -378,12 +398,14 @@ namespace Automatics.SmokeTest
                 var kinds = CountComponents();
                 var overlays = CountNavigationOverlays();
                 var guides = CountNavigationGuides();
+                var aimedLabels = FindAll<RectTransform>().Count(x => x.name == AimedOverlayName);
                 var extraPins = ExtraUnsavedPins().Count();
-                Cycle(OffComponents, cycle, kinds.Sum(x => x.Total) == 0 && overlays == 0 && guides == 0 &&
+                Cycle(OffComponents, cycle, kinds.Sum(x => x.Total) == 0 && overlays == 0 && guides == 0 && aimedLabels == 0 &&
+                    aimedActive && !AimedObjectBar.Label && !AimedObjectBar.GetHudTarget() &&
                     markerActive && Navigation.TemporaryMarker == null && !AllPins().Contains(marker) &&
                     extraPins == 0 && NavigationDestroyHandlers() == 0,
-                    "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode, navigation overlay, guide swarm or temporary marker is left after disabling with a marker active",
-                    $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s), {guides} guide swarm(s), marker active before={markerActive}, marker left={Navigation.TemporaryMarker != null || AllPins().Contains(marker)}, extra unsaved pins={extraPins}, navigation destruction handlers={NavigationDestroyHandlers()} (AC-R4)");
+                    "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode, navigation overlay, aimed label, guide swarm or temporary marker is left after disabling with a marker and aimed label active",
+                    $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s), {aimedLabels} aimed label(s), aimed active before={aimedActive}, aimed precondition={aimedPrecondition}, {guides} guide swarm(s), marker active before={markerActive}, marker left={Navigation.TemporaryMarker != null || AllPins().Contains(marker)}, extra unsaved pins={extraPins}, navigation destruction handlers={NavigationDestroyHandlers()}");
 
                 var saved = SavedPins(_baseline.VehiclePins);
                 Cycle(OffSavedPins, cycle, saved.SequenceEqual(_baseline.SavedPins),

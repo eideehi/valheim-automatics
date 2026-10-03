@@ -73,7 +73,8 @@ namespace Automatics.AutomaticMapping
             public string StoredName;
         }
 
-        internal static bool TryResolveFromRay(Player player, Ray ray, out AimedObject aimed)
+        internal static bool TryResolveFromRay(Player player, Ray ray, out AimedObject aimed,
+            AimedObject cached = null)
         {
             aimed = null;
             // The nearest hit can be the player's body in third-person view. Keep looking
@@ -118,7 +119,9 @@ namespace Automatics.AutomaticMapping
                 var internalName = GetInternalName(hit.collider, component);
                 // A display name keeps a manual vehicle pin out of legacy automatic-pin
                 // adoption, which matches the vehicle's untranslated name.
-                name = Localization.instance.Localize(GetDisplayName(hit.collider, component, internalName));
+                name = cached != null && cached.Instance == component.gameObject && cached.Component == component
+                    ? cached.Name
+                    : Localization.instance.Localize(GetDisplayName(hit.collider, component, internalName));
                 var character = component.GetComponent<Character>();
                 type = IconPack.GetPinType(new Target
                 {

@@ -37,6 +37,8 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<KeyboardShortcut> _pinObjectKey;
         private static ConfigEntry<float> _pinObjectRange;
         private static ConfigEntry<KeyboardShortcut> _navigateToAimedObjectKey;
+        private static ConfigEntry<bool> _enableAimedObjectBar;
+        private static ConfigEntry<float> _aimedObjectBarRange;
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
         private static ConfigEntry<bool> _enableNavigationGuide;
         private static ConfigEntry<string> _navigationGuideColor;
@@ -81,8 +83,13 @@ namespace Automatics.AutomaticMapping
         public static KeyboardShortcut StaticObjectMappingKey => _staticObjectMappingKey.Value;
         public static KeyboardShortcut PinObjectKey => _pinObjectKey.Value;
         public static float PinObjectRange => _pinObjectRange.Value;
+        internal static ConfigEntry<float> PinObjectRangeEntry => _pinObjectRange;
         public static KeyboardShortcut NavigateToAimedObjectKey => _navigateToAimedObjectKey.Value;
         internal static ConfigEntry<KeyboardShortcut> NavigateToAimedObjectKeyEntry => _navigateToAimedObjectKey;
+        public static bool EnableAimedObjectBar => _enableAimedObjectBar.Value;
+        internal static ConfigEntry<bool> EnableAimedObjectBarEntry => _enableAimedObjectBar;
+        public static float AimedObjectBarRange => _aimedObjectBarRange.Value;
+        internal static ConfigEntry<float> AimedObjectBarRangeEntry => _aimedObjectBarRange;
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
         public static bool EnableNavigationGuide => _enableNavigationGuide.Value;
         internal static ConfigEntry<bool> EnableNavigationGuideEntry => _enableNavigationGuide;
@@ -173,6 +180,8 @@ namespace Automatics.AutomaticMapping
             _pinObjectKey = config.Bind("pin_object_key", new KeyboardShortcut());
             _navigateToAimedObjectKey = config.Bind("navigate_to_aimed_object_key", new KeyboardShortcut());
             _pinObjectRange = config.Bind("pin_object_range", 100f, (10f, 300f));
+            _enableAimedObjectBar = config.Bind("enable_aimed_object_bar", false);
+            _aimedObjectBarRange = config.Bind("aimed_object_bar_range", 50f, (10f, 300f));
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
             _enableNavigationGuide = config.Bind("enable_navigation_guide", true);

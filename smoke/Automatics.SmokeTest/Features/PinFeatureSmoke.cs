@@ -1230,3 +1230,508 @@ namespace Automatics.SmokeTest
         }
     }
 }
+
+namespace Automatics.SmokeTest
+{
+    internal static class AimBarFeatureSmoke
+    {
+        private const float TestRange = 20f;
+        private const float HudStep = 0.25f;
+        private static readonly System.Reflection.FieldInfo HudsField =
+            AccessTools.Field(typeof(EnemyHud), "m_huds");
+        private static readonly System.Reflection.MethodInfo LateUpdate =
+            AccessTools.Method(typeof(EnemyHud), "LateUpdate");
+        private static readonly System.Reflection.MethodInfo UpdateHuds =
+            AccessTools.Method(typeof(EnemyHud), "UpdateHuds");
+
+        internal static IEnumerator Run(FeatureRun run)
+        {
+            var player = Player.m_localPlayer;
+            if (!run.IsCurrent || !player || !player.IsOwner() || !Minimap.instance || !EnemyHud.instance ||
+                !GameCamera.instance || !ZNetScene.instance || Localization.instance == null ||
+                !ZNet.instance || !ZNet.instance.IsServer() || ZNet.instance.GetPeerConnections() > 0)
+            {
+                run.Skip("aimbar_section", "requires a loaded single-player world, local owner, minimap, enemy HUD and camera");
+                yield break;
+            }
+            if (!MappingModule.Running)
+            {
+                run.Skip("aimbar_section", "Automatic Mapping is not running; enable the module first");
+                yield break;
+            }
+            if (Game.IsPaused() || !Hud.instance || Hud.IsUserHidden() ||
+                Minimap.instance.m_mode == Minimap.MapMode.Large)
+            {
+                run.Skip("aimbar_section", "the game must be unpaused, HUD visible and large map closed");
+                yield break;
+            }
+
+            var original = Navigation.CaptureTarget();
+            var camera = GameCamera.instance.transform;
+            var rotation = camera.rotation;
+            var position = camera.position;
+            var spawned = new List<GameObject>();
+            var cleanup = new Func<string, bool>(_ =>
+            {
+                if (camera) camera.SetPositionAndRotation(position, rotation);
+                AimedObjectBar.Cleanup();
+                if (Minimap.instance) Navigation.RestoreTarget(original);
+                return true;
+            });
+            SmokeSession.TrackHandBack(cleanup);
+            try
+            {
+                if (!SmokeSession.BeginSetting(run.RunId, MappingConfig.EnableAimedObjectBarEntry,
+                        out var enabled, out var refusal) ||
+                    !SmokeSession.BeginSetting(run.RunId, MappingConfig.AimedObjectBarRangeEntry,
+                        out var range, out refusal) ||
+                    !SmokeSession.BeginSetting(run.RunId, MappingConfig.PinObjectRangeEntry,
+                        out var rayRange, out refusal) ||
+                    !SmokeSession.WriteSetting(run.RunId, enabled, true, out refusal) ||
+                    !SmokeSession.WriteSetting(run.RunId, range, TestRange, out refusal) ||
+                    !SmokeSession.WriteSetting(run.RunId, rayRange, 100f, out refusal))
+                {
+                    run.Fail("aimbar_settings", "setting ownership precondition failed: " + refusal);
+                    yield break;
+                }
+                Navigation.ClearTarget();
+                var forward = Vector3.ProjectOnPlane(camera.forward, Vector3.up).normalized;
+                if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
+                var near = position + forward * 5f;
+                var far = position + forward * 45f;
+
+                foreach (var prefabName in new[] { "Boar", "woodwall", "Pickable_Mushroom" })
+                {
+                    var go = Spawn(prefabName, near, Quaternion.LookRotation(-forward), spawned, out var error);
+                    if (!go)
+                    {
+                        run.Fail("aimbar_" + prefabName + "_setup", error);
+                        continue;
+                    }
+                    var character = go.GetComponent<Character>();
+                    var piece = go.GetComponent<Piece>();
+                    var expectedHealth = 1f;
+                    if (character)
+                    {
+                        character.SetHealth(character.GetMaxHealth() * 0.4f);
+                        expectedHealth = character.GetHealthPercentage();
+                    }
+                    if (piece)
+                    {
+                        piece.SetCreator(player.GetPlayerID(), default);
+                        var wear = piece.GetComponent<WearNTear>();
+                        if (!piece.IsPlacedByPlayer() || !wear)
+                        {
+                            run.Fail("aimbar_piece_setup", "the test piece must have a player creator and WearNTear");
+                            Remove(go);
+                            continue;
+                        }
+                        wear.m_noSupportWear = true;
+                        var health = wear.m_health * 0.4f;
+                        go.GetComponent<ZNetView>().GetZDO().Set(ZDOVars.s_health, health);
+                        AccessTools.Method(typeof(WearNTear), "RPC_HealthChanged")
+                            .Invoke(wear, new object[] { 0L, health });
+                        expectedHealth = wear.GetHealthPercentage();
+                        Check(run, "aimbar_piece_health_source", Mathf.Abs(expectedHealth - 0.4f) < 0.01f,
+                            $"player-built piece health precondition: expected 0.4, got {expectedHealth:F3}");
+                    }
+                    var name = character ? "creature" : piece ? "piece" : "pickable";
+                    if (!AimAndUpdate(player, go, out error))
+                    {
+                        run.Fail("aimbar_" + name + "_near", error);
+                        Remove(go);
+                        continue;
+                    }
+                    CheckBar(run, player, go, "aimbar_" + name + "_near", expectedHealth);
+
+                    if (!SmokeSession.WriteSetting(run.RunId, enabled, false, out refusal))
+                        throw new InvalidOperationException(refusal);
+                    Navigation.Update(player);
+                    Check(run, "aimbar_" + name + "_off", !AimedObjectBar.Label &&
+                        !AimedObjectBar.GetHudTarget(),
+                        "option off clears the aimed label and releases the vanilla HUD target");
+                    if (!SmokeSession.WriteSetting(run.RunId, enabled, true, out refusal))
+                        throw new InvalidOperationException(refusal);
+
+                    go.transform.position = far;
+                    Physics.SyncTransforms();
+                    if (!AimAndUpdate(player, go, out error)) run.Fail("aimbar_" + name + "_far", error);
+                    else Check(run, "aimbar_" + name + "_far", Utils.DistanceXZ(player.transform.position, far) > TestRange &&
+                        !LabelVisible() && !AimedObjectBar.GetHudTarget(),
+                        "the resolver still hits the object, but the bar is hidden beyond the horizontal limit");
+                    go.transform.position = near;
+                    Physics.SyncTransforms();
+                    if (!AimAndUpdate(player, go, out error)) run.Fail("aimbar_" + name + "_return", error);
+                    else CheckBar(run, player, go, "aimbar_" + name + "_return", expectedHealth);
+
+                    if (character)
+                    {
+                        CheckAimedCreatureRange(run, player, character, forward, range);
+                        CheckCreatures(run, player, character, forward, spawned);
+                    }
+                    else if (piece) CheckSamePiece(run, player, go);
+                    camera.rotation = Quaternion.LookRotation(Vector3.up, forward);
+                    var empty = new Ray(camera.position, camera.forward);
+                    var hit = ObjectPinning.TryResolveFromRay(player, empty, out _);
+                    Navigation.ClearTarget();
+                    Navigation.Update(player);
+                    Check(run, "aimbar_" + name + "_away", !hit && !LabelVisible() &&
+                        !AimedObjectBar.GetHudTarget(),
+                        hit ? "empty-aim precondition failed: upward camera ray hit an object" : "aiming away hides the bar");
+                    Remove(go);
+                }
+                CheckBareTerrain(run, player, forward);
+                camera.SetPositionAndRotation(position, rotation);
+            }
+            finally
+            {
+                try
+                {
+                    foreach (var go in spawned) Remove(go);
+                    if (cleanup("aimed bar smoke")) SmokeSession.ReleaseHandBack(cleanup);
+                }
+                finally
+                {
+                    var restored = SmokeSession.RestoreSettings(run.RunId);
+                    Check(run, "aimbar_settings_restored", restored.All(x =>
+                        x.Key == SmokeSession.ToggleOutcome.Restored || x.Key == SmokeSession.ToggleOutcome.NothingWritten ||
+                        x.Key == SmokeSession.ToggleOutcome.AlreadyOriginal),
+                        string.Join("; ", restored.Select(x => x.Value)));
+                }
+            }
+        }
+
+        private static void CheckBareTerrain(FeatureRun run, Player player, Vector3 forward)
+        {
+            Navigation.ClearTarget();
+            var camera = GameCamera.instance.transform;
+            var position = camera.position;
+            var rotation = camera.rotation;
+            try
+            {
+                for (var i = 0; i < 8; i++)
+                {
+                    var angle = i * Mathf.PI / 4f;
+                    var origin = player.transform.position + Vector3.up * 5f +
+                        new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 3f;
+                    var ray = new Ray(origin, Vector3.down);
+                    if (!Physics.Raycast(ray, out var hit, MappingConfig.PinObjectRange, LayerMask.GetMask("terrain")) ||
+                        !hit.collider.GetComponentInParent<Heightmap>() ||
+                        !ObjectPinning.TryResolveFromRay(player, ray, out var aimed) ||
+                        !aimed.Instance.GetComponentInParent<Heightmap>() ||
+                        aimed.Component || aimed.Location || !string.IsNullOrEmpty(aimed.Name)) continue;
+                    camera.SetPositionAndRotation(origin, Quaternion.LookRotation(Vector3.down, forward));
+                    Navigation.Update(player);
+                    var selected = AccessTools.Field(typeof(AimedObjectBar), "_aimed").GetValue(null);
+                    Check(run, "aimbar_bare_terrain", !LabelVisible() && !AimedObjectBar.GetHudTarget() && selected == null,
+                        "an unobstructed bare terrain hit selects no aimed object and shows no bar");
+                    return;
+                }
+                run.Fail("aimbar_bare_terrain", "terrain precondition failed: no nearby downward ray hits bare terrain without a component, name or location");
+            }
+            finally { camera.SetPositionAndRotation(position, rotation); }
+        }
+
+        private static void CheckAimedCreatureRange(FeatureRun run, Player player, Character creature, Vector3 forward,
+            SmokeSession.SettingRestoration range)
+        {
+            Navigation.ClearTarget();
+            var position = creature.transform.position;
+            try
+            {
+                // Just beyond the vanilla creature bar's reach, with the bar range widened to cover it
+                // for this check only.
+                var reach = EnemyHud.instance.m_maxShowDistance + 5f;
+                if (!SmokeSession.WriteSetting(run.RunId, range, reach + 10f, out var refusal))
+                {
+                    run.Fail("aimbar_creature_extended_range", "setting ownership precondition failed: " + refusal);
+                    return;
+                }
+                var target = player.transform.position + forward * reach;
+                target.y = position.y;
+                creature.transform.position = target;
+                Physics.SyncTransforms();
+                var distance = Vector3.Distance(player.transform.position, target);
+                var horizontal = Utils.DistanceXZ(player.transform.position, target);
+                if (distance <= EnemyHud.instance.m_maxShowDistance || horizontal > MappingConfig.AimedObjectBarRange)
+                {
+                    run.Fail("aimbar_creature_extended_range",
+                        $"distance precondition failed: creature at {distance:F1} m (horizontal {horizontal:F1} m), vanilla range {EnemyHud.instance.m_maxShowDistance:F1} m, bar range {MappingConfig.AimedObjectBarRange:F1} m");
+                    return;
+                }
+                if (!AimAndUpdate(player, creature.gameObject, out var error))
+                {
+                    run.Fail("aimbar_creature_extended_range", error);
+                    return;
+                }
+                var data = HudData(creature);
+                Check(run, "aimbar_creature_extended_range", Navigation.GetHudTarget() == null &&
+                    AimedObjectBar.GetHudTarget() == creature && data != null && HudVisible(data) &&
+                    HudName(data).EndsWith(DistanceText(player, creature.gameObject)) && !LabelVisible(),
+                    "the aimed creature beyond vanilla range has a visible real HUD with distance, without navigation or a cloned label");
+            }
+            finally
+            {
+                creature.transform.position = position;
+                SmokeSession.WriteSetting(run.RunId, range, TestRange, out _);
+                Physics.SyncTransforms();
+            }
+        }
+
+        private static void CheckCreatures(FeatureRun run, Player player, Character first, Vector3 forward,
+            List<GameObject> spawned)
+        {
+            var navigation = new Navigation.TargetState
+            {
+                Pin = new Minimap.PinData { m_type = Minimap.PinType.Icon3, m_name = first.GetHoverName() },
+                Temporary = true,
+                CreatureId = first.GetComponent<ZNetView>().GetZDO().m_uid,
+                LastPosition = first.transform.position
+            };
+            Navigation.RestoreTarget(navigation);
+            if (!AimAndUpdate(player, first.gameObject, out var error))
+            {
+                run.Fail("aimbar_same_creature", error);
+                return;
+            }
+            var data = HudData(first);
+            Check(run, "aimbar_same_creature", data != null && HudVisible(data) && !LabelVisible() &&
+                NamedLabels() == 0 && HudCount(first) == 1,
+                "the same creature has exactly one real HUD and no cloned label");
+            if (data == null)
+            {
+                run.Fail("aimbar_same_creature_timer", "the shared creature's real HUD must exist before saving its timer");
+                return;
+            }
+            var hover = HoverField(data);
+            hover.SetValue(data, 81f);
+            UpdateHuds.Invoke(EnemyHud.instance, new object[] { player, null, HudStep });
+            Check(run, "aimbar_same_creature_timer", Mathf.Abs((float)hover.GetValue(data) - (81f + HudStep)) < 0.01f,
+                "a shared creature is processed once and its natural hover timer advances once");
+
+            var camera = GameCamera.instance.transform;
+            var second = Spawn("Boar", camera.position + forward * 35f + Vector3.Cross(Vector3.up, forward) * 5f,
+                Quaternion.identity, spawned, out error);
+            if (!second)
+            {
+                run.Fail("aimbar_two_creatures", error);
+                return;
+            }
+            var other = second.GetComponent<Character>();
+            navigation.CreatureId = second.GetComponent<ZNetView>().GetZDO().m_uid;
+            navigation.LastPosition = second.transform.position;
+            navigation.Pin.m_name = other.GetHoverName();
+            Navigation.RestoreTarget(navigation);
+            if (!AimAndUpdate(player, first.gameObject, out error))
+            {
+                run.Fail("aimbar_two_creatures", error);
+                Remove(second);
+                return;
+            }
+            var otherData = HudData(other);
+            var beyond = Vector3.Distance(player.transform.position, other.transform.position) > EnemyHud.instance.m_maxShowDistance;
+            Check(run, "aimbar_two_creatures", beyond && data != null && otherData != null &&
+                HudVisible(data) && HudVisible(otherData) && !LabelVisible() && NamedLabels() == 0,
+                $"two real HUDs are visible; second creature beyond vanilla range precondition={beyond}");
+            if (data == null || otherData == null)
+            {
+                run.Fail("aimbar_two_timers", "both real HUD data entries must exist before saving their hover timers");
+            }
+            else
+            {
+                var otherHover = HoverField(otherData);
+                hover.SetValue(data, 83f);
+                otherHover.SetValue(otherData, 97f);
+                UpdateHuds.Invoke(EnemyHud.instance, new object[] { player, null, HudStep });
+                var timers = Mathf.Abs((float)hover.GetValue(data) - (83f + HudStep)) < 0.01f &&
+                             Mathf.Abs((float)otherHover.GetValue(otherData) - (97f + HudStep)) < 0.01f;
+                var names = HudName(data).EndsWith(DistanceText(player, first.gameObject)) &&
+                            HudName(otherData).EndsWith(DistanceText(player, second));
+                Check(run, "aimbar_two_timers", timers && names && HudVisible(data) && HudVisible(otherData),
+                    $"independent hover timers restored with vanilla elapsed time={timers}, both names carry distance={names}");
+            }
+            Navigation.ClearTarget();
+            first.m_hideHud = true;
+            if (!AimAndUpdate(player, first.gameObject, out error)) run.Fail("aimbar_hidden_creature", error);
+            else CheckBar(run, player, first.gameObject, "aimbar_hidden_creature", 1f);
+            first.m_hideHud = false;
+            var boss = first.m_boss;
+            first.m_boss = true;
+            try
+            {
+                if (!AimAndUpdate(player, first.gameObject, out error, false)) run.Fail("aimbar_boss", error);
+                else CheckBar(run, player, first.gameObject, "aimbar_boss", 1f);
+            }
+            finally { first.m_boss = boss; }
+            Remove(second);
+        }
+
+        private static void CheckSamePiece(FeatureRun run, Player player, GameObject go)
+        {
+            Navigation.RestoreTarget(new Navigation.TargetState
+            {
+                Pin = new Minimap.PinData { m_type = Minimap.PinType.Icon3, m_name = go.GetComponent<Piece>().m_name },
+                Temporary = true,
+                LastPosition = go.transform.position,
+                AimedInstance = go,
+                AimedId = go.GetComponent<ZNetView>().GetZDO().m_uid
+            });
+            if (!AimAndUpdate(player, go, out var error)) run.Fail("aimbar_same_piece", error);
+            else
+            {
+                var label = Navigation.Label;
+                var health = go.GetComponent<WearNTear>().GetHealthPercentage();
+                var fast = label ? label.transform.Find("Health/health_fast").GetComponent<GuiBar>() : null;
+                var slow = label ? label.transform.Find("Health/health_slow").GetComponent<GuiBar>() : null;
+                var values = fast && slow && Mathf.Abs(BarValue(fast) - health) < 0.01f &&
+                    Mathf.Abs(BarValue(slow) - health) < 0.01f;
+                Check(run, "aimbar_same_piece", !LabelVisible() && NamedLabels() == 1 &&
+                    label && label.activeInHierarchy && health < 1f && values,
+                    $"only the navigation label is visible for the damaged player-built piece; health={health:F3}, both bars match={values}");
+            }
+            Navigation.ClearTarget();
+        }
+
+        internal static bool AimAndUpdate(Player player, GameObject go, out string error, bool updateEnemyHud = true)
+        {
+            error = "ray precondition failed: no enabled collider resolves to the test object before an obstruction";
+            var camera = GameCamera.instance.transform;
+            Physics.SyncTransforms();
+            foreach (var collider in go.GetComponentsInChildren<Collider>())
+            {
+                if (!collider.enabled) continue;
+                var ray = new Ray(camera.position, collider.bounds.center - camera.position);
+                if (!ObjectPinning.TryResolveFromRay(player, ray, out var aimed) ||
+                    aimed.Instance != go) continue;
+                camera.rotation = Quaternion.LookRotation(ray.direction);
+                Navigation.Update(player);
+                if (updateEnemyHud) LateUpdate.Invoke(EnemyHud.instance, null);
+                error = null;
+                return true;
+            }
+            return false;
+        }
+
+        internal static bool ActivateExistingLabel(Player player, out string error)
+        {
+            error = "aimed label precondition failed: ";
+            if (!GameCamera.instance) { error += "the game camera is missing"; return false; }
+            if (!player || player != Player.m_localPlayer || !player.IsOwner())
+            { error += "the player is not the local owner"; return false; }
+            if (Game.IsPaused()) { error += "the game is paused"; return false; }
+            if (!Hud.instance || Hud.IsUserHidden()) { error += "the HUD is missing or hidden"; return false; }
+            if (!Minimap.instance || Minimap.instance.m_mode == Minimap.MapMode.Large)
+            { error += "the minimap is missing or the large map is open"; return false; }
+            var camera = GameCamera.instance.transform;
+            var rotation = camera.rotation;
+            try
+            {
+                foreach (var collider in UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsSortMode.None))
+                {
+                    if (!collider.enabled || collider.isTrigger || collider.transform.IsChildOf(player.transform)) continue;
+                    var ray = new Ray(camera.position, collider.bounds.center - camera.position);
+                    if (!ObjectPinning.TryResolveFromRay(player, ray, out var aimed) ||
+                        !aimed.Instance || aimed.Instance.GetComponent<Character>() ||
+                        Utils.DistanceXZ(player.transform.position, aimed.Position) > MappingConfig.AimedObjectBarRange)
+                        continue;
+                    camera.rotation = Quaternion.LookRotation(ray.direction);
+                    Navigation.Update(player);
+                    if (LabelVisible())
+                    {
+                        error = null;
+                        return true;
+                    }
+                }
+                error = "no unobstructed loaded non-creature within the ray and bar ranges produces an on-screen label; face nearby vegetation or a piece and retry";
+                return false;
+            }
+            finally { camera.rotation = rotation; }
+        }
+
+        private static GameObject Spawn(string prefabName, Vector3 position, Quaternion rotation,
+            List<GameObject> spawned, out string error)
+        {
+            error = "spawn precondition failed: " + prefabName + " prefab is unavailable";
+            var prefab = ZNetScene.instance.GetPrefab(prefabName);
+            if (!prefab) return null;
+            var go = UnityEngine.Object.Instantiate(prefab, position, rotation);
+            SmokeSession.TrackSpawn(go);
+            spawned.Add(go);
+            var view = go.GetComponent<ZNetView>();
+            if (!view || !view.IsValid() || view.GetZDO() == null)
+            {
+                error = "spawn precondition failed: " + prefabName + " has no valid ZDO";
+                Remove(go);
+                return null;
+            }
+            view.GetZDO().Persistent = false;
+            Physics.SyncTransforms();
+            error = null;
+            return go;
+        }
+
+        private static void Remove(GameObject go)
+        {
+            if (!go) return;
+            go.SetActive(false);
+            Physics.SyncTransforms();
+            if (SmokeSession.DestroyTestObject(go, 0, "aimed bar smoke")) SmokeSession.ReleaseSpawn(go);
+        }
+
+        private static void CheckBar(FeatureRun run, Player player, GameObject go, string check, float health)
+        {
+            var character = go.GetComponent<Character>();
+            var vanilla = character && !character.m_hideHud && !character.IsBoss();
+            var data = vanilla ? HudData(character) : null;
+            var label = AimedObjectBar.Label;
+            var root = vanilla ? data == null ? null : HudRoot(data) : label;
+            var name = vanilla ? data == null ? "" : HudName(data) : LabelName(label);
+            var expectedName = Localization.instance.Localize(character ? character.GetHoverName() :
+                go.GetComponent<Piece>() ? go.GetComponent<Piece>().m_name : go.GetComponent<Pickable>().GetHoverName());
+            var fast = root ? root.transform.Find("Health/health_fast").GetComponent<GuiBar>() : null;
+            var slow = root ? root.transform.Find("Health/health_slow").GetComponent<GuiBar>() : null;
+            var friendly = root ? root.transform.Find("Health/health_fast_friendly") : null;
+            var values = fast && slow && Mathf.Abs(BarValue(fast) - health) < 0.01f &&
+                         Mathf.Abs(BarValue(slow) - health) < 0.01f &&
+                         (!friendly || Mathf.Abs(BarValue(friendly.GetComponent<GuiBar>()) - health) < 0.01f);
+            Check(run, check, root && root.activeInHierarchy && name == expectedName + DistanceText(player, go) &&
+                values && (!vanilla || !LabelVisible()),
+                $"visible={root && root.activeInHierarchy}, name='{name}', expected='{expectedName + DistanceText(player, go)}', health={health:F3}, bars match={values}, vanilla={vanilla}");
+        }
+
+        private static float BarValue(GuiBar bar) =>
+            (float)AccessTools.Field(typeof(GuiBar), "m_value").GetValue(bar);
+        private static string DistanceText(Player player, GameObject go) =>
+            " " + Mathf.RoundToInt(Utils.DistanceXZ(player.transform.position, go.transform.position)) + "m";
+        private static bool LabelVisible() => AimedObjectBar.Label &&
+            AimedObjectBar.Label.activeInHierarchy;
+        private static int NamedLabels() => UnityEngine.Object.FindObjectsByType<RectTransform>(
+            FindObjectsInactive.Include, FindObjectsSortMode.None).Count(x => x.gameObject.activeInHierarchy &&
+            (x.name == "AutomaticsNavigationOverlay" || x.name == "AutomaticsAimedObjectOverlay"));
+        private static IDictionary Huds() => (IDictionary)HudsField.GetValue(EnemyHud.instance);
+        private static object HudData(Character character) => Huds().Contains(character) ? Huds()[character] : null;
+        private static int HudCount(Character character) => Huds().Keys.Cast<Character>().Count(x => x == character);
+        private static GameObject HudRoot(object data) =>
+            (GameObject)AccessTools.Field(data.GetType(), "m_gui").GetValue(data);
+        private static bool HudVisible(object data) => HudRoot(data) && HudRoot(data).activeInHierarchy;
+        private static System.Reflection.FieldInfo HoverField(object data) =>
+            AccessTools.Field(data.GetType(), "m_hoverTimer");
+        private static string HudName(object data)
+        {
+            var name = AccessTools.Field(data.GetType(), "m_name").GetValue(data);
+            return (string)AccessTools.Property(name.GetType(), "text").GetValue(name);
+        }
+        private static string LabelName(GameObject label)
+        {
+            if (!label) return "";
+            var type = AccessTools.Field(AccessTools.Inner(typeof(EnemyHud), "HudData"), "m_name").FieldType;
+            var name = label.transform.Find("Name").GetComponent(type);
+            return (string)AccessTools.Property(type, "text").GetValue(name);
+        }
+        private static void Check(FeatureRun run, string name, bool passed, string detail)
+        {
+            if (passed) run.Pass(name, detail);
+            else run.Fail(name, detail);
+        }
+    }
+}

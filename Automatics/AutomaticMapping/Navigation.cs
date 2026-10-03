@@ -1,30 +1,16 @@
 ﻿using System;
-using System.Reflection;
-using HarmonyLib;
 using ModUtils;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace Automatics.AutomaticMapping
 {
     internal static class Navigation
     {
         private const float TargetPinValidationInterval = 0.5f;
-        private const float ObjectTopMargin = 0.4f;
         private const float UnresolvedTargetHeight = 2f;
         private const float ManualPinMapPlaneHeightEpsilon = 0.01f;
         private const float GuideRetryDelay = 5f;
-
-        // Resolve GameCamera.m_camera through a cached field-ref delegate; the navigation
-        // overlay reads it every frame and a fresh Traverse lookup each frame is wasteful.
-        private static readonly AccessTools.FieldRef<GameCamera, Camera> CameraRef =
-            AccessTools.FieldRefAccess<GameCamera, Camera>("m_camera");
-
-        private static readonly Type EnemyHudNameType =
-            AccessTools.Field(AccessTools.Inner(typeof(EnemyHud), "HudData"), "m_name").FieldType;
-
-        private static readonly PropertyInfo EnemyHudNameTextProperty =
-            AccessTools.Property(EnemyHudNameType, "text");
+        private static readonly MappingOverlay Overlay = new MappingOverlay("AutomaticsNavigationOverlay");
 
         private static Minimap.PinData _targetPin;
         private static Minimap.PinData _temporaryMarker;
@@ -34,25 +20,11 @@ namespace Automatics.AutomaticMapping
         private static ZDOID _aimedId = ZDOID.None;
         private static ZDOMan _zdoMan;
 
-        private static GameObject _overlayObject;
-        private static EnemyHud _overlayHud;
-        private static Component _nameText;
-        private static GuiBar _healthFast;
-        private static GuiBar _healthSlow;
-        private static GuiBar _healthFastFriendly;
-        private static string _displayName = string.Empty;
-        // Raw (unlocalized) pin name reference last seen, so UpdateName can skip
-        // re-localizing every frame when the source m_name reference is unchanged.
-        private static string _rawPinName;
-        // Cache the rounded distance so UpdateName skips rebuilding the combined label
-        // when both the pin name and the displayed distance are unchanged.
-        private static int _displayDistanceMeters = int.MinValue;
         private static float _nextTargetPinValidationTime;
         private static float _nextGuideAttemptTime;
         private static bool _guideErrorLogged;
-        private static GameObject _boundsInstance;
-        private static float _boundsTopOffset;
 
+        internal static GameObject Label => Overlay.Root;
         internal static Minimap.PinData TemporaryMarker => _temporaryMarker;
         internal static Minimap.PinData TargetPin => _targetPin;
         internal static Vector3 TargetPosition => _creatureId != ZDOID.None
@@ -68,14 +40,11 @@ namespace Automatics.AutomaticMapping
             _lastPosition = Vector3.zero;
             _aimedInstance = null;
             _aimedId = ZDOID.None;
-            _displayName = string.Empty;
-            _rawPinName = null;
-            _displayDistanceMeters = int.MinValue;
             _nextTargetPinValidationTime = 0f;
             _nextGuideAttemptTime = 0f;
             _guideErrorLogged = false;
-            _boundsInstance = null;
             DestroyOverlay();
+            AimedObjectBar.Cleanup();
             NavigationGuide.Dispose();
         }
 
@@ -257,6 +226,7 @@ namespace Automatics.AutomaticMapping
             // requested, and destroyed with the rest of the session when the module is turned off.
             if (!Module.Running)
             {
+                AimedObjectBar.Cleanup();
                 SetVisible(false);
                 NavigationGuide.Hide();
                 return;
@@ -264,6 +234,7 @@ namespace Automatics.AutomaticMapping
 
             EnsureDestructionSubscription();
             ValidateTargetPin();
+            AimedObjectBar.Update(player);
             var targetInstance = ResolveTargetInstance();
             if (_creatureId != ZDOID.None && targetInstance)
                 _lastPosition = targetInstance.transform.position;
@@ -291,21 +262,20 @@ namespace Automatics.AutomaticMapping
             }
 
             targetPos = targetInstance
-                ? GetOverlayPosition(targetInstance)
+                ? Overlay.GetPosition(targetInstance)
                 : targetPos + Vector3.up * UnresolvedTargetHeight;
 
             if (!EnsureOverlay())
                 return;
 
-            if (!TryGetScreenPoint(targetPos, out var screenPoint))
+            if (!MappingOverlay.TryGetScreenPoint(targetPos, out var screenPoint))
             {
                 SetVisible(false);
                 return;
             }
 
-            UpdateName(player, targetPos);
-            UpdateColor();
-            UpdatePosition(screenPoint);
+            Overlay.Show(_targetPin.m_name, Utils.DistanceXZ(player.transform.position, targetPos),
+                screenPoint, MappingOverlay.GetHealth(targetInstance ? targetInstance : _aimedInstance));
             SetVisible(true);
         }
 
@@ -344,8 +314,12 @@ namespace Automatics.AutomaticMapping
 
         private static bool ShouldShow(Player player)
         {
-            return _targetPin != null &&
-                   player &&
+            return _targetPin != null && CanShowHud(player);
+        }
+
+        internal static bool CanShowHud(Player player)
+        {
+            return player &&
                    player == Player.m_localPlayer &&
                    player.IsOwner() &&
                    !Game.IsPaused() &&
@@ -375,40 +349,16 @@ namespace Automatics.AutomaticMapping
             return instance;
         }
 
-        private static bool CanUseEnemyHud(Character character)
+        internal static bool CanUseEnemyHud(Character character)
         {
             return character && !character.IsBoss() && !character.m_hideHud &&
                    character != Player.m_localPlayer && EnemyHud.instance;
         }
 
-        private static Vector3 GetOverlayPosition(GameObject instance)
+        internal static bool ShowsInstance(GameObject instance)
         {
-            if (!ReferenceEquals(instance, _boundsInstance))
-            {
-                _boundsInstance = instance;
-                _boundsTopOffset = UnresolvedTargetHeight;
-
-                // Visual bounds cover child meshes even when the pin is attached to the root.
-                var renderers = instance.GetComponentsInChildren<Renderer>();
-                var found = false;
-                var bounds = new Bounds();
-                foreach (var renderer in renderers)
-                {
-                    if (!renderer.enabled || renderer is ParticleSystemRenderer) continue;
-                    if (!found)
-                    {
-                        bounds = renderer.bounds;
-                        found = true;
-                    }
-                    else
-                        bounds.Encapsulate(renderer.bounds);
-                }
-
-                if (found)
-                    _boundsTopOffset = bounds.max.y - instance.transform.position.y + ObjectTopMargin;
-            }
-
-            return instance.transform.position + Vector3.up * _boundsTopOffset;
+            return ShouldShow(Player.m_localPlayer) &&
+                   ((_aimedInstance && _aimedInstance == instance) || ResolveTargetInstance() == instance);
         }
 
         private static void SetTarget(Minimap.PinData pinData)
@@ -422,11 +372,7 @@ namespace Automatics.AutomaticMapping
             _aimedInstance = null;
             _aimedId = ZDOID.None;
             EnsureDestructionSubscription();
-            _displayName = string.Empty;
-            _rawPinName = null;
-            _displayDistanceMeters = int.MinValue;
             _nextTargetPinValidationTime = 0f;
-            _boundsInstance = null;
             ShowStartMessage(pinData);
         }
 
@@ -438,11 +384,7 @@ namespace Automatics.AutomaticMapping
             _lastPosition = Vector3.zero;
             _aimedInstance = null;
             _aimedId = ZDOID.None;
-            _displayName = string.Empty;
-            _rawPinName = null;
-            _displayDistanceMeters = int.MinValue;
             _nextTargetPinValidationTime = 0f;
-            _boundsInstance = null;
             DestroyOverlay();
             NavigationGuide.Destroy();
             if (showMessage)
@@ -452,116 +394,17 @@ namespace Automatics.AutomaticMapping
 
         private static void SetVisible(bool visible)
         {
-            if (_overlayObject)
-                _overlayObject.SetActive(visible);
+            Overlay.SetVisible(visible);
         }
 
         private static bool EnsureOverlay()
         {
-            var enemyHud = EnemyHud.instance;
-            if (_overlayObject && _overlayHud == enemyHud && enemyHud)
-                return true;
-
-            DestroyOverlay();
-            if (!enemyHud) return false;
-
-            _overlayHud = enemyHud;
-            _overlayObject = Object.Instantiate(enemyHud.m_baseHud, enemyHud.m_hudRoot.transform);
-            _overlayObject.name = "AutomaticsNavigationOverlay";
-            _overlayObject.SetActive(true);
-            var overlay = _overlayObject.transform;
-            overlay.Find("level_2").gameObject.SetActive(false);
-            overlay.Find("level_3").gameObject.SetActive(false);
-            overlay.Find("Alerted").gameObject.SetActive(false);
-            overlay.Find("Aware").gameObject.SetActive(false);
-            _nameText = overlay.Find("Name").GetComponent(EnemyHudNameType);
-            _healthFast = overlay.Find("Health/health_fast").GetComponent<GuiBar>();
-            _healthSlow = overlay.Find("Health/health_slow").GetComponent<GuiBar>();
-            _healthFast.gameObject.SetActive(true);
-            _healthFast.SetValue(1f);
-            _healthSlow.SetValue(1f);
-            var friendly = overlay.Find("Health/health_fast_friendly");
-            if (friendly)
-            {
-                _healthFastFriendly = friendly.GetComponent<GuiBar>();
-                _healthFastFriendly.SetValue(1f);
-                friendly.gameObject.SetActive(false);
-            }
-
-            SetVisible(false);
-            return true;
-        }
-
-        private static void UpdateName(Player player, Vector3 targetPos)
-        {
-            var raw = _targetPin?.m_name;
-            var meters = Mathf.RoundToInt(Utils.DistanceXZ(player.transform.position, targetPos));
-            if (ReferenceEquals(raw, _rawPinName) && meters == _displayDistanceMeters) return;
-
-            // Localize only when the source pin name changes.
-            if (!ReferenceEquals(raw, _rawPinName))
-            {
-                _rawPinName = raw;
-                _displayName = GetDisplayPinName(_targetPin);
-            }
-
-            _displayDistanceMeters = meters;
-            EnemyHudNameTextProperty.SetValue(_nameText, _displayName + " " + meters + "m");
-        }
-
-        private static void UpdateColor()
-        {
-            var color = Color.white;
-            _healthFast.SetColor(color);
-            // GuiBar colours each layer independently, including the slow bar behind the fast bar.
-            _healthSlow.SetColor(color);
-            if (_healthFastFriendly)
-                _healthFastFriendly.SetColor(color);
-        }
-
-        private static void UpdatePosition(Vector3 screenPoint)
-        {
-            _overlayObject.transform.position = screenPoint;
-        }
-
-        private static bool TryGetScreenPoint(Vector3 targetPos, out Vector3 screenPoint)
-        {
-            screenPoint = default;
-            var camera = GetWorldCamera();
-            if (!camera) return false;
-
-            var viewport = camera.WorldToViewportPoint(targetPos);
-            if (viewport.z <= 0f) return false;
-            if (viewport.x < 0f || viewport.x > 1f) return false;
-            if (viewport.y < 0f || viewport.y > 1f) return false;
-
-            screenPoint = camera.WorldToScreenPointScaled(targetPos);
-            return true;
-        }
-
-        private static Camera GetWorldCamera()
-        {
-            if (GameCamera.instance)
-            {
-                var gameCamera = CameraRef(GameCamera.instance);
-                if (gameCamera) return gameCamera;
-            }
-
-            return Camera.main;
+            return Overlay.Ensure();
         }
 
         private static void DestroyOverlay()
         {
-            if (_overlayObject)
-                Object.Destroy(_overlayObject);
-
-            _overlayObject = null;
-            _overlayHud = null;
-            _nameText = null;
-            _healthFast = null;
-            _healthSlow = null;
-            _healthFastFriendly = null;
-            _displayDistanceMeters = int.MinValue;
+            Overlay.Destroy();
         }
 
         private static void ShowStartMessage(Minimap.PinData pinData)
