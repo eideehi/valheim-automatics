@@ -37,6 +37,45 @@ namespace Automatics.AutomaticMapping
             if (!player || player != Player.m_localPlayer || !player.IsOwner()) return null;
             if (!Minimap.instance || Localization.instance == null) return null;
 
+            if (!TryResolveFromRay(player, ray, out var aimed))
+            {
+                Message(player, "@message_automatic_mapping_pin_no_hit");
+                return null;
+            }
+            var position = aimed.Position;
+            var name = aimed.Name;
+            var type = aimed.Type;
+
+            // Include pins without a live marker: outside the minimap view, with the minimap
+            // hidden, or added this frame.
+            if (Map.GetClosestPin(position, 2f,
+                    pin => pin.m_save && !Map.IsAutomaticPin(pin) && pin.m_name == name,
+                    includeInactive: true) != null)
+            {
+                Message(player, "@message_automatic_mapping_pin_duplicate");
+                return null;
+            }
+
+            var added = Minimap.instance.AddPin(position, type, name, true, false);
+            Message(player, "@message_automatic_mapping_pin_added");
+            return added;
+        }
+
+        internal sealed class AimedObject
+        {
+            public Component Component;
+            public GameObject Instance;
+            public string Name;
+            public Vector3 Position;
+            public Minimap.PinType Type;
+            public ZDOID UniqueId;
+            public Location Location;
+            public string StoredName;
+        }
+
+        internal static bool TryResolveFromRay(Player player, Ray ray, out AimedObject aimed)
+        {
+            aimed = null;
             // The nearest hit can be the player's body in third-person view. Keep looking
             // past their colliders, but never through another object or the terrain.
             var hits = Physics.RaycastAll(ray, Config.PinObjectRange, InteractMask(player));
@@ -52,19 +91,20 @@ namespace Automatics.AutomaticMapping
 
             if (!hit.collider)
             {
-                Message(player, "@message_automatic_mapping_pin_no_hit");
-                return null;
+                return false;
             }
 
             var component = hit.collider.GetComponentInParent<IDestructible>() as Component ??
                             hit.collider.GetComponentInParent<Interactable>() as Component ??
                             hit.collider.GetComponentInParent<Hoverable>() as Component ??
                             hit.collider.GetComponentInParent<Character>();
+            var aimedComponent = component;
             var position = hit.point;
             var name = "";
             var type = Minimap.PinType.Icon3;
             if (TryResolveLocation(hit, component, out var location, out var locationName))
             {
+                aimedComponent = location;
                 name = Automatics.L10N.TranslateInternalName(locationName);
                 type = IconPack.GetPinType(new Target
                 {
@@ -89,19 +129,20 @@ namespace Automatics.AutomaticMapping
                 position = component.transform.position;
             }
 
-            // Include pins without a live marker: outside the minimap view, with the minimap
-            // hidden, or added this frame.
-            if (Map.GetClosestPin(position, 2f,
-                    pin => pin.m_save && !Map.IsAutomaticPin(pin) && pin.m_name == name,
-                    includeInactive: true) != null)
+            var instance = aimedComponent ? aimedComponent.gameObject : hit.collider.gameObject;
+            var nview = instance.GetComponent<ZNetView>();
+            aimed = new AimedObject
             {
-                Message(player, "@message_automatic_mapping_pin_duplicate");
-                return null;
-            }
-
-            var added = Minimap.instance.AddPin(position, type, name, true, false);
-            Message(player, "@message_automatic_mapping_pin_added");
-            return added;
+                Component = aimedComponent,
+                Instance = instance,
+                Name = name,
+                Position = position,
+                Type = type,
+                UniqueId = nview && nview.GetZDO() != null ? nview.GetZDO().m_uid : ZDOID.None,
+                Location = location,
+                StoredName = location ? Map.StoredPinName(locationName) : name
+            };
+            return true;
         }
 
         private static bool TryResolveLocation(RaycastHit hit, Component component,

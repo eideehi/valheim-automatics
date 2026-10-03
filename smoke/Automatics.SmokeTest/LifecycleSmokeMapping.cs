@@ -10,6 +10,8 @@ using HarmonyLib;
 using ModUtils;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using Navigation = Automatics.AutomaticMapping.Navigation;
+using MappingMap = Automatics.AutomaticMapping.Map;
 using BirdCache = Automatics.AutomaticMapping.BirdCache;
 using DynamicObjectMapping = Automatics.AutomaticMapping.DynamicObjectMapping;
 using FishCache = Automatics.AutomaticMapping.FishCache;
@@ -139,6 +141,9 @@ namespace Automatics.SmokeTest
             private bool _proceed;
             private int _cycle;
             private Baseline _baseline;
+            private Navigation.TargetState _originalNavigation;
+            private HashSet<Minimap.PinData> _pinsBefore;
+            private Func<string, bool> _navigationHandBack;
             private string _notReached = "not reached: an earlier step stopped the run";
 
             public MappingRun(int runId, string runner)
@@ -231,6 +236,15 @@ namespace Automatics.SmokeTest
                 }
 
                 _baseline = TakeBaseline(components);
+                _pinsBefore = new HashSet<Minimap.PinData>(AllPins());
+                _originalNavigation = Navigation.CaptureTarget();
+                _navigationHandBack = _ =>
+                {
+                    if (!MappingModule.Running || !Minimap.instance) return false;
+                    Navigation.RestoreTarget(_originalNavigation);
+                    return true;
+                };
+                SmokeSession.TrackHandBack(_navigationHandBack);
 
                 for (_cycle = 1; _cycle <= MappingCycles; _cycle++)
                 {
@@ -274,6 +288,8 @@ namespace Automatics.SmokeTest
                     }
                 }
 
+                if (_navigationHandBack != null && _navigationHandBack("mapping lifecycle smoke"))
+                    SmokeSession.ReleaseHandBack(_navigationHandBack);
                 if (_errors.Started) JudgeLog();
                 SmokeSession.ReleaseHandBack(_observerHandBack);
             }
@@ -296,6 +312,17 @@ namespace Automatics.SmokeTest
             private IEnumerator TurnOff(int cycle)
             {
                 _proceed = false;
+
+                Navigation.RestoreTarget(new Navigation.TargetState
+                {
+                    Pin = new Minimap.PinData { m_type = Minimap.PinType.Icon3, m_name = "" },
+                    Temporary = true,
+                    LastPosition = Player.m_localPlayer.transform.position + Vector3.forward * 60f,
+                    CreatureId = ZDOID.None,
+                    AimedId = ZDOID.None
+                });
+                var marker = Navigation.TemporaryMarker;
+                var markerActive = marker != null && !marker.m_save && AllPins().Contains(marker);
 
                 // What the module holds unsaved now is what has to be off the map once it is off.
                 var held = HeldPins().Where(pin => !pin.m_save).ToList();
@@ -351,9 +378,12 @@ namespace Automatics.SmokeTest
                 var kinds = CountComponents();
                 var overlays = CountNavigationOverlays();
                 var guides = CountNavigationGuides();
-                Cycle(OffComponents, cycle, kinds.Sum(x => x.Total) == 0 && overlays == 0 && guides == 0,
-                    "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode, navigation overlay or guide swarm is left in the scene",
-                    $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s), {guides} guide swarm(s) (AC-R4)");
+                var extraPins = ExtraUnsavedPins().Count();
+                Cycle(OffComponents, cycle, kinds.Sum(x => x.Total) == 0 && overlays == 0 && guides == 0 &&
+                    markerActive && Navigation.TemporaryMarker == null && !AllPins().Contains(marker) &&
+                    extraPins == 0 && NavigationDestroyHandlers() == 0,
+                    "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode, navigation overlay, guide swarm or temporary marker is left after disabling with a marker active",
+                    $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s), {guides} guide swarm(s), marker active before={markerActive}, marker left={Navigation.TemporaryMarker != null || AllPins().Contains(marker)}, extra unsaved pins={extraPins}, navigation destruction handlers={NavigationDestroyHandlers()} (AC-R4)");
 
                 var saved = SavedPins(_baseline.VehiclePins);
                 Cycle(OffSavedPins, cycle, saved.SequenceEqual(_baseline.SavedPins),
@@ -670,11 +700,19 @@ namespace Automatics.SmokeTest
                 return pins ?? new List<Minimap.PinData>();
             }
 
-            // The pins either scan holds, saved or not.
-            private static List<Minimap.PinData> HeldPins()
+            private IEnumerable<Minimap.PinData> ExtraUnsavedPins()
+            {
+                return AllPins().Where(pin => !pin.m_save && !MappingMap.IsAutomaticPin(pin) &&
+                    !_pinsBefore.Contains(pin));
+            }
+
+            // The pins either scan holds, plus every new unsaved navigation marker.
+            private List<Minimap.PinData> HeldPins()
             {
                 return AllPins().Where(pin =>
-                    pin != null && (DynamicObjectMapping.OwnsPin(pin) || StaticObjectMapping.OwnsPin(pin))).ToList();
+                    pin != null && (DynamicObjectMapping.OwnsPin(pin) || StaticObjectMapping.OwnsPin(pin) ||
+                                    (!pin.m_save && !MappingMap.IsAutomaticPin(pin) &&
+                                     !_pinsBefore.Contains(pin)))).ToList();
             }
 
             // Every saved pin as the game saves it: type, name, position to 0.1 m, owner and checked
@@ -715,12 +753,19 @@ namespace Automatics.SmokeTest
                 return result;
             }
 
+            private static int NavigationDestroyHandlers()
+            {
+                return ZDOMan.instance?.m_onZDODestroyed?.GetInvocationList()
+                    .Count(handler => handler.Method.DeclaringType == typeof(Navigation)) ?? 0;
+            }
+
             private static Dictionary<string, int> HandlerCounts()
             {
                 return new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["Hooks.OnPlayerAwake"] = Invocations(Hooks.OnPlayerAwake),
                     ["Hooks.OnPlayerUpdate"] = Invocations(Hooks.OnPlayerUpdate),
+                    ["Navigation destruction handlers"] = NavigationDestroyHandlers(),
                     ["Hooks.OnPlayerFixedUpdate"] = Invocations(Hooks.OnPlayerFixedUpdate),
                     ["PickableCache.OnCacheAdded"] = Invocations(PickableCache.OnCacheAdded),
                     ["ShipCache.OnCacheAdded"] = Invocations(ShipCache.OnCacheAdded),

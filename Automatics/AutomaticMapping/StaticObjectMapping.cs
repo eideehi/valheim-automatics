@@ -1730,7 +1730,7 @@ namespace Automatics.AutomaticMapping
                 sourceToken, domain);
         }
 
-        private static bool TryGetCachedPin(MapPinIdentify identify, out Minimap.PinData pinData)
+        internal static bool TryGetCachedPin(MapPinIdentify identify, out Minimap.PinData pinData)
         {
             if (PinDataCache.TryGetValue(identify, out var entry) && entry?.PinData != null)
             {

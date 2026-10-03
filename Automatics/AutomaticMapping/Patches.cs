@@ -478,6 +478,7 @@ namespace Automatics.AutomaticMapping
             private static void Postfix()
             {
                 Map.ClearAutomaticPins();
+                Navigation.Cleanup();
                 PinIndex.Clear();
                 MineRock5Cache.Clear();
             }

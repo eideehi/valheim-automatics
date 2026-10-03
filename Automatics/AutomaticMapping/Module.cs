@@ -255,6 +255,7 @@ namespace Automatics.AutomaticMapping
         {
             Navigation.Update(player);
             ObjectPinning.OnPlayerUpdate(player, takeInput);
+            Navigation.OnPlayerUpdate(player, takeInput);
         }
 
         /// <summary>

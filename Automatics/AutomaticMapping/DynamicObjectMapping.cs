@@ -862,6 +862,23 @@ namespace Automatics.AutomaticMapping
                     VehiclePinKeyCache.ContainsKey(pinData));
         }
 
+        internal static Minimap.PinData GetCachedPin(ZDOID uniqueId)
+        {
+            if (PinDataCache.TryGetValue(uniqueId, out var pin)) return pin;
+            return VehiclePinCache.TryGetValue(uniqueId, out pin) ? pin : null;
+        }
+
+        internal static ZDOID GetCreatureId(Minimap.PinData pinData)
+        {
+            if (pinData == null || !PinKeyCache.TryGetValue(pinData, out var uniqueId))
+                return ZDOID.None;
+            var instance = ZNetScene.instance ? ZNetScene.instance.FindInstance(uniqueId) : null;
+            var zdo = ZDOMan.instance?.GetZDO(uniqueId);
+            var source = instance ? instance : zdo != null && ZNetScene.instance
+                ? ZNetScene.instance.GetPrefab(zdo.GetPrefab()) : null;
+            return source && source.GetComponent<Character>() ? uniqueId : ZDOID.None;
+        }
+
         internal static GameObject FindLiveInstance(Minimap.PinData pinData)
         {
             if (pinData == null || !ZNetScene.instance) return null;

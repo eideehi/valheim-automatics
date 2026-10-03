@@ -36,6 +36,7 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<KeyboardShortcut> _staticObjectMappingKey;
         private static ConfigEntry<KeyboardShortcut> _pinObjectKey;
         private static ConfigEntry<float> _pinObjectRange;
+        private static ConfigEntry<KeyboardShortcut> _navigateToAimedObjectKey;
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
         private static ConfigEntry<bool> _enableNavigationGuide;
         private static ConfigEntry<string> _navigationGuideColor;
@@ -80,6 +81,8 @@ namespace Automatics.AutomaticMapping
         public static KeyboardShortcut StaticObjectMappingKey => _staticObjectMappingKey.Value;
         public static KeyboardShortcut PinObjectKey => _pinObjectKey.Value;
         public static float PinObjectRange => _pinObjectRange.Value;
+        public static KeyboardShortcut NavigateToAimedObjectKey => _navigateToAimedObjectKey.Value;
+        internal static ConfigEntry<KeyboardShortcut> NavigateToAimedObjectKeyEntry => _navigateToAimedObjectKey;
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
         public static bool EnableNavigationGuide => _enableNavigationGuide.Value;
         internal static ConfigEntry<bool> EnableNavigationGuideEntry => _enableNavigationGuide;
@@ -168,6 +171,7 @@ namespace Automatics.AutomaticMapping
             _needToEquipWishboneForUndergroundMinerals = config.Bind("need_to_equip_wishbone_for_underground_minerals", true);
             _staticObjectMappingKey = config.Bind("static_object_mapping_key", new KeyboardShortcut());
             _pinObjectKey = config.Bind("pin_object_key", new KeyboardShortcut());
+            _navigateToAimedObjectKey = config.Bind("navigate_to_aimed_object_key", new KeyboardShortcut());
             _pinObjectRange = config.Bind("pin_object_range", 100f, (10f, 300f));
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));

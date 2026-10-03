@@ -76,7 +76,7 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            var originalTarget = TargetPinField.GetValue(null) as Minimap.PinData;
+            var originalTarget = Navigation.CaptureTarget();
             var originalMode = map.m_mode;
             var cameraForward = Vector3.ProjectOnPlane(GameCamera.instance.transform.forward, Vector3.up);
             if (cameraForward.sqrMagnitude < 0.001f) cameraForward = player.transform.forward;
@@ -104,6 +104,7 @@ namespace Automatics.SmokeTest
                     run.Skip("guide_section", "the test pin could not be added");
                     yield break;
                 }
+                CheckMapClick(run, map, testPin);
                 SetTargetMethod.Invoke(null, new object[] { testPin });
 
                 // The first frames create the swarm; the next let it fill.
@@ -164,13 +165,13 @@ namespace Automatics.SmokeTest
                 }
                 finally
                 {
-                    if (originalTarget == null)
+                    if (originalTarget.Pin == null)
                         run.Pass("guide_navigation_restored", "there was no navigation before the section, and none is left");
                     else if (restoredNavigation)
                         run.Pass("guide_navigation_restored", "your navigation target is set again");
                     else
-                        run.Skip("guide_navigation_restored",
-                            "your navigation target is no longer on the map, so it could not be set again");
+                        run.Fail("guide_navigation_restored",
+                            "your original pin disappeared; navigation was restored through a temporary marker instead");
                 }
             }
         }
@@ -431,18 +432,109 @@ namespace Automatics.SmokeTest
                 run.Fail("guide_option_on_recreates", "the swarm did not come back with enable_navigation_guide on");
         }
 
-        private static bool RestoreTarget(Minimap.PinData originalTarget)
-        {
-            if (originalTarget == null)
-            {
-                if (TargetPinField.GetValue(null) != null) Navigation.ClearTarget();
-                return true;
-            }
-            if (!Map.ContainsPin(originalTarget)) return false;
+        private static Vector3 _clickPosition;
+        private static int _pressedCalls;
+        private static bool _clickPositionObserved;
 
-            if (!ReferenceEquals(TargetPinField.GetValue(null), originalTarget))
-                SetTargetMethod.Invoke(null, new object[] { originalTarget });
-            return true;
+        internal static bool ClickPin(Minimap map, Minimap.PinData pin, out string detail)
+        {
+            var mode = map.m_mode;
+            var image = AccessTools.Field(typeof(Minimap), "m_mapImageLarge").GetValue(map);
+            var uvRectProperty = AccessTools.Property(image.GetType(), "uvRect");
+            var uvRect = uvRectProperty.GetValue(image, null);
+            var shader = (Material)AccessTools.Field(typeof(Minimap), "m_mapLargeShader").GetValue(map);
+            var shaderCenter = shader.GetVector("_mapCenter");
+            var shaderZoom = shader.GetFloat("_zoom");
+            var shaderPixelSize = shader.GetFloat("_pixelSize");
+            var mapState = new[]
+            {
+                "m_mapOffset", "m_dragView", "m_namePin", "m_previousMapCenter",
+                "m_previousLargeZoom", "m_pinUpdateRequired"
+            }.Select(name => AccessTools.Field(typeof(Minimap), name))
+                .ToDictionary(field => field, field => field.GetValue(map));
+            var harmony = new Harmony("AutomaticsSmoke-navigation-click");
+            try
+            {
+                map.SetMapMode(Minimap.MapMode.Large);
+                Map.RefreshPins();
+                var visibleBefore = (bool)AccessTools.Method(typeof(Minimap), "IsPointVisible")
+                    .Invoke(map, new[] { (object)pin.m_pos, image });
+                var activeBefore = pin.m_uiElement && pin.m_uiElement.gameObject.activeInHierarchy;
+
+                // Opening the map also needs its viewport centered before UpdatePins can build markers.
+                AccessTools.Method(AccessTools.TypeByName("UnityEngine.Canvas"), "ForceUpdateCanvases")
+                    .Invoke(null, null);
+                AccessTools.Method(typeof(Minimap), "CenterMap").Invoke(map, new object[] { pin.m_pos });
+                Map.RefreshPins();
+                var active = pin.m_uiElement && pin.m_uiElement.gameObject.activeInHierarchy;
+                _clickPosition = pin.m_pos;
+                var isPressed = AccessTools.Method(typeof(BepInEx.Configuration.KeyboardShortcut), "IsPressed");
+                harmony.Patch(isPressed,
+                    prefix: new HarmonyMethod(typeof(GuideFeatureSmoke), nameof(Pressed)));
+                harmony.Patch(AccessTools.Method(typeof(Minimap), "ScreenToWorldPoint"),
+                    postfix: new HarmonyMethod(typeof(GuideFeatureSmoke), nameof(ClickPosition)));
+                var keyProbe = (bool)isPressed.Invoke(MappingConfig.NavigationStartKey, null);
+                _pressedCalls = 0;
+                _clickPositionObserved = false;
+                var radius = (float)AccessTools.Field(typeof(Minimap), "m_removeRadius").GetValue(map) *
+                             ((float)AccessTools.Field(typeof(Minimap), "m_largeZoom").GetValue(map) * 2f);
+                var closest = Map.GetClosestPin(_clickPosition, radius);
+                var handled = Navigation.TryHandleMapClick(map);
+                detail = $"running={MappingModule.Running}, large map={map.m_mode == Minimap.MapMode.Large}, " +
+                         $"key bound={MappingConfig.NavigationStartKey.MainKey != KeyCode.None}, " +
+                         $"before centering: in viewport={visibleBefore}, marker active={activeBefore}; " +
+                         $"marker active={active}, IsPressed probe={keyProbe}, " +
+                         $"key override observed={_pressedCalls > 0}, pointer override observed={_clickPositionObserved}, " +
+                         $"closest pin={(closest == null ? "none" : ReferenceEquals(closest, pin) ? "expected" : "other")}, " +
+                         $"handled={handled}";
+                return handled;
+            }
+            finally
+            {
+                harmony.UnpatchSelf();
+                map.SetMapMode(mode);
+                uvRectProperty.SetValue(image, uvRect, null);
+                shader.SetVector("_mapCenter", shaderCenter);
+                shader.SetFloat("_zoom", shaderZoom);
+                shader.SetFloat("_pixelSize", shaderPixelSize);
+                foreach (var state in mapState) state.Key.SetValue(map, state.Value);
+                Map.RefreshPins();
+            }
+        }
+
+        private static bool Pressed(ref bool __result)
+        {
+            _pressedCalls++;
+            __result = true;
+            return false;
+        }
+
+        private static void ClickPosition(ref Vector3 __result)
+        {
+            _clickPositionObserved = true;
+            __result = _clickPosition;
+        }
+
+        private static void CheckMapClick(FeatureRun run, Minimap map, Minimap.PinData pin)
+        {
+            if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
+            {
+                run.Skip("guide_map_click_toggle", "navigation_start_key is unbound");
+                return;
+            }
+            Navigation.ClearTarget();
+            var started = ClickPin(map, pin, out var startDetail) && ReferenceEquals(Navigation.TargetPin, pin);
+            var cleared = ClickPin(map, pin, out var clearDetail) && Navigation.TargetPin == null;
+            var detail = $"start={started} ({startDetail}); clear on same pin={cleared} ({clearDetail})";
+            if (started && cleared) run.Pass("guide_map_click_toggle", detail);
+            else run.Fail("guide_map_click_toggle", detail);
+        }
+
+        private static bool RestoreTarget(Navigation.TargetState originalTarget)
+        {
+            Navigation.RestoreTarget(originalTarget);
+            return originalTarget.Pin == null || originalTarget.Temporary ||
+                   ReferenceEquals(Navigation.TargetPin, originalTarget.Pin);
         }
 
         private static int CountGuideObjects()

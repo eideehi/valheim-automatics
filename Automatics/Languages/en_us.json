@@ -109,6 +109,8 @@
     "@config_automatic_mapping_pin_object_key_description": "Press this shortcut to save a map pin for what you are looking at, using its display name and icon-pack icon. Looking at a world-generated location (its structure, the ground within its area or a dungeon's interior) pins the location with the name and icon Automatic Mapping recognizes. Player-built pieces, creatures, trees, deposits and other objects keep their own pins, and other bare ground gets an unnamed pin. Unbound by default; requires the module to be running.",
     "@config_automatic_mapping_pin_object_range_name": "Object Pin Range",
     "@config_automatic_mapping_pin_object_range_description": "Maximum distance in meters from the camera for pinning the object you are looking at.",
+    "@config_automatic_mapping_navigate_to_aimed_object_key_name": "Navigate to Looked-at Object Key",
+    "@config_automatic_mapping_navigate_to_aimed_object_key_description": "Press this shortcut to navigate to the automatic pin of what you are looking at, or to a temporary unsaved marker when it has no pin. Press it on the current target to clear navigation. Creature targets are followed while loaded; navigation keeps their last position while unloaded and ends when they die or are removed. Unbound by default; requires the module to be running.",
     "@config_automatic_mapping_navigation_start_key_name": "Map Navigation Start Key",
     "@config_automatic_mapping_navigation_start_key_description": "Specify the modifier key used to start navigation by left-clicking a pin on the large map. Left click is fixed.",
     "@config_automatic_mapping_enable_navigation_guide_name": "Navigation Guide Swarm",

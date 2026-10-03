@@ -77,8 +77,11 @@ namespace Automatics.SmokeTest
                 }
 
                 CheckDetachedPiece(run, player, piece, created);
-                CheckLocation(run, player, created, false);
-                CheckLocation(run, player, created, true);
+                var navigationChecked = false;
+                CheckLocation(run, player, created, false, ref navigationChecked);
+                CheckLocation(run, player, created, true, ref navigationChecked);
+                if (!navigationChecked)
+                    run.Skip("navhotkey_location", "no eligible loaded location ray was available in the location pin checks");
                 CheckObjectsInLocation(run, player, created);
                 CheckInterior(run, player, created);
                 CheckGround(run, player, created);
@@ -670,7 +673,7 @@ namespace Automatics.SmokeTest
 
         // Read existing locations only: spawning their prefab can generate terrain or entities.
         private static void CheckLocation(FeatureRun run, Player player,
-            List<Minimap.PinData> created, bool ground)
+            List<Minimap.PinData> created, bool ground, ref bool navigationChecked)
         {
             var check = ground ? "pin_location_ground" : "pin_location_wall";
             var origin = GameCamera.instance.transform.position;
@@ -723,6 +726,11 @@ namespace Automatics.SmokeTest
                             (destructible && ValheimObject.Mineral.GetIdentify(Objects.GetName(destructible), out _)) ||
                             collider.GetComponentInParent<Location>() != location.Location) continue;
                     }
+                    if (!navigationChecked)
+                    {
+                        CheckLocationNavigation(run, player, ray, location);
+                        navigationChecked = true;
+                    }
                     var count = Map.GetAllPins().Count;
                     var added = Invoke(player, ray, created);
                     var expectedType = IconPack.GetPinType(new Target
@@ -744,6 +752,65 @@ namespace Automatics.SmokeTest
             run.Skip(check, overlapping
                 ? "every terrain point found lies inside more than one location area; move to a spot where one location's area stands alone and retry"
                 : "no visible eligible loaded location without an existing manual pin; stand near a dungeon entrance or tar pit and retry; location spawning is not used");
+        }
+
+        private static void CheckLocationNavigation(FeatureRun run, Player player, Ray ray,
+            KnownLocation location)
+        {
+            const string check = "navhotkey_location";
+            StaticObjectMapping.TryGetCachedPin(
+                new StaticObjectMapping.MapPinIdentify(location.Position), out var pin);
+            if (pin == null)
+            {
+                var entrances = Physics.OverlapSphere(location.Position, location.Location.m_exteriorRadius,
+                        LayerMask.GetMask("character_trigger"), QueryTriggerInteraction.Collide)
+                    .Where(collider => collider.GetComponent<Teleport>())
+                    .OrderBy(collider => Vector3.Distance(location.Position, collider.bounds.center));
+                foreach (var entrance in entrances)
+                    if (StaticObjectMapping.TryGetCachedPin(
+                            new StaticObjectMapping.MapPinIdentify(entrance.bounds.center), out pin))
+                        break;
+            }
+            if (pin == null)
+            {
+                run.Skip(check, "the loaded location has no cached position or entrance pin to use as an independent expectation");
+                return;
+            }
+            var key = MappingConfig.NavigateToAimedObjectKeyEntry;
+            if (!SmokeSession.BeginSetting(run.RunId, key, out var setting, out var refusal))
+            {
+                run.Skip(check, refusal);
+                return;
+            }
+            var original = Navigation.CaptureTarget();
+            try
+            {
+                if (!SmokeSession.WriteSetting(run.RunId, setting,
+                        new BepInEx.Configuration.KeyboardShortcut(KeyCode.F8), out refusal))
+                {
+                    run.Skip(check, refusal);
+                    return;
+                }
+                Navigation.ClearTarget();
+                var count = Map.GetAllPins().Count;
+                Navigation.TryNavigateFromRay(player, ray, true);
+                if (ReferenceEquals(Navigation.TargetPin, pin) && Navigation.TemporaryMarker == null &&
+                    Map.GetAllPins().Count == count)
+                    run.Pass(check, "the existing location pin is selected by identity without adding a marker");
+                else
+                    run.Fail(check, "the location ray did not select its owned automatic pin without adding a marker");
+            }
+            finally
+            {
+                Navigation.RestoreTarget(original);
+                var restored = SmokeSession.RestoreSettings(run.RunId);
+                foreach (var result in restored)
+                    if (result.Key == SmokeSession.ToggleOutcome.Failed)
+                        run.Fail(check, "shortcut restoration failed: " + result.Value);
+                    else if (result.Key == SmokeSession.ToggleOutcome.LeftForUser ||
+                             result.Key == SmokeSession.ToggleOutcome.NotThisRun)
+                        run.Skip(check, "shortcut restoration skipped: " + result.Value);
+            }
         }
 
         private static void CheckGround(FeatureRun run, Player player,
@@ -818,6 +885,348 @@ namespace Automatics.SmokeTest
                 // Include a pin even if a message or an AddPin postfix throws after adding it.
                 created.AddRange(Map.GetAllPins().Where(pin => !before.Contains(pin)));
             }
+        }
+    }
+}
+
+namespace Automatics.SmokeTest
+{
+    // Ray actions use a non-persistent creature and drop. The death checks wait for the live
+    // death flag and the owner's ZDO destruction, then restore the navigation and shortcut.
+    internal static class NavHotkeyFeatureSmoke
+    {
+        public static IEnumerator Run(FeatureRun run)
+        {
+            var player = Player.m_localPlayer;
+            var map = Minimap.instance;
+            if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
+                ZDOMan.instance == null || !InventoryGui.instance || !ZNet.instance || !ZNet.instance.IsServer() ||
+                ZNet.instance.GetPeerConnections() > 0 || Localization.instance == null)
+            {
+                run.Skip("navhotkey_section", "requires a loaded single-player world, minimap, inventory and camera");
+                yield break;
+            }
+            if (!MappingModule.Running)
+            {
+                run.Skip("navhotkey_section", "Automatic Mapping is not running; enable the module first");
+                yield break;
+            }
+            var creaturePrefab = ZNetScene.instance.GetPrefab("Boar");
+            var dropPrefab = ZNetScene.instance.GetPrefab("Wood");
+            if (!creaturePrefab || !dropPrefab)
+            {
+                run.Skip("navhotkey_section", "the test creature or Wood prefab is unavailable");
+                yield break;
+            }
+            var key = MappingConfig.NavigateToAimedObjectKeyEntry;
+            if (!SmokeSession.BeginSetting(run.RunId, key, out var keySetting, out var refusal) ||
+                !SmokeSession.WriteSetting(run.RunId, keySetting,
+                    new BepInEx.Configuration.KeyboardShortcut(KeyCode.F8), out refusal))
+            {
+                run.Skip("navhotkey_section", refusal);
+                yield break;
+            }
+
+            var original = Navigation.CaptureTarget();
+            var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+            var added = new List<Minimap.PinData>();
+            var createdMarkers = new HashSet<Minimap.PinData>();
+            var creatureId = ZDOID.None;
+            Action<Action> observe = action =>
+            {
+                var pins = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                try { action(); }
+                finally
+                {
+                    createdMarkers.UnionWith(Map.GetAllPins().Where(pin => !pins.Contains(pin) &&
+                        !pin.m_save && !Map.IsAutomaticPin(pin)));
+                }
+            };
+            Action<Player, Ray, bool> navigate = (targetPlayer, ray, takeInput) =>
+                observe(() => Navigation.TryNavigateFromRay(targetPlayer, ray, takeInput));
+            Func<string, bool> handBack = _ =>
+            {
+                Navigation.ClearTarget();
+                foreach (var pin in createdMarkers) if (map) map.RemovePin(pin);
+                foreach (var pin in added) if (map) map.RemovePin(pin);
+                var creaturePin = DynamicObjectMapping.GetCachedPin(creatureId);
+                if (creaturePin != null && map) map.RemovePin(creaturePin);
+                if (map) Navigation.RestoreTarget(original);
+                return true;
+            };
+            SmokeSession.TrackHandBack(handBack);
+            GameObject creature = null;
+            ItemDrop drop = null;
+            try
+            {
+                var camera = GameCamera.instance.transform;
+                creature = UnityEngine.Object.Instantiate(creaturePrefab,
+                    camera.position + camera.forward * 5f + camera.right * 3f, Quaternion.identity);
+                SmokeSession.TrackSpawn(creature);
+                var nview = creature.GetComponent<ZNetView>();
+                if (!nview || !nview.IsValid())
+                {
+                    run.Skip("navhotkey_section", "the spawned creature has no ZDO");
+                    yield break;
+                }
+                nview.GetZDO().Persistent = false;
+                var character = creature.GetComponent<Character>();
+                var id = nview.GetZDO().m_uid;
+                creatureId = id;
+                drop = FeaturesSmokeCommand.SpawnTestDrop(dropPrefab,
+                    camera.position + camera.forward * 5f - camera.right * 3f, false);
+                Physics.SyncTransforms();
+                if (!drop || !TryRay(player, creature, out var creatureRay) ||
+                    !TryRay(player, drop.gameObject, out var dropRay))
+                {
+                    run.Skip("navhotkey_section", "the camera rays to the test objects are obstructed");
+                    yield break;
+                }
+
+                Navigation.ClearTarget();
+                var name = Localization.instance.Localize(Objects.GetName(character));
+                var control = map.AddPin(creature.transform.position + Vector3.right * 0.5f,
+                    Minimap.PinType.Icon3, name, true, false);
+                added.Add(control);
+                AccessTools.Method(typeof(DynamicObjectMapping), "AddPin").Invoke(null, new object[]
+                {
+                    id, creature.transform.position, name,
+                    new Target { name = Objects.GetName(character), prefabName = "Boar" }
+                });
+                var automatic = DynamicObjectMapping.GetCachedPin(id);
+                if (automatic == null)
+                    run.Skip("navhotkey_exact_pin", "automatic pins are hidden at the test creature's position");
+                else
+                {
+                    added.Add(automatic);
+                    navigate(player, creatureRay, true);
+                    Check(run, "navhotkey_exact_pin", ReferenceEquals(Navigation.TargetPin, automatic) &&
+                        !ReferenceEquals(Navigation.TargetPin, control) && MarkerCount(before, added) == 0,
+                        "the creature's own automatic pin is selected, with no temporary marker");
+                    navigate(player, dropRay, true);
+                    var replaced = Navigation.TemporaryMarker;
+                    navigate(player, creatureRay, true);
+                    Check(run, "navhotkey_replace_with_pin", ReferenceEquals(Navigation.TargetPin, automatic) &&
+                        MarkerCount(before, added) == 0 && !Map.GetAllPins().Contains(replaced),
+                        "switching from a temporary marker to the automatic pin removes the marker");
+                    var mapClickDetail = "navigation_start_key is unbound";
+                    if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
+                        run.Skip("navhotkey_map_creature", "navigation_start_key is unbound");
+                    else
+                    {
+                        Navigation.ClearTarget();
+                        var clicked = GuideFeatureSmoke.ClickPin(map, automatic, out mapClickDetail);
+                        Check(run, "navhotkey_map_creature", clicked && ReferenceEquals(Navigation.TargetPin, automatic) &&
+                            Navigation.CaptureTarget().CreatureId == id,
+                            $"map-click navigation stores the creature's ZDOID; {mapClickDetail}");
+                    }
+                    character.transform.position += camera.up * 2f;
+                    Physics.SyncTransforms();
+                    AccessTools.Field(typeof(Navigation), "_nextTargetPinValidationTime")
+                        .SetValue(null, Time.time + 0.5f);
+                    Navigation.Update(player);
+                    Check(run, "navhotkey_pin_follows", Navigation.CaptureTarget().CreatureId == id &&
+                        Vector3.Distance(Navigation.TargetPosition, character.transform.position) < 0.01f,
+                        $"the pinned creature's destination follows before the next validation tick; {mapClickDetail}");
+                    character.transform.position -= camera.up * 2f;
+                    Physics.SyncTransforms();
+                    Validate();
+                    map.RemovePin(automatic);
+                    Check(run, "navhotkey_removed_pin_kept", Navigation.CaptureTarget().CreatureId == id &&
+                        MarkerCount(before, added) == 1 && Vector3.Distance(Navigation.TargetPosition, character.transform.position) < 0.01f,
+                        $"removing a tracked creature's dynamic pin leaves a temporary destination; {mapClickDetail}");
+                    Navigation.ClearTarget();
+                }
+
+                navigate(player, dropRay, true);
+                var marker = Navigation.TemporaryMarker;
+                Check(run, "navhotkey_temporary", marker != null && ReferenceEquals(Navigation.TargetPin, marker) &&
+                    !marker.m_save && !Map.IsAutomaticPin(marker) && MarkerCount(before, added) == 1 &&
+                    marker.m_name == Localization.instance.Localize(Objects.GetName(drop)) &&
+                    Vector3.Distance(marker.m_pos, drop.transform.position) < 0.01f,
+                    "an unpinned object gets exactly one named, unsaved, non-automatic marker");
+                CheckSave(run, map, marker, control);
+                navigate(player, dropRay, true);
+                Check(run, "navhotkey_repeat_clears", Navigation.TargetPin == null && MarkerCount(before, added) == 0 &&
+                    !Map.GetAllPins().Contains(marker), "repeating the target removes its marker and clears navigation");
+
+                navigate(player, dropRay, true);
+                marker = Navigation.TemporaryMarker;
+                navigate(player, creatureRay, true);
+                Check(run, "navhotkey_replacement", MarkerCount(before, added) == 1 && !Map.GetAllPins().Contains(marker) &&
+                    Navigation.CaptureTarget().CreatureId == id,
+                    "switching to the unpinned creature removes the old marker and retains its identity");
+                character.transform.position += camera.up * 2f;
+                Physics.SyncTransforms();
+                Validate();
+                Check(run, "navhotkey_temporary_follows", MarkerCount(before, added) == 1 &&
+                    Vector3.Distance(Navigation.TargetPosition, character.transform.position) < 0.01f &&
+                    Vector3.Distance(Navigation.TemporaryMarker.m_pos, character.transform.position) < 0.01f,
+                    "both the destination and temporary marker follow the creature");
+
+                var creatureTarget = Navigation.CaptureTarget();
+                if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
+                    run.Skip("navhotkey_creature_marker_to_pin", "navigation_start_key is unbound");
+                else
+                {
+                    var clicked = false;
+                    var clickDetail = "";
+                    observe(() => clicked = GuideFeatureSmoke.ClickPin(map, control, out clickDetail));
+                    Check(run, "navhotkey_creature_marker_to_pin", clicked &&
+                        ReferenceEquals(Navigation.TargetPin, control) && MarkerCount(before, added) == 0,
+                        $"map-clicking a pinned target from a creature marker leaves no extra unsaved pin; {clickDetail}");
+                    observe(() => Navigation.RestoreTarget(creatureTarget));
+                }
+
+                var target = Navigation.TargetPin;
+                var empty = new Ray(new Vector3(0f, 10000f, 0f), Vector3.up);
+                navigate(player, empty, true);
+                CheckUnchanged(run, "navhotkey_empty", target, before, added);
+                SmokeSession.WriteSetting(run.RunId, keySetting, new BepInEx.Configuration.KeyboardShortcut(), out refusal);
+                navigate(player, dropRay, true);
+                CheckUnchanged(run, "navhotkey_unbound", target, before, added);
+                SmokeSession.WriteSetting(run.RunId, keySetting,
+                    new BepInEx.Configuration.KeyboardShortcut(KeyCode.F8), out refusal);
+                var stopped = MappingModule.StopRequested;
+                try
+                {
+                    MappingModule.StopRequested = true;
+                    navigate(player, dropRay, true);
+                    CheckUnchanged(run, "navhotkey_stopped", target, before, added);
+                }
+                finally { MappingModule.StopRequested = stopped; }
+
+                var gui = InventoryGui.instance;
+                var inventoryOpen = InventoryGui.IsVisible();
+                try
+                {
+                    if (!inventoryOpen) gui.Show(null);
+                    var takeInput = (bool)AccessTools.Method(typeof(Player), "TakeInput").Invoke(player, null);
+                    navigate(player, dropRay, takeInput);
+                    Check(run, "navhotkey_blocked", InventoryGui.IsVisible() && !takeInput &&
+                        ReferenceEquals(Navigation.TargetPin, target) && MarkerCount(before, added) == 1,
+                        "an open inventory blocks the same input gate the shortcut uses");
+                }
+                finally { if (!inventoryOpen) gui.Hide(); }
+
+                // Keep the test creature alive long enough to observe its real death flag,
+                // without death effects or drops preceding the separate destruction check.
+                character.GetComponent<BaseAI>().enabled = false;
+                character.m_deathAnimation = true;
+                character.m_deathAnimationStartDelay = 10f;
+                character.SetHealth(0f);
+                var deadline = Time.realtimeSinceStartup + 5f;
+                while (run.IsCurrent && character && !character.IsDead() &&
+                       Time.realtimeSinceStartup < deadline)
+                    yield return new WaitForFixedUpdate();
+                if (!run.IsCurrent) yield break;
+                var dead = character && character.IsDead();
+                Validate();
+                Check(run, "navhotkey_dead_clears", dead && ZDOMan.instance.GetZDO(id) != null &&
+                    Navigation.TargetPin == null && MarkerCount(before, added) == 0,
+                    "the live death flag clears navigation before the creature's ZDO is destroyed");
+
+                observe(() => Navigation.RestoreTarget(creatureTarget));
+                var destroyMarker = Navigation.TemporaryMarker;
+                var destroyTargetActive = destroyMarker != null &&
+                    Navigation.CaptureTarget().CreatureId == id && MarkerCount(before, added) == 1;
+                if (!nview.IsOwner()) nview.ClaimOwnership();
+                ZNetScene.instance.Destroy(creature);
+                deadline = Time.realtimeSinceStartup + 5f;
+                while (run.IsCurrent && ZDOMan.instance.GetZDO(id) != null &&
+                       Time.realtimeSinceStartup < deadline)
+                    yield return null;
+                if (!run.IsCurrent) yield break;
+                Check(run, "navhotkey_destroyed_clears", destroyTargetActive &&
+                    ZDOMan.instance.GetZDO(id) == null && Navigation.TargetPin == null &&
+                    MarkerCount(before, added) == 0 && !Map.GetAllPins().Contains(destroyMarker),
+                    "owner destruction of the target ZDO clears navigation and removes every temporary marker");
+                SmokeSession.ReleaseSpawn(creature);
+            }
+            finally
+            {
+                try
+                {
+                    if (handBack("navigation hotkey smoke")) SmokeSession.ReleaseHandBack(handBack);
+                }
+                finally
+                {
+                    FeaturesSmokeCommand.RemoveTestDrop(drop, "navigation hotkey smoke");
+                    if (creature && SmokeSession.DestroyTestObject(creature, 0, "navigation hotkey smoke"))
+                        SmokeSession.ReleaseSpawn(creature);
+                    var restored = SmokeSession.RestoreSettings(run.RunId);
+                    Check(run, "navhotkey_settings_restored", restored.All(x =>
+                            x.Key == SmokeSession.ToggleOutcome.Restored || x.Key == SmokeSession.ToggleOutcome.NothingWritten),
+                        string.Join("; ", restored.Select(x => x.Value)));
+                }
+            }
+        }
+
+        private static bool TryRay(Player player, GameObject instance, out Ray ray)
+        {
+            foreach (var collider in instance.GetComponentsInChildren<Collider>())
+            {
+                if (!collider.enabled) continue;
+                var origin = GameCamera.instance.transform.position;
+                ray = new Ray(origin, collider.bounds.center - origin);
+                if (ObjectPinning.TryResolveFromRay(player, ray, out var aimed) && aimed.Instance == instance)
+                    return true;
+            }
+            ray = default;
+            return false;
+        }
+
+        private static int MarkerCount(HashSet<Minimap.PinData> before, List<Minimap.PinData> added)
+        {
+            return Map.GetAllPins().Count(pin => !pin.m_save && !Map.IsAutomaticPin(pin) &&
+                !before.Contains(pin) && !added.Contains(pin));
+        }
+
+        private static void Validate()
+        {
+            AccessTools.Field(typeof(Navigation), "_nextTargetPinValidationTime").SetValue(null, 0f);
+            AccessTools.Method(typeof(Navigation), "ValidateTargetPin").Invoke(null, null);
+        }
+
+        private static void CheckUnchanged(FeatureRun run, string name, Minimap.PinData target,
+            HashSet<Minimap.PinData> before, List<Minimap.PinData> added)
+        {
+            Check(run, name, ReferenceEquals(Navigation.TargetPin, target) && MarkerCount(before, added) == 1,
+                "the current destination and single temporary marker are unchanged");
+        }
+
+        private static void Check(FeatureRun run, string name, bool passed, string detail)
+        {
+            if (passed) run.Pass(name, detail);
+            else run.Fail(name, detail);
+        }
+
+        private static void CheckSave(FeatureRun run, Minimap map, Minimap.PinData marker, Minimap.PinData control)
+        {
+            var data = (byte[])AccessTools.Method(typeof(Minimap), "GetMapData").Invoke(map, null);
+            var outer = new ZPackage(data);
+            var version = outer.ReadInt();
+            var pins = outer.ReadCompressedPackage();
+            var size = pins.ReadInt();
+            for (var i = 0; i < size * size * 2; i++) pins.ReadBool();
+            var count = pins.ReadInt();
+            var hasMarker = false;
+            var hasControl = false;
+            for (var i = 0; i < count; i++)
+            {
+                var name = pins.ReadString();
+                var position = pins.ReadVector3();
+                var type = pins.ReadInt();
+                pins.ReadBool();
+                pins.ReadLong();
+                pins.ReadString();
+                if (marker != null && name == marker.m_name && position == marker.m_pos && type == (int)marker.m_type)
+                    hasMarker = true;
+                if (name == control.m_name && position == control.m_pos && type == (int)control.m_type)
+                    hasControl = true;
+            }
+            Check(run, "navhotkey_not_saved", version == 8 && marker != null && !hasMarker && hasControl,
+                $"temporary marker in serialized map={hasMarker}, saved control={hasControl}");
         }
     }
 }
