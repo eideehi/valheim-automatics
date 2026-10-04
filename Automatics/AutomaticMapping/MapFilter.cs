@@ -231,9 +231,16 @@ namespace Automatics.AutomaticMapping
         private static void DisableInheritedInput(GameObject root)
         {
             foreach (var localize in root.GetComponentsInChildren<Localize>(true)) localize.enabled = false;
-            foreach (var hint in root.GetComponentsInChildren<UIInputHint>(true)) hint.gameObject.SetActive(false);
+            // The source control's gamepad hints are removed outright: a copy of one can still show
+            // its unresolved button name, which it would draw across the map.
+            foreach (var hint in root.GetComponentsInChildren<UIInputHint>(true)) Object.DestroyImmediate(hint.gameObject);
             foreach (var tooltip in root.GetComponentsInChildren<UITooltip>(true)) tooltip.enabled = false;
-            foreach (var gamepad in root.GetComponentsInChildren<UIGamePad>(true)) gamepad.enabled = false;
+            foreach (var gamepad in root.GetComponentsInChildren<UIGamePad>(true))
+            {
+                if (gamepad.m_hint && gamepad.m_hint.transform.IsChildOf(root.transform))
+                    Object.DestroyImmediate(gamepad.m_hint);
+                gamepad.enabled = false;
+            }
         }
 
         // Measure the translated text and flow around the vanilla filter column and public toggle.
