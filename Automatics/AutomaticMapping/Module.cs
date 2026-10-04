@@ -102,7 +102,11 @@ namespace Automatics.AutomaticMapping
         public void SetStopRequested(bool value)
         {
             StopRequested = value;
-            if (value) MapFilter.Cleanup();
+            if (value)
+            {
+                MapFilter.Cleanup();
+                PinTooltip.Cleanup();
+            }
         }
 
         public void BindConfig()

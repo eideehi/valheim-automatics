@@ -239,6 +239,7 @@ namespace Automatics.AutomaticMapping
         private static void OnHideUnexploredPinsChanged(object sender, EventArgs e)
         {
             if (!Module.Running) return;
+            if (!EnableMapEnhancements) PinTooltip.Hide();
             Map.RefreshPins();
         }
 

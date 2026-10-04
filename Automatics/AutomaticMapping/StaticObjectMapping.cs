@@ -1854,6 +1854,11 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
+        internal static bool TryGetPinKeys(Minimap.PinData pinData, out HashSet<MapPinIdentify> keys)
+        {
+            return PinKeyCache.TryGetValue(pinData, out keys);
+        }
+
         internal static GameObject FindLiveInstance(Minimap.PinData pinData)
         {
             if (pinData == null || !ZNetScene.instance ||

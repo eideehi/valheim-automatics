@@ -373,6 +373,7 @@ namespace Automatics.AutomaticMapping
         private static void Minimap_UpdatePins_Postfix(Minimap __instance)
         {
             MapFilter.Update(__instance);
+            PinTooltip.Update(__instance);
         }
 
         [HarmonyPostfix]
@@ -384,9 +385,10 @@ namespace Automatics.AutomaticMapping
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Minimap), "Update")]
-        private static void Minimap_Update_Postfix()
+        private static void Minimap_Update_Postfix(Minimap __instance)
         {
             MapFilter.UpdateInput();
+            PinTooltip.Update(__instance);
         }
 
         [HarmonyPostfix]
@@ -394,6 +396,7 @@ namespace Automatics.AutomaticMapping
         private static void Minimap_OnLanguageChange_Postfix()
         {
             MapFilter.OnLanguageChange();
+            PinTooltip.Invalidate();
         }
 
         [HarmonyPostfix]
@@ -401,6 +404,7 @@ namespace Automatics.AutomaticMapping
         private static void Minimap_SetMapMode_Postfix(Minimap __instance)
         {
             MapFilter.Update(__instance);
+            PinTooltip.Update(__instance);
         }
 
         [HarmonyPostfix]
@@ -494,6 +498,7 @@ namespace Automatics.AutomaticMapping
             DynamicObjectMapping.Cleanup();
             StaticObjectMapping.Cleanup();
             MapFilter.Cleanup();
+            PinTooltip.Cleanup();
             PinCategories.Cleanup();
             Navigation.ClearTarget();
         }

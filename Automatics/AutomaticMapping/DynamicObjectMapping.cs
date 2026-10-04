@@ -901,6 +901,11 @@ namespace Automatics.AutomaticMapping
             return source && source.GetComponent<Character>() ? uniqueId : ZDOID.None;
         }
 
+        internal static bool TryGetPinId(Minimap.PinData pinData, out ZDOID id)
+        {
+            return PinKeyCache.TryGetValue(pinData, out id) || VehiclePinKeyCache.TryGetValue(pinData, out id);
+        }
+
         internal static GameObject FindLiveInstance(Minimap.PinData pinData)
         {
             if (pinData == null || !ZNetScene.instance) return null;

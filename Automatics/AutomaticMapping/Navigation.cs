@@ -46,6 +46,7 @@ namespace Automatics.AutomaticMapping
             DestroyOverlay();
             AimedObjectBar.Cleanup();
             MapFilter.Cleanup();
+            PinTooltip.Cleanup();
             PinCategories.Cleanup();
             NavigationGuide.Dispose();
         }

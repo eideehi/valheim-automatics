@@ -30,6 +30,7 @@ namespace Automatics.AutomaticMapping
         private static readonly Dictionary<Minimap.PinData, SearchLabel> SearchLabels =
             new Dictionary<Minimap.PinData, SearchLabel>();
         private static Minimap _map;
+        private static Func<bool> _searchFocused;
         private static string _searchText = "";
         private static string _loweredSearch = "";
         private static int _blockedInputFrame = -1;
@@ -49,7 +50,7 @@ namespace Automatics.AutomaticMapping
         internal static bool SearchPinned { get; private set; }
         internal static bool HasSearch => _loweredSearch.Length != 0;
         internal static bool SearchFocused => SearchInput && SearchInput.gameObject.activeInHierarchy &&
-            (bool)InputFocusProperty.GetValue(SearchInput);
+            _searchFocused();
         internal static bool InTextInput => Module.Running && Config.EnableMapEnhancements &&
             _map && _map.m_mode == Minimap.MapMode.Large &&
             (SearchFocused || _blockedInputFrame == Time.frameCount);
@@ -162,6 +163,7 @@ namespace Automatics.AutomaticMapping
             }
             Root = null;
             SearchInput = null;
+            _searchFocused = null;
             SearchToggle = null;
             _map = null;
             FilterControls.Clear();
@@ -196,6 +198,7 @@ namespace Automatics.AutomaticMapping
             var inputRoot = Object.Instantiate(originalInput.gameObject, row);
             inputRoot.name = "AutomaticsMapFilter_Search";
             SearchInput = inputRoot.GetComponent(InputType);
+            _searchFocused = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), SearchInput, InputFocusProperty.GetGetMethod());
             DisableInheritedInput(inputRoot);
             ((Selectable)SearchInput).navigation = new UnityEngine.UI.Navigation { mode = UnityEngine.UI.Navigation.Mode.None };
             foreach (var eventName in new[] { "onValueChanged", "onEndEdit", "onSubmit", "onSelect", "onDeselect" })

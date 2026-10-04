@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using Automatics.AutomaticMapping;
 using Automatics.Valheim;
@@ -43,6 +44,7 @@ namespace Automatics.SmokeTest
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("navhotkey", NavHotkeyFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("aimbar", AimBarFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("mapfilter", MapFilterFeatureSmoke.Run),
+            new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("pintooltip", PinTooltipFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("mining", MiningFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("planting", PlantingFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("farming", FarmingFeatureSmoke.Run),
@@ -986,6 +988,562 @@ namespace Automatics.SmokeTest
         {
             if (!SmokeSession.InvokeSettingControl(run.RunId, setting, expected, control.InvokeClick, out var refusal))
                 throw new InvalidOperationException("control click precondition failed: " + refusal);
+        }
+
+        private static void Check(FeatureRun run, string name, bool passed, string failure)
+        {
+            if (passed) run.Pass(name);
+            else run.Fail(name, failure);
+        }
+    }
+
+    internal static class PinTooltipFeatureSmoke
+    {
+        private static ZDOID _cachedId;
+        private static Minimap.PinData _savedPortalPin;
+        private static int _clientReads;
+
+        public static IEnumerator Run(FeatureRun run)
+        {
+            var player = Player.m_localPlayer;
+            var map = Minimap.instance;
+            if (!run.IsCurrent || !player || !map || !ZNetScene.instance || !InventoryGui.instance ||
+                !ZNet.instance || !ZNet.instance.IsServer() || ZNet.instance.GetPeerConnections() > 0 ||
+                !MappingModule.Running)
+            {
+                run.Skip("pintooltip_section", "requires a loaded single-player world, inventory UI and running Automatic Mapping");
+                yield break;
+            }
+
+            var objects = new List<GameObject>();
+            var pins = new List<Minimap.PinData>();
+            var settings = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
+            var originalMode = map.m_mode;
+            var originalSearch = MapFilter.SearchText;
+            var originalSearchPinned = MapFilter.SearchPinned;
+            var originalFocus = MapFilter.SearchFocused;
+            var originalPointer = ZInput.pointerPosition;
+            var offsetField = AccessTools.Field(typeof(Minimap), "m_mapOffset");
+            var originalOffset = offsetField.GetValue(map);
+            var center = AccessTools.Method(typeof(Minimap), "GetViewCenterWorldPoint").Invoke(map, null);
+            var cachedProbe = new Harmony("automatics.smoke.pintooltip." + run.RunId);
+            var clientProbe = new Harmony("automatics.smoke.pintooltip.client." + run.RunId);
+            Func<string, bool> handBack = _ =>
+            {
+                clientProbe.UnpatchSelf();
+                cachedProbe.UnpatchSelf();
+                _cachedId = ZDOID.None;
+                _savedPortalPin = null;
+                _clientReads = 0;
+                PinTooltip.Hide();
+                foreach (var pin in pins) if (Map.ContainsPin(pin)) map.RemovePin(pin);
+                pins.Clear();
+                foreach (var go in objects.ToArray()) Remove(go);
+                objects.Clear();
+                SmokeSession.RestoreSettings(run.RunId);
+                if (MappingModule.Running && MappingConfig.EnableMapEnhancements)
+                {
+                    map.SetMapMode(Minimap.MapMode.Large);
+                    MapFilter.Update(map);
+                    MapFilter.SetSearchText(originalSearch);
+                    if (MapFilter.SearchPinned != originalSearchPinned) MapFilter.SearchToggle.InvokeClick();
+                    if (originalFocus)
+                    {
+                        AccessTools.Method(MapFilter.SearchInput.GetType(), "Select").Invoke(MapFilter.SearchInput, null);
+                        AccessTools.Method(MapFilter.SearchInput.GetType(), "ActivateInputFieldInternal").Invoke(MapFilter.SearchInput, null);
+                    }
+                }
+                AccessTools.Method(typeof(Minimap), "CenterMap").Invoke(map, new[] { center });
+                if (Cursor.lockState != CursorLockMode.Locked) ZInput.SetMousePosition(originalPointer);
+                map.SetMapMode(originalMode);
+                offsetField.SetValue(map, originalOffset);
+                Map.RefreshPins();
+                return true;
+            };
+            SmokeSession.TrackHandBack(handBack);
+            try
+            {
+                foreach (var entry in new ConfigEntryBase[]
+                {
+                    MappingConfig.EnableMapEnhancementsEntry, MappingConfig.MapFilterHiddenCategoriesEntry,
+                    MappingConfig.HideUnexploredAutomaticMappingPinsEntry
+                })
+                {
+                    if (!SmokeSession.BeginSetting(run.RunId, entry, out var setting, out var refusal))
+                    {
+                        run.Fail("pintooltip_settings", "setting ownership precondition failed: " + refusal);
+                        yield break;
+                    }
+                    settings.Add(entry, setting);
+                }
+                Write(run, settings, MappingConfig.EnableMapEnhancementsEntry, true);
+                Write(run, settings, MappingConfig.MapFilterHiddenCategoriesEntry, new StringList());
+                Write(run, settings, MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false);
+                map.SetMapMode(Minimap.MapMode.Large);
+                MapFilter.Update(map);
+                if (MapFilter.SearchFocused) MapFilter.DefocusSearch();
+                MapFilter.SetSearchText("");
+
+                var origin = player.transform.position + Vector3.up * 15f;
+                var creature = Spawn("Deer", origin, objects);
+                if (!creature || !creature.GetComponent<Character>())
+                {
+                    run.Fail("pintooltip_creature_precondition", "spawned creature precondition failed: Deer has no valid Character/ZDO");
+                    yield break;
+                }
+                var character = creature.GetComponent<Character>();
+                var initialZdo = creature.GetComponent<ZNetView>().GetZDO();
+                var initialCached = PinTooltipContent.ReadObject(ZNetScene.instance.GetPrefab("Deer"), initialZdo, false, ZNet.instance.GetTime());
+                Check(run, "pintooltip_full_health_default", initialZdo.GetFloat(ZDOVars.s_health, -1f) < 0f &&
+                    initialCached.Health == initialCached.MaxHealth,
+                    "missing-health precondition/default failed: fresh creature must have no health field and cached health must default to max");
+                character.SetLevel(2);
+                character.SetHealth(character.GetMaxHealth() / 2f);
+                var creaturePin = AddPin(map, pins, creature.transform.position, "Automatics smoke creature");
+                AssociateDynamic(creaturePin, creature.GetComponent<ZNetView>().GetZDO().m_uid);
+                var loaded = PinTooltipContent.Build(creaturePin);
+                Check(run, "pintooltip_creature", loaded.Name == creaturePin.m_name &&
+                    loaded.Text.Contains(Line("hp", character.GetHealth().ToString("0.#", CultureInfo.InvariantCulture),
+                        character.GetMaxHealth().ToString("0.#", CultureInfo.InvariantCulture))) &&
+                    loaded.Text.Contains(Line("level", 2)) && !loaded.Text.Contains(Line("outdated")),
+                    "damaged level-2 creature content precondition/output failed: " + loaded.Text);
+                Check(run, "pintooltip_horizontal_distance", loaded.Text.Contains(Line("distance",
+                    Vector3.ProjectOnPlane(creaturePin.m_pos - player.transform.position, Vector3.up).magnitude.ToString("0", CultureInfo.InvariantCulture))),
+                    "horizontal distance/name content failed for the elevated test object");
+
+                _cachedId = creature.GetComponent<ZNetView>().GetZDO().m_uid;
+                cachedProbe.Patch(AccessTools.Method(typeof(ZNetScene), nameof(ZNetScene.FindInstance), new[] { typeof(ZDOID) }),
+                    prefix: new HarmonyMethod(typeof(PinTooltipFeatureSmoke), nameof(HideTestInstance)));
+                var cached = PinTooltipContent.Read(creaturePin, player.transform.position, ZNet.instance.GetTime());
+                Check(run, "pintooltip_server_unloaded_creature", ZNet.instance.IsServer() &&
+                    cached.Members.Single().State == PinTooltipContent.ObjectState.Current &&
+                    PinTooltipContent.Build(creaturePin).Text == loaded.Text,
+                    "server/unloaded ZDO precondition or content failed: authoritative HP/level must have no outdated note");
+                StubClient(clientProbe);
+                var clientCreature = PinTooltipContent.Read(creaturePin, player.transform.position, ZNet.instance.GetTime());
+                Check(run, "pintooltip_cached_creature", _clientReads > 0 && ZNet.instance.IsServer() &&
+                    clientCreature.Members.Single().State == PinTooltipContent.ObjectState.Cached &&
+                    PinTooltipContent.Format(clientCreature, Translate).Text == loaded.Text + "\n" + Line("outdated"),
+                    "client role probe/cached ZDO precondition or content failed: HP/level must carry the outdated note; probe reads=" + _clientReads);
+                cachedProbe.UnpatchSelf();
+                var readsBeforeLoaded = _clientReads;
+                var restoredCreature = PinTooltipContent.Read(creaturePin, player.transform.position, ZNet.instance.GetTime());
+                Check(run, "pintooltip_loaded_no_note", _clientReads == readsBeforeLoaded &&
+                    restoredCreature.Members.Single().State == PinTooltipContent.ObjectState.Loaded &&
+                    PinTooltipContent.Format(restoredCreature, Translate).Text == loaded.Text,
+                    "restored live-instance precondition or content failed: loaded HP/level must have no outdated note");
+                RestoreServer(run, clientProbe, "creature");
+
+                var ready = Spawn("Pickable_Mushroom", origin + Vector3.right * 4f, objects);
+                var picked = Spawn("Pickable_Mushroom", origin + Vector3.right * 8f, objects);
+                if (!ready || !picked || !ready.GetComponent<Pickable>() || !picked.GetComponent<Pickable>() ||
+                    picked.GetComponent<Pickable>().m_respawnTimeMinutes <= 0f)
+                {
+                    run.Fail("pintooltip_pickable_precondition", "ready/picked respawning pickable precondition failed");
+                    yield break;
+                }
+                ready.GetComponent<Pickable>().SetPicked(false);
+                picked.GetComponent<Pickable>().SetPicked(true);
+                var readyId = ready.GetComponent<ZNetView>().GetZDO().m_uid;
+                var pickedId = picked.GetComponent<ZNetView>().GetZDO().m_uid;
+                var readyPin = AddPin(map, pins, ready.transform.position, "Automatics smoke ready");
+                var pickedPin = AddPin(map, pins, picked.transform.position, "Automatics smoke picked");
+                AssociateStatic(readyPin, readyId, PinKind.Flora);
+                AssociateStatic(pickedPin, pickedId, PinKind.Flora);
+                Check(run, "pintooltip_ready", PinTooltipContent.Build(readyPin).Text.Contains(Line("ready")),
+                    "ready pickable precondition/output failed");
+                var now = ZNet.instance.GetTime();
+                var pickedSnapshot = PinTooltipContent.Read(pickedPin, player.transform.position, now);
+                var member = pickedSnapshot.Members.Single();
+                var expectedSeconds = picked.GetComponent<Pickable>().m_respawnTimeMinutes * 60d -
+                    (now.Ticks - picked.GetComponent<ZNetView>().GetZDO().GetLong(ZDOVars.s_pickedTime)) / (double)TimeSpan.TicksPerSecond;
+                Check(run, "pintooltip_respawn", !member.Ready && member.RespawnSeconds.HasValue &&
+                    Math.Abs(member.RespawnSeconds.Value - expectedSeconds) < 0.001d &&
+                    PinTooltipContent.Format(pickedSnapshot, Translate).Text.Contains(Line("respawn", Duration(expectedSeconds))),
+                    "picked timestamp/respawn duration precondition or estimated countdown output failed");
+
+                map.RemovePin(readyPin);
+                map.RemovePin(pickedPin);
+                var merged = AddPin(map, pins, origin + Vector3.right * 6f, "Automatics smoke mixed flora");
+                AssociateStatic(merged, readyId, PinKind.Flora);
+                AssociateStatic(merged, pickedId, PinKind.Flora);
+                var mergedContent = PinTooltipContent.Build(merged);
+                Check(run, "pintooltip_merged", mergedContent.Text.Contains(Line("ready_count", 1, 2)) &&
+                    mergedContent.Text.Contains(Line("earliest", Duration(expectedSeconds))),
+                    "merged two-member association precondition/count or earliest estimate failed: " + mergedContent.Text);
+                _cachedId = pickedId;
+                cachedProbe.Patch(AccessTools.Method(typeof(ZNetScene), nameof(ZNetScene.FindInstance), new[] { typeof(ZDOID) }),
+                    prefix: new HarmonyMethod(typeof(PinTooltipFeatureSmoke), nameof(HideTestInstance)));
+                var cachedFlora = PinTooltipContent.Read(merged, player.transform.position, now);
+                Check(run, "pintooltip_server_unloaded_flora", ZNet.instance.IsServer() &&
+                    cachedFlora.Members.Any(x => x.State == PinTooltipContent.ObjectState.Current) &&
+                    PinTooltipContent.Format(cachedFlora, Translate).Text == mergedContent.Text,
+                    "server/unloaded flora precondition or content failed: authoritative members must retain count/estimate without the outdated note");
+                StubClient(clientProbe);
+                var clientFlora = PinTooltipContent.Read(merged, player.transform.position, now);
+                Check(run, "pintooltip_cached_flora", _clientReads > 0 && ZNet.instance.IsServer() &&
+                    clientFlora.Members.Any(x => x.State == PinTooltipContent.ObjectState.Cached) &&
+                    PinTooltipContent.Format(clientFlora, Translate).Text == mergedContent.Text + "\n" + Line("outdated"),
+                    "client role probe/cached flora precondition or content failed: mixed members must retain count/estimate with the outdated note; probe reads=" + _clientReads);
+                RestoreServer(run, clientProbe, "flora");
+                cachedProbe.UnpatchSelf();
+                var later = PinTooltipContent.Read(merged, player.transform.position, now.AddMinutes(1));
+                Check(run, "pintooltip_countdown", Math.Abs(later.Members[0].RespawnSeconds.GetValueOrDefault() +
+                    later.Members[1].RespawnSeconds.GetValueOrDefault() - (expectedSeconds - 60d)) < 0.001d,
+                    "countdown did not advance on the network-time base");
+
+                var depositPrefab = ZNetScene.instance.GetPrefab("rock4_copper_frac");
+                if (!depositPrefab || !depositPrefab.GetComponent<MineRock5>())
+                {
+                    run.Fail("pintooltip_deposit_precondition", "section prefab precondition failed: rock4_copper_frac has no MineRock5");
+                    yield break;
+                }
+                var deposit = Spawn("rock4_copper_frac", origin + Vector3.forward * 8f, objects);
+                if (!deposit || !deposit.GetComponent<MineRock5>())
+                {
+                    run.Fail("pintooltip_deposit_precondition", "spawned section deposit precondition failed: rock4_copper_frac has no MineRock5/valid ZDO");
+                    yield break;
+                }
+                var rock = deposit.GetComponent<MineRock5>();
+                var areas = (IList)AccessTools.Field(typeof(MineRock5), "m_hitAreas").GetValue(rock);
+                if (areas == null || areas.Count < 2)
+                {
+                    run.Fail("pintooltip_deposit_precondition", "MineRock5 Awake/section precondition failed: need at least two initialized hit areas");
+                    yield break;
+                }
+                AccessTools.Method(typeof(MineRock5), "RPC_SetAreaHealth").Invoke(rock, new object[] { 0L, 0, 0f });
+                AccessTools.Method(typeof(MineRock5), "SaveHealth").Invoke(rock, null);
+                var depositPin = AddPin(map, pins, deposit.transform.position, "Automatics smoke deposit");
+                var depositId = deposit.GetComponent<ZNetView>().GetZDO().m_uid;
+                AssociateStatic(depositPin, depositId, PinKind.Mineral);
+                Check(run, "pintooltip_sections", PinTooltipContent.Build(depositPin).Text.Contains(Line("sections", areas.Count - 1, areas.Count)),
+                    "broken section/package precondition/output failed");
+                _cachedId = depositId;
+                cachedProbe.Patch(AccessTools.Method(typeof(ZNetScene), nameof(ZNetScene.FindInstance), new[] { typeof(ZDOID) }),
+                    prefix: new HarmonyMethod(typeof(PinTooltipFeatureSmoke), nameof(HideTestInstance)));
+                var serverSections = PinTooltipContent.Build(depositPin);
+                Check(run, "pintooltip_server_unloaded_sections", ZNet.instance.IsServer() &&
+                    serverSections.Text.Contains(Line("sections", areas.Count - 1, areas.Count)) &&
+                    !serverSections.Text.Contains(Line("outdated")),
+                    "server/unloaded deposit precondition or content failed: authoritative sections must have no outdated note");
+                StubClient(clientProbe);
+                var clientSections = PinTooltipContent.Read(depositPin, player.transform.position, ZNet.instance.GetTime());
+                Check(run, "pintooltip_cached_sections", _clientReads > 0 && ZNet.instance.IsServer() &&
+                    clientSections.Members.Single().State == PinTooltipContent.ObjectState.Cached &&
+                    PinTooltipContent.Format(clientSections, Translate).Text == serverSections.Text + "\n" + Line("outdated"),
+                    "client role probe/cached deposit precondition or content failed: section details must carry the outdated note; probe reads=" + _clientReads);
+                RestoreServer(run, clientProbe, "sections");
+                cachedProbe.UnpatchSelf();
+
+                var saved = Map.AddPin(origin + Vector3.left * 4f, "Automatics smoke saved", true,
+                    new Target { name = "Automatics smoke saved" });
+                pins.Add(saved);
+                Check(run, "pintooltip_no_link", saved.m_save && Map.IsAutomaticPin(saved) &&
+                    PinTooltipContent.Build(saved).Text.Contains(Line("no_link")),
+                    "saved automatic pin without association precondition/reason failed");
+                _savedPortalPin = Map.AddPin(origin + Vector3.back * 4f, "Automatics smoke saved portal", true,
+                    new Target { name = "Automatics smoke saved portal" });
+                pins.Add(_savedPortalPin);
+                cachedProbe.Patch(AccessTools.Method(typeof(PinCategories), nameof(PinCategories.TryClassify)),
+                    prefix: new HarmonyMethod(typeof(PinTooltipFeatureSmoke), nameof(ClassifySavedPortal)));
+                var portalContent = PinTooltipContent.Build(_savedPortalPin);
+                Check(run, "pintooltip_saved_portal", _savedPortalPin.m_save && Map.IsAutomaticPin(_savedPortalPin) &&
+                    !StaticObjectMapping.OwnsPin(_savedPortalPin) && !DynamicObjectMapping.OwnsPin(_savedPortalPin) &&
+                    PinCategories.TryClassify(_savedPortalPin, out var portalCategory) && portalCategory == PinCategory.Portal &&
+                    portalContent.Name == _savedPortalPin.m_name && portalContent.Text.Split('\n').Length == 1,
+                    "saved portal category/no-association precondition or content failed: only name and distance should appear");
+                cachedProbe.UnpatchSelf();
+                _savedPortalPin = null;
+                var manual = map.AddPin(origin + Vector3.left * 8f, Minimap.PinType.Icon3, "Automatics smoke manual", false, false);
+                pins.Add(manual);
+                Check(run, "pintooltip_manual", PinTooltipContent.Build(manual).Text.Split('\n').Length == 1,
+                    "manual pin should carry only its name and distance");
+                var location = AddPin(map, pins, origin + Vector3.left * 12f, "Automatics smoke location");
+                AssociateLocation(location);
+                Check(run, "pintooltip_location", PinTooltipContent.Build(location).Text.Split('\n').Length == 1,
+                    "location-domain pin should carry only its name and distance");
+
+                AccessTools.Method(typeof(Minimap), "CenterMap").Invoke(map, new object[] { merged.m_pos });
+                AccessTools.Method(AccessTools.TypeByName("UnityEngine.Canvas"), "ForceUpdateCanvases").Invoke(null, null);
+                Map.RefreshPins();
+                if (!merged.m_uiElement || !merged.m_uiElement.gameObject.activeInHierarchy)
+                {
+                    run.Fail("pintooltip_ui_precondition", "test pin marker precondition failed: mixed flora marker is not visible on the large map");
+                    yield break;
+                }
+                var point = merged.m_uiElement.position;
+                CheckUi(run, map, merged, point, settings);
+                var removedId = creature.GetComponent<ZNetView>().GetZDO().m_uid;
+                foreach (var pin in pins) if (Map.ContainsPin(pin)) map.RemovePin(pin);
+                pins.Clear();
+                foreach (var go in objects) Remove(go);
+                objects.Clear();
+                var hoverPin = map.AddPin(player.transform.position + Vector3.forward * 300f,
+                    Minimap.PinType.Icon3, "Automatics smoke hover", false, false);
+                pins.Add(hoverPin);
+                var pointerSteps = CheckPointer(run, map, hoverPin, settings);
+                while (pointerSteps.MoveNext()) yield return pointerSteps.Current;
+                if (!run.IsCurrent) yield break;
+                var removalDeadline = Time.unscaledTime + 3f;
+                while (run.IsCurrent && ZDOMan.instance.GetZDO(removedId) != null && Time.unscaledTime < removalDeadline)
+                    yield return null;
+                if (!run.IsCurrent) yield break;
+                var removedPin = AddPin(map, pins, origin, "Automatics smoke missing data");
+                AssociateDynamic(removedPin, removedId);
+                var removedContent = PinTooltipContent.Build(removedPin);
+                Check(run, "pintooltip_server_removed", ZNet.instance.IsServer() && ZDOMan.instance.GetZDO(removedId) == null &&
+                    removedContent.Name == removedPin.m_name && removedContent.Text.Split('\n').Length == 1,
+                    "server/removed-object precondition or content failed: missing authoritative ZDO must leave only name and distance");
+                StubClient(clientProbe);
+                var missing = PinTooltipContent.Read(removedPin, player.transform.position, ZNet.instance.GetTime());
+                Check(run, "pintooltip_not_loaded", _clientReads > 0 && ZNet.instance.IsServer() &&
+                    ZDOMan.instance.GetZDO(removedId) == null && missing.Members.Single().State == PinTooltipContent.ObjectState.NoData &&
+                    PinTooltipContent.Format(missing, Translate).Text == removedContent.Text + "\n" + Line("not_loaded"),
+                    "client role probe/missing-data precondition or content failed: unavailable local data must carry the not-loaded reason; probe reads=" + _clientReads);
+                RestoreServer(run, clientProbe, "missing_data");
+
+            }
+            finally
+            {
+                if (handBack("pin tooltip smoke")) SmokeSession.ReleaseHandBack(handBack);
+            }
+        }
+
+        private static void CheckUi(FeatureRun run, Minimap map, Minimap.PinData pin, Vector3 point,
+            Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> settings)
+        {
+            PinTooltip.UpdateAt(map, point);
+            Check(run, "pintooltip_ui_components", PinTooltip.Root && PinTooltip.HasTopicAndText,
+                "inventory-element tooltip prefab precondition failed: Topic/Text text components were not both found after creation");
+            if (!PinTooltip.Root || !PinTooltip.HasTopicAndText) return;
+            var shown = PinTooltip.Root && PinTooltip.Root.activeInHierarchy &&
+                ReferenceEquals(PinTooltip.HoveredPin, pin) && PinTooltip.Content.Text == PinTooltipContent.Build(pin).Text &&
+                Text(PinTooltip.Root, "Topic") == PinTooltip.Content.Name && Text(PinTooltip.Root, "Text") == PinTooltip.Content.Text;
+            Check(run, "pintooltip_ui_show", shown,
+                "cursor/prefab precondition or tooltip show/content failed at the test marker's screen point");
+            if (!shown) return;
+            var original = PinTooltip.Content;
+            PinTooltip.UpdateAt(map, point);
+            Check(run, "pintooltip_ui_cached", ReferenceEquals(original, PinTooltip.Content),
+                "unchanged hover rebuilt/localized content before its one-second refresh");
+            PinTooltip.Invalidate();
+            PinTooltip.UpdateAt(map, point);
+            Check(run, "pintooltip_ui_refresh", PinTooltip.Content != null && !ReferenceEquals(original, PinTooltip.Content),
+                "due refresh failed to rebuild countdown content");
+            var rect = MapFilter.ScreenRect((RectTransform)PinTooltip.Root.transform.GetChild(0));
+            Check(run, "pintooltip_ui_clamped", rect.xMin >= -1f && rect.yMin >= -1f &&
+                rect.xMax <= Screen.width + 1f && rect.yMax <= Screen.height + 1f,
+                "tooltip screen clamp failed: " + rect);
+            PinTooltip.UpdateAt(map, new Vector3(-100000f, -100000f));
+            Check(run, "pintooltip_ui_leave", Hidden(), "moving off every pin left the tooltip visible");
+            PinTooltip.UpdateAt(map, point);
+            Write(run, settings, MappingConfig.EnableMapEnhancementsEntry, false);
+            Check(run, "pintooltip_ui_option_immediate", Hidden(), "enhancements off did not hide the shown tooltip in the setting-change frame");
+            PinTooltip.UpdateAt(map, point);
+            Check(run, "pintooltip_ui_option_off", Hidden(), "enhancements off allowed tooltip at the test pin");
+            Write(run, settings, MappingConfig.EnableMapEnhancementsEntry, true);
+            PinTooltip.UpdateAt(map, point);
+            Check(run, "pintooltip_ui_option_on", PinTooltip.Root && PinTooltip.Root.activeInHierarchy,
+                "enhancements on did not restore hover details");
+            AccessTools.Method(MapFilter.SearchInput.GetType(), "Select").Invoke(MapFilter.SearchInput, null);
+            AccessTools.Method(MapFilter.SearchInput.GetType(), "ActivateInputFieldInternal").Invoke(MapFilter.SearchInput, null);
+            PinTooltip.UpdateAt(map, point);
+            Check(run, "pintooltip_ui_search_focus", MapFilter.SearchFocused && Hidden(),
+                "search focus precondition/hide failed");
+            MapFilter.DefocusSearch();
+            PinTooltip.UpdateAt(map, point);
+            map.SetMapMode(Minimap.MapMode.Small);
+            Check(run, "pintooltip_ui_close", Hidden(), "leaving the large map did not hide the tooltip immediately");
+            PinTooltip.UpdateAt(map, point);
+            Check(run, "pintooltip_ui_minimap", Hidden(), "minimap allowed tooltip rendering");
+        }
+
+        private static IEnumerator CheckPointer(FeatureRun run, Minimap map, Minimap.PinData pin,
+            Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> settings)
+        {
+            map.SetMapMode(Minimap.MapMode.Large);
+            AccessTools.Field(typeof(Minimap), "m_mapOffset").SetValue(map, pin.m_pos - Player.m_localPlayer.transform.position);
+            AccessTools.Method(typeof(Minimap), "CenterMap").Invoke(map, new object[] { pin.m_pos });
+            AccessTools.Method(AccessTools.TypeByName("UnityEngine.Canvas"), "ForceUpdateCanvases").Invoke(null, null);
+            Map.RefreshPins();
+            yield return null;
+            if (!run.IsCurrent) yield break;
+            if (Cursor.lockState == CursorLockMode.Locked || !pin.m_uiElement || !pin.m_uiElement.gameObject.activeInHierarchy)
+            {
+                run.Skip("pintooltip_real_pointer", "cursor/marker precondition unavailable: cursor is locked or test marker is not visible; real-hover check remains manual");
+                yield break;
+            }
+            var point = pin.m_uiElement.position;
+            ZInput.SetMousePosition(point);
+            yield return null;
+            yield return null;
+            if (!run.IsCurrent) yield break;
+            if (Vector2.Distance(ZInput.pointerPosition, point) > 2f)
+            {
+                run.Skip("pintooltip_real_pointer", "ZInput.SetMousePosition did not drive pointerPosition to the marker; real-hover check remains manual");
+                yield break;
+            }
+            Check(run, "pintooltip_real_show", PinTooltip.Root && PinTooltip.Root.activeInHierarchy &&
+                PinTooltip.HasTopicAndText &&
+                ReferenceEquals(PinTooltip.HoveredPin, pin) && Text(PinTooltip.Root, "Topic") == pin.m_name &&
+                Text(PinTooltip.Root, "Text") == PinTooltipContent.Build(pin).Text,
+                "real cursor reached the marker but Minimap.Update did not show matching tooltip content");
+            var off = point + new Vector3(150f, 150f);
+            var world = (Vector3)AccessTools.Method(typeof(Minimap), "ScreenToWorldPoint").Invoke(map, new object[] { off });
+            var radius = (float)AccessTools.Field(typeof(Minimap), "m_removeRadius").GetValue(map) *
+                ((float)AccessTools.Field(typeof(Minimap), "m_largeZoom").GetValue(map) * 2f);
+            if (Map.GetClosestPin(world, radius) != null)
+                run.Fail("pintooltip_real_leave", "empty hover point precondition failed: another visible pin is within the radius");
+            else
+            {
+                ZInput.SetMousePosition(off);
+                yield return null;
+                yield return null;
+                if (!run.IsCurrent) yield break;
+                Check(run, "pintooltip_real_leave", Vector2.Distance(ZInput.pointerPosition, off) <= 2f && Hidden(),
+                    "real cursor off the pins did not hide the tooltip, or pointer warp precondition failed");
+            }
+            ZInput.SetMousePosition(point);
+            yield return null;
+            yield return null;
+            if (!run.IsCurrent) yield break;
+            Write(run, settings, MappingConfig.EnableMapEnhancementsEntry, false);
+            yield return null;
+            if (!run.IsCurrent) yield break;
+            Check(run, "pintooltip_real_option_off", Hidden(), "real hover while enhancements are off showed a tooltip");
+            Write(run, settings, MappingConfig.EnableMapEnhancementsEntry, true);
+            yield return null;
+            if (!run.IsCurrent) yield break;
+            Check(run, "pintooltip_real_option_on", PinTooltip.Root && PinTooltip.Root.activeInHierarchy &&
+                ReferenceEquals(PinTooltip.HoveredPin, pin), "real hover did not resume when enhancements were enabled");
+            map.SetMapMode(Minimap.MapMode.Small);
+            yield return null;
+            if (!run.IsCurrent) yield break;
+            Check(run, "pintooltip_real_close", Hidden(), "real update left a tooltip after closing the large map");
+        }
+
+        private static string Text(GameObject root, string name)
+        {
+            var type = AccessTools.Property(typeof(Minimap.PinNameData), "PinNameText").PropertyType;
+            return (string)AccessTools.Property(type, "text").GetValue(Utils.FindChild(root.transform, name).GetComponent(type));
+        }
+
+        internal static bool ActivateExisting(Minimap map, out string precondition)
+        {
+            var pin = Navigation.TemporaryMarker;
+            if (pin == null) { precondition = "navigation test marker is missing"; return false; }
+            AccessTools.Method(typeof(Minimap), "CenterMap").Invoke(map, new object[] { pin.m_pos });
+            AccessTools.Method(AccessTools.TypeByName("UnityEngine.Canvas"), "ForceUpdateCanvases").Invoke(null, null);
+            Map.RefreshPins();
+            if (!pin.m_uiElement || !pin.m_uiElement.gameObject.activeInHierarchy)
+            { precondition = "navigation test marker has no visible large-map element"; return false; }
+            PinTooltip.UpdateAt(map, pin.m_uiElement.position);
+            precondition = "hover at navigation test marker screen point with both Topic/Text components";
+            return PinTooltip.Root && PinTooltip.HasTopicAndText && PinTooltip.Root.activeInHierarchy && ReferenceEquals(PinTooltip.HoveredPin, pin);
+        }
+
+        private static bool Hidden() => (!PinTooltip.Root || !PinTooltip.Root.activeSelf) && PinTooltip.HoveredPin == null;
+
+        private static void StubClient(Harmony probe)
+        {
+            _clientReads = 0;
+            probe.Patch(AccessTools.Method(typeof(PinTooltipContent), nameof(PinTooltipContent.IsServer)),
+                prefix: new HarmonyMethod(typeof(PinTooltipFeatureSmoke), nameof(ReportClient)));
+        }
+
+        private static bool ReportClient(ref bool __result)
+        {
+            _clientReads++;
+            __result = false;
+            return false;
+        }
+
+        private static void RestoreServer(FeatureRun run, Harmony probe, string section)
+        {
+            probe.UnpatchSelf();
+            var reads = _clientReads;
+            Check(run, "pintooltip_role_restored_" + section,
+                PinTooltipContent.IsServer() && ZNet.instance.IsServer() && _clientReads == reads,
+                "client role probe restoration failed: content reader must use the real server role after unpatching");
+        }
+
+        private static bool ClassifySavedPortal(Minimap.PinData pin, ref PinCategory category, ref bool __result)
+        {
+            if (!ReferenceEquals(pin, _savedPortalPin)) return true;
+            category = PinCategory.Portal;
+            __result = true;
+            return false;
+        }
+
+        private static bool HideTestInstance(ZDOID id, ref GameObject __result)
+        {
+            if (id != _cachedId) return true;
+            __result = null;
+            return false;
+        }
+
+        private static GameObject Spawn(string name, Vector3 position, List<GameObject> created)
+        {
+            var prefab = ZNetScene.instance.GetPrefab(name);
+            if (!prefab) return null;
+            var go = UnityEngine.Object.Instantiate(prefab, position, Quaternion.identity);
+            SmokeSession.TrackSpawn(go);
+            created.Add(go);
+            var view = go.GetComponent<ZNetView>();
+            if (!view || !view.IsValid()) return null;
+            view.GetZDO().Persistent = false;
+            return go;
+        }
+
+        private static void Remove(GameObject go)
+        {
+            if (!go) return;
+            go.SetActive(false);
+            if (SmokeSession.DestroyTestObject(go, 0, "pin tooltip smoke")) SmokeSession.ReleaseSpawn(go);
+        }
+
+        private static Minimap.PinData AddPin(Minimap map, List<Minimap.PinData> pins, Vector3 pos, string name)
+        {
+            var pin = Map.AddPin(pos, name, false, new Target { name = name });
+            pins.Add(pin);
+            return pin;
+        }
+
+        private static void AssociateDynamic(Minimap.PinData pin, ZDOID id)
+        {
+            ((IDictionary)AccessTools.Field(typeof(DynamicObjectMapping), "PinDataCache").GetValue(null))[id] = pin;
+            ((IDictionary)AccessTools.Field(typeof(DynamicObjectMapping), "PinKeyCache").GetValue(null))[pin] = id;
+        }
+
+        private static void AssociateStatic(Minimap.PinData pin, ZDOID id, PinKind kind)
+        {
+            CacheStatic(pin, new StaticObjectMapping.MapPinIdentify(id), kind, PinSourceDomain.Component);
+        }
+
+        private static void AssociateLocation(Minimap.PinData pin)
+        {
+            CacheStatic(pin, new StaticObjectMapping.MapPinIdentify(pin.m_pos), PinKind.Spot, PinSourceDomain.Location);
+        }
+
+        private static void CacheStatic(Minimap.PinData pin, StaticObjectMapping.MapPinIdentify key, PinKind kind, PinSourceDomain domain)
+        {
+            AccessTools.Method(typeof(StaticObjectMapping), "CachePin", new[]
+            {
+                typeof(StaticObjectMapping.MapPinIdentify), typeof(Minimap.PinData), typeof(PinKind),
+                typeof(string), typeof(string), typeof(PinSourceDomain)
+            }).Invoke(null, new object[] { key, pin, kind, "smoke", "smoke", domain });
+        }
+
+        private static string Translate(string key) => Automatics.L10N.Translate(key);
+        private static string Line(string key, params object[] args) => string.Format(CultureInfo.InvariantCulture,
+            Translate("@text_automatic_mapping_tooltip_" + key), args);
+        private static string Duration(double seconds) => Line("duration", (long)Math.Ceiling(seconds / 60d));
+
+        private static void Write(FeatureRun run, Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> settings,
+            ConfigEntryBase entry, object value)
+        {
+            if (!SmokeSession.WriteSetting(run.RunId, settings[entry], value, out var refusal))
+                throw new InvalidOperationException(entry.Definition.Key + " setting write precondition failed: " + refusal);
         }
 
         private static void Check(FeatureRun run, string name, bool passed, string failure)

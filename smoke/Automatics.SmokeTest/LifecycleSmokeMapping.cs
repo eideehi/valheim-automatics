@@ -93,6 +93,7 @@ namespace Automatics.SmokeTest
             private const string OffPatches = "mapping_off_patches_removed";
             private const string OffComponents = "mapping_off_components_removed";
             private const string OffFilterControls = "mapping_off_filter_controls_removed";
+            private const string OffTooltip = "mapping_off_tooltip_removed";
             private const string OffFilterSearch = "mapping_off_filter_search_reset";
             private const string OffSavedPins = "mapping_off_saved_pins_kept";
             private const string OffUnsavedPins = "mapping_off_unsaved_pins_removed";
@@ -110,7 +111,7 @@ namespace Automatics.SmokeTest
             // are reported in.
             private static readonly string[] Order =
             {
-                Settled, OffState, OffStopped, OffPatches, OffComponents, OffFilterControls, OffFilterSearch,
+                Settled, OffState, OffStopped, OffPatches, OffComponents, OffFilterControls, OffFilterSearch, OffTooltip,
                 OffSavedPins, OffUnsavedPins,
                 OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, Restored, NoErrors
             };
@@ -118,7 +119,7 @@ namespace Automatics.SmokeTest
             // Recorded once per cycle, and a PASS only when every cycle passed.
             private static readonly HashSet<string> PerCycle = new HashSet<string>(StringComparer.Ordinal)
             {
-                OffState, OffStopped, OffPatches, OffComponents, OffFilterControls, OffFilterSearch,
+                OffState, OffStopped, OffPatches, OffComponents, OffFilterControls, OffFilterSearch, OffTooltip,
                 OffSavedPins, OffUnsavedPins,
                 OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins
             };
@@ -385,9 +386,11 @@ namespace Automatics.SmokeTest
 
                 var map = Minimap.instance;
                 var originalMode = map.m_mode;
+                var originalCenter = AccessTools.Method(typeof(Minimap), "GetViewCenterWorldPoint").Invoke(map, null);
                 _filterHandBack = _ =>
                 {
                     if (!map || Minimap.instance != map) return true;
+                    AccessTools.Method(typeof(Minimap), "CenterMap").Invoke(map, new[] { originalCenter });
                     map.SetMapMode(originalMode);
                     MappingMap.RefreshPins();
                     return true;
@@ -402,6 +405,7 @@ namespace Automatics.SmokeTest
                 MapFilter.SetSearchText("lifecycle search");
                 if (!MapFilter.SearchPinned) MapFilter.SearchToggle.InvokeClick();
                 var searchActive = MapFilter.SearchText == "lifecycle search" && MapFilter.SearchPinned;
+                var tooltipActive = PinTooltipFeatureSmoke.ActivateExisting(map, out var tooltipPrecondition);
 
                 // What the module holds unsaved now is what has to be off the map once it is off.
                 var held = HeldPins().Where(pin => !pin.m_save).ToList();
@@ -442,6 +446,11 @@ namespace Automatics.SmokeTest
                     !MapFilter.SearchPinned && !MapFilter.SearchInput && MapFilter.SearchToggle == null,
                     "the active search text and minimap toggle were cleared while stopped",
                     $"search precondition/cleanup failed: active before={searchActive}, text after={MapFilter.SearchText}, pinned after={MapFilter.SearchPinned}");
+                var tooltipRoots = FindAll<RectTransform>().Count(x => x.name == global::Automatics.AutomaticMapping.PinTooltip.ObjectName);
+                Cycle(OffTooltip, cycle, tooltipActive && !global::Automatics.AutomaticMapping.PinTooltip.Root &&
+                    global::Automatics.AutomaticMapping.PinTooltip.HoveredPin == null && tooltipRoots == 0,
+                    "tooltip shown before disable; no owned tooltip or hovered pin remains",
+                    $"tooltip precondition/cleanup failed: shown before={tooltipActive}, precondition={tooltipPrecondition}, roots after={tooltipRoots}");
                 if (_filterHandBack("mapping cycle ended"))
                     SmokeSession.ReleaseHandBack(_filterHandBack);
                 _filterHandBack = null;
