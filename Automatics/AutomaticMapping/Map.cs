@@ -96,6 +96,7 @@ namespace Automatics.AutomaticMapping
             // and also drops stale PinData references from a prior session.
             AutomaticPins.Clear();
             PinIndex.Clear();
+            PinCategories.Cleanup();
             var pins = GetAllPins(map);
             for (var i = 0; i < pins.Count; i++)
             {
@@ -112,6 +113,8 @@ namespace Automatics.AutomaticMapping
         /// </summary>
         public static void Detach()
         {
+            MapFilter.Cleanup();
+            PinCategories.Cleanup();
             AutomaticPins.Clear();
             PinIndex.Clear();
         }
@@ -279,36 +282,38 @@ namespace Automatics.AutomaticMapping
 
         public static bool ShouldHideAutomaticPin(Minimap.PinData pinData)
         {
+            return ShouldHideAutomaticPinCore(pinData, true);
+        }
+
+        /// <summary>
+        ///     The unexplored and category rules only. The search narrows what the map shows for
+        ///     the moment, so a pin it hides is still the object's pin for navigation.
+        /// </summary>
+        public static bool ShouldHideAutomaticPinIgnoringSearch(Minimap.PinData pinData)
+        {
+            return ShouldHideAutomaticPinCore(pinData, false);
+        }
+
+        private static bool ShouldHideAutomaticPinCore(Minimap.PinData pinData, bool includeSearch)
+        {
             // Called from the transpiled UpdatePins for every pin: stopped, the game draws them all.
             if (!Module.Running) return false;
 
-            // Cheap feature gate first: with unexplored-pin hiding disabled (the
-            // default) this collapses to bool reads, skipping the per-pin hash
-            // lookups in IsAutomaticPin and the IsExplored map call. Inlines
-            // ShouldFilterAutomaticPinAt (ShouldFilterAutomaticPins && !IsExplored).
-            return pinData != null &&
-                   ShouldFilterAutomaticPins() &&
-                   IsAutomaticPin(pinData) &&
-                   !IsExplored(pinData.m_pos);
-        }
-
-        public static void DestroyHiddenAutomaticPinMarkers()
-        {
-            if (!Module.Running) return;
-            if (!ShouldFilterAutomaticPins()) return;
-
-            var pins = GetAllPins();
-            for (var i = 0; i < pins.Count; i++)
-            {
-                var pinData = pins[i];
-                if (pinData == null || !pinData.m_uiElement) continue;
-                if (ShouldHideAutomaticPin(pinData))
-                    DestroyPinMarker(pinData);
-            }
+            // With the filters idle, no pin classification or label lookup is needed.
+            var hideUnexplored = ShouldFilterAutomaticPins();
+            var hideCategory = Config.EnableMapEnhancements && Config.HasHiddenMapCategories;
+            var hideSearch = includeSearch && Config.EnableMapEnhancements && MapFilter.SearchActive;
+            if (!hideUnexplored && !hideCategory && !hideSearch) return false;
+            if (pinData == null || !IsAutomaticPin(pinData)) return false;
+            return (hideUnexplored && !IsExplored(pinData.m_pos)) ||
+                   (hideCategory && PinCategories.TryClassify(pinData, out var category) &&
+                    Config.IsMapCategoryHidden(category)) ||
+                   (hideSearch && MapFilter.ShouldHideBySearch(pinData));
         }
 
         internal static bool IsAutomaticPin(Minimap.PinData pinData)
         {
+            if (pinData == null || pinData.m_ownerID != 0L) return false;
             return AutomaticPins.Contains(pinData) ||
                    DynamicObjectMapping.OwnsPin(pinData) ||
                    StaticObjectMapping.OwnsPin(pinData);

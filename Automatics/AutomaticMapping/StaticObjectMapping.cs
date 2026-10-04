@@ -146,7 +146,7 @@ namespace Automatics.AutomaticMapping
         private static bool CanMapping(float delta, bool takeInput)
         {
             // The key runs one pass whatever the interval is, and the interval starts over.
-            if (takeInput && Config.StaticObjectMappingKey.MainKey != KeyCode.None &&
+            if (takeInput && !Minimap.InTextInput() && Config.StaticObjectMappingKey.MainKey != KeyCode.None &&
                 Config.StaticObjectMappingKey.IsDown())
             {
                 _mappingTimer = 0f;
@@ -1316,7 +1316,7 @@ namespace Automatics.AutomaticMapping
             OwnedFloraPinsScratch.Clear();
         }
 
-        private static string ComputeFloraPinName(string displayName, int nodeCount)
+        internal static string ComputeFloraPinName(string displayName, int nodeCount)
         {
             return nodeCount > 1
                 ? Automatics.L10N.LocalizeTextOnly(
@@ -1839,6 +1839,19 @@ namespace Automatics.AutomaticMapping
         public static bool OwnsPin(Minimap.PinData pinData)
         {
             return pinData != null && PinKeyCache.ContainsKey(pinData);
+        }
+
+        internal static bool TryGetPinKind(Minimap.PinData pinData, out PinKind kind)
+        {
+            if (PinKeyCache.TryGetValue(pinData, out var keys))
+                foreach (var key in keys)
+                    if (PinDataCache.TryGetValue(key, out var entry))
+                    {
+                        kind = entry.Kind;
+                        return true;
+                    }
+            kind = default;
+            return false;
         }
 
         internal static GameObject FindLiveInstance(Minimap.PinData pinData)

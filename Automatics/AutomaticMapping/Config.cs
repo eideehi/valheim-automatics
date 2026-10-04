@@ -16,6 +16,8 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<int> _staticObjectMappingRange;
         private static ConfigEntry<int> _locationMappingRange;
         private static ConfigEntry<bool> _hideUnexploredAutomaticMappingPins;
+        private static ConfigEntry<bool> _enableMapEnhancements;
+        private static ConfigEntry<StringList> _mapFilterHiddenCategories;
         private static ConfigEntry<StringList> _allowPinningAnimal;
         private static ConfigEntry<StringList> _allowPinningMonster;
         private static ConfigEntry<StringList> _allowPinningFlora;
@@ -60,6 +62,14 @@ namespace Automatics.AutomaticMapping
             _hideUnexploredAutomaticMappingPins?.Value == true;
         internal static ConfigEntry<bool> HideUnexploredAutomaticMappingPinsEntry =>
             _hideUnexploredAutomaticMappingPins;
+        public static bool EnableMapEnhancements => _enableMapEnhancements.Value;
+        internal static ConfigEntry<bool> EnableMapEnhancementsEntry => _enableMapEnhancements;
+        public static StringList MapFilterHiddenCategories => _mapFilterHiddenCategories.Value;
+        internal static ConfigEntry<StringList> MapFilterHiddenCategoriesEntry => _mapFilterHiddenCategories;
+        internal static bool HasHiddenMapCategories { get; private set; }
+        private static readonly bool[] HiddenMapCategories = new bool[PinCategories.Categories.Length];
+
+        internal static bool IsMapCategoryHidden(PinCategory category) => HiddenMapCategories[(int)category];
         public static StringList AllowPinningAnimal => _allowPinningAnimal.Value;
         public static StringList AllowPinningMonster => _allowPinningMonster.Value;
         public static StringList AllowPinningFlora => _allowPinningFlora.Value;
@@ -151,6 +161,8 @@ namespace Automatics.AutomaticMapping
             _staticObjectMappingRange = config.Bind("static_object_mapping_range", 32, (0, 128));
             _locationMappingRange = config.Bind("location_mapping_range", 96, (0, 128));
             _hideUnexploredAutomaticMappingPins = config.Bind("hide_unexplored_automatic_mapping_pins", false);
+            _enableMapEnhancements = config.Bind("enable_map_enhancements", true);
+            _mapFilterHiddenCategories = config.Bind("map_filter_hidden_categories", new StringList());
             _allowPinningAnimal = config.BindValheimObjectList("allow_pinning_animal", ValheimObject.Animal);
             _allowPinningMonster = config.BindValheimObjectList("allow_pinning_monster", ValheimObject.Monster);
             _allowPinningFlora = config.BindValheimObjectList("allow_pinning_flora",
@@ -199,6 +211,13 @@ namespace Automatics.AutomaticMapping
             RefreshNavigationGuideColor();
             _navigationGuideColor.SettingChanged += (_, __) => RefreshNavigationGuideColor();
             _hideUnexploredAutomaticMappingPins.SettingChanged += OnHideUnexploredPinsChanged;
+            RefreshMapFilterCategories();
+            _mapFilterHiddenCategories.SettingChanged += (_, __) =>
+            {
+                RefreshMapFilterCategories();
+                OnHideUnexploredPinsChanged(null, EventArgs.Empty);
+            };
+            _enableMapEnhancements.SettingChanged += OnHideUnexploredPinsChanged;
 
             _allowPinningFlora.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Flora);
             _allowPinningMineral.SettingChanged += (_, __) => StaticAllowlistChanged?.Invoke(ValheimObject.Mineral);
@@ -228,6 +247,17 @@ namespace Automatics.AutomaticMapping
             NavigationGuideColor = TryParseColor(_navigationGuideColor?.Value, out var color)
                 ? color
                 : DefaultNavigationGuideColor;
+        }
+
+        private static void RefreshMapFilterCategories()
+        {
+            HasHiddenMapCategories = false;
+            foreach (var category in PinCategories.Categories)
+            {
+                var hidden = MapFilterHiddenCategories.Contains(category.ToString());
+                HiddenMapCategories[(int)category] = hidden;
+                HasHiddenMapCategories |= hidden;
+            }
         }
 
         private static bool TryParseColor(string value, out Color color)

@@ -370,9 +370,37 @@ namespace Automatics.AutomaticMapping
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Minimap), "UpdatePins")]
-        private static void Minimap_UpdatePins_Postfix()
+        private static void Minimap_UpdatePins_Postfix(Minimap __instance)
         {
-            Map.DestroyHiddenAutomaticPinMarkers();
+            MapFilter.Update(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.InTextInput))]
+        private static void Minimap_InTextInput_Postfix(ref bool __result)
+        {
+            __result |= MapFilter.InTextInput;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), "Update")]
+        private static void Minimap_Update_Postfix()
+        {
+            MapFilter.UpdateInput();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), "OnLanguageChange")]
+        private static void Minimap_OnLanguageChange_Postfix()
+        {
+            MapFilter.OnLanguageChange();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.SetMapMode))]
+        private static void Minimap_SetMapMode_Postfix(Minimap __instance)
+        {
+            MapFilter.Update(__instance);
         }
 
         [HarmonyPostfix]
@@ -448,7 +476,9 @@ namespace Automatics.AutomaticMapping
         private static void Minimap_RemovePin_Postfix(Minimap.PinData pin)
         {
             if (pin != null)
+            {
                 AutomaticMapping.OnRemovePin(pin);
+            }
         }
 
         [HarmonyPostfix]
@@ -463,6 +493,8 @@ namespace Automatics.AutomaticMapping
             // that permanently suppresses re-pinning for the rest of the session.
             DynamicObjectMapping.Cleanup();
             StaticObjectMapping.Cleanup();
+            MapFilter.Cleanup();
+            PinCategories.Cleanup();
             Navigation.ClearTarget();
         }
 

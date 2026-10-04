@@ -102,6 +102,7 @@ namespace Automatics.AutomaticMapping
         public void SetStopRequested(bool value)
         {
             StopRequested = value;
+            if (value) MapFilter.Cleanup();
         }
 
         public void BindConfig()
@@ -158,6 +159,10 @@ namespace Automatics.AutomaticMapping
                 h => ValheimObject.RegistryChanged += h,
                 h => ValheimObject.RegistryChanged -= h,
                 StaticObjectMapping.OnValheimObjectRegistryChanged);
+            scope.Subscribe<Action<ValheimObject>>(
+                h => ValheimObject.RegistryChanged += h,
+                h => ValheimObject.RegistryChanged -= h,
+                PinCategories.OnRegistryChanged);
             scope.Subscribe<Action<ValheimObject>>(
                 h => Config.StaticAllowlistChanged += h,
                 h => Config.StaticAllowlistChanged -= h,

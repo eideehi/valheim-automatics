@@ -45,6 +45,8 @@ namespace Automatics.AutomaticMapping
             _guideErrorLogged = false;
             DestroyOverlay();
             AimedObjectBar.Cleanup();
+            MapFilter.Cleanup();
+            PinCategories.Cleanup();
             NavigationGuide.Dispose();
         }
 
@@ -66,7 +68,7 @@ namespace Automatics.AutomaticMapping
         {
             // False hands the click back to the game's own handling.
             if (!Module.Running) return false;
-            if (!map) return false;
+            if (!map || Minimap.InTextInput()) return false;
             if (Config.NavigationStartKey.MainKey == KeyCode.None) return false;
             if (map.m_mode != Minimap.MapMode.Large) return false;
             if (!Config.NavigationStartKey.IsPressed()) return false;
@@ -105,7 +107,7 @@ namespace Automatics.AutomaticMapping
         private static bool CanHandleAimedKey(Player player, bool takeInput)
         {
             return Module.Running && player && player == Player.m_localPlayer && player.IsOwner() &&
-                   takeInput && Config.NavigateToAimedObjectKey.MainKey != KeyCode.None;
+                   takeInput && !Minimap.InTextInput() && Config.NavigateToAimedObjectKey.MainKey != KeyCode.None;
         }
 
         internal static void TryNavigateFromRay(Player player, Ray ray, bool takeInput)
@@ -127,6 +129,7 @@ namespace Automatics.AutomaticMapping
                     StaticObjectMapping.TryGetCachedPin(
                         new StaticObjectMapping.MapPinIdentify(aimed.UniqueId), out pin);
             }
+            if (pin != null && Map.ShouldHideAutomaticPinIgnoringSearch(pin)) pin = null;
             if (_targetPin != null && ((pin != null && ReferenceEquals(pin, _targetPin)) ||
                 (aimed.UniqueId != ZDOID.None && (aimed.UniqueId == _creatureId || aimed.UniqueId == _aimedId)) ||
                 (_aimedInstance && _aimedInstance == aimed.Instance)))
@@ -218,6 +221,7 @@ namespace Automatics.AutomaticMapping
             _aimedInstance = state.AimedInstance;
             _aimedId = state.AimedId;
             EnsureDestructionSubscription();
+            MapFilter.RefreshSearchPins();
         }
 
         public static void Update(Player player)
@@ -374,6 +378,7 @@ namespace Automatics.AutomaticMapping
             EnsureDestructionSubscription();
             _nextTargetPinValidationTime = 0f;
             ShowStartMessage(pinData);
+            MapFilter.RefreshSearchPins();
         }
 
         private static void ClearTarget(bool showMessage)
@@ -387,6 +392,7 @@ namespace Automatics.AutomaticMapping
             _nextTargetPinValidationTime = 0f;
             DestroyOverlay();
             NavigationGuide.Destroy();
+            MapFilter.RefreshSearchPins();
             if (showMessage)
                 ShowMessage(Automatics.L10N.Localize(
                     "@message_automatic_mapping_navigation_cleared"));

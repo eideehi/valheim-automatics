@@ -13,6 +13,7 @@ using Object = UnityEngine.Object;
 using AimedObjectBar = Automatics.AutomaticMapping.AimedObjectBar;
 using Navigation = Automatics.AutomaticMapping.Navigation;
 using MappingMap = Automatics.AutomaticMapping.Map;
+using MapFilter = Automatics.AutomaticMapping.MapFilter;
 using BirdCache = Automatics.AutomaticMapping.BirdCache;
 using DynamicObjectMapping = Automatics.AutomaticMapping.DynamicObjectMapping;
 using FishCache = Automatics.AutomaticMapping.FishCache;
@@ -34,7 +35,7 @@ namespace Automatics.SmokeTest
     //     the predicate every entry point opens with, and the static scan makes no pass until the
     //     teardown;
     //   - while off, no patch is left under its Harmony id, no component of its own and no
-    //     navigation overlay, aimed label or guide swarm is left in the scene, the saved pins
+    //     navigation overlay, aimed label, filter row or guide swarm is left in the scene, the saved pins
     //     are the ones there were before the run, and no unsaved pin the module held is left on the map;
     //   - while on, the patches are exactly the declared set, every eligible object in the scene
     //     carries its component from the running generation, the handler counts, component counts
@@ -43,8 +44,9 @@ namespace Automatics.SmokeTest
     // A vehicle pin is a saved pin that follows its vehicle, and a disable moves it to where its
     // vehicle is, so the saved-pin comparison leaves the position of the vehicle pins out.
     //
-    // It spawns nothing and records the module toggle and aimed-bar settings through SmokeSession,
-    // under the lifecycle command's rules. It only ever turns Automatic Mapping off and back on: when the module is
+    // It spawns no world object and records the
+    // module toggle, aimed-bar and filter settings through SmokeSession. It only ever turns
+    // Automatic Mapping off and back on: when the module is
     // off in the user's settings, every check SKIPs and nothing is written.
     internal static partial class LifecycleSmokeCommand
     {
@@ -90,9 +92,12 @@ namespace Automatics.SmokeTest
             private const string OffStopped = "mapping_off_stopped_at_request";
             private const string OffPatches = "mapping_off_patches_removed";
             private const string OffComponents = "mapping_off_components_removed";
+            private const string OffFilterControls = "mapping_off_filter_controls_removed";
+            private const string OffFilterSearch = "mapping_off_filter_search_reset";
             private const string OffSavedPins = "mapping_off_saved_pins_kept";
             private const string OffUnsavedPins = "mapping_off_unsaved_pins_removed";
             private const string OnState = "mapping_on_state_enabled";
+            private const string OnFilterSearch = "mapping_on_filter_search_empty";
             private const string OnPatches = "mapping_on_patches_applied";
             private const string OnComponents = "mapping_on_components_attached";
             private const string OnBaseline = "mapping_on_counts_at_baseline";
@@ -105,15 +110,17 @@ namespace Automatics.SmokeTest
             // are reported in.
             private static readonly string[] Order =
             {
-                Settled, OffState, OffStopped, OffPatches, OffComponents, OffSavedPins, OffUnsavedPins,
-                OnState, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, Restored, NoErrors
+                Settled, OffState, OffStopped, OffPatches, OffComponents, OffFilterControls, OffFilterSearch,
+                OffSavedPins, OffUnsavedPins,
+                OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, Restored, NoErrors
             };
 
             // Recorded once per cycle, and a PASS only when every cycle passed.
             private static readonly HashSet<string> PerCycle = new HashSet<string>(StringComparer.Ordinal)
             {
-                OffState, OffStopped, OffPatches, OffComponents, OffSavedPins, OffUnsavedPins,
-                OnState, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins
+                OffState, OffStopped, OffPatches, OffComponents, OffFilterControls, OffFilterSearch,
+                OffSavedPins, OffUnsavedPins,
+                OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins
             };
 
             private static readonly FieldInfo PinsField = AccessTools.Field(typeof(Minimap), "m_pins");
@@ -144,8 +151,11 @@ namespace Automatics.SmokeTest
             private int _cycle;
             private Baseline _baseline;
             private Navigation.TargetState _originalNavigation;
+            private string _originalSearch;
+            private bool _originalSearchPinned;
             private HashSet<Minimap.PinData> _pinsBefore;
             private Func<string, bool> _navigationHandBack;
+            private Func<string, bool> _filterHandBack;
             private string _notReached = "not reached: an earlier step stopped the run";
 
             public MappingRun(int runId, string runner)
@@ -240,10 +250,21 @@ namespace Automatics.SmokeTest
                 _baseline = TakeBaseline(components);
                 _pinsBefore = new HashSet<Minimap.PinData>(AllPins());
                 _originalNavigation = Navigation.CaptureTarget();
+                _originalSearch = MapFilter.SearchText;
+                _originalSearchPinned = MapFilter.SearchPinned;
                 _navigationHandBack = _ =>
                 {
                     if (!MappingModule.Running || !Minimap.instance) return false;
                     Navigation.RestoreTarget(_originalNavigation);
+                    if (MappingConfig.EnableMapEnhancements && (_originalSearch.Length != 0 || _originalSearchPinned))
+                    {
+                        var map = Minimap.instance;
+                        var mode = map.m_mode;
+                        map.SetMapMode(Minimap.MapMode.Large);
+                        MapFilter.SetSearchText(_originalSearch);
+                        if (MapFilter.SearchPinned != _originalSearchPinned) MapFilter.SearchToggle.InvokeClick();
+                        map.SetMapMode(mode);
+                    }
                     return true;
                 };
                 SmokeSession.TrackHandBack(_navigationHandBack);
@@ -257,6 +278,21 @@ namespace Automatics.SmokeTest
                 {
                     Stopped("aimed-label setting precondition failed: " + aimedRefusal);
                     yield break;
+                }
+
+                foreach (var pair in new[]
+                {
+                    new KeyValuePair<ConfigEntryBase, object>(MappingConfig.EnableMapEnhancementsEntry, true),
+                    new KeyValuePair<ConfigEntryBase, object>(MappingConfig.MapFilterHiddenCategoriesEntry, new StringList()),
+                    new KeyValuePair<ConfigEntryBase, object>(MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false)
+                })
+                {
+                    if (!SmokeSession.BeginSetting(RunId, pair.Key, out var setting, out var filterRefusal) ||
+                        !SmokeSession.WriteSetting(RunId, setting, pair.Value, out filterRefusal))
+                    {
+                        Stopped("map-filter setting precondition failed: " + filterRefusal);
+                        yield break;
+                    }
                 }
 
                 for (_cycle = 1; _cycle <= MappingCycles; _cycle++)
@@ -303,9 +339,12 @@ namespace Automatics.SmokeTest
 
                 if (_navigationHandBack != null && _navigationHandBack("mapping lifecycle smoke"))
                     SmokeSession.ReleaseHandBack(_navigationHandBack);
+                if (_filterHandBack != null && _filterHandBack("mapping lifecycle smoke"))
+                    SmokeSession.ReleaseHandBack(_filterHandBack);
                 AimedObjectBar.Cleanup();
                 var aimedRestored = SmokeSession.RestoreSettings(RunId);
                 var aimedFailures = aimedRestored.Where(x => x.Key != SmokeSession.ToggleOutcome.Restored &&
+                    x.Key != SmokeSession.ToggleOutcome.AlreadyOriginal &&
                     x.Key != SmokeSession.ToggleOutcome.NothingWritten).ToList();
                 if (aimedFailures.Count > 0)
                     Settle(CheckStatus.Fail, Restored, string.Join("; ", aimedFailures.Select(x => x.Value)));
@@ -344,6 +383,26 @@ namespace Automatics.SmokeTest
                 var marker = Navigation.TemporaryMarker;
                 var markerActive = marker != null && !marker.m_save && AllPins().Contains(marker);
 
+                var map = Minimap.instance;
+                var originalMode = map.m_mode;
+                _filterHandBack = _ =>
+                {
+                    if (!map || Minimap.instance != map) return true;
+                    map.SetMapMode(originalMode);
+                    MappingMap.RefreshPins();
+                    return true;
+                };
+                SmokeSession.TrackHandBack(_filterHandBack);
+                map.SetMapMode(Minimap.MapMode.Large);
+                AccessTools.Method(AccessTools.TypeByName("UnityEngine.Canvas"), "ForceUpdateCanvases")
+                    .Invoke(null, null);
+                MappingMap.RefreshPins();
+                var controlsActive = MapFilter.Root && MapFilter.Root.activeInHierarchy && MapFilter.Controls.Count == 10 &&
+                    MapFilter.SearchInput && MapFilter.SearchToggle != null;
+                MapFilter.SetSearchText("lifecycle search");
+                if (!MapFilter.SearchPinned) MapFilter.SearchToggle.InvokeClick();
+                var searchActive = MapFilter.SearchText == "lifecycle search" && MapFilter.SearchPinned;
+
                 // What the module holds unsaved now is what has to be off the map once it is off.
                 var held = HeldPins().Where(pin => !pin.m_save).ToList();
 
@@ -373,6 +432,19 @@ namespace Automatics.SmokeTest
 
                 // Object.Destroy takes effect at the end of the frame the pump ran in.
                 for (var i = 0; i < DestroySettleFrames; i++) yield return null;
+
+                var filterRoots = FindAll<RectTransform>().Count(x => x.name == MapFilter.ObjectName);
+                Cycle(OffFilterControls, cycle, controlsActive && !MapFilter.Root &&
+                    MapFilter.Controls.Count == 0 && filterRoots == 0,
+                    "ten categories and both search controls existed before disable; no filter row or controls remain",
+                    $"filter control precondition/cleanup failed: active before={controlsActive}, row count after={filterRoots}, control count after={MapFilter.Controls.Count}");
+                Cycle(OffFilterSearch, cycle, searchActive && MapFilter.SearchText == "" &&
+                    !MapFilter.SearchPinned && !MapFilter.SearchInput && MapFilter.SearchToggle == null,
+                    "the active search text and minimap toggle were cleared while stopped",
+                    $"search precondition/cleanup failed: active before={searchActive}, text after={MapFilter.SearchText}, pinned after={MapFilter.SearchPinned}");
+                if (_filterHandBack("mapping cycle ended"))
+                    SmokeSession.ReleaseHandBack(_filterHandBack);
+                _filterHandBack = null;
 
                 if (!passAtRequest.HasValue)
                     Cycle(OffStopped, cycle, false, "",
@@ -437,6 +509,9 @@ namespace Automatics.SmokeTest
                 var wait = Await(ModuleState.Enabled, true, true);
                 while (wait.MoveNext()) yield return wait.Current;
                 if (!RecordWait(OnState, cycle)) yield break;
+                Cycle(OnFilterSearch, cycle, MapFilter.SearchText == "" && !MapFilter.SearchPinned,
+                    "search starts empty/off after re-enabling the module",
+                    $"search reset failed after enable: text={MapFilter.SearchText}, pinned={MapFilter.SearchPinned}");
                 var enabledAt = Time.realtimeSinceStartup;
 
                 CheckPatchSet(cycle);

@@ -15,7 +15,7 @@ namespace Automatics.AutomaticMapping
         {
             if (!Module.Running) return;
             if (!player || player != Player.m_localPlayer || !player.IsOwner()) return;
-            if (!takeInput || Config.PinObjectKey.MainKey == KeyCode.None) return;
+            if (!takeInput || Minimap.InTextInput() || Config.PinObjectKey.MainKey == KeyCode.None) return;
             if (!Config.PinObjectKey.IsDown()) return;
             if (!GameCamera.instance) return;
 

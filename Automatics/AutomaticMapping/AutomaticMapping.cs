@@ -106,6 +106,7 @@ namespace Automatics.AutomaticMapping
             Map.UntrackAutomaticPin(pinData);
             PinIndex.Untrack(pinData);
             Navigation.OnRemovePin(pinData);
+            MapFilter.OnRemovePin(pinData);
             DynamicObjectMapping.OnRemovePin(pinData);
             StaticObjectMapping.OnRemovePin(pinData);
         }

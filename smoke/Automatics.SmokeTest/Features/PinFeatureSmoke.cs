@@ -1038,6 +1038,7 @@ namespace Automatics.SmokeTest
                     Navigation.ClearTarget();
                 }
 
+                CheckHiddenCategory(run, player, map, drop, dropRay, navigate, added);
                 navigate(player, dropRay, true);
                 var marker = Navigation.TemporaryMarker;
                 Check(run, "navhotkey_temporary", marker != null && ReferenceEquals(Navigation.TargetPin, marker) &&
@@ -1156,9 +1157,80 @@ namespace Automatics.SmokeTest
                         SmokeSession.ReleaseSpawn(creature);
                     var restored = SmokeSession.RestoreSettings(run.RunId);
                     Check(run, "navhotkey_settings_restored", restored.All(x =>
-                            x.Key == SmokeSession.ToggleOutcome.Restored || x.Key == SmokeSession.ToggleOutcome.NothingWritten),
+                            x.Key == SmokeSession.ToggleOutcome.Restored ||
+                            x.Key == SmokeSession.ToggleOutcome.AlreadyOriginal ||
+                            x.Key == SmokeSession.ToggleOutcome.NothingWritten),
                         string.Join("; ", restored.Select(x => x.Value)));
                 }
+            }
+        }
+
+        private static void CheckHiddenCategory(FeatureRun run, Player player, Minimap map,
+            ItemDrop drop, Ray ray, Action<Player, Ray, bool> navigate, List<Minimap.PinData> added)
+        {
+            if (!Objects.GetZdoid(drop, out var id))
+            {
+                run.Fail("navhotkey_hidden_category_kept", "test-drop identity precondition failed: no ZDOID");
+                return;
+            }
+            var changes = new[]
+            {
+                new KeyValuePair<BepInEx.Configuration.ConfigEntryBase, object>(MappingConfig.EnableMapEnhancementsEntry, true),
+                new KeyValuePair<BepInEx.Configuration.ConfigEntryBase, object>(MappingConfig.MapFilterHiddenCategoriesEntry,
+                    new StringList(new[] { "Other" })),
+                new KeyValuePair<BepInEx.Configuration.ConfigEntryBase, object>(MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false)
+            };
+            var settings = new List<SmokeSession.SettingRestoration>();
+            foreach (var change in changes)
+            {
+                if (!SmokeSession.BeginSetting(run.RunId, change.Key, out var setting, out var refusal))
+                {
+                    run.Fail("navhotkey_hidden_category_kept", "filter setting precondition failed: " + refusal);
+                    return;
+                }
+                settings.Add(setting);
+            }
+            Minimap.PinData automatic = null;
+            try
+            {
+                for (var i = 0; i < changes.Length; i++)
+                    if (!SmokeSession.WriteSetting(run.RunId, settings[i], changes[i].Value, out var refusal))
+                    {
+                        run.Fail("navhotkey_hidden_category_kept", "filter write precondition failed: " + refusal);
+                        return;
+                    }
+                Navigation.ClearTarget();
+                var name = Objects.GetName(drop);
+                automatic = Map.AddPin(drop.transform.position, name, false, new Target { name = name });
+                added.Add(automatic);
+                AccessTools.Method(typeof(StaticObjectMapping), "CachePin", new[]
+                {
+                    typeof(StaticObjectMapping.MapPinIdentify), typeof(Minimap.PinData), typeof(PinKind),
+                    typeof(string), typeof(string), typeof(PinSourceDomain)
+                }).Invoke(null, new object[]
+                {
+                    new StaticObjectMapping.MapPinIdentify(id), automatic, PinKind.Other,
+                    "smoke", "smoke", PinSourceDomain.Component
+                });
+                var hidden = Map.ShouldHideAutomaticPin(automatic);
+                navigate(player, ray, true);
+                var marker = Navigation.TemporaryMarker;
+                var started = marker != null && !ReferenceEquals(marker, automatic) &&
+                    ReferenceEquals(Navigation.TargetPin, marker) && !marker.m_save && !Map.IsAutomaticPin(marker);
+                for (var i = 0; i < 3; i++) Validate();
+                Check(run, "navhotkey_hidden_category_kept", hidden && started &&
+                    ReferenceEquals(Navigation.TargetPin, marker) && Map.ContainsPin(marker) &&
+                    Navigation.CaptureTarget().CreatureId == ZDOID.None,
+                    "a non-creature's hidden Other pin uses a temporary marker and stays navigating through three validation ticks; " +
+                    $"hidden-pin precondition={hidden}, temporary marker started={started}");
+            }
+            finally
+            {
+                Navigation.ClearTarget();
+                if (automatic != null) map.RemovePin(automatic);
+                foreach (var setting in settings)
+                    if (!SmokeSession.WriteSetting(run.RunId, setting, setting.Original, out var refusal))
+                        run.Fail("navhotkey_hidden_category_settings", "filter restoration failed: " + refusal);
             }
         }
 

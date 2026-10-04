@@ -59,6 +59,8 @@ namespace Automatics.AutomaticMapping
 
         private static readonly Dictionary<ZDOID, Minimap.PinData> PinDataCache;
         private static readonly Dictionary<Minimap.PinData, ZDOID> PinKeyCache;
+        private static readonly Dictionary<ZDOID, PinCategory> PinCategoryCache =
+            new Dictionary<ZDOID, PinCategory>();
         private static readonly Dictionary<ZDOID, Vector3> PinTargetCache;
         private static readonly Dictionary<ZDOID, Vector3> PinVelocityCache;
         private static readonly IDictionary<ZDOID, Minimap.PinData> VehiclePinCache;
@@ -233,6 +235,7 @@ namespace Automatics.AutomaticMapping
         {
             PinDataCache.Clear();
             PinKeyCache.Clear();
+            PinCategoryCache.Clear();
             PinTargetCache.Clear();
             PinVelocityCache.Clear();
             VehiclePinCache.Clear();
@@ -286,6 +289,7 @@ namespace Automatics.AutomaticMapping
                 var key = RemoveKeyBuffer[i];
                 if (!PinDataCache.TryGetValue(key, out var pinData)) continue;
                 PinDataCache.Remove(key);
+                PinCategoryCache.Remove(key);
                 PinKeyCache.Remove(pinData);
                 PinTargetCache.Remove(key);
                 PinVelocityCache.Remove(key);
@@ -498,7 +502,7 @@ namespace Automatics.AutomaticMapping
                             if (!monsterAllowlist.Contains(identifier)) continue;
                         }
 
-                        AddOrUpdatePin(character, delta);
+                        AddOrUpdatePin(character, kind, delta);
                     }
                 }
 
@@ -741,7 +745,7 @@ namespace Automatics.AutomaticMapping
             return found;
         }
 
-        private static void AddOrUpdatePin(Character character, float delta)
+        private static void AddOrUpdatePin(Character character, CharacterKind kind, float delta)
         {
             var uniqueId = character.GetZDOID();
             if (!KnownObjects.Add(uniqueId)) return;
@@ -756,6 +760,9 @@ namespace Automatics.AutomaticMapping
                     CreateTarget(character.gameObject, baseName, level));
             else
                 UpdatePin(uniqueId, pinData, pinName, pos, delta);
+            if (PinDataCache.ContainsKey(uniqueId))
+                PinCategoryCache[uniqueId] = kind == CharacterKind.Animal
+                    ? PinCategory.Animal : PinCategory.Monster;
         }
 
         /// <summary>
@@ -823,6 +830,8 @@ namespace Automatics.AutomaticMapping
             {
                 UpdatePin(uniqueId, pinData, pinData.m_name, pos, delta);
             }
+            if (PinDataCache.ContainsKey(uniqueId))
+                PinCategoryCache[uniqueId] = PinCategory.Animal;
         }
 
         private static void AddPin(ZDOID uniqueId, Vector3 pos, string pinName, Target target)
@@ -849,6 +858,7 @@ namespace Automatics.AutomaticMapping
 
             PinKeyCache.Remove(pinData);
             PinDataCache.Remove(uniqueId);
+            PinCategoryCache.Remove(uniqueId);
             PinTargetCache.Remove(uniqueId);
             PinVelocityCache.Remove(uniqueId);
             DirtyPins.Remove(uniqueId);
@@ -860,6 +870,18 @@ namespace Automatics.AutomaticMapping
             return pinData != null &&
                    (PinKeyCache.ContainsKey(pinData) ||
                     VehiclePinKeyCache.ContainsKey(pinData));
+        }
+
+        internal static bool TryGetPinCategory(Minimap.PinData pinData, out PinCategory category)
+        {
+            if (VehiclePinKeyCache.ContainsKey(pinData))
+            {
+                category = PinCategory.Vehicle;
+                return true;
+            }
+            category = default;
+            return PinKeyCache.TryGetValue(pinData, out var id) &&
+                   PinCategoryCache.TryGetValue(id, out category);
         }
 
         internal static Minimap.PinData GetCachedPin(ZDOID uniqueId)

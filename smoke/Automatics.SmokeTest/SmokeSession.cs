@@ -341,6 +341,41 @@ namespace Automatics.SmokeTest
             return setting != null && setting.EditedByUser;
         }
 
+        // Records a control's expected write before invoking its real callback, and treats
+        // the synchronous SettingChanged notification as the smoke run's own change.
+        internal static bool InvokeSettingControl(int runId, SettingRestoration setting,
+            object expected, Action click, out string refusal)
+        {
+            refusal = null;
+            if (setting == null || !IsCurrent(runId) || !Settings.Contains(setting))
+                refusal = "the run no longer owns the setting";
+            else if (setting.EditedByUser)
+                refusal = $"{setting.Name} was changed outside the check";
+            else if (!WriteMarker(setting, expected, out var failure))
+                refusal = $"the control's setting write could not be recorded: {failure}";
+            if (refusal != null) return false;
+
+            setting.Written = true;
+            setting.LastWritten = expected;
+            _writingSetting = true;
+            try
+            {
+                click();
+            }
+            finally
+            {
+                setting.LastWritten = setting.Entry.BoxedValue;
+                _writingSetting = false;
+            }
+            var actual = setting.Entry.BoxedValue;
+            var matches = expected is StringList expectedList && actual is StringList actualList
+                ? new HashSet<string>(expectedList).SetEquals(actualList)
+                : Equals(expected, actual);
+            if (!matches)
+                refusal = $"{setting.Name} control wrote {Format(setting, actual)} instead of {Format(setting, expected)}";
+            return matches;
+        }
+
         // Every setting the run holds, put back; one entry per setting that had been written. A
         // run that is no longer current leaves them to whichever trigger handed them back.
         public static List<KeyValuePair<ToggleOutcome, string>> RestoreSettings(int runId)
