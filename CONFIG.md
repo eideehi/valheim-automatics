@@ -153,6 +153,17 @@ Hide Automatic Mapping pins whose position is outside the explored map. Saved pi
 
 - Default value: false
 
+### Enhance the Map / [enable_map_enhancements]
+Show category controls and label search on the large map without deleting pins. Categories apply on both maps; search applies on the minimap only with Pin search on. Turning this off keeps category choices and clears search. On by default; requires the module to be running. Hide Pins Outside Explored Area still applies independently.
+
+- Default value: true
+
+### Hidden Map Categories / [map_filter_hidden_categories]
+Hide automatic pins in these categories on both maps: Animal, Monster, Flora, Mineral, Spawner, Dungeon, Spot, Portal, Vehicle, Other. Empty by default. Unknown names are ignored. Saved pins whose category is ambiguous or unknown are unaffected by category hiding. Manual and shared pins are unaffected; requires Enhance the Map.
+
+- Default value: empty (no categories hidden)
+- Acceptable values: Animal, Monster, Flora, Mineral, Spawner, Dungeon, Spot, Portal, Vehicle, Other
+
 ### Allow Pinning Animal / [allow_pinning_animal]
 Specify the animals to pin automatically.
 
@@ -255,6 +266,22 @@ Press this shortcut to save a map pin for the object you are looking at, using i
 Maximum distance in meters from the camera for pinning the object you are looking at.
 
 - Default value: 100
+- Acceptable value range: From 10 to 300
+
+### Navigate to Looked-at Object Key / [navigate_to_aimed_object_key]
+Press this shortcut to navigate to the automatic pin of what you are looking at, or to a temporary unsaved marker when it has no pin. Press it on the current target to clear navigation. Creature targets are followed while loaded; navigation keeps their last position while unloaded and ends when they die or are removed. Unbound by default; requires the module to be running.
+
+- Default value: unbound
+
+### Aimed Object Bar / [enable_aimed_object_bar]
+Show a bar above the object you are looking at with its name and distance, plus health for creatures and player-built pieces. Bosses and creatures with hidden HUDs show only a name and distance label. An object already shown by navigation or its creature bar gets no extra label. Off by default; requires the module to be running.
+
+- Default value: false
+
+### Aimed Object Bar Range / [aimed_object_bar_range]
+Maximum horizontal distance in meters from the player for showing the aimed object bar. The object must also be within Object Pin Range from the camera.
+
+- Default value: 50
 - Acceptable value range: From 10 to 300
 
 ### Map Navigation Start Key / [navigation_start_key]

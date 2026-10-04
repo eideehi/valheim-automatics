@@ -321,11 +321,28 @@ Automatic mapping can load custom map icons from PNG and JSON files. See
 configured key and left-click a map pin to start navigation to that pin. Use the
 same action on the current target pin to clear navigation.
 
+Bind `Navigate to Looked-at Object Key` (unbound by default) to start navigation
+to what the crosshair is on, within `Object Pin Range` from the camera. It uses
+the object's automatic pin when available, even if label search hides it.
+Otherwise, including when its category or unexplored-area filter hides the pin,
+it adds a temporary unsaved marker. That marker is removed when navigation ends,
+you choose another target, or the module is turned off. Press the shortcut while
+looking at the current target to clear navigation. The shortcut works only while
+the module is running and no menu or text input has focus.
+
+Creature targets selected with this shortcut or through their automatic map
+pins are followed: the destination moves with the creature while it is loaded
+and stays at its last position while it is not. Navigation continues when the
+creature's dynamic pin disappears out of range, and ends when the creature dies
+or its object is removed. A pin you saved yourself stays a fixed destination.
+
 While navigation is active and the large map is closed, a loaded non-boss
 creature target shows Valheim's health and awareness HUD with the horizontal
 distance added to its name, even from farther away. Bosses keep their usual HUD
 behaviour and use the navigation label. Non-creature targets and bosses show a
-status-bar-style label with their name, distance and a full white decorative bar.
+status-bar-style label with their name, distance and a white bar. For a loaded
+player-built piece the bar shows its health; for other targets it is full and
+decorative.
 The label appears above the object when Automatics can resolve its loaded
 instance; otherwise it appears about 2 m above the pin
 position. Navigation labels are hidden while the game is paused or the HUD is
@@ -337,6 +354,73 @@ streams ahead in a straight line about 1.5 m above the ground, stops appearing
 within 5 m of the target, and is hidden while the large map is open. It is only
 drawn for you and adds nothing to the world. Turn it off with
 `Navigation Guide Swarm`, or change its colour with `Navigation Guide Color`.
+
+### Aimed object bar
+
+Turn on `Aimed Object Bar` (off by default) to show a bar above the named object
+at the crosshair, with its name and horizontal distance. Creatures show
+Valheim's own health and awareness bar, even beyond its usual display range;
+player-built pieces show their health. Bosses and creatures with hidden HUDs
+show a name and distance label without health. Other named objects use a full
+decorative bar. Bare ground, unnamed meshes and whole locations get no bar, and
+an object already shown by navigation or its creature bar gets no extra label.
+
+`Aimed Object Bar Range` limits the horizontal distance from you (50 meters by
+default, configurable from 10 to 300). The object must also be within
+`Object Pin Range` from the camera. The bar is hidden while the large map is
+open, the game is paused or the HUD is hidden; the module must be running.
+
+### Large map controls
+
+With `Enhance the Map` on (the default) and the module running, open the large
+map to show category controls for Animals, Monsters, Flora, Minerals, Spawners,
+Dungeons, Spots, Portals, Vehicles and Other. Turn a category off to hide its
+automatic pins on both maps without deleting them. All categories are shown by
+default; your choices are saved in `Hidden Map Categories`. You can also edit
+that list using `Animal`, `Monster`, `Flora`, `Mineral`, `Spawner`, `Dungeon`,
+`Spot`, `Portal`, `Vehicle` and `Other`; unknown names are ignored. Saved
+automatic pins whose category is ambiguous or unknown are unaffected by these
+category controls.
+
+Type in the search field to show automatic pins whose displayed label contains
+the text, ignoring case and surrounding spaces. Search always applies on the
+large map. Turn on `Pin search` (off by default) to keep it applied on the
+minimap after closing the large map. Clear the field to stop searching. Search
+text and `Pin search` are not saved; turning off `Enhance the Map` or the module
+clears them but keeps category choices.
+
+Manual and shared pins are unaffected by category controls and search. Search
+also leaves the current navigation target visible, but category hiding and
+`Hide Pins Outside Explored Area` still apply to automatic target pins.
+While the search field has focus, game and mod shortcuts are held as when
+editing a pin name. Enter or Escape leaves the field; Enter used to confirm an
+IME conversion keeps focus there.
+
+### Pin hover details
+
+With `Enhance the Map` on and the module running, hover a visible pin on the
+large map to show its name and horizontal distance from you. Automatic pins
+with an associated object also show these details when available:
+
+| Pin kind | Details |
+| --- | --- |
+| Creature | Current and maximum HP, and level. |
+| Pickable flora | `Ready`, or the estimated time until it respawns. If no estimate can be calculated, it says `Picked — respawn estimate unavailable`. |
+| Merged flora | How many are ready, and the earliest known estimated respawn. If some members have no data, the count reads `At least … ready`. |
+| Mineral deposit with sections | Remaining and total sections. |
+| Other mineral deposit | Current and maximum HP. |
+| Other pins, including locations, portals, vehicles, spawners, and manual or shared pins | Name and distance, without the above object details. |
+
+Respawn times are estimates from the recorded picking time and respawn interval,
+rounded up to whole minutes; they do not guarantee that an object has already
+respawned when the estimate reaches zero. Details come from the loaded object
+or its stored data when it is not loaded. On a client, details from an unloaded
+object carry `May be outdated`; if its data or object definition is unavailable,
+the tooltip says `Not loaded — details unavailable`. These two lines are
+client-only. A saved automatic pin whose object has not been found again shows
+`No live link — details appear once the object is found again` for creature,
+flora and mineral categories, or when its category is unknown. Hover details
+are hidden while the search field has focus.
 
 ## Automatic processing
 
