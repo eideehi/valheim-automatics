@@ -10,6 +10,7 @@ namespace Automatics.AutomaticMapping
         private const float UnresolvedTargetHeight = 2f;
         private const float ManualPinMapPlaneHeightEpsilon = 0.01f;
         private const float GuideRetryDelay = 5f;
+        private const float GroundTargetRadius = 2f;
         private static readonly MappingOverlay Overlay = new MappingOverlay("AutomaticsNavigationOverlay");
 
         private static Minimap.PinData _targetPin;
@@ -133,7 +134,8 @@ namespace Automatics.AutomaticMapping
             if (pin != null && Map.ShouldHideAutomaticPinIgnoringSearch(pin)) pin = null;
             if (_targetPin != null && ((pin != null && ReferenceEquals(pin, _targetPin)) ||
                 (aimed.UniqueId != ZDOID.None && (aimed.UniqueId == _creatureId || aimed.UniqueId == _aimedId)) ||
-                (_aimedInstance && _aimedInstance == aimed.Instance)))
+                (_aimedInstance && _aimedInstance == aimed.Instance &&
+                 (aimed.Component || Utils.DistanceXZ(aimed.Position, _lastPosition) <= GroundTargetRadius))))
             {
                 ClearTarget(true);
                 return;
