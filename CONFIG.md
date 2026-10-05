@@ -1,6 +1,6 @@
 # Configurations
 
-Every module is off on a new install; turn on the ones you want by setting their `Module` entry to `Enabled`. An existing configuration file keeps each module on or off as it was; Automatic Supply, which is new, starts off there too. Only the default of `Module` changed: the settings inside each module keep their defaults.
+Every module is off on a new install; turn on the ones you want by setting their `Module` entry to `Enabled`. An existing configuration file keeps each module on or off as it was; Automatic Supply, which is new, starts off there too. Turning a module on is normally all you need: the settings inside each module keep their usual defaults.
 
 ## [ #1 System ] / [system]
 ### Logging / [enable_logging]
@@ -263,13 +263,13 @@ Press this shortcut to save a map pin for the object you are looking at, using i
 - Default value: unbound
 
 ### Object Pin Range / [pin_object_range]
-Maximum distance in meters from the camera for pinning the object you are looking at.
+Maximum distance in meters from the camera at which Pin Looked-at Object Key, Navigate to Looked-at Object Key and Aimed Object Bar find the object you are looking at.
 
 - Default value: 100
 - Acceptable value range: From 10 to 300
 
 ### Navigate to Looked-at Object Key / [navigate_to_aimed_object_key]
-Press this shortcut to navigate to the automatic pin of what you are looking at, or to a temporary unsaved marker when it has no pin. Press it on the current target to clear navigation. Creature targets are followed while loaded; navigation keeps their last position while unloaded and ends when they die or are removed. Unbound by default; requires the module to be running.
+Press this shortcut to navigate to the automatic pin of what you are looking at within Object Pin Range, or to a temporary unsaved marker when it has no pin. Press it on the current target to clear navigation. Creature targets are followed while loaded; navigation keeps their last position while unloaded and ends when they die or are removed. Unbound by default; requires the module to be running.
 
 - Default value: unbound
 
@@ -317,7 +317,7 @@ Specify the HTML color code used for the storage connection effect shown by auto
 - Default value: #4FA9FF
 
 ### Allow Container / [allow_container]
-Specify containers that allow automatic operations such as item supply and storage.
+Specify the containers Automatic Processing may take materials, fuel and charge items from and store products into. Private chests are excluded by default. Automatic Storage has its own Allow Container list; Automatic Supply and Automatic Feeding use neither list.
 
 - Default value: PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred, PieceChestBarrel, PieceChestGrausten, PieceChestWardrobe
 
@@ -1162,7 +1162,7 @@ Turn this module on or off. While it is off, Automatics adds none of its logic t
 - Acceptable values: Enabled, Disabled
 
 ### Harvest And Replant Automatically / [enable_automatic_farming]
-Specify whether to enable the feature that harvests grown crops and replants the regrowing sapling at the harvested spot. Where it works depends on Farming Mode. The module's other features, such as grid planting, are not affected.
+Specify whether farming harvests grown crops, replants the regrowing sapling at each harvested spot and, with Proactive Sowing on, sows empty cultivated ground, both on its interval and with Attempt Farming Key. Where it works depends on Farming Mode. Designate Container Role Key also works only while this is on. Grid planting is not affected.
 
 - Default value: true
 
@@ -1223,11 +1223,11 @@ Specify a shortcut key that cycles the role of the container you are looking at 
 - Default value:
 
 ### Grid Planting / [enable_grid_planting]
-Hold the grid planting key while planting by hand to add a grid of the same crop. Each extra crop costs what a hand-placed crop costs: seeds from your inventory (and from nearby containers while Automatic Supply is running), stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of automatic farming, Farming Mode and Seed Reserve.
+Hold Grid Planting Key while planting by hand to add a grid of the same crop. Each extra crop costs what a hand-placed crop costs: seeds from your inventory (and from nearby containers while Automatic Supply is running), stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of Harvest And Replant Automatically, Farming Mode and Seed Reserve.
 
 - Default value: true
 
-### Grid Planting Modifier / [grid_planting_key]
+### Grid Planting Key / [grid_planting_key]
 Hold this key while placing a crop to plant a grid. While it is held, the crop preview also snaps to the rows of a growing crop of the same kind nearby (same spacing and orientation), so a new grid lines up with an earlier one. An unbound key makes every manual crop placement plant a grid, except while alternate placement (AltPlace) is held. Left Alt does not conflict with vanilla alternate placement.
 
 - Default value: LeftAlt
