@@ -7,7 +7,7 @@ Automatics is a mod that automates the tedious tasks of life in Valheim. Most of
 
 ## Features
 
-> **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Disable Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair, Automatic Storage and Automatic Supply can all switch without restarting the game. Turning one off stops new actions immediately and lets work already in progress finish; the switch completes over the next few frames. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
+> **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair, Automatic Storage and Automatic Supply can all switch without restarting the game. Turning one off stops new actions immediately and lets work already in progress finish; the switch completes over the next few frames. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
 
 For released feature documentation, see [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.7.0/docs/user-guide.md).
 
@@ -17,7 +17,7 @@ Automatically opens and closes allowed doors near the player. The open and close
 
 ### Automatic mapping
 
-Bind `Pin Looked-at Object` to save a pin for the object or ground you look at, up to `Object Pin Range` (100 meters by default).
+Bind `Pin Looked-at Object Key` to save a pin for the object or ground you look at, up to `Object Pin Range` (100 meters by default). A location’s structure, the ground within its loaded area (also when looking through water or tar) and a dungeon’s interior get one location pin with its recognized name and icon. World-generated pieces inside a loaded location’s area also pin the location, even when detached from its hierarchy. Overlapping areas use the nearest containing location; when that location is not recognized, the usual object or ground pin applies. Player-built pieces, creatures, trees, deposits, loose items and other objects such as rune stones keep their own pins.
 
 Automatically pins nearby dynamic objects, static objects, and locations to the map, including animals, monsters, flora, minerals, vehicles, portals, dungeons, spots, and other configured objects. You can configure search ranges, allowed targets, static pin saving, destroyed-object pin cleanup, and user-defined objects. The map navigation shortcut starts or clears navigation by holding the configured modifier key (Left Shift by default) and left-clicking a pin on the large map; while navigating, the HUD shows the target name and distance, and an optional swarm of small glowing lights streams along the ground toward the target.
 
@@ -35,15 +35,15 @@ Allows configured tamable creatures to eat valid food from nearby containers, th
 
 ### Automatic repair
 
-Automatically repairs items when the player is near usable crafting stations or, if enabled, when the crafting station GUI is opened. It can also repair nearby pieces while a build tool such as a hammer is equipped.
+Automatically repairs items when the player is near usable crafting stations or, if enabled, when the crafting station GUI is opened. It can also repair nearby pieces while a build tool such as a hammer is in your hand with its repair action selected.
 
 ### Automatic mining
 
-Automatically mines allowed minerals around the player. Mining can run at the configured interval or only when the mining shortcut is pressed, and it can require a pickaxe or wishbone for underground minerals. With `Area Mining` (on by default), a pickaxe swing at an allowed mineral also hits other allowed minerals and rock sections nearby, wearing the pickaxe once per extra target.
+Automatically mines allowed minerals around the player. Mining runs at the configured interval (0 turns it off) and each time the mining shortcut is pressed, and it can require a pickaxe or wishbone for underground minerals. With `Area Mining` (on by default), a pickaxe swing at an allowed mineral also hits other allowed minerals and rock sections nearby, wearing the pickaxe once per extra target.
 
 ### Automatic storage
 
-Stores eligible player inventory items into nearby allowed containers when the storage shortcut is pressed. It fills existing item stacks first, then prefers containers that already hold the same Valheim item type, and finally uses other containers with space. Hotbar, equipped, quest, and configured excluded items are kept in the player inventory by default.
+Stores eligible player inventory items into nearby allowed containers when the storage shortcut is pressed. By default an item goes only into containers that already hold the same item, topping up their stacks before using their free slots; turn on `Store Into Any Container` to also use other containers with space. Containers that received items are then sorted unless `Sort Containers After Storing` is off. Hotbar, equipped, quest, and configured excluded items are kept in the player inventory by default, and items in slots locked with `Slot Lock Key` are never stored.
 
 ### Automatic pickup
 
@@ -53,7 +53,7 @@ Automatically picks up nearby items at the configured interval; an interval of 0
 
 Hold Left Alt while planting with the cultivator to add a grid of the same crop (5×5 by default), each extra crop costing what a hand-placed crop costs: inventory seeds (plus nearby containers while Automatic supply runs), stamina and cultivator durability (no seeds in free-build worlds, as in vanilla). Invalid cells are skipped; planting stops when you cannot pay for another crop. While Left Alt is held, the crop preview snaps to the rows of a growing crop of the same kind nearby, so a new grid lines up with an earlier one.
 
-Harvests grown crops around the player and replants the regrowing sapling at each harvested spot, keeping a configurable reserve of every planting input. It can also sow into nearby empty cultivated ground on a spacing grid so the saplings settle healthy. Planting can draw from the player inventory, or from containers you designate by role — cultivation boxes to grow crops, seed-harvest boxes to multiply seeds, and storage boxes to receive the yield. Farming can run at the configured interval or only when the farming shortcut is pressed. While farming is active, Automatic pickup leaves allowlisted crops for farming to harvest and replant.
+Harvests grown crops around the player and replants the regrowing sapling at each harvested spot, keeping a configurable reserve of every planting input. It can also sow into nearby empty cultivated ground on a spacing grid so the saplings settle healthy. Planting can draw from the player inventory, or from containers you designate by role — cultivation boxes to grow crops, seed-harvest boxes to multiply seeds, and storage boxes to receive the yield — so whole fields can run from chests without ever planting the wrong stock. Farming runs at the configured interval (0 turns it off) and each time the farming shortcut is pressed. While farming is active, Automatic pickup leaves the crops farming would harvest itself (those within reach of its range and containers) for farming to harvest and replant.
 
 ### Automatic supply
 

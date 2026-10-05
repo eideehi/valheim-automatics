@@ -45,7 +45,7 @@ Automatically mines allowed minerals around the player. Mining runs at the confi
 
 ### Automatic storage
 
-Stores eligible player inventory items into nearby allowed containers when the storage shortcut is pressed. It fills existing item stacks first, then prefers containers that already hold the same Valheim item type, then empty containers, and finally other containers with space. Hotbar, equipped, quest, and configured excluded items are kept in the player inventory by default.
+Stores eligible player inventory items into nearby allowed containers when the storage shortcut is pressed. By default an item goes only into containers that already hold the same item, topping up their stacks before using their free slots; turn on `Store Into Any Container` to also use other containers with space. Containers that received items are then sorted unless `Sort Containers After Storing` is off. Hotbar, equipped, quest, and configured excluded items are kept in the player inventory by default, and items in slots locked with `Slot Lock Key` are never stored.
 
 ### Automatic pickup
 

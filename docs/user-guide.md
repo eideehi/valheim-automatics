@@ -174,8 +174,11 @@ Matching result:
 ### Shortcuts and messages
 
 Shortcut settings use BepInEx `KeyboardShortcut` values. Empty shortcut settings
-disable that shortcut behavior. Message settings can usually be set to `None`,
-`Center`, or `TopLeft`.
+disable that shortcut behavior. The exception is `Grid Planting Key`: left
+empty, every crop you place by hand plants a grid, except while alternate
+placement (AltPlace) is held (turn `Grid Planting` off or set
+`Grid Planting Size` to 1 to stop grid planting). Message settings can usually
+be set to `None`, `Center`, or `TopLeft`.
 
 ## Automatic door
 
@@ -425,10 +428,10 @@ object carry `May be outdated`; if its data or object definition is unavailable,
 the tooltip says `Not loaded — details unavailable`. These two lines are
 client-only.
 
-Your own saved pins can also show details without a live link when their label
-uniquely identifies flora or a mineral, including automatic pins you clicked
-to save and manual pins with matching labels. Shared pins and manual pins with
-other labels show only name and distance. When you hover a different pin,
+Automatic flora and mineral pins you clicked to save also show details without
+a live link; the lookup uses the pin's stored label. Pins you typed by hand or
+made with `Pin Looked-at Object Key`, and shared pins, show only name and
+distance. When you hover a different pin,
 Automatics looks in locally available object data from its map sector and
 neighbouring sectors, matching the kind,
 localized name and position. Single flora pins use the nearest match within
@@ -482,7 +485,7 @@ Common settings:
 | `<piece>: Number Of Product Stacks To Stop Processing` | Stops the piece once all containers it uses together hold that many stacks of its product; a crafting piece also counts what it is still making. A crafting piece stops taking materials; a piece that only stores its product stops moving it into containers. `0` means no limit. |
 | `<piece>: Supply Only If Materials Run Out` | Supplies a material only when the processor has no material queued. The fermenter has no such option: it only takes materials while empty. |
 | `<piece>: Refuel Only If Fuels Run Out` | Refuels only when the processor has no fuel. |
-| `<piece>: Refuel Only When Materials Supplied` | Refuels only while the piece holds materials waiting to be processed (for the stone oven, food waiting to be cooked). A piece that has run out of fuel, the stone oven included, is refuelled from containers either way. |
+| `<piece>: Refuel Only When Materials Supplied` | Refuels only while the piece holds materials waiting to be processed (for the stone oven, food waiting to be cooked), also after it has run out of fuel; with nothing waiting, it is not refuelled. A stone oven without fuel still takes food from containers while fuel for it is nearby, so it can start from empty. |
 | `<piece>: Store Only If Product Exists In Container` | Stores only into containers that already contain the product. If no matching container is found, the normal output behavior continues. |
 | `<piece>: Charge Items To Keep In Containers` | Keeps at least that many charge items in containers before stopping charge. |
 
@@ -744,7 +747,7 @@ carry weight, tar restrictions, and pieces that should not be picked up.
 With the module enabled, hold Left Alt while planting with the cultivator to add
 more of the same crop in a grid aligned to the placement rotation. `Grid Planting`
 is independent of automatic harvesting and sowing. `Grid Planting Size` defaults
-to 5 cells per side (1 disables it); `Grid Planting Modifier` can be changed or
+to 5 cells per side (1 disables it); `Grid Planting Key` can be changed or
 left unbound to make every manual crop placement a grid, except while alternate
 placement (AltPlace) is held. Spacing uses the crop's grow radius multiplied by
 `Sowing Spacing Factor`. Each extra crop costs what a hand-placed crop costs:
