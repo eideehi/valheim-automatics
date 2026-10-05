@@ -263,7 +263,7 @@ Press this shortcut to save a map pin for the object you are looking at, using i
 - Default value: unbound
 
 ### Object Pin Range / [pin_object_range]
-Maximum distance in meters from the camera at which Pin Looked-at Object Key, Navigate to Looked-at Object Key and Aimed Object Bar find the object you are looking at.
+Maximum distance in meters from the camera at which Pin Looked-at Object Key, Navigate to Looked-at Object Key and Looked-at Object Bar find the object you are looking at.
 
 - Default value: 100
 - Acceptable value range: From 10 to 300
@@ -273,13 +273,13 @@ Press this shortcut to navigate to the automatic pin of what you are looking at 
 
 - Default value: unbound
 
-### Aimed Object Bar / [enable_aimed_object_bar]
+### Looked-at Object Bar / [enable_aimed_object_bar]
 Show a bar above the object you are looking at with its name and distance, plus health for creatures and player-built pieces. Bosses and creatures with hidden HUDs show only a name and distance label. An object already shown by navigation or its creature bar gets no extra label. Off by default; requires the module to be running.
 
 - Default value: false
 
-### Aimed Object Bar Range / [aimed_object_bar_range]
-Maximum horizontal distance in meters from the player for showing the aimed object bar. The object must also be within Object Pin Range from the camera.
+### Looked-at Object Bar Range / [aimed_object_bar_range]
+Maximum horizontal distance in meters from the player for showing the looked-at object bar. The object must also be within Object Pin Range from the camera.
 
 - Default value: 50
 - Acceptable value range: From 10 to 300
@@ -1115,7 +1115,7 @@ Specify whether containers that received items are sorted by item type and local
 - Default value: true
 
 ### Slot Lock Key / [slot_lock_key]
-Specify the key used to toggle player inventory slot locks. While the inventory is open, hold this key and left-click a player inventory slot to toggle its lock. Locked slots keep their items during automatic storage and show a lock icon while the module runs. Empty slots can also be locked. Locks are saved with the character and remain saved while the module is off.
+Specify the key used to toggle player inventory slot locks. While the inventory is open, hold this key and left-click a player inventory slot to toggle its lock. Locked slots keep their items during automatic storage and show a key icon while the module runs. Empty slots can also be locked. Locks are saved with the character and remain saved while the module is off.
 
 - Default value: LeftAlt
 

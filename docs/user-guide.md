@@ -360,9 +360,9 @@ within 5 m of the target, and is hidden while the large map is open. It is only
 drawn for you and adds nothing to the world. Turn it off with
 `Navigation Guide Swarm`, or change its colour with `Navigation Guide Color`.
 
-### Aimed object bar
+### Looked-at object bar
 
-Turn on `Aimed Object Bar` (off by default) to show a bar above the named object
+Turn on `Looked-at Object Bar` (off by default) to show a bar above the named object
 at the crosshair, with its name and horizontal distance in brackets, such as
 `Boar [10m]`. Creatures show
 Valheim's own health and awareness bar, even beyond its usual display range;
@@ -371,7 +371,7 @@ show a name and distance label without health. Other named objects use a full
 decorative bar. Bare ground, unnamed meshes and whole locations get no bar, and
 an object already shown by navigation or its creature bar gets no extra label.
 
-`Aimed Object Bar Range` limits the horizontal distance from you (50 meters by
+`Looked-at Object Bar Range` limits the horizontal distance from you (50 meters by
 default, configurable from 10 to 300). The object must also be within
 `Object Pin Range` from the camera. The bar is hidden while the large map is
 open, the game is paused or the HUD is hidden; the module must be running.
@@ -701,7 +701,7 @@ Key settings:
 
 Equipped items, quest items, and hotbar-row items are skipped by default.
 With the inventory open, you can lock even an empty slot. Items in locked slots are never
-stored, and a lock icon marks each locked slot while Automatic Storage runs. Locks are saved
+stored, and a key icon marks each locked slot while Automatic Storage runs. Locks are saved
 with the character and remain saved if the module is turned off.
 
 `Excluded Items` matches internal item names, prefab names, and localized display
