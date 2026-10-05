@@ -121,6 +121,28 @@ namespace Automatics.AutomaticMapping
             return false;
         }
 
+        // For the tooltip: pin-key pins store the label localized in the language active when
+        // they were made. The category filter keeps TryClassify, which matches stored names only.
+        internal static bool TryClassifyLocalizedName(string pinName, out PinCategory category)
+        {
+            category = default;
+            if (string.IsNullOrEmpty(pinName)) return false;
+            if (!_labelsBuilt) BuildLabels();
+            var name = Localization.instance.Localize(pinName);
+            var found = false;
+            PinCategory? match = null;
+            foreach (var label in Labels)
+            {
+                if (Localization.instance.Localize(label.Key) != name) continue;
+                if (!found) match = label.Value;
+                else if (match != label.Value) match = null;
+                found = true;
+            }
+            if (!match.HasValue) return false;
+            category = match.Value;
+            return true;
+        }
+
         internal static void Cleanup()
         {
             Labels.Clear();

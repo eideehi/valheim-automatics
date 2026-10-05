@@ -130,7 +130,9 @@ namespace Automatics.AutomaticMapping
         private static bool TryGetSavedResourceCategory(Minimap.PinData pin, out PinCategory category)
         {
             category = default;
-            return pin.m_save && pin.m_ownerID == 0 && PinCategories.TryClassify(pin, out category) &&
+            return pin.m_save && pin.m_ownerID == 0 &&
+                   (PinCategories.TryClassify(pin, out category) ||
+                    (!Map.IsAutomaticPin(pin) && PinCategories.TryClassifyLocalizedName(pin.m_name, out category))) &&
                    (category == PinCategory.Flora || category == PinCategory.Mineral);
         }
 

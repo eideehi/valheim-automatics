@@ -428,10 +428,15 @@ object carry `May be outdated`; if its data or object definition is unavailable,
 the tooltip says `Not loaded — details unavailable`. These two lines are
 client-only.
 
-Automatic flora and mineral pins you clicked to save also show details without
-a live link; the lookup uses the pin's stored label. Pins you typed by hand or
-made with `Pin Looked-at Object Key`, and shared pins, show only name and
-distance. When you hover a different pin,
+Your own saved flora and mineral pins also show details without a live link:
+automatic pins you clicked to save, and pins made with
+`Pin Looked-at Object Key` as long as their name is still the object's name in
+the current game language; after you change the game language, older pins no
+longer match. A pin you typed with exactly that name is treated the same way,
+and a name that belongs to objects of different categories gets no details.
+Shared pins and your other manual pins, typed or made with
+`Pin Looked-at Object Key`, show only name and distance. When
+you hover a different pin,
 Automatics looks in locally available object data from its map sector and
 neighbouring sectors, matching the kind,
 localized name and position. Single flora pins use the nearest match within

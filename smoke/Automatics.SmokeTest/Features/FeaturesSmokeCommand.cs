@@ -1428,6 +1428,17 @@ namespace Automatics.SmokeTest
                 PinTooltipContent.Build(labelledManual, manualMatches).Text.Contains(Line("ready")),
                 "own saved manual pin with a unique flora label did not resolve readiness");
             map.RemovePin(labelledManual);
+            var localizedName = Localization.instance.Localize(Objects.GetName(ready.GetComponent<Pickable>()));
+            var localizedManual = map.AddPin(single.m_pos, Minimap.PinType.Icon3, localizedName, true, false);
+            pins.Add(localizedManual);
+            var localizedMatches = PinTooltipContent.ResolveSavedObjects(localizedManual);
+            Check(run, "pintooltip_saved_localized_flora", localizedName != single.m_name &&
+                localizedName == Localization.instance.Localize(single.m_name) &&
+                !Map.IsAutomaticPin(localizedManual) && !PinCategories.TryClassify(localizedManual, out _) &&
+                localizedMatches.Ids.SequenceEqual(new[] { readyId }) &&
+                PinTooltipContent.Build(localizedManual, localizedMatches).Text.Contains(Line("ready")),
+                "own saved pin-key pin with a localized flora label did not resolve readiness");
+            map.RemovePin(localizedManual);
             var shared = new Minimap.PinData { m_save = true, m_ownerID = 1L, m_name = single.m_name, m_pos = single.m_pos };
             var sharedMatches = PinTooltipContent.ResolveSavedObjects(shared);
             Check(run, "pintooltip_saved_shared", sharedMatches.Ids.Count == 0 &&
