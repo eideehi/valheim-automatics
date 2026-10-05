@@ -97,6 +97,30 @@ namespace Automatics.AutomaticMapping
             if (Module.Running) Map.RefreshPins();
         }
 
+        internal static bool TryGetFloraClusterLabel(string pinName, out string baseLabel)
+        {
+            if (!_labelsBuilt) BuildLabels();
+            var name = Localization.instance.Localize(pinName);
+            var token = int.MaxValue.ToString(CultureInfo.InvariantCulture);
+            foreach (var flora in FloraLabels)
+            {
+                var sample = Localization.instance.Localize(Map.StoredPinName(
+                    StaticObjectMapping.ComputeFloraPinName(flora.Label, int.MaxValue)));
+                var offset = sample.IndexOf(token, StringComparison.Ordinal);
+                if (offset < 0) continue;
+                var match = Regex.Match(name, "^" + Regex.Escape(sample.Substring(0, offset)) +
+                    "([0-9]+)" + Regex.Escape(sample.Substring(offset + token.Length)) + "$");
+                if (!match.Success || !int.TryParse(match.Groups[1].Value, NumberStyles.None,
+                        CultureInfo.InvariantCulture, out var count) || count <= 1 ||
+                    Localization.instance.Localize(Map.StoredPinName(
+                        StaticObjectMapping.ComputeFloraPinName(flora.Label, count))) != name) continue;
+                baseLabel = Localization.instance.Localize(Map.StoredPinName(flora.Label));
+                return true;
+            }
+            baseLabel = null;
+            return false;
+        }
+
         internal static void Cleanup()
         {
             Labels.Clear();

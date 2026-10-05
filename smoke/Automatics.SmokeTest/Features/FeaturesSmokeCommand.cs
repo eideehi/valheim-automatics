@@ -439,7 +439,7 @@ namespace Automatics.SmokeTest
                 Check(run, "mapfilter_controls", MapFilter.Root && MapFilter.Controls.Count == 10 &&
                     MapFilter.Root.transform.parent == map.m_largeRoot.transform &&
                     MapFilter.Controls.All(x => x.Category.HasValue) && MapFilter.SearchInput && MapFilter.SearchToggle != null,
-                    "control creation precondition failed: expected ten categories, search field and Pin search under m_largeRoot");
+                    "control creation precondition failed: expected ten categories, search field and Apply to minimap under m_largeRoot");
                 CheckLayout(run, map);
                 Check(run, "mapfilter_mouse_only_controls", MapFilter.Controls.Concat(new[] { MapFilter.SearchToggle }).All(control =>
                     control.Root.GetComponentsInChildren<UIGamePad>(true).All(gamepad => !gamepad.enabled)) &&
@@ -539,7 +539,7 @@ namespace Automatics.SmokeTest
                 Check(run, "mapfilter_module_on_search_empty", MappingModule.Running && MapFilter.SearchInput &&
                     MapFilter.SearchText == "" && !MapFilter.SearchPinned &&
                     (string)AccessTools.Property(MapFilter.SearchInput.GetType(), "text").GetValue(MapFilter.SearchInput) == "",
-                    "module enable precondition/reset failed: no input, non-empty text or Pin search on");
+                    "module enable precondition/reset failed: no input, non-empty text or Apply to minimap on");
                 CheckLayout(run, map);
             }
             finally
@@ -582,25 +582,48 @@ namespace Automatics.SmokeTest
                 if (!text) throw new InvalidOperationException("search label precondition failed: missing text for " + pin.m_name);
                 return ((string)AccessTools.Property(text.GetType(), "text").GetValue(text)).ToLowerInvariant();
             });
+            var special = map.AddPin(origin + Vector3.forward * 3f, Minimap.PinType.Death,
+                "Automatics smoke special", false, false);
+            var unnamed = map.AddPin(origin + Vector3.forward * 5f, Minimap.PinType.Icon3, "", false, false);
+            pins.Add(special);
+            pins.Add(unnamed);
+            labels.Add(special, special.m_name.ToLowerInvariant());
+            labels.Add(unnamed, "");
+            var textType = AccessTools.Property(typeof(Minimap.PinNameData), "PinNameText").PropertyType;
+            var toggleLabel = (string)AccessTools.Property(textType, "text").GetValue(
+                MapFilter.SearchToggle.Root.GetComponentInChildren(textType, true));
+            Check(run, "mapfilter_search_toggle_text", toggleLabel == "Apply to minimap" || toggleLabel == "ミニマップにも反映",
+                "minimap toggle does not show the requested translated label: " + toggleLabel);
             MapFilter.SetSearchText("  SMOKE FLORA  ");
+            var specialTypes = Enum.GetValues(typeof(Minimap.PinType)).Cast<Minimap.PinType>().Where(type =>
+                type == Minimap.PinType.Death || type == Minimap.PinType.Bed || type == Minimap.PinType.Shout ||
+                type == Minimap.PinType.Player || type == Minimap.PinType.RandomEvent || type == Minimap.PinType.Ping ||
+                (int)type >= (int)Minimap.PinType.EventArea);
+            foreach (var type in specialTypes)
+                Check(run, "mapfilter_search_special_" + (int)type,
+                    !Map.ShouldHideAutomaticPin(new Minimap.PinData { m_type = type, m_name = "" }),
+                    "search hid a vanilla special marker");
+            Check(run, "mapfilter_search_custom_icon", Map.ShouldHideAutomaticPin(new Minimap.PinData
+                { m_type = (Minimap.PinType)Enum.GetValues(typeof(Minimap.PinType)).Length, m_name = "unmatched custom icon" }),
+                "the special-marker exemption incorrectly includes custom icon types");
             Check(run, "mapfilter_search_value_changed", MapFilter.SearchText == "  SMOKE FLORA  " && MapFilter.HasSearch,
                 "the cloned input's value-changed callback did not record the search");
             CheckModes(run, map, origin, pins, "search_large", pin => map.m_mode == Minimap.MapMode.Small ||
-                pin == flora || pin == manual || pin == shared);
+                pin == flora || pin == special);
             MapFilter.SearchToggle.InvokeClick();
             Check(run, "mapfilter_search_toggle_callback", MapFilter.SearchPinned && MapFilter.SearchToggle.Shown &&
-                MapFilter.SearchToggle.Tint == Color.white, "Pin search's callback did not turn on its session value and tint");
-            CheckModes(run, map, origin, pins, "search_pinned", pin => pin == flora || pin == manual || pin == shared);
+                MapFilter.SearchToggle.Tint == Color.white, "Apply to minimap's callback did not turn on its session value and tint");
+            CheckModes(run, map, origin, pins, "search_pinned", pin => pin == flora || pin == special);
 
             var originalName = flora.m_name;
             flora.m_name = "Automatics smoke renamed";
-            CheckModes(run, map, origin, pins, "search_renamed_pin", pin => pin == manual || pin == shared);
+            CheckModes(run, map, origin, pins, "search_renamed_pin", pin => pin == special);
             flora.m_name = originalName;
-            CheckModes(run, map, origin, pins, "search_name_restored", pin => pin == flora || pin == manual || pin == shared);
+            CheckModes(run, map, origin, pins, "search_name_restored", pin => pin == flora || pin == special);
 
             AccessTools.Method(typeof(Navigation), "SetTarget").Invoke(null, new object[] { mineral });
             CheckModes(run, map, origin, pins, "search_navigation_kept",
-                pin => pin == flora || pin == mineral || pin == manual || pin == shared);
+                pin => pin == flora || pin == mineral || pin == special);
             for (var i = 0; i < 3; i++)
             {
                 AccessTools.Field(typeof(Navigation), "_nextTargetPinValidationTime").SetValue(null, 0f);
@@ -610,23 +633,33 @@ namespace Automatics.SmokeTest
                 "search cleared the non-matching navigation target during validation");
             Write(run, settings, MappingConfig.MapFilterHiddenCategoriesEntry, new StringList(new[] { "Flora" }));
             CheckModes(run, map, origin, pins, "search_category_combined",
-                pin => pin == mineral || pin == manual || pin == shared);
+                pin => pin == mineral || pin == special);
             Write(run, settings, MappingConfig.MapFilterHiddenCategoriesEntry, new StringList());
             Navigation.ClearTarget();
             MapFilter.SetSearchText("  " + labels[saved].ToUpperInvariant() + "  ");
             Check(run, "mapfilter_search_localized_precondition", labels[saved].Length != 0,
                 "the saved registry pin has no displayed localized label");
             CheckModes(run, map, origin, pins, "search_localized_case_insensitive",
-                pin => pin == manual || pin == shared || labels[pin].Contains(labels[saved]));
+                pin => pin == special || labels[pin].Contains(labels[saved]));
+            Check(run, "mapfilter_search_manual_match", !Map.ShouldHideAutomaticPin(manual) &&
+                Map.ShouldHideAutomaticPin(shared), "matching manual pin or non-matching shared pin was not filtered by label");
+            MapFilter.SetSearchText("SMOKE SHARED");
+            CheckModes(run, map, origin, pins, "search_shared_match", pin => pin == shared || pin == special);
             MapFilter.SetSearchText("nothing matches this smoke query");
-            CheckModes(run, map, origin, pins, "search_nonmatching", pin => pin == manual || pin == shared);
+            CheckModes(run, map, origin, pins, "search_nonmatching", pin => pin == special);
+            Check(run, "mapfilter_search_unnamed", Map.ShouldHideAutomaticPin(unnamed),
+                "active search left an unnamed ordinary pin visible");
             MapFilter.SetSearchText("   ");
             CheckModes(run, map, origin, pins, "search_whitespace_restores", _ => true);
             MapFilter.SetSearchText("");
             MapFilter.SearchToggle.InvokeClick();
             Check(run, "mapfilter_search_toggle_off", !MapFilter.SearchPinned && MapFilter.SearchToggle.Tint == Color.gray,
-                "Pin search's callback did not restore its off value and tint");
+                "Apply to minimap's callback did not restore its off value and tint");
             CheckModes(run, map, origin, pins, "search_clear_restores", _ => true);
+            map.RemovePin(special);
+            map.RemovePin(unnamed);
+            pins.Remove(special);
+            pins.Remove(unnamed);
         }
 
         private static void CheckLayout(FeatureRun run, Minimap map)
@@ -898,6 +931,7 @@ namespace Automatics.SmokeTest
                         continue;
                     }
                     var text = GetNameText(pin);
+                    if (string.IsNullOrEmpty(pin.m_name)) continue;
                     Check(run, $"mapfilter_{phase}_{mode}_{pins.IndexOf(pin)}_text",
                         text && text.enabled &&
                         (mode != Minimap.MapMode.Large || pin.m_NamePinData.PinNameGameObject.activeInHierarchy),
@@ -1002,6 +1036,7 @@ namespace Automatics.SmokeTest
         private static ZDOID _cachedId;
         private static Minimap.PinData _savedPortalPin;
         private static int _clientReads;
+        private static int _sectorReads;
 
         public static IEnumerator Run(FeatureRun run)
         {
@@ -1028,6 +1063,7 @@ namespace Automatics.SmokeTest
             var center = AccessTools.Method(typeof(Minimap), "GetViewCenterWorldPoint").Invoke(map, null);
             var cachedProbe = new Harmony("automatics.smoke.pintooltip." + run.RunId);
             var clientProbe = new Harmony("automatics.smoke.pintooltip.client." + run.RunId);
+            var mergeRangeEntry = (ConfigEntry<int>)AccessTools.Field(typeof(MappingConfig), "_floraPinMergeRange").GetValue(null);
             Func<string, bool> handBack = _ =>
             {
                 clientProbe.UnpatchSelf();
@@ -1035,6 +1071,7 @@ namespace Automatics.SmokeTest
                 _cachedId = ZDOID.None;
                 _savedPortalPin = null;
                 _clientReads = 0;
+                _sectorReads = 0;
                 PinTooltip.Hide();
                 foreach (var pin in pins) if (Map.ContainsPin(pin)) map.RemovePin(pin);
                 pins.Clear();
@@ -1066,7 +1103,7 @@ namespace Automatics.SmokeTest
                 foreach (var entry in new ConfigEntryBase[]
                 {
                     MappingConfig.EnableMapEnhancementsEntry, MappingConfig.MapFilterHiddenCategoriesEntry,
-                    MappingConfig.HideUnexploredAutomaticMappingPinsEntry
+                    MappingConfig.HideUnexploredAutomaticMappingPinsEntry, mergeRangeEntry
                 })
                 {
                     if (!SmokeSession.BeginSetting(run.RunId, entry, out var setting, out var refusal))
@@ -1079,6 +1116,7 @@ namespace Automatics.SmokeTest
                 Write(run, settings, MappingConfig.EnableMapEnhancementsEntry, true);
                 Write(run, settings, MappingConfig.MapFilterHiddenCategoriesEntry, new StringList());
                 Write(run, settings, MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false);
+                Write(run, settings, mergeRangeEntry, 8);
                 map.SetMapMode(Minimap.MapMode.Large);
                 MapFilter.Update(map);
                 if (MapFilter.SearchFocused) MapFilter.DefocusSearch();
@@ -1273,6 +1311,7 @@ namespace Automatics.SmokeTest
                 }
                 var point = merged.m_uiElement.position;
                 CheckUi(run, map, merged, point, settings);
+                CheckSavedObjects(run, map, pins, objects, ready, picked, deposit, merged, depositPin, cachedProbe);
                 var removedId = creature.GetComponent<ZNetView>().GetZDO().m_uid;
                 foreach (var pin in pins) if (Map.ContainsPin(pin)) map.RemovePin(pin);
                 pins.Clear();
@@ -1307,6 +1346,143 @@ namespace Automatics.SmokeTest
             {
                 if (handBack("pin tooltip smoke")) SmokeSession.ReleaseHandBack(handBack);
             }
+        }
+
+        private static void CheckSavedObjects(FeatureRun run, Minimap map, List<Minimap.PinData> pins,
+            List<GameObject> objects, GameObject ready, GameObject picked, GameObject deposit, Minimap.PinData merged,
+            Minimap.PinData depositPin, Harmony probe)
+        {
+            if (!ValheimObject.Flora.GetIdentify(Objects.GetName(ready.GetComponent<Pickable>()), out var floraId) ||
+                !ValheimObject.Flora.GetName(floraId, out var floraLabel) ||
+                !ValheimObject.Mineral.GetIdentify(Objects.GetName(deposit.GetComponent<MineRock5>()), out var mineralId) ||
+                !ValheimObject.Mineral.GetName(mineralId, out var mineralLabel))
+                throw new InvalidOperationException("saved tooltip registry labels are unavailable");
+            map.RemovePin(merged);
+            map.RemovePin(depositPin);
+            Minimap.PinData Saved(string name, Vector3 position, PinKind kind, params ZDOID[] ids)
+            {
+                var pin = Map.AddPin(position, name, true, new Target { name = name });
+                pins.Add(pin);
+                foreach (var id in ids) AssociateStatic(pin, id, kind);
+                StaticObjectMapping.OnRemovePin(pin);
+                Check(run, "pintooltip_saved_unlinked_" + pins.Count,
+                    pin.m_save && Map.IsAutomaticPin(pin) && !StaticObjectMapping.OwnsPin(pin),
+                    "saved automatic pin retained its test association");
+                return pin;
+            }
+            var readyId = ready.GetComponent<ZNetView>().GetZDO().m_uid;
+            var pickedId = picked.GetComponent<ZNetView>().GetZDO().m_uid;
+            var depositId = deposit.GetComponent<ZNetView>().GetZDO().m_uid;
+            var single = Saved(floraLabel, ready.transform.position, PinKind.Flora, readyId);
+            var singleObjects = PinTooltipContent.ResolveSavedObjects(single);
+            Check(run, "pintooltip_saved_flora", singleObjects.Ids.SequenceEqual(new[] { readyId }) &&
+                !singleObjects.MergedFlora && PinTooltipContent.Build(single, singleObjects).Text.Contains(Line("ready")),
+                "saved flora did not resolve its nearest matching local object and readiness");
+            var clusterName = StaticObjectMapping.ComputeFloraPinName(floraLabel, 2);
+            var cluster = Map.AddPin((ready.transform.position + picked.transform.position) / 2f,
+                clusterName, false, new Target { name = floraLabel });
+            pins.Add(cluster);
+            AssociateStatic(cluster, readyId, PinKind.Flora);
+            AssociateStatic(cluster, pickedId, PinKind.Flora);
+            Check(run, "pintooltip_click_save_precondition", !cluster.m_save && Map.IsAutomaticPin(cluster) &&
+                StaticObjectMapping.OwnsPin(cluster), "merged flora pin was not an associated unsaved automatic pin");
+            var savedByClick = StaticObjectMapping.SetSaveFlag(cluster);
+            Check(run, "pintooltip_click_saved_unlinked", savedByClick && cluster.m_save && cluster.m_ownerID == 0 &&
+                !Map.IsAutomaticPin(cluster) && !StaticObjectMapping.OwnsPin(cluster),
+                "SetSaveFlag did not save and untrack the automatic merged flora pin");
+            var clusterObjects = PinTooltipContent.ResolveSavedObjects(cluster);
+            Check(run, "pintooltip_saved_merged_flora", clusterObjects.MergedFlora &&
+                new HashSet<ZDOID>(clusterObjects.Ids).SetEquals(new[] { readyId, pickedId }) &&
+                PinTooltipContent.Build(cluster, clusterObjects).Text.Contains(Line("ready_count", 1, 2)) &&
+                PinTooltipContent.Build(cluster, clusterObjects).Text.Contains(Translate("@text_automatic_mapping_tooltip_earliest").Split('{')[0]),
+                "saved merged flora did not match the formatter's base label, count and earliest estimate");
+            var mineralPositionArgs = new object[] { deposit.GetComponent<MineRock5>(), Vector3.zero, 0f };
+            if (!(bool)AccessTools.Method(typeof(StaticObjectMapping), "TryGetMineralPosition").Invoke(null, mineralPositionArgs))
+                throw new InvalidOperationException("saved mineral mapping position is unavailable");
+            var mineralPosition = (Vector3)mineralPositionArgs[1];
+            var mineral = Saved(mineralLabel, mineralPosition, PinKind.Mineral, depositId);
+            var mineralObjects = PinTooltipContent.ResolveSavedObjects(mineral);
+            var areas = (IList)AccessTools.Field(typeof(MineRock5), "m_hitAreas").GetValue(deposit.GetComponent<MineRock5>());
+            Check(run, "pintooltip_saved_mineral", mineralObjects.Ids.SequenceEqual(new[] { depositId }) &&
+                PinTooltipContent.Build(mineral, mineralObjects).Text.Contains(Line("sections", areas.Count - 1, areas.Count)),
+                "saved mineral at its mapped collider centre did not resolve its matching local object and remaining sections");
+            var missing = map.AddPin(ready.transform.position + Vector3.up * 100f, Minimap.PinType.Icon3,
+                Map.StoredPinName(floraLabel), true, false);
+            pins.Add(missing);
+            var missingObjects = PinTooltipContent.ResolveSavedObjects(missing);
+            Check(run, "pintooltip_saved_not_found", missingObjects.Ids.Count == 0 &&
+                PinTooltipContent.Build(missing, missingObjects).Text.Contains(Line("no_link")),
+                "own saved flora-labelled pin without a matching nearby object lost its reason line");
+            var manual = map.AddPin(single.m_pos, Minimap.PinType.Icon3, "Automatics smoke saved manual", true, false);
+            pins.Add(manual);
+            var manualObjects = PinTooltipContent.ResolveSavedObjects(manual);
+            Check(run, "pintooltip_saved_manual", manualObjects.Ids.Count == 0 &&
+                PinTooltipContent.Build(manual, manualObjects).Text.Split('\n').Length == 1,
+                "saved manual pin with an unrelated label incorrectly acquired object details");
+            map.RemovePin(manual);
+            var labelledManual = map.AddPin(single.m_pos, Minimap.PinType.Icon3, single.m_name, true, false);
+            pins.Add(labelledManual);
+            var manualMatches = PinTooltipContent.ResolveSavedObjects(labelledManual);
+            Check(run, "pintooltip_saved_manual_flora", !Map.IsAutomaticPin(labelledManual) &&
+                manualMatches.Ids.SequenceEqual(new[] { readyId }) &&
+                PinTooltipContent.Build(labelledManual, manualMatches).Text.Contains(Line("ready")),
+                "own saved manual pin with a unique flora label did not resolve readiness");
+            map.RemovePin(labelledManual);
+            var shared = new Minimap.PinData { m_save = true, m_ownerID = 1L, m_name = single.m_name, m_pos = single.m_pos };
+            var sharedMatches = PinTooltipContent.ResolveSavedObjects(shared);
+            Check(run, "pintooltip_saved_shared", sharedMatches.Ids.Count == 0 &&
+                PinTooltipContent.Build(shared, sharedMatches).Text.Split('\n').Length == 1,
+                "shared flora-labelled pin incorrectly acquired details or a no-link reason");
+            probe.Patch(AccessTools.Method(typeof(ZDOMan), nameof(ZDOMan.FindSectorObjects)),
+                prefix: new HarmonyMethod(typeof(PinTooltipFeatureSmoke), nameof(CountSectorRead)));
+            try
+            {
+                CheckSavedHover(run, map, single, "flora", Line("ready"));
+                CheckSavedHover(run, map, cluster, "merged_flora", Line("ready_count", 1, 2));
+                CheckSavedHover(run, map, mineral, "mineral", Line("sections", areas.Count - 1, areas.Count));
+            }
+            finally { probe.UnpatchSelf(); }
+
+            // Keep the chain above existing flora so only these four objects can join it.
+            var chain = new List<GameObject>();
+            for (var i = 0; i < 4; i++)
+            {
+                var flora = Spawn("Pickable_Mushroom", ready.transform.position + Vector3.up * 50f +
+                    Vector3.right * (i * 7f - 10.5f), objects);
+                if (!flora || !flora.GetComponent<Pickable>())
+                    throw new InvalidOperationException("saved flora chain fixture is unavailable");
+                flora.GetComponent<Pickable>().SetPicked(false);
+                chain.Add(flora);
+            }
+            var chainIds = chain.Select(flora => flora.GetComponent<ZNetView>().GetZDO().m_uid).ToArray();
+            var chainPin = Saved(StaticObjectMapping.ComputeFloraPinName(floraLabel, 4),
+                (chain[0].transform.position + chain[3].transform.position) / 2f, PinKind.Flora, chainIds);
+            var chainObjects = PinTooltipContent.ResolveSavedObjects(chainPin);
+            Check(run, "pintooltip_saved_flora_chain", chainObjects.MergedFlora &&
+                new HashSet<ZDOID>(chainObjects.Ids).SetEquals(chainIds) &&
+                PinTooltipContent.Build(chainPin, chainObjects).Text.Contains(Line("ready_count", 4, 4)),
+                "saved x4 flora pin did not include the endpoints linked through neighbours 7 m apart at merge range 8");
+        }
+
+        private static void CountSectorRead() => _sectorReads++;
+
+        private static void CheckSavedHover(FeatureRun run, Minimap map, Minimap.PinData pin, string kind, string detail)
+        {
+            map.SetMapMode(Minimap.MapMode.Large);
+            AccessTools.Method(typeof(Minimap), "CenterMap").Invoke(map, new object[] { pin.m_pos });
+            Map.RefreshPins();
+            PinTooltip.Hide();
+            _sectorReads = 0;
+            PinTooltip.UpdateAt(map, pin.m_uiElement.position);
+            var resolved = PinTooltip.ResolvedObjects;
+            Check(run, "pintooltip_saved_" + kind + "_hover", PinTooltip.HoveredPin == pin && resolved != null &&
+                resolved.Ids.Count > 0 && _sectorReads == 1 && PinTooltip.Content.Text.Contains(detail),
+                "hover change did not resolve the saved pin and display its details");
+            PinTooltip.Invalidate();
+            PinTooltip.UpdateAt(map, pin.m_uiElement.position);
+            Check(run, "pintooltip_saved_" + kind + "_cache", ReferenceEquals(resolved, PinTooltip.ResolvedObjects) &&
+                _sectorReads == 1 && PinTooltip.Content.Text.Contains(detail),
+                "unchanged hover scanned sectors again or lost its resolved details");
         }
 
         private static void CheckUi(FeatureRun run, Minimap map, Minimap.PinData pin, Vector3 point,

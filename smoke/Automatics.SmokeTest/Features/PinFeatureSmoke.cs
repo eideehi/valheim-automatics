@@ -1047,6 +1047,20 @@ namespace Automatics.SmokeTest
                     Vector3.Distance(marker.m_pos, drop.transform.position) < 0.01f,
                     "an unpinned object gets exactly one named, unsaved, non-automatic marker");
                 CheckSave(run, map, marker, control);
+                var distanceMode = map.m_mode;
+                try
+                {
+                    map.SetMapMode(Minimap.MapMode.Small);
+                    Navigation.Update(player);
+                    var label = Navigation.Label;
+                    var textType = AccessTools.Property(typeof(Minimap.PinNameData), "PinNameText").PropertyType;
+                    var text = label ? (string)AccessTools.Property(textType, "text").GetValue(
+                        label.transform.Find("Name").GetComponent(textType)) : "";
+                    var suffix = " [" + Mathf.RoundToInt(Utils.DistanceXZ(player.transform.position, marker.m_pos)) + "m]";
+                    Check(run, "navhotkey_distance_format", text == marker.m_name + suffix,
+                        "navigation label did not append the bracketed horizontal distance: " + text);
+                }
+                finally { map.SetMapMode(distanceMode); }
                 navigate(player, dropRay, true);
                 Check(run, "navhotkey_repeat_clears", Navigation.TargetPin == null && MarkerCount(before, added) == 0 &&
                     !Map.GetAllPins().Contains(marker), "repeating the target removes its marker and clears navigation");
@@ -1774,7 +1788,7 @@ namespace Automatics.SmokeTest
         private static float BarValue(GuiBar bar) =>
             (float)AccessTools.Field(typeof(GuiBar), "m_value").GetValue(bar);
         private static string DistanceText(Player player, GameObject go) =>
-            " " + Mathf.RoundToInt(Utils.DistanceXZ(player.transform.position, go.transform.position)) + "m";
+            " [" + Mathf.RoundToInt(Utils.DistanceXZ(player.transform.position, go.transform.position)) + "m]";
         private static bool LabelVisible() => AimedObjectBar.Label &&
             AimedObjectBar.Label.activeInHierarchy;
         private static int NamedLabels() => UnityEngine.Object.FindObjectsByType<RectTransform>(

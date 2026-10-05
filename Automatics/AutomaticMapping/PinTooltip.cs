@@ -34,6 +34,7 @@ namespace Automatics.AutomaticMapping
         internal static GameObject Root { get; private set; }
         internal static Minimap.PinData HoveredPin { get; private set; }
         internal static PinTooltipContent.Content Content { get; private set; }
+        internal static PinTooltipContent.SavedObjects ResolvedObjects { get; private set; }
         internal static bool HasTopicAndText => _topic && _text && _topic != _text;
 
         internal static void Update(Minimap map)
@@ -98,11 +99,12 @@ namespace Automatics.AutomaticMapping
                 return;
             }
             var changed = !ReferenceEquals(pin, HoveredPin);
+            if (changed) ResolvedObjects = PinTooltipContent.ResolveSavedObjects(pin);
             HoveredPin = pin;
             if (!Root) Create(map);
             if (changed || due || Content == null)
             {
-                Content = PinTooltipContent.Build(pin);
+                Content = PinTooltipContent.Build(pin, ResolvedObjects);
                 if (_topic) TextProperty.SetValue(_topic, Content.Name);
                 TextProperty.SetValue(_text, _topic ? Content.Text : Content.Name + "\n" + Content.Text);
                 Root.SetActive(true);
@@ -155,6 +157,7 @@ namespace Automatics.AutomaticMapping
             _refreshAt = 0f;
             HoveredPin = null;
             Content = null;
+            ResolvedObjects = null;
         }
 
         internal static void Invalidate()
@@ -168,6 +171,7 @@ namespace Automatics.AutomaticMapping
             Root = null;
             HoveredPin = null;
             Content = null;
+            ResolvedObjects = null;
             _map = null;
             _topic = _text = null;
             _body = null;

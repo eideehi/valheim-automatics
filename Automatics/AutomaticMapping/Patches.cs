@@ -107,7 +107,7 @@ namespace Automatics.AutomaticMapping
                 var meters = Mathf.RoundToInt(Utils.DistanceXZ(
                     Player.m_localPlayer.transform.position, state.Character.transform.position));
                 var text = (string)EnemyHudNameTextProperty.GetValue(name);
-                EnemyHudNameTextProperty.SetValue(name, text + " " + meters + "m");
+                EnemyHudNameTextProperty.SetValue(name, text + " [" + meters + "m]");
             }
             __state.Clear();
         }

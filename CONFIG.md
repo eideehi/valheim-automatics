@@ -154,12 +154,12 @@ Hide Automatic Mapping pins whose position is outside the explored map. Saved pi
 - Default value: false
 
 ### Enhance the Map / [enable_map_enhancements]
-Show category controls and label search on the large map without deleting pins. Categories apply on both maps; search applies on the minimap only with Pin search on. Turning this off keeps category choices and clears search. On by default; requires the module to be running. Hide Pins Outside Explored Area still applies independently.
+Show category controls, pin search and hover details on the large map without deleting pins. Categories apply only to automatic pins on both maps. Search matches automatic, manual and shared pin labels; vanilla special markers and the navigation target stay visible, and unnamed pins are hidden. Search applies on the minimap only with Apply to minimap on. Turning this off keeps category choices and clears search. On by default; requires the module to be running. Hide Pins Outside Explored Area still applies independently.
 
 - Default value: true
 
 ### Hidden Map Categories / [map_filter_hidden_categories]
-Hide automatic pins in these categories on both maps: Animal, Monster, Flora, Mineral, Spawner, Dungeon, Spot, Portal, Vehicle, Other. Empty by default. Unknown names are ignored. Saved pins whose category is ambiguous or unknown are unaffected by category hiding. Manual and shared pins are unaffected; requires Enhance the Map.
+Hide automatic pins in these categories on both maps: Animal, Monster, Flora, Mineral, Spawner, Dungeon, Spot, Portal, Vehicle, Other. Empty by default. Unknown names are ignored. Saved pins whose category is ambiguous or unknown are unaffected by category hiding. Manual and shared pins are unaffected by category hiding; requires Enhance the Map.
 
 - Default value: empty (no categories hidden)
 - Acceptable values: Animal, Monster, Flora, Mineral, Spawner, Dungeon, Spot, Portal, Vehicle, Other

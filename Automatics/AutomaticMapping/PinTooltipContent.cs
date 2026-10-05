@@ -44,19 +44,139 @@ namespace Automatics.AutomaticMapping
             internal string Text;
         }
 
+        internal sealed class SavedObjects
+        {
+            internal bool MergedFlora;
+            internal readonly List<ZDOID> Ids = new List<ZDOID>();
+        }
+
         private static readonly AccessTools.FieldRef<MineRock, Collider[]> RockAreas =
             AccessTools.FieldRefAccess<MineRock, Collider[]>("m_hitAreas");
         private static readonly FieldInfo Rock5Areas = AccessTools.Field(typeof(MineRock5), "m_hitAreas");
         private static readonly FieldInfo Rock5Health = AccessTools.Field(Rock5Areas.FieldType.GetGenericArguments()[0], "m_health");
 
-        internal static Content Build(Minimap.PinData pin)
+        internal static Content Build(Minimap.PinData pin, SavedObjects savedObjects = null)
         {
-            return Format(Read(pin, Player.m_localPlayer.transform.position, ZNet.instance.GetTime()),
+            return Format(Read(pin, Player.m_localPlayer.transform.position, ZNet.instance.GetTime(), savedObjects),
                 key => Automatics.L10N.Translate(key));
         }
 
-        // Reading the association never discovers an object or changes its pin.
-        internal static Snapshot Read(Minimap.PinData pin, Vector3 playerPosition, DateTime now)
+        // Hover changes resolve saved pins from local sector data without adopting or changing them.
+        internal static SavedObjects ResolveSavedObjects(Minimap.PinData pin)
+        {
+            var result = new SavedObjects();
+            if (DynamicObjectMapping.OwnsPin(pin) || StaticObjectMapping.OwnsPin(pin) ||
+                !TryGetSavedResourceCategory(pin, out var category)) return result;
+
+            var label = Localization.instance.Localize(pin.m_name);
+            if (category == PinCategory.Flora && PinCategories.TryGetFloraClusterLabel(pin.m_name, out var baseLabel))
+            {
+                label = baseLabel;
+                result.MergedFlora = true;
+            }
+            var mergeRangeSquared = (float)Config.FloraPinMergeRange * Config.FloraPinMergeRange;
+            var nearest = float.MaxValue;
+            var candidates = new List<ZDO>();
+            var matchingFlora = new List<ZDO>();
+            ZDOMan.instance.FindSectorObjects(ZoneSystem.GetZone(pin.m_pos),
+                new SimulationDistance(1, 0, true), candidates);
+            var registry = category == PinCategory.Flora ? ValheimObject.Flora : ValheimObject.Mineral;
+            foreach (var zdo in candidates)
+            {
+                var prefab = ZNetScene.instance.GetPrefab(zdo.GetPrefab());
+                if (!prefab) continue;
+                var component = category == PinCategory.Flora ? (Component)prefab.GetComponent<Pickable>() :
+                    (Component)prefab.GetComponent<MineRock>() ??
+                    (Component)prefab.GetComponent<MineRock5>() ?? prefab.GetComponent<Destructible>();
+                if (!component || !registry.GetIdentify(Objects.GetName(component), out var identifier) ||
+                    !registry.GetName(identifier, out var objectLabel) ||
+                    Localization.instance.Localize(Map.StoredPinName(objectLabel)) != label) continue;
+                if (result.MergedFlora)
+                {
+                    matchingFlora.Add(zdo);
+                    continue;
+                }
+                var distance = category == PinCategory.Mineral ? Utils.DistanceXZ(zdo.GetPosition(), pin.m_pos) :
+                    Vector3.Distance(zdo.GetPosition(), pin.m_pos);
+                var radius = category == PinCategory.Mineral ? MineralSearchRadius(prefab, zdo.GetRotation()) :
+                    Config.FloraPinMergeRange;
+                if (distance > radius || distance > nearest) continue;
+                result.Ids.Clear();
+                nearest = distance;
+                result.Ids.Add(zdo.m_uid);
+            }
+            if (result.MergedFlora)
+            {
+                // Seed near the pin, then follow the same three-dimensional neighbour links as flora networks.
+                var members = new List<ZDO>();
+                for (var i = matchingFlora.Count - 1; i >= 0; i--)
+                    if ((matchingFlora[i].GetPosition() - pin.m_pos).sqrMagnitude <= mergeRangeSquared)
+                    {
+                        members.Add(matchingFlora[i]);
+                        matchingFlora.RemoveAt(i);
+                    }
+                for (var member = 0; member < members.Count; member++)
+                    for (var i = matchingFlora.Count - 1; i >= 0; i--)
+                        if ((matchingFlora[i].GetPosition() - members[member].GetPosition()).sqrMagnitude <= mergeRangeSquared)
+                        {
+                            members.Add(matchingFlora[i]);
+                            matchingFlora.RemoveAt(i);
+                        }
+                foreach (var member in members) result.Ids.Add(member.m_uid);
+            }
+            return result;
+        }
+
+        private static bool TryGetSavedResourceCategory(Minimap.PinData pin, out PinCategory category)
+        {
+            category = default;
+            return pin.m_save && pin.m_ownerID == 0 && PinCategories.TryClassify(pin, out category) &&
+                   (category == PinCategory.Flora || category == PinCategory.Mineral);
+        }
+
+        private static float MineralSearchRadius(GameObject prefab, Quaternion rotation)
+        {
+            var radius = 4f;
+            var relativeRotation = rotation * Quaternion.Inverse(prefab.transform.rotation);
+            // A live pin's collider centre stays within this footprint, even when only some sections remain.
+            // Use shape bounds because inactive prefab colliders have no world-space physics bounds.
+            foreach (var collider in prefab.GetComponentsInChildren<Collider>(true))
+            {
+                Bounds bounds;
+                switch (collider)
+                {
+                    case MeshCollider mesh when mesh.sharedMesh:
+                        bounds = mesh.sharedMesh.bounds;
+                        break;
+                    case BoxCollider box:
+                        bounds = new Bounds(box.center, box.size);
+                        break;
+                    case SphereCollider sphere:
+                        bounds = new Bounds(sphere.center, Vector3.one * sphere.radius * 2f);
+                        break;
+                    case CapsuleCollider capsule:
+                        var size = Vector3.one * capsule.radius * 2f;
+                        size[capsule.direction] = Mathf.Max(capsule.height, size[capsule.direction]);
+                        bounds = new Bounds(capsule.center, size);
+                        break;
+                    default:
+                        continue;
+                }
+                for (var corner = 0; corner < 8; corner++)
+                {
+                    var point = bounds.center + Vector3.Scale(bounds.extents, new Vector3(
+                        (corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f,
+                        (corner & 4) == 0 ? -1f : 1f));
+                    var offset = relativeRotation * (collider.transform.TransformPoint(point) - prefab.transform.position);
+                    radius = Mathf.Max(radius, Utils.DistanceXZ(Vector3.zero, offset));
+                }
+            }
+            return radius;
+        }
+
+        // Refresh details through existing associations or the ids captured when hover changed.
+        internal static Snapshot Read(Minimap.PinData pin, Vector3 playerPosition, DateTime now,
+            SavedObjects savedObjects = null)
         {
             var result = new Snapshot
             {
@@ -76,10 +196,17 @@ namespace Automatics.AutomaticMapping
                 result.MergedFlora = result.Members.Count > 1 &&
                     StaticObjectMapping.TryGetPinKind(pin, out var kind) && kind == PinKind.Flora;
             }
-            else if (Map.IsAutomaticPin(pin) &&
+            else if (savedObjects != null && savedObjects.Ids.Count > 0)
+            {
+                result.HasState = true;
+                result.MergedFlora = savedObjects.MergedFlora;
+                foreach (var savedId in savedObjects.Ids) result.Members.Add(ReadMember(savedId, now));
+            }
+            else if (TryGetSavedResourceCategory(pin, out _) ||
+                     (pin.m_ownerID == 0 && Map.IsAutomaticPin(pin) &&
                      (!PinCategories.TryClassify(pin, out var category) ||
                       category == PinCategory.Animal || category == PinCategory.Monster ||
-                      category == PinCategory.Flora || category == PinCategory.Mineral))
+                      category == PinCategory.Flora || category == PinCategory.Mineral)))
             {
                 result.HasState = true;
                 result.Members.Add(new Member { State = ObjectState.NoLink });

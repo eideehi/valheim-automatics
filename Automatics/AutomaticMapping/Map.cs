@@ -304,11 +304,13 @@ namespace Automatics.AutomaticMapping
             var hideCategory = Config.EnableMapEnhancements && Config.HasHiddenMapCategories;
             var hideSearch = includeSearch && Config.EnableMapEnhancements && MapFilter.SearchActive;
             if (!hideUnexplored && !hideCategory && !hideSearch) return false;
-            if (pinData == null || !IsAutomaticPin(pinData)) return false;
+            if (pinData == null) return false;
+            if (hideSearch && MapFilter.ShouldHideBySearch(pinData)) return true;
+            if (!hideUnexplored && !hideCategory) return false;
+            if (!IsAutomaticPin(pinData)) return false;
             return (hideUnexplored && !IsExplored(pinData.m_pos)) ||
                    (hideCategory && PinCategories.TryClassify(pinData, out var category) &&
-                    Config.IsMapCategoryHidden(category)) ||
-                   (hideSearch && MapFilter.ShouldHideBySearch(pinData));
+                    Config.IsMapCategoryHidden(category));
         }
 
         internal static bool IsAutomaticPin(Minimap.PinData pinData)

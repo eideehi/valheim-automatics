@@ -338,11 +338,13 @@ or its object is removed. A pin you saved yourself stays a fixed destination.
 
 While navigation is active and the large map is closed, a loaded non-boss
 creature target shows Valheim's health and awareness HUD with the horizontal
-distance added to its name, even from farther away. Bosses keep their usual HUD
+distance added to its name in brackets, such as `Boar [10m]`, even from farther
+away. Bosses keep their usual HUD
 behaviour and use the navigation label. Non-creature targets and bosses show a
 status-bar-style label with their name, distance and a white bar. For a loaded
 player-built piece the bar shows its health; for other targets it is full and
 decorative.
+Navigation labels use the same bracketed distance format.
 The label appears above the object when Automatics can resolve its loaded
 instance; otherwise it appears about 2 m above the pin
 position. Navigation labels are hidden while the game is paused or the HUD is
@@ -358,7 +360,8 @@ drawn for you and adds nothing to the world. Turn it off with
 ### Aimed object bar
 
 Turn on `Aimed Object Bar` (off by default) to show a bar above the named object
-at the crosshair, with its name and horizontal distance. Creatures show
+at the crosshair, with its name and horizontal distance in brackets, such as
+`Boar [10m]`. Creatures show
 Valheim's own health and awareness bar, even beyond its usual display range;
 player-built pieces show their health. Bosses and creatures with hidden HUDs
 show a name and distance label without health. Other named objects use a full
@@ -382,14 +385,17 @@ that list using `Animal`, `Monster`, `Flora`, `Mineral`, `Spawner`, `Dungeon`,
 automatic pins whose category is ambiguous or unknown are unaffected by these
 category controls.
 
-Type in the search field to show automatic pins whose displayed label contains
-the text, ignoring case and surrounding spaces. Search always applies on the
-large map. Turn on `Pin search` (off by default) to keep it applied on the
+Type in the search field to show pins whose displayed label contains the text,
+ignoring case and surrounding spaces. Automatic, manual and shared pins are
+searched; unnamed pins are hidden while a search is active. Vanilla special
+markers, such as death, bed, player and event markers, and the current navigation
+target are always shown by search. Search always applies on the
+large map. Turn on `Apply to minimap` (off by default) to keep it applied on the
 minimap after closing the large map. Clear the field to stop searching. Search
-text and `Pin search` are not saved; turning off `Enhance the Map` or the module
+text and `Apply to minimap` are not saved; turning off `Enhance the Map` or the module
 clears them but keeps category choices.
 
-Manual and shared pins are unaffected by category controls and search. Search
+Manual and shared pins are unaffected by category controls. Search
 also leaves the current navigation target visible, but category hiding and
 `Hide Pins Outside Explored Area` still apply to automatic target pins.
 While the search field has focus, game and mod shortcuts are held as when
@@ -409,7 +415,7 @@ with an associated object also show these details when available:
 | Merged flora | How many are ready, and the earliest known estimated respawn. If some members have no data, the count reads `At least … ready`. |
 | Mineral deposit with sections | Remaining and total sections. |
 | Other mineral deposit | Current and maximum HP. |
-| Other pins, including locations, portals, vehicles, spawners, and manual or shared pins | Name and distance, without the above object details. |
+| Other pins, including locations, portals, vehicles and spawners | Name and distance, without the above object details. |
 
 Respawn times are estimates from the recorded picking time and respawn interval,
 rounded up to whole minutes; they do not guarantee that an object has already
@@ -417,10 +423,25 @@ respawned when the estimate reaches zero. Details come from the loaded object
 or its stored data when it is not loaded. On a client, details from an unloaded
 object carry `May be outdated`; if its data or object definition is unavailable,
 the tooltip says `Not loaded — details unavailable`. These two lines are
-client-only. A saved automatic pin whose object has not been found again shows
-`No live link — details appear once the object is found again` for creature,
-flora and mineral categories, or when its category is unknown. Hover details
-are hidden while the search field has focus.
+client-only.
+
+Your own saved pins can also show details without a live link when their label
+uniquely identifies flora or a mineral, including automatic pins you clicked
+to save and manual pins with matching labels. Shared pins and manual pins with
+other labels show only name and distance. When you hover a different pin,
+Automatics looks in locally available object data from its map sector and
+neighbouring sectors, matching the kind,
+localized name and position. Single flora pins use the nearest match within
+`Flora Pins Merge Range`; mineral pins use horizontal distance and a lookup
+radius derived from the deposit's collider footprint, at least 4 meters. Merged
+flora pins start with matching pickables within the merge range of the pin,
+then include matching neighbours linked within that range, including chains.
+These matches are kept while you hover the same pin. If no object can be found
+for your saved flora or mineral pin, it shows
+`No live link — details appear once the object is found again`. Automatic
+creature pins and automatic pins whose category is unknown also use this line
+when their live link is missing. Hover details are hidden while the search
+field has focus.
 
 ## Automatic processing
 

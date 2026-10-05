@@ -35,6 +35,7 @@ namespace Automatics.AutomaticMapping
         private static string _loweredSearch = "";
         private static int _blockedInputFrame = -1;
         private static Vector2 _layoutSize;
+        private static readonly int VanillaPinTypeCount = Enum.GetValues(typeof(Minimap.PinType)).Length;
 
         private struct SearchLabel
         {
@@ -60,6 +61,11 @@ namespace Automatics.AutomaticMapping
         internal static bool ShouldHideBySearch(Minimap.PinData pin)
         {
             if (ReferenceEquals(pin, Navigation.TargetPin)) return false;
+            var type = pin.m_type;
+            if (type == Minimap.PinType.Death || type == Minimap.PinType.Bed ||
+                type == Minimap.PinType.Shout || type == Minimap.PinType.Player ||
+                type == Minimap.PinType.RandomEvent || type == Minimap.PinType.Ping ||
+                ((int)type >= (int)Minimap.PinType.EventArea && (int)type < VanillaPinTypeCount)) return false;
             if (!SearchLabels.TryGetValue(pin, out var label) || !ReferenceEquals(label.Name, pin.m_name))
             {
                 label = new SearchLabel

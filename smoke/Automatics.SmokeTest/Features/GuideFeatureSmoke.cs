@@ -143,6 +143,7 @@ namespace Automatics.SmokeTest
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
 
+                CheckDistanceFormat(run, player, map, testPin);
                 steps = CheckOption(run);
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
@@ -293,6 +294,31 @@ namespace Automatics.SmokeTest
             finally
             {
                 if (map && map.m_mode != originalMode) map.SetMapMode(originalMode);
+            }
+        }
+
+        private static void CheckDistanceFormat(FeatureRun run, Player player, Minimap map, Minimap.PinData pin)
+        {
+            var position = pin.m_pos;
+            var mode = map.m_mode;
+            try
+            {
+                var camera = GameCamera.instance.transform;
+                map.SetMapMode(Minimap.MapMode.Small);
+                Map.MovePin(pin, camera.position + camera.forward * 20f - Vector3.up * 2f);
+                Navigation.Update(player);
+                var label = Navigation.Label;
+                var textType = AccessTools.Property(typeof(Minimap.PinNameData), "PinNameText").PropertyType;
+                var text = label ? (string)AccessTools.Property(textType, "text").GetValue(
+                    label.transform.Find("Name").GetComponent(textType)) : "";
+                var expected = pin.m_name + " [" + Mathf.RoundToInt(Utils.DistanceXZ(player.transform.position, pin.m_pos)) + "m]";
+                if (label && label.activeInHierarchy && text == expected) run.Pass("guide_distance_format");
+                else run.Fail("guide_distance_format", "navigation label did not show bracketed horizontal distance: " + text);
+            }
+            finally
+            {
+                Map.MovePin(pin, position);
+                map.SetMapMode(mode);
             }
         }
 

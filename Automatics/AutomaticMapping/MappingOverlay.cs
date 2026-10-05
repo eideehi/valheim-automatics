@@ -79,7 +79,7 @@ namespace Automatics.AutomaticMapping
                     _displayName = Localization.instance != null ? Localization.instance.Localize(name) : name;
                 }
                 _meters = meters;
-                NameTextProperty.SetValue(_nameText, _displayName + " " + meters + "m");
+                NameTextProperty.SetValue(_nameText, _displayName + " [" + meters + "m]");
             }
             _healthFast.SetValue(health);
             _healthSlow.SetValue(health);
