@@ -42,6 +42,38 @@ namespace Automatics.AutomaticMapping
                 Message(player, "@message_automatic_mapping_pin_no_hit");
                 return null;
             }
+
+            // The object's static automatic pin is saved as a large-map click saves it, not joined
+            // by a second pin, so a flora patch keeps one pin; creatures and vehicles still get one.
+            var automatic = FindStaticPin(aimed);
+            if (automatic != null)
+            {
+                if (automatic.m_ownerID == 0L && !automatic.m_save && StaticObjectMapping.SetSaveFlag(automatic))
+                {
+                    Map.RefreshPins();
+                    return automatic;
+                }
+                Message(player, "@message_automatic_mapping_pin_duplicate");
+                return null;
+            }
+
+            // A patch without an automatic pin, such as one beyond the static mapping range, gets the
+            // pin the scan would give it: one for the whole patch, at its centre and with its name.
+            var network = FloraNode.Find(aimed.UniqueId)?.Network;
+            if (network != null && network.NodeCount > 1 && aimed.Component)
+            {
+                var sourceToken = Objects.GetName(aimed.Component);
+                if (ValheimObject.Flora.GetIdentify(sourceToken, out var identifier))
+                {
+                    var label = ValheimObject.Flora.GetName(identifier, out var registered) ? registered : sourceToken;
+                    var patchPin = Minimap.instance.AddPin(PatchCenter(network), aimed.Type,
+                        Map.StoredPinName(StaticObjectMapping.ComputeFloraPinName(label, network.NodeCount)), true,
+                        false);
+                    Message(player, "@message_automatic_mapping_pin_added");
+                    return patchPin;
+                }
+            }
+
             var position = aimed.Position;
             var name = aimed.Name;
             var type = aimed.Type;
@@ -49,7 +81,7 @@ namespace Automatics.AutomaticMapping
             // Include pins without a live marker: outside the minimap view, with the minimap
             // hidden, or added this frame.
             if (Map.GetClosestPin(position, 2f,
-                    pin => pin.m_save && !Map.IsAutomaticPin(pin) && pin.m_name == name,
+                    pin => pin.m_save && !Map.IsAutomaticPin(pin) && Localization.instance.Localize(pin.m_name) == name,
                     includeInactive: true) != null)
             {
                 Message(player, "@message_automatic_mapping_pin_duplicate");
@@ -59,6 +91,46 @@ namespace Automatics.AutomaticMapping
             var added = Minimap.instance.AddPin(position, type, name, true, false);
             Message(player, "@message_automatic_mapping_pin_added");
             return added;
+        }
+
+        private static Minimap.PinData FindStaticPin(AimedObject aimed)
+        {
+            if (aimed.Location)
+                return Map.GetClosestPin(aimed.Location.transform.position, aimed.Location.m_exteriorRadius,
+                    pin => pin.m_ownerID == 0L && Map.IsAutomaticPin(pin) &&
+                           (pin.m_name == aimed.StoredName || pin.m_name == aimed.Name),
+                    includeInactive: true);
+            if (aimed.UniqueId == ZDOID.None) return null;
+            if (StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(aimed.UniqueId),
+                    out var cached))
+                return cached;
+
+            // A saved patch pin leaves the cache; it stands at the patch centre, where the scan adds
+            // no other pin, under the flora's name or its merged name.
+            var network = FloraNode.Find(aimed.UniqueId)?.Network;
+            return network == null
+                ? null
+                : Map.GetClosestPin(PatchCenter(network), 1f,
+                    pin => pin.m_ownerID == 0L && (pin.m_save || StaticObjectMapping.OwnsPin(pin)) &&
+                           (Localization.instance.Localize(pin.m_name) == aimed.Name ||
+                            (PinCategories.TryGetFloraClusterLabel(pin.m_name, out var baseLabel) &&
+                             baseLabel == aimed.Name)),
+                    includeInactive: true);
+        }
+
+        // FloraNetwork.Center is refreshed only when the static scan reaches the patch, so the
+        // centre is worked out here as the network works it out: the mean of its valid nodes.
+        private static Vector3 PatchCenter(FloraNetwork network)
+        {
+            var center = Vector3.zero;
+            var count = 0;
+            foreach (var node in network.EnumerateNodes())
+            {
+                if (!node || !node.IsValid()) continue;
+                center += node.Position;
+                count++;
+            }
+            return count > 0 ? center / count : Vector3.zero;
         }
 
         internal sealed class AimedObject

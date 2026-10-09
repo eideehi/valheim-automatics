@@ -1473,6 +1473,138 @@ namespace Automatics.SmokeTest
                 new HashSet<ZDOID>(chainObjects.Ids).SetEquals(chainIds) &&
                 PinTooltipContent.Build(chainPin, chainObjects).Text.Contains(Line("ready_count", 4, 4)),
                 "saved x4 flora pin did not include the endpoints linked through neighbours 7 m apart at merge range 8");
+
+            // Pin Looked-at Object Key on a member of a merged flora patch. The patch's network
+            // forms a second or two after its pickables spawn, so it is built here; the saved pin
+            // above stands at the patch centre and is taken away, so the key first meets a patch
+            // without any pin and then one with an automatic pin.
+            map.RemovePin(cluster);
+            var player = Player.m_localPlayer;
+            var readyNode = FloraNode.Find(readyId);
+            var pickedNode = FloraNode.Find(pickedId);
+            if (readyNode && pickedNode)
+                AccessTools.Method(typeof(FloraNode), "NetworkConstruction").Invoke(readyNode, null);
+            var network = readyNode ? readyNode.Network : null;
+            if (network == null || !pickedNode || !ReferenceEquals(network, pickedNode.Network) || network.NodeCount != 2)
+            {
+                run.Skip("pin_key_creates_patch_pin", "the two test flora did not form one flora network");
+                run.Skip("pin_key_patch_pin_not_duplicated", "no flora network was available");
+                run.Skip("pin_key_saves_automatic_pin", "the two test flora did not form one flora network");
+                run.Skip("pin_key_saved_pin_not_duplicated", "no flora network was available");
+                return;
+            }
+            network.Update();
+            // The camera ray first, then onto each flora from just beside it on every side: the
+            // section's test deposit stands close enough to cover the flora from some directions.
+            var rays = new List<KeyValuePair<Ray, ZDOID>>();
+            var colliders = new[] { ready, picked }.Select(target => new KeyValuePair<Collider, ZDOID>(
+                target.GetComponentsInChildren<Collider>().FirstOrDefault(x => x.enabled && x.gameObject.activeInHierarchy),
+                target.GetComponent<ZNetView>().GetZDO().m_uid)).Where(x => x.Key).ToList();
+            if (GameCamera.instance)
+            {
+                var camera = GameCamera.instance.transform.position;
+                foreach (var target in colliders)
+                    rays.Add(new KeyValuePair<Ray, ZDOID>(new Ray(camera, target.Key.bounds.center - camera), target.Value));
+            }
+            foreach (var direction in new[]
+                         { Vector3.down, Vector3.up, Vector3.forward, Vector3.back, Vector3.left, Vector3.right })
+                foreach (var height in new[] { 1.5f, 3f })
+                    foreach (var target in colliders)
+                        rays.Add(new KeyValuePair<Ray, ZDOID>(
+                            new Ray(target.Key.bounds.center - direction * height, direction), target.Value));
+            var ray = default(Ray);
+            var aimable = false;
+            var rayNotes = new List<string>();
+            var interactMask = AccessTools.FieldRefAccess<Player, int>("m_interactMask")(player);
+            foreach (var candidate in rays)
+            {
+                if (ObjectPinning.TryResolveFromRay(player, candidate.Key, out var aimed) &&
+                    aimed.UniqueId == candidate.Value)
+                {
+                    ray = candidate.Key;
+                    aimable = true;
+                    break;
+                }
+                var first = Physics.RaycastAll(candidate.Key, MappingConfig.PinObjectRange, interactMask)
+                    .Where(x => !x.collider.transform.IsChildOf(player.transform))
+                    .OrderBy(x => x.distance).FirstOrDefault();
+                rayNotes.Add(first.collider
+                    ? $"hit {first.collider.name}/{LayerMask.LayerToName(first.collider.gameObject.layer)}" +
+                      $"{(first.collider.isTrigger ? "/trigger" : "")} root {first.collider.transform.root.name} " +
+                      $"at {first.distance:0.0}m resolved {(aimed != null ? aimed.UniqueId.ToString() : "none")}"
+                    : "hit nothing");
+            }
+            if (!aimable)
+            {
+                var targets = string.Join(", ", colliders.Select(x =>
+                    $"{x.Key.name}/{LayerMask.LayerToName(x.Key.gameObject.layer)}{(x.Key.isTrigger ? "/trigger" : "")} " +
+                    $"{x.Value}"));
+                run.Skip("pin_key_creates_patch_pin", "no test ray resolved the test flora: targets [" + targets +
+                    "]; rays [" + string.Join("; ", rayNotes) + "]");
+                run.Skip("pin_key_patch_pin_not_duplicated", "no unobstructed flora ray was available");
+                run.Skip("pin_key_saves_automatic_pin", "every test ray to the test flora is obstructed");
+                run.Skip("pin_key_saved_pin_not_duplicated", "no unobstructed flora ray was available");
+                return;
+            }
+            Minimap.PinData PressPinKey()
+            {
+                var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                try
+                {
+                    return ObjectPinning.TryPinFromRay(player, ray);
+                }
+                finally
+                {
+                    // Include a pin even if a message or an AddPin postfix throws after adding it.
+                    pins.AddRange(Map.GetAllPins().Where(pin => !before.Contains(pin)));
+                }
+            }
+
+            // Without an automatic pin, the key adds the pin the scan would give the patch.
+            var existing = new HashSet<Minimap.PinData>(Map.GetAllPins());
+            var count = existing.Count;
+            var patchPin = PressPinKey();
+            var patchObjects = patchPin != null ? PinTooltipContent.ResolveSavedObjects(patchPin) : null;
+            Check(run, "pin_key_creates_patch_pin", patchPin != null && !existing.Contains(patchPin) &&
+                Map.GetAllPins().Count == count + 1 && patchPin.m_save && !Map.IsAutomaticPin(patchPin) &&
+                Vector3.Distance(patchPin.m_pos, network.Center) < 0.01f &&
+                patchPin.m_name == Map.StoredPinName(StaticObjectMapping.ComputeFloraPinName(floraLabel, 2)) &&
+                patchObjects.MergedFlora && new HashSet<ZDOID>(patchObjects.Ids).SetEquals(new[] { readyId, pickedId }),
+                "the key on a flora patch without an automatic pin did not add one saved pin named and placed like its automatic pin");
+            // A pin that was already on the map is not the test's to remove.
+            if (patchPin == null || existing.Contains(patchPin))
+                run.Skip("pin_key_patch_pin_not_duplicated", "the first press created no new pin");
+            else
+            {
+                count = Map.GetAllPins().Count;
+                Check(run, "pin_key_patch_pin_not_duplicated", PressPinKey() == null && Map.GetAllPins().Count == count,
+                    "the key on a member of a flora patch with its saved patch pin added another pin");
+                // The automatic-pin checks below need the patch centre free.
+                map.RemovePin(patchPin);
+            }
+
+            var keyPin = Map.AddPin(network.Center, clusterName, false, new Target { name = floraLabel });
+            pins.Add(keyPin);
+            AssociateStatic(keyPin, readyId, PinKind.Flora);
+            AssociateStatic(keyPin, pickedId, PinKind.Flora);
+            var keyPinName = keyPin.m_name;
+            var automatic = !keyPin.m_save && Map.IsAutomaticPin(keyPin) && StaticObjectMapping.OwnsPin(keyPin);
+            count = Map.GetAllPins().Count;
+            var pressed = PressPinKey();
+            var keyObjects = PinTooltipContent.ResolveSavedObjects(keyPin);
+            Check(run, "pin_key_saves_automatic_pin", automatic && ReferenceEquals(pressed, keyPin) &&
+                Map.GetAllPins().Count == count && keyPin.m_save && !Map.IsAutomaticPin(keyPin) &&
+                !StaticObjectMapping.OwnsPin(keyPin) && keyPin.m_name == keyPinName && keyObjects.MergedFlora &&
+                new HashSet<ZDOID>(keyObjects.Ids).SetEquals(new[] { readyId, pickedId }),
+                "unsaved associated merged flora pin precondition or the key's in-place save failed");
+            if (!keyPin.m_save)
+            {
+                run.Skip("pin_key_saved_pin_not_duplicated", "the first press did not save the automatic pin");
+                return;
+            }
+            count = Map.GetAllPins().Count;
+            Check(run, "pin_key_saved_pin_not_duplicated", PressPinKey() == null && Map.GetAllPins().Count == count,
+                "the key on a member of a saved flora patch pin added another pin");
         }
 
         private static void CountSectorRead() => _sectorReads++;

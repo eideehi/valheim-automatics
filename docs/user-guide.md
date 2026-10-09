@@ -247,7 +247,11 @@ even when detached from its hierarchy. Overlapping areas use the nearest
 containing location, and when that location is not recognized the usual pin
 applies. Player-built pieces, creatures, trees, deposits, loose items and other
 objects such as rune stones keep their own pins. Bare ground outside a location
-gets an unnamed generic pin.
+gets an unnamed generic pin. An object that already has an automatic pin, other
+than a creature or vehicle, gets that pin saved instead of a new one, as
+clicking it on the large map does, and a flora patch, with or without an
+automatic pin, gets one pin for the whole patch; pressing the key again there
+reports a duplicate.
 These are ordinary saved pins: they survive reload and module toggles and are
 not hidden by the unexplored-area filter. A saved non-automatic pin with the
 same name within 2 meters prevents a duplicate. Adding a pin, finding a duplicate,
@@ -303,6 +307,8 @@ To keep an automatic pin that is not saved, left-click it on the large map. It
 becomes a saved pin that Automatics no longer tracks, and a short message confirms
 it; automatic mapping no longer moves or removes it. For a creature, the saved pin
 stays where the creature was, and a new automatic pin follows the creature.
+`Pin Looked-at Object Key` saves the automatic pin of what you look at the same
+way, except for creatures and vehicles.
 
 ### User-defined mapping targets
 
@@ -429,11 +435,12 @@ the tooltip says `Not loaded — details unavailable`. These two lines are
 client-only.
 
 Your own saved flora and mineral pins also show details without a live link:
-automatic pins you clicked to save, and pins made with
-`Pin Looked-at Object Key` as long as their name is still the object's name in
-the current game language; after you change the game language, older pins no
-longer match. A pin you typed with exactly that name is treated the same way,
-and a name that belongs to objects of different categories gets no details.
+automatic pins you saved by clicking them or with `Pin Looked-at Object Key`,
+the key's flora patch pins, and its other new pins as long as their name is
+still the object's name in the current game language; after you change the
+game language, those older pins no longer match. A pin you typed with exactly
+that name is treated the same way, and a name that belongs to objects of
+different categories gets no details.
 Shared pins and your other manual pins, typed or made with
 `Pin Looked-at Object Key`, show only name and distance. When
 you hover a different pin,

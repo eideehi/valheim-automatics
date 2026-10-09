@@ -457,6 +457,7 @@ namespace Automatics.SmokeTest
                     {
                         if (!TryArrange(player, worldPiece, location, out var ray)) continue;
                         found = location;
+                        var kept = ExpectLocationPinKept(location, out var keptDetail);
                         var count = Map.GetAllPins().Count;
                         var added = Invoke(player, ray, created);
                         var expectedType = IconPack.GetPinType(new Target
@@ -464,13 +465,18 @@ namespace Automatics.SmokeTest
                             name = location.Label, prefabName = location.Prefab
                         });
                         if (!piece.IsPlacedByPlayer() && !worldPiece.GetComponentInParent<Location>() &&
-                            added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
-                            added.m_name == location.Name && added.m_type == expectedType &&
-                            !Map.IsAutomaticPin(added) &&
-                            Vector3.Distance(added.m_pos, location.Position) < 0.01f)
-                            run.Pass(check, "a detached piece with creator 0 saved the containing location's name, icon and position");
+                            (kept != null
+                                ? kept(added, count)
+                                : added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
+                                  added.m_name == location.Name && added.m_type == expectedType &&
+                                  !Map.IsAutomaticPin(added) &&
+                                  Vector3.Distance(added.m_pos, location.Position) < 0.01f))
+                            run.Pass(check, kept != null
+                                ? "a detached piece with creator 0 resolved the containing location: " + keptDetail
+                                : "a detached piece with creator 0 saved the containing location's name, icon and position");
                         else
                             run.Fail(check, "the detached world-generated piece did not save exactly one location pin");
+                        // A location pin the key saved goes too; the static scan adds the automatic pin back.
                         if (added != null) Minimap.instance.RemovePin(added);
                         break;
                     }
@@ -630,18 +636,24 @@ namespace Automatics.SmokeTest
                 var parent = hit.collider.GetComponentInParent<Location>();
                 if (parent && parent != location.Location) continue;
 
+                var kept = ExpectLocationPinKept(location, out var keptDetail);
                 var count = Map.GetAllPins().Count;
                 var added = Invoke(player, ray, created);
                 var expectedType = IconPack.GetPinType(new Target
                 {
                     name = location.Label, prefabName = location.Prefab
                 });
-                if (added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
-                    added.m_name == location.Name && added.m_type == expectedType && !Map.IsAutomaticPin(added) &&
-                    Vector3.Distance(added.m_pos, location.Position) < 0.01f)
-                    run.Pass(check, "an interior surface saved its zone location's name, icon and entrance position");
+                if (kept != null
+                        ? kept(added, count)
+                        : added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
+                          added.m_name == location.Name && added.m_type == expectedType && !Map.IsAutomaticPin(added) &&
+                          Vector3.Distance(added.m_pos, location.Position) < 0.01f)
+                    run.Pass(check, kept != null
+                        ? "an interior surface resolved its zone location: " + keptDetail
+                        : "an interior surface saved its zone location's name, icon and entrance position");
                 else
                     run.Fail(check, "the interior ray did not save exactly one pin for its zone location");
+                // A location pin the key saved goes too; the static scan adds the automatic pin back.
                 if (added != null) Minimap.instance.RemovePin(added);
                 return;
             }
@@ -667,8 +679,35 @@ namespace Automatics.SmokeTest
         {
             // Include pins without a live minimap marker, as the action does.
             return Map.GetClosestPin(position, 2f,
-                pin => pin.m_save && !Map.IsAutomaticPin(pin) && pin.m_name == name,
+                pin => pin.m_save && !Map.IsAutomaticPin(pin) && Localization.instance.Localize(pin.m_name) == name,
                 includeInactive: true) != null;
+        }
+
+        // A location's automatic pin, found as the action finds it, is kept instead of joined by a
+        // new pin: an unsaved one comes back saved in place and no longer automatic, and a saved
+        // one makes the press add nothing. Null when the location has no such pin, so the press
+        // adds a pin of its own.
+        private static Func<Minimap.PinData, int, bool> ExpectLocationPinKept(KnownLocation location,
+            out string detail)
+        {
+            var stored = Map.StoredPinName(location.Label);
+            var pin = Map.GetClosestPin(location.Position, location.Location.m_exteriorRadius,
+                x => x.m_ownerID == 0L && Map.IsAutomaticPin(x) &&
+                     (x.m_name == stored || x.m_name == location.Name),
+                includeInactive: true);
+            detail = null;
+            if (pin == null) return null;
+            var saved = pin.m_save;
+            var name = pin.m_name;
+            var position = pin.m_pos;
+            var type = pin.m_type;
+            detail = saved
+                ? "its pin was already saved, so the key added nothing"
+                : "the key saved its automatic pin in place";
+            return (added, count) => Map.GetAllPins().Count == count && (saved
+                ? added == null
+                : ReferenceEquals(added, pin) && pin.m_save && !Map.IsAutomaticPin(pin) && pin.m_name == name &&
+                  pin.m_pos == position && pin.m_type == type);
         }
 
         // Read existing locations only: spawning their prefab can generate terrain or entities.
@@ -731,20 +770,27 @@ namespace Automatics.SmokeTest
                         CheckLocationNavigation(run, player, ray, location);
                         navigationChecked = true;
                     }
+                    var kept = ExpectLocationPinKept(location, out var keptDetail);
                     var count = Map.GetAllPins().Count;
                     var added = Invoke(player, ray, created);
                     var expectedType = IconPack.GetPinType(new Target
                     {
                         name = location.Label, prefabName = location.Prefab
                     });
-                    if (added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
-                        added.m_name == location.Name && added.m_type == expectedType && !Map.IsAutomaticPin(added) &&
-                        Vector3.Distance(added.m_pos, location.Position) < 0.01f &&
-                        Invoke(player, ray, created) == null && Map.GetAllPins().Count == count + 1)
-                        run.Pass(check, "one saved location pin with the recognized name, icon and position; repeat adds nothing");
+                    if (kept != null
+                            ? kept(added, count) &&
+                              Invoke(player, ray, created) == null && Map.GetAllPins().Count == count
+                            : added != null && Map.GetAllPins().Count == count + 1 && added.m_save &&
+                              added.m_name == location.Name && added.m_type == expectedType && !Map.IsAutomaticPin(added) &&
+                              Vector3.Distance(added.m_pos, location.Position) < 0.01f &&
+                              Invoke(player, ray, created) == null && Map.GetAllPins().Count == count + 1)
+                        run.Pass(check, kept != null
+                            ? "the location ray resolved the recognized location: " + keptDetail + "; repeat adds nothing"
+                            : "one saved location pin with the recognized name, icon and position; repeat adds nothing");
                     else
                         run.Fail(check, "the location ray did not add exactly one recognized location pin or allowed a duplicate");
-                    // Let the other ray check exercise the same location without a test duplicate.
+                    // Let the other ray check exercise the same location without a test duplicate. A
+                    // location pin the key saved goes too; the static scan adds the automatic pin back.
                     if (added != null) Minimap.instance.RemovePin(added);
                     return;
                 }
