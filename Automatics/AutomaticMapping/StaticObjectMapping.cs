@@ -277,9 +277,9 @@ namespace Automatics.AutomaticMapping
             _currentPassId = 0;
         }
 
-        public static void RemoveCachedPins()
+        public static bool RemoveCachedPins()
         {
-            if (PinDataCache.Count == 0) return;
+            if (PinDataCache.Count == 0) return false;
 
             StaleRemovalScratch.Clear();
             foreach (var pair in PinDataCache)
@@ -293,6 +293,7 @@ namespace Automatics.AutomaticMapping
             }
 
             StaleRemovalScratch.Clear();
+            return true;
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)

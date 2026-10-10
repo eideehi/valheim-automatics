@@ -16,6 +16,14 @@ namespace Automatics.AutomaticStorage
         private static bool _spriteWarningLogged;
         private static InventoryGrid _playerGrid;
 
+        // What the icons were last built from. RefreshIcons runs on every frame the
+        // inventory is open, so it does nothing until one of these changes.
+        private static Player _refreshedPlayer;
+        private static string _refreshedLockedSlots;
+        private static Transform _refreshedFirstElement;
+        private static int _refreshedElementCount;
+        private static bool _refreshedWithSprite;
+
         internal static void CaptureSprite()
         {
             if (_lockSprite) return;
@@ -91,7 +99,30 @@ namespace Automatics.AutomaticStorage
         internal static void RefreshIcons(InventoryGrid grid, Player player)
         {
             if (!Module.Running || !grid || player != Player.m_localPlayer) return;
+
+            string lockedSlots = null;
+            if (player != null) player.m_customData.TryGetValue(CustomDataKey, out lockedSlots);
+
+            // The grid creates its elements as children of m_gridRoot and replaces all of them
+            // when its size changes, so the child count and the first child tell a replaced
+            // element set from the one the icons were built on.
+            var root = grid.m_gridRoot;
+            var elementCount = root ? root.childCount : 0;
+            var firstElement = elementCount > 0 ? root.GetChild(0) : null;
+
+            if (ReferenceEquals(_playerGrid, grid) &&
+                ReferenceEquals(_refreshedPlayer, player) &&
+                _refreshedWithSprite == (bool)_lockSprite &&
+                _refreshedLockedSlots == lockedSlots &&
+                _refreshedElementCount == elementCount &&
+                ReferenceEquals(_refreshedFirstElement, firstElement)) return;
+
             _playerGrid = grid;
+            _refreshedPlayer = player;
+            _refreshedLockedSlots = lockedSlots;
+            _refreshedElementCount = elementCount;
+            _refreshedFirstElement = firstElement;
+            _refreshedWithSprite = _lockSprite;
             var slots = GetLockedSlots(player);
             foreach (var element in grid.GetComponentsInChildren<InventoryElement>(true))
             {
@@ -125,13 +156,21 @@ namespace Automatics.AutomaticStorage
 
         internal static void HideIcons()
         {
-            if (!_playerGrid) return;
-            foreach (var element in _playerGrid.GetComponentsInChildren<InventoryElement>(true))
+            if (_playerGrid)
             {
-                var icon = element.transform.Find(IconName);
-                if (icon) icon.gameObject.SetActive(false);
+                foreach (var element in _playerGrid.GetComponentsInChildren<InventoryElement>(true))
+                {
+                    var icon = element.transform.Find(IconName);
+                    if (icon) icon.gameObject.SetActive(false);
+                }
             }
+
             _playerGrid = null;
+            _refreshedPlayer = null;
+            _refreshedLockedSlots = null;
+            _refreshedFirstElement = null;
+            _refreshedElementCount = 0;
+            _refreshedWithSprite = false;
         }
     }
 }

@@ -32,9 +32,10 @@ namespace Automatics.AutomaticMapping
 
         private static void RemoveCachedPins()
         {
-            DynamicObjectMapping.RemoveCachedPins();
-            StaticObjectMapping.RemoveCachedPins();
-            Map.RefreshPins();
+            // Both calls must run, so the results are combined without short-circuiting.
+            var removed = DynamicObjectMapping.RemoveCachedPins();
+            removed |= StaticObjectMapping.RemoveCachedPins();
+            if (removed) Map.RefreshPins();
         }
 
         private static bool CanRun(Player player)

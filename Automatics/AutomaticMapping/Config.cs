@@ -211,6 +211,7 @@ namespace Automatics.AutomaticMapping
             RefreshNavigationGuideColor();
             _navigationGuideColor.SettingChanged += (_, __) => RefreshNavigationGuideColor();
             _hideUnexploredAutomaticMappingPins.SettingChanged += OnHideUnexploredPinsChanged;
+            _enableAutomaticMapping.SettingChanged += OnHideUnexploredPinsChanged;
             RefreshMapFilterCategories();
             _mapFilterHiddenCategories.SettingChanged += (_, __) =>
             {
@@ -232,9 +233,11 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        ///     Redraws the pins when hiding unexplored automatic pins is switched. The bridge is
-        ///     bound whether the module runs or not, so it checks the applied state first: while
-        ///     the module is off the map is left exactly as the game draws it.
+        ///     Redraws the pins when a setting that changes which pins are drawn is switched:
+        ///     automatic mapping, hiding unexplored automatic pins, the category filter or map
+        ///     enhancements. The bridge is bound whether the module runs or not, so it checks the
+        ///     applied state first: while the module is off the map is left exactly as the game
+        ///     draws it.
         /// </summary>
         private static void OnHideUnexploredPinsChanged(object sender, EventArgs e)
         {

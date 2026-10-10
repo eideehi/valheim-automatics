@@ -262,17 +262,18 @@ namespace Automatics.AutomaticMapping
             }
         }
 
-        public static void RemoveCachedPins(ISet<ZDOID> excludes = null)
+        public static bool RemoveCachedPins(ISet<ZDOID> excludes = null)
         {
             // A null excludes set means a full turn-off (mapping disabled or
             // DynamicObjectMappingRange <= 0), not a normal scan. Drain the vehicle pin
             // cache on that path too so its ZDOID->PinData entries do not leak for the
             // session; the saved vehicle minimap pins persist and are re-adopted by
             // TryFindExistingVehiclePin when mapping resumes.
+            var removed = false;
             if (excludes is null)
-                RemoveVehicleCachedPins();
+                removed = RemoveVehicleCachedPins();
 
-            if (PinDataCache.Count == 0) return;
+            if (PinDataCache.Count == 0) return removed;
 
             if (excludes is null)
                 excludes = EmptyCacheKeys;
@@ -288,6 +289,7 @@ namespace Automatics.AutomaticMapping
             {
                 var key = RemoveKeyBuffer[i];
                 if (!PinDataCache.TryGetValue(key, out var pinData)) continue;
+                removed = true;
                 PinDataCache.Remove(key);
                 PinCategoryCache.Remove(key);
                 PinKeyCache.Remove(pinData);
@@ -299,6 +301,7 @@ namespace Automatics.AutomaticMapping
             }
 
             RemoveKeyBuffer.Clear();
+            return removed;
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
@@ -310,15 +313,16 @@ namespace Automatics.AutomaticMapping
         // Drops every vehicle pin cache entry without touching the saved minimap pins
         // (vehicle pins are created with save=true). Used when the dynamic scan turns off
         // so the per-vehicle cache dictionaries do not accumulate for the whole session.
-        private static void RemoveVehicleCachedPins()
+        private static bool RemoveVehicleCachedPins()
         {
-            if (VehiclePinCache.Count == 0 && VehicleDirtyPins.Count == 0) return;
+            if (VehiclePinCache.Count == 0 && VehicleDirtyPins.Count == 0) return false;
 
             VehiclePinCache.Clear();
             VehiclePinKeyCache.Clear();
             VehiclePinTargetCache.Clear();
             VehiclePinVelocityCache.Clear();
             VehicleDirtyPins.Clear();
+            return true;
         }
 
         /// <summary>

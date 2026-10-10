@@ -466,7 +466,12 @@ namespace Automatics.AutomaticMapping
                 }
                 if (instance) _lastPosition = instance.transform.position;
                 if (!Map.ContainsPin(_targetPin)) ReplaceMissingCreaturePin();
-                if (_temporaryMarker != null) Map.MovePin(_temporaryMarker, _lastPosition);
+                if (_temporaryMarker != null && _temporaryMarker.m_pos != _lastPosition)
+                {
+                    Map.MovePin(_temporaryMarker, _lastPosition);
+                    // MovePin only writes the position, so ask the map to redraw the marker.
+                    Map.RefreshPins();
+                }
             }
             else if (!Map.ContainsPin(_targetPin) || Map.ShouldHideAutomaticPin(_targetPin))
                 ClearTarget(false);
