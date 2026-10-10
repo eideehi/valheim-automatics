@@ -334,8 +334,12 @@ Bind `Navigate to Looked-at Object Key` (unbound by default) to start navigation
 to what the crosshair is on, within `Object Pin Range` from the camera. It uses
 the object's automatic pin when available, even if label search hides it.
 Otherwise, including when its category or unexplored-area filter hides the pin,
-it adds a temporary unsaved marker. That marker is removed when navigation ends,
-you choose another target, or the module is turned off. Press the shortcut while
+it adds a temporary unsaved marker. On a plant that belongs to a flora patch,
+it targets the patch as `Pin Looked-at Object Key` does: the patch's automatic
+pin or the patch pin you saved, or, when the patch has no pin, a temporary
+marker at the patch centre with the patch's merged name. A temporary marker is
+removed when navigation ends, you choose another target, or the module is
+turned off. Press the shortcut while
 looking at the current target to clear navigation. The shortcut works only while
 the module is running and no menu or text input has focus.
 
@@ -343,7 +347,11 @@ Creature targets selected with this shortcut or through their automatic map
 pins are followed: the destination moves with the creature while it is loaded
 and stays at its last position while it is not. Navigation continues when the
 creature's dynamic pin disappears out of range, and ends when the creature dies
-or its object is removed. A pin you saved yourself stays a fixed destination.
+or its object is removed. When a creature is followed through a temporary
+marker, navigation switches to its automatic pin and removes the marker as soon
+as the pin appears, so the creature never shows two pins; while a category or
+unexplored-area filter hides that pin, the marker stays. A pin you saved
+yourself stays a fixed destination.
 
 While navigation is active and the large map is closed, a loaded non-boss
 creature target shows Valheim's health and awareness HUD with the horizontal

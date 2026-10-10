@@ -59,19 +59,11 @@ namespace Automatics.AutomaticMapping
 
             // A patch without an automatic pin, such as one beyond the static mapping range, gets the
             // pin the scan would give it: one for the whole patch, at its centre and with its name.
-            var network = FloraNode.Find(aimed.UniqueId)?.Network;
-            if (network != null && network.NodeCount > 1 && aimed.Component)
+            if (TryGetPatchPin(aimed, out var patchPosition, out var patchName))
             {
-                var sourceToken = Objects.GetName(aimed.Component);
-                if (ValheimObject.Flora.GetIdentify(sourceToken, out var identifier))
-                {
-                    var label = ValheimObject.Flora.GetName(identifier, out var registered) ? registered : sourceToken;
-                    var patchPin = Minimap.instance.AddPin(PatchCenter(network), aimed.Type,
-                        Map.StoredPinName(StaticObjectMapping.ComputeFloraPinName(label, network.NodeCount)), true,
-                        false);
-                    Message(player, "@message_automatic_mapping_pin_added");
-                    return patchPin;
-                }
+                var patchPin = Minimap.instance.AddPin(patchPosition, aimed.Type, patchName, true, false);
+                Message(player, "@message_automatic_mapping_pin_added");
+                return patchPin;
             }
 
             var position = aimed.Position;
@@ -93,7 +85,25 @@ namespace Automatics.AutomaticMapping
             return added;
         }
 
-        private static Minimap.PinData FindStaticPin(AimedObject aimed)
+        // The position and name the scan would give the pin of the flora patch the object belongs
+        // to; false for an object outside a patch of two or more.
+        internal static bool TryGetPatchPin(AimedObject aimed, out Vector3 position, out string name)
+        {
+            position = default;
+            name = null;
+            var network = FloraNode.Find(aimed.UniqueId)?.Network;
+            if (network == null || network.NodeCount <= 1 || !aimed.Component) return false;
+
+            var sourceToken = Objects.GetName(aimed.Component);
+            if (!ValheimObject.Flora.GetIdentify(sourceToken, out var identifier)) return false;
+
+            var label = ValheimObject.Flora.GetName(identifier, out var registered) ? registered : sourceToken;
+            position = PatchCenter(network);
+            name = Map.StoredPinName(StaticObjectMapping.ComputeFloraPinName(label, network.NodeCount));
+            return true;
+        }
+
+        internal static Minimap.PinData FindStaticPin(AimedObject aimed)
         {
             if (aimed.Location)
                 return Map.GetClosestPin(aimed.Location.transform.position, aimed.Location.m_exteriorRadius,

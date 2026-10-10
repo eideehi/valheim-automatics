@@ -1054,6 +1054,7 @@ namespace Automatics.SmokeTest
             var pins = new List<Minimap.PinData>();
             var settings = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
             var originalMode = map.m_mode;
+            var originalTarget = Navigation.CaptureTarget();
             var originalSearch = MapFilter.SearchText;
             var originalSearchPinned = MapFilter.SearchPinned;
             var originalFocus = MapFilter.SearchFocused;
@@ -1077,6 +1078,7 @@ namespace Automatics.SmokeTest
                 pins.Clear();
                 foreach (var go in objects.ToArray()) Remove(go);
                 objects.Clear();
+                if (map) Navigation.RestoreTarget(originalTarget);
                 SmokeSession.RestoreSettings(run.RunId);
                 if (MappingModule.Running && MappingConfig.EnableMapEnhancements)
                 {
@@ -1491,6 +1493,10 @@ namespace Automatics.SmokeTest
                 run.Skip("pin_key_patch_pin_not_duplicated", "no flora network was available");
                 run.Skip("pin_key_saves_automatic_pin", "the two test flora did not form one flora network");
                 run.Skip("pin_key_saved_pin_not_duplicated", "no flora network was available");
+                run.Skip("nav_key_marks_patch", "no flora network was available");
+                run.Skip("nav_key_repeat_clears", "no flora network was available");
+                run.Skip("nav_key_targets_automatic_patch_pin", "no flora network was available");
+                run.Skip("nav_key_targets_saved_patch_pin", "no flora network was available");
                 return;
             }
             network.Update();
@@ -1544,6 +1550,10 @@ namespace Automatics.SmokeTest
                 run.Skip("pin_key_patch_pin_not_duplicated", "no unobstructed flora ray was available");
                 run.Skip("pin_key_saves_automatic_pin", "every test ray to the test flora is obstructed");
                 run.Skip("pin_key_saved_pin_not_duplicated", "no unobstructed flora ray was available");
+                run.Skip("nav_key_marks_patch", "no unobstructed flora ray was available");
+                run.Skip("nav_key_repeat_clears", "no unobstructed flora ray was available");
+                run.Skip("nav_key_targets_automatic_patch_pin", "no unobstructed flora ray was available");
+                run.Skip("nav_key_targets_saved_patch_pin", "no unobstructed flora ray was available");
                 return;
             }
             Minimap.PinData PressPinKey()
@@ -1559,6 +1569,42 @@ namespace Automatics.SmokeTest
                     pins.AddRange(Map.GetAllPins().Where(pin => !before.Contains(pin)));
                 }
             }
+
+            // Navigate to Looked-at Object Key on the same patch; the run restores the key and the
+            // navigation target.
+            var navBound = SmokeSession.BeginSetting(run.RunId, MappingConfig.NavigateToAimedObjectKeyEntry,
+                    out var navSetting, out var navRefusal) &&
+                SmokeSession.WriteSetting(run.RunId, navSetting, new KeyboardShortcut(KeyCode.F8), out navRefusal);
+            // The key acts only with the large map closed: the player takes no input while it is
+            // open, and CheckUi's search defocus blocks text input on the large map for the rest
+            // of this frame. Each press returns the key's gate state for the failure messages.
+            string PressNavKey()
+            {
+                var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                var mode = map.m_mode;
+                try
+                {
+                    map.SetMapMode(Minimap.MapMode.Small);
+                    var state = $"running={MappingModule.Running}, large map={map.m_mode == Minimap.MapMode.Large}, " +
+                                $"text input={Minimap.InTextInput()}, " +
+                                $"key bound={MappingConfig.NavigateToAimedObjectKey.MainKey != KeyCode.None}";
+                    Navigation.TryNavigateFromRay(player, ray, true);
+                    return state;
+                }
+                finally
+                {
+                    map.SetMapMode(mode);
+                    pins.AddRange(Map.GetAllPins().Where(pin => !before.Contains(pin)));
+                }
+            }
+            // What the last press left, against the pin it should target and the pin count before it.
+            string NavResult(Minimap.PinData expected, int countBefore) =>
+                "target=" + (Navigation.TargetPin == null ? "none"
+                    : ReferenceEquals(Navigation.TargetPin, expected) ? "expected"
+                    : ReferenceEquals(Navigation.TargetPin, Navigation.TemporaryMarker) ? "marker" : "other") +
+                $", marker={(Navigation.TemporaryMarker == null ? "none" : "present")}, " +
+                $"pin delta={Map.GetAllPins().Count - countBefore}";
+            Navigation.ClearTarget();
 
             // Without an automatic pin, the key adds the pin the scan would give the patch.
             var existing = new HashSet<Minimap.PinData>(Map.GetAllPins());
@@ -1583,12 +1629,52 @@ namespace Automatics.SmokeTest
                 map.RemovePin(patchPin);
             }
 
+            // Navigation to a patch without a pin marks the patch centre, not the plant looked at.
+            if (!navBound)
+            {
+                run.Skip("nav_key_marks_patch", "the navigation key could not be bound: " + navRefusal);
+                run.Skip("nav_key_repeat_clears", "the navigation key could not be bound: " + navRefusal);
+            }
+            else
+            {
+                existing = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                var navState = PressNavKey();
+                var marker = Navigation.TemporaryMarker;
+                Check(run, "nav_key_marks_patch", marker != null && ReferenceEquals(Navigation.TargetPin, marker) &&
+                    !existing.Contains(marker) && Map.GetAllPins().Count == existing.Count + 1 && !marker.m_save &&
+                    !Map.IsAutomaticPin(marker) && Vector3.Distance(marker.m_pos, network.Center) < 0.01f &&
+                    marker.m_name == Map.StoredPinName(StaticObjectMapping.ComputeFloraPinName(floraLabel, 2)),
+                    "navigation to a flora patch without an automatic pin did not add one unsaved marker named and placed like the patch pin; " +
+                    navState + ", " + NavResult(marker, existing.Count) + (marker == null ? "" :
+                        $", saved={marker.m_save}, automatic={Map.IsAutomaticPin(marker)}, " +
+                        $"distance to patch centre={Vector3.Distance(marker.m_pos, network.Center):0.00}m, " +
+                        $"name={marker.m_name}, expected name=" +
+                        Map.StoredPinName(StaticObjectMapping.ComputeFloraPinName(floraLabel, 2))));
+                PressNavKey();
+                Check(run, "nav_key_repeat_clears", Navigation.TargetPin == null && Navigation.TemporaryMarker == null &&
+                    Map.GetAllPins().Count == existing.Count && (marker == null || !Map.GetAllPins().Contains(marker)),
+                    "repeating navigation to the patch did not clear it and remove its marker");
+            }
+
             var keyPin = Map.AddPin(network.Center, clusterName, false, new Target { name = floraLabel });
             pins.Add(keyPin);
             AssociateStatic(keyPin, readyId, PinKind.Flora);
             AssociateStatic(keyPin, pickedId, PinKind.Flora);
             var keyPinName = keyPin.m_name;
             var automatic = !keyPin.m_save && Map.IsAutomaticPin(keyPin) && StaticObjectMapping.OwnsPin(keyPin);
+            if (!navBound)
+                run.Skip("nav_key_targets_automatic_patch_pin", "the navigation key could not be bound: " + navRefusal);
+            else
+            {
+                count = Map.GetAllPins().Count;
+                var navState = PressNavKey();
+                Check(run, "nav_key_targets_automatic_patch_pin", automatic && ReferenceEquals(Navigation.TargetPin, keyPin) &&
+                    Navigation.TemporaryMarker == null && Map.GetAllPins().Count == count,
+                    "navigation to a flora patch with an unsaved automatic pin did not target it without a marker; " +
+                    navState + ", " + NavResult(keyPin, count) + $", automatic={automatic}, " +
+                    $"pin hidden={Map.ShouldHideAutomaticPinIgnoringSearch(keyPin)}");
+                Navigation.ClearTarget();
+            }
             count = Map.GetAllPins().Count;
             var pressed = PressPinKey();
             var keyObjects = PinTooltipContent.ResolveSavedObjects(keyPin);
@@ -1600,11 +1686,25 @@ namespace Automatics.SmokeTest
             if (!keyPin.m_save)
             {
                 run.Skip("pin_key_saved_pin_not_duplicated", "the first press did not save the automatic pin");
+                run.Skip("nav_key_targets_saved_patch_pin", "the first press did not save the automatic pin");
                 return;
             }
             count = Map.GetAllPins().Count;
             Check(run, "pin_key_saved_pin_not_duplicated", PressPinKey() == null && Map.GetAllPins().Count == count,
                 "the key on a member of a saved flora patch pin added another pin");
+            if (!navBound)
+                run.Skip("nav_key_targets_saved_patch_pin", "the navigation key could not be bound: " + navRefusal);
+            else
+            {
+                count = Map.GetAllPins().Count;
+                var navState = PressNavKey();
+                Check(run, "nav_key_targets_saved_patch_pin", ReferenceEquals(Navigation.TargetPin, keyPin) &&
+                    Navigation.TemporaryMarker == null && Map.GetAllPins().Count == count,
+                    "navigation to a flora patch with its saved pin did not target that pin without a marker; " +
+                    navState + ", " + NavResult(keyPin, count) + $", saved={keyPin.m_save}, " +
+                    $"pin hidden={Map.ShouldHideAutomaticPinIgnoringSearch(keyPin)}");
+                Navigation.ClearTarget();
+            }
         }
 
         private static void CountSectorRead() => _sectorReads++;

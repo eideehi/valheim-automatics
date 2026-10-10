@@ -1125,6 +1125,31 @@ namespace Automatics.SmokeTest
                     Vector3.Distance(Navigation.TemporaryMarker.m_pos, character.transform.position) < 0.01f,
                     "both the destination and temporary marker follow the creature");
 
+                // The creature comes within the dynamic mapping range while it is followed by a marker.
+                var followMarker = Navigation.TemporaryMarker;
+                AccessTools.Method(typeof(DynamicObjectMapping), "AddPin").Invoke(null, new object[]
+                {
+                    id, creature.transform.position, name,
+                    new Target { name = Objects.GetName(character), prefabName = "Boar" }
+                });
+                var adopted = DynamicObjectMapping.GetCachedPin(id);
+                if (adopted == null)
+                    run.Skip("navhotkey_marker_adopts_pin", "automatic pins are hidden at the test creature's position");
+                else
+                {
+                    Validate();
+                    Check(run, "navhotkey_marker_adopts_pin", ReferenceEquals(Navigation.TargetPin, adopted) &&
+                        Navigation.TemporaryMarker == null && !Map.GetAllPins().Contains(followMarker) &&
+                        MarkerCount(before, added) == 0 && Navigation.CaptureTarget().CreatureId == id,
+                        "the creature's new automatic pin replaces the marker that followed it, which is removed");
+                    map.RemovePin(adopted);
+                    Validate();
+                    Check(run, "navhotkey_marker_returns", Navigation.TemporaryMarker != null &&
+                        MarkerCount(before, added) == 1 && Navigation.CaptureTarget().CreatureId == id &&
+                        Vector3.Distance(Navigation.TargetPosition, character.transform.position) < 0.01f,
+                        "removing the adopted pin puts a marker back on the same creature");
+                }
+
                 var creatureTarget = Navigation.CaptureTarget();
                 if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
                     run.Skip("navhotkey_creature_marker_to_pin", "navigation_start_key is unbound");

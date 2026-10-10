@@ -125,12 +125,7 @@ namespace Automatics.AutomaticMapping
                                  (candidate.m_name == aimed.StoredName || candidate.m_name == aimed.Name),
                     includeInactive: true);
             else if (aimed.UniqueId != ZDOID.None)
-            {
-                pin = DynamicObjectMapping.GetCachedPin(aimed.UniqueId);
-                if (pin == null)
-                    StaticObjectMapping.TryGetCachedPin(
-                        new StaticObjectMapping.MapPinIdentify(aimed.UniqueId), out pin);
-            }
+                pin = DynamicObjectMapping.GetCachedPin(aimed.UniqueId) ?? ObjectPinning.FindStaticPin(aimed);
             if (pin != null && Map.ShouldHideAutomaticPinIgnoringSearch(pin)) pin = null;
             if (_targetPin != null && ((pin != null && ReferenceEquals(pin, _targetPin)) ||
                 (aimed.UniqueId != ZDOID.None && (aimed.UniqueId == _creatureId || aimed.UniqueId == _aimedId)) ||
@@ -146,7 +141,16 @@ namespace Automatics.AutomaticMapping
             else
             {
                 ClearTarget(false);
-                pin = Minimap.instance.AddPin(aimed.Position, aimed.Type, aimed.Name, false, false);
+                // A flora patch is one target, as it is for the pin key: the marker stands at its
+                // centre under its name, not at the single plant that was looked at.
+                var markerPosition = aimed.Position;
+                var markerName = aimed.Name;
+                if (ObjectPinning.TryGetPatchPin(aimed, out var patchPosition, out var patchName))
+                {
+                    markerPosition = patchPosition;
+                    markerName = patchName;
+                }
+                pin = Minimap.instance.AddPin(markerPosition, aimed.Type, markerName, false, false);
                 SetTarget(pin);
                 _temporaryMarker = pin;
             }
@@ -161,6 +165,19 @@ namespace Automatics.AutomaticMapping
             var marker = _temporaryMarker;
             _temporaryMarker = null;
             if (marker != null && Minimap.instance) Minimap.instance.RemovePin(marker);
+        }
+
+        // A creature gets its automatic pin once it comes within the dynamic mapping range; the
+        // marker would follow it as a second pin. _targetPin is set before the marker is removed,
+        // as removing the marker reaches OnRemovePin, which would put a new marker in its place.
+        private static void AdoptCreaturePin()
+        {
+            if (_temporaryMarker == null || _creatureId == ZDOID.None) return;
+            var pin = DynamicObjectMapping.GetCachedPin(_creatureId);
+            if (pin == null || Map.ShouldHideAutomaticPinIgnoringSearch(pin)) return;
+            _targetPin = pin;
+            RemoveTemporaryMarker();
+            MapFilter.RefreshSearchPins();
         }
 
         private static void ReplaceMissingCreaturePin()
@@ -434,6 +451,7 @@ namespace Automatics.AutomaticMapping
         private static void ValidateTargetPin()
         {
             if (_targetPin == null) return;
+            AdoptCreaturePin();
             if (Time.time < _nextTargetPinValidationTime) return;
 
             _nextTargetPinValidationTime = Time.time + TargetPinValidationInterval;
