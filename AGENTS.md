@@ -9,6 +9,7 @@
 
 - `Automatics/Libraries/mod-utils` is a read-only library dependency. Do not edit files under this directory unless the task is explicitly to update the submodule.
 - When preparing a release, create the Git tag that matches the release/package version so versioned README and Thunderstore links resolve correctly.
+- Every release commit must update `distributor/thunderstore/manifest.json`. Never release with it unchanged. Set `version_number` to the release version, and set each dependency to the version the release was built and checked against. For `denikson-BepInExPack_Valheim` that is the latest version on Thunderstore; if the local BepInEx install is older, update it first. `scripts/check-version.sh` checks only `version_number`, so check the dependencies by hand.
 - `docs/` holds end-user-facing documentation, which is tracked. Local-only working documents live in fixed subdirectories of `docs/` that are gitignored and never committed: `docs/specs/` (requirements and specifications), `docs/plans/` (implementation plans), `docs/reports/` (audits, research notes and findings; deferred findings go in `docs/reports/findings/`) and `docs/decisions/` (decision records). Do not put other non-end-user documents directly under `docs/`, and do not create `plans/`, `specs/` or `.plans/` at the repository root.
 
 ## Required local dependencies
