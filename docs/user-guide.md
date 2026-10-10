@@ -550,6 +550,15 @@ The connection effect appears when you hover a processor that Automatics can
 identify for source processing and that processor has a positive container
 search range.
 
+At a cooking station, iron cooking station or stone oven, the player who built it
+gains the skill and bonus food for what Automatics does there, as the game gives
+them to whoever puts food in or takes it out by hand: supplying food counts as
+putting it in, and storing cooked food as taking it out. Bonus food goes into the
+same container as the food; bonus food that does not fit there is not given. A
+player's skill can only be raised in their own game, so the builder gains these
+only while their game owns the piece. While another player's game owns it, and
+at pieces no player built, nobody gains them.
+
 In multiplayer, each processing piece follows the settings of the player whose
 game currently owns it. Turning automatic processing off in your game stops it
 for the pieces your game owns; pieces owned by another player keep being

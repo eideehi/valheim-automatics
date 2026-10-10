@@ -2,6 +2,7 @@
 using System.Linq;
 using JetBrains.Annotations;
 using ModUtils;
+using UnityEngine;
 
 namespace Automatics.AutomaticProcessing
 {
@@ -10,6 +11,50 @@ namespace Automatics.AutomaticProcessing
         private static bool IsFireLit(CookingStation cookingStation)
         {
             return Reflections.InvokeMethod<bool>(cookingStation, "IsFireLit");
+        }
+
+        // The player who built the station earns the skill and the bonus food for what
+        // Automatics cooks at it, as the game gives them to whoever puts food in or takes it
+        // out by hand. A player's skills exist only in their own game, so this is the local
+        // player when they built the station, and nobody when another player did or the
+        // station was not built by a player.
+        private static Player GetLocalBuilder(CookingStation cookingStation)
+        {
+            var player = Player.m_localPlayer;
+            if (!player) return null;
+
+            var playerId = player.GetPlayerID();
+            if (playerId == 0L) return null;
+
+            var piece = cookingStation.GetComponentInParent<Piece>();
+            return piece && piece.GetCreator() == playerId ? player : null;
+        }
+
+        private static void RaiseSkill(CookingStation cookingStation, Player builder, float value)
+        {
+            if (builder && cookingStation.m_skill != Skills.SkillType.None)
+                builder.RaiseSkill(cookingStation.m_skill, value);
+        }
+
+        // The bonus roll of CookingStation.OnInteract, with the builder's skill.
+        private static int RollBonusYield(CookingStation cookingStation, Player builder)
+        {
+            if (!builder || !cookingStation.m_canGiveBonusYield || !InventoryGui.instance) return 0;
+
+            var skillFactor = builder.GetSkillFactor(cookingStation.m_skill);
+            return Random.value < skillFactor * InventoryGui.instance.m_craftBonusChance
+                ? InventoryGui.instance.m_craftBonusAmount
+                : 0;
+        }
+
+        private static void CreateBonusYieldEffects(CookingStation cookingStation, int bonus)
+        {
+            var position = cookingStation.transform.position;
+            if (DamageText.instance)
+                DamageText.instance.ShowText(DamageText.TextType.Bonus, position + Vector3.up,
+                    $"+{bonus}", player: true);
+            if (InventoryGui.instance)
+                InventoryGui.instance.m_craftBonusEffect.Create(position, Quaternion.identity);
         }
 
         private static CookingStation.ItemConversion GetItemConversion(
@@ -105,6 +150,8 @@ namespace Automatics.AutomaticProcessing
                         continue;
                     // CookingStation registers Register<string, bool>("RPC_AddItem", RPC_AddItem).
                     zNetView.InvokeRPC("RPC_AddItem", prefabName, cheated);
+                    // The game raises the skill by 0.4 when food is put in by hand.
+                    RaiseSkill(cookingStation, GetLocalBuilder(cookingStation), 0.4f);
 
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position, stationName,
@@ -195,6 +242,23 @@ namespace Automatics.AutomaticProcessing
                 zNetView.GetZDO().Set("slot" + slot, 0f);
                 zNetView.GetZDO().Set("slotstatus" + slot, 0);
                 zNetView.InvokeRPC(ZNetView.Everybody, "RPC_SetSlotVisual", slot, "");
+
+                // As when cooked food is taken out by hand, the skill rises by 0.6 before the
+                // bonus is rolled. The bonus goes into the same container, and what does not
+                // fit there is not given.
+                var builder = GetLocalBuilder(cookingStation);
+                RaiseSkill(cookingStation, builder, 0.6f);
+                var bonus = RollBonusYield(cookingStation, builder);
+                if (bonus > 0)
+                {
+                    var storedBonusCount =
+                        Logics.AddItemAndGetCountDelta(inventory, item.gameObject, itemName, bonus);
+                    if (storedBonusCount > 0)
+                    {
+                        CreateBonusYieldEffects(cookingStation, storedBonusCount);
+                        storedItemCount += storedBonusCount;
+                    }
+                }
 
                 Logics.StoreLog(itemName, storedItemCount, container.m_name,
                     container.transform.position, stationName, origin);

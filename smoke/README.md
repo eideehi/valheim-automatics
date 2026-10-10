@@ -577,8 +577,8 @@ The original module setting is restored under the shared session rules.
 
 ### Processing smoke command
 
-`automatics_smoke_processing` takes one subcommand: `rpc`, `toggle` or `config`
-(the last two are described after `rpc`). Each is one smoke run.
+`automatics_smoke_processing` takes one subcommand: `rpc`, `toggle`, `config` or
+`skill` (the last three are described after `rpc`). Each is one smoke run.
 
 `automatics_smoke_processing rpc` checks that Automatic Processing keeps every
 item when it moves one from a chest into a station. Processing does that by
@@ -804,6 +804,82 @@ the file nor any setting.
 [Automatics Smoke] PASS processing_config_module_line_matches_setting: automatic_processing/module = Enabled in net.eidee.valheim.automatics.cfg, the same as the setting
 [Automatics Smoke] Summary: total=2 passed=2 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
+
+#### `automatics_smoke_processing skill`
+
+Checks who gains the skill and the bonus food for what Automatic Processing does
+at a cooking station. The player who built the station gains what the game gives
+for putting food in by hand (a skill raise of 0.4) and for taking cooked food out
+(a raise of 0.6 and a bonus roll), and only in that player's own game. The
+command changes no setting.
+
+What it does:
+
+- It places a wood chest and a stone oven as `rpc` does, with the same rules for
+  where to stand, and puts `material_count_of_suppress_processing` + 5 of one of
+  the oven's materials into the chest.
+- It sets who built the oven through the piece's creator field: nobody, a player
+  id that isn't yours, and then you. For each, it calls
+  `CookingStationProcess.Craft`, turns the food the oven took into its cooked
+  product as the oven's own update would, and calls
+  `CookingStationProcess.Store` for that slot. A Harmony prefix on
+  `Player.RaiseSkill` records every raise of the oven's skill meanwhile, with the
+  value it was called with, before status effects scale it.
+- It makes the bonus roll certain by raising the game's
+  `InventoryGui.m_craftBonusChance`, or impossible by setting it to 0. Before the
+  first call, your skill level is lifted to at least 1, so the roll has a skill
+  factor whoever the builder is.
+- Once, it fills the chest with the cooked product first, so that the chest has
+  room for exactly one more item.
+- Everything happens in the frame the objects are placed, so the oven's own
+  update never runs. The bonus food and the filler are taken out of the chest
+  right after each call, also when the call throws, so only the cooked item that
+  left the oven's slot stays. The chest and the oven are then removed under the
+  `rpc` rules.
+
+| Check | Asserts |
+|---|---|
+| `processing_skill_no_builder` | With nobody as the builder, Craft and Store raise no skill, and Store puts exactly one item in even with a certain bonus roll |
+| `processing_skill_other_builder` | The same, with another player as the builder |
+| `processing_skill_builder` | With you as the builder and an impossible bonus roll, Craft raises the skill once by 0.4, and Store raises it once by 0.6 and puts exactly one item in |
+| `processing_skill_builder_bonus` | With you as the builder and a certain bonus roll, Store puts in one item plus the game's bonus amount, with the same raises |
+| `processing_skill_builder_bonus_no_room` | With room for one item and a certain bonus roll, Store still puts the cooked item in, without its bonus, empties the slot and raises the skill by 0.6, and nothing appears on the ground |
+| `processing_skill_state_restored` | Your skill level and progress, the bonus chance and the prefix are back as they were |
+
+A precondition that is missing SKIPs the run under `processing_skill_setup`.
+Besides the `rpc` preconditions, these count: the oven's
+`allow_processing_by_*` lacks Craft or Store, its
+`*_store_only_if_product_exists` is on, or the oven raises no skill in this game
+build, or the bonus roll cannot be made certain. The two bonus checks SKIP when
+the oven gives no bonus food in this game build. A check is NOT-RUN when Craft
+took nothing or the chest could not be filled to room for exactly one item.
+
+```text
+[Automatics Smoke] automatics_smoke_processing skill started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder, and removes them; your cooking skill and the game's bonus chance are put back, and no setting is changed
+[Automatics Smoke] automatics_smoke_processing skill: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] PASS processing_skill_no_builder: with no builder, Craft took one Bread dough and Store put one Bread into the chest with the bonus roll made certain, and neither raised the Cooking skill
+[Automatics Smoke] PASS processing_skill_other_builder: with another player as the builder, Craft took one Bread dough and Store put one Bread into the chest with the bonus roll made certain, and neither raised the Cooking skill
+[Automatics Smoke] PASS processing_skill_builder: with you as the builder and the bonus roll made impossible, Craft raised the Cooking skill by 0.4 and Store by 0.6 and put exactly one Bread into the chest
+[Automatics Smoke] PASS processing_skill_builder_bonus: with you as the builder and the bonus roll made certain, Store put 2 Bread (one and the bonus of 1) into the chest, and the Cooking skill rose by 0.4 and 0.6; the bonus was taken out again
+[Automatics Smoke] PASS processing_skill_builder_bonus_no_room: with room for one item in the chest and the bonus roll made certain, Store put the cooked Bread in without its bonus, emptied the slot and raised the Cooking skill by 0.6; the filler was taken out again
+[Automatics Smoke] PASS processing_skill_state_restored: the Cooking skill is back at level 12 with progress 3.5, the bonus chance at 0.25, and the Player.RaiseSkill prefix is removed
+[Automatics Smoke] Summary: total=6 passed=6 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+```
+
+The item names, the bonus amount, the skill figures and the bonus chance depend
+on your game build, language and character.
+
+Safety, on top of the `rpc` rules:
+
+- Your skill level and progress, the bonus chance and the prefix are put back
+  when the run ends or throws, and by the session if the smoke plugin stops
+  mid-run. A raise during the run can show the game's skill-up message; the
+  level is put back all the same. If you have never used the skill, the skills
+  panel lists it at level 0 afterwards. If your character is gone before the
+  skill can be put back (a logout mid-run), a warning says so; check the skill
+  yourself.
+- The run does not touch your inventory. The filler and the bonus food are
+  added to and taken from the check's own chest only.
 
 ### Feature smoke command
 

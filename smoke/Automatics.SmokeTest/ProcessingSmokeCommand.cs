@@ -41,7 +41,8 @@ namespace Automatics.SmokeTest
     //
     // toggle and config are in ProcessingSmokeToggle.cs: one round trip of
     // automatic_processing/module through its real setting, and a read-only look at the
-    // automatic_processing section of the live .cfg.
+    // automatic_processing section of the live .cfg. skill is in ProcessingSmokeSkill.cs: who
+    // gains the skill and bonus food for what Processing does at a cooking station.
     //
     // Safety follows the asymmetric rule of the other smoke commands (smoke/README.md): only
     // objects this command spawned are changed, test items go only into its own chest, and
@@ -74,7 +75,8 @@ namespace Automatics.SmokeTest
             {
                 { "rpc", RunRpc },
                 { "toggle", RunToggle },
-                { "config", RunConfig }
+                { "config", RunConfig },
+                { "skill", RunSkill }
             };
 
         private static MonoBehaviour _host;
@@ -1510,10 +1512,15 @@ namespace Automatics.SmokeTest
             private bool _fireRequirementLifted;
             private float _fuelSet;
 
-            public OvenBench() : base("processing_rpc_cooking_station_add_item", "$piece_oven",
-                "stone oven")
+            public OvenBench() : this("processing_rpc_cooking_station_add_item")
             {
             }
+
+            public OvenBench(string checkName) : base(checkName, "$piece_oven", "stone oven")
+            {
+            }
+
+            public CookingStation Station => _station;
 
             protected override Type ComponentType => typeof(CookingStation);
 
