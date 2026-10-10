@@ -19,7 +19,7 @@ namespace Automatics
     {
         private const string ModId = "net.eidee.valheim.automatics";
         private const string ModName = "Automatics";
-        private const string ModVersion = "1.7.0";
+        private const string ModVersion = "1.8.0";
 
         private void Awake()
         {
