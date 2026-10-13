@@ -1236,10 +1236,16 @@ in a world without a map, and while a pin search applies to the minimap). Stand
 still while it runs. Everything runs in one frame: the section adds unsaved test
 pins at known bearings and distances from you, turns the camera to known
 headings and runs the compass update itself, so no scan moves or removes a pin
-in between. For the section it turns `enable_compass` and `enable_map_enhancements`
-on, sets `compass_pin_range` to 80 m, clears `map_filter_hidden_categories` and
-turns `hide_unexplored_automatic_mapping_pins` off, and it changes them further
-for single checks as described below.
+in between. For the section it turns `enable_compass`, `enable_compass_labels`
+and `enable_map_enhancements` on, sets `compass_position` to `Top` and
+`compass_pin_range` to 80 m, clears `map_filter_hidden_categories` and turns
+`hide_unexplored_automatic_mapping_pins` off, and it changes them further for
+single checks as described below. It clears your navigation target before it
+counts the pins on the map and sets it again at the end; the target checks
+navigate to test pins without the start message. The boss bar check spawns a
+non-persistent boar, marks it as a boss and shows its bar through the enemy
+HUD, so it needs a single-player world (it SKIPs otherwise); the creature, its
+flag and its bar are removed in the same frame.
 
 | Check | Asserts |
 |---|---|
@@ -1262,19 +1268,49 @@ for single checks as described below.
 | `compass_hidden_without_minimap` | With the map mode the game uses while you are dead and in a world without a map, the strip is hidden, and it is shown again with the small map |
 | `compass_hidden_with_hud_hidden` | With the HUD hidden the strip is hidden, and it is shown again once the HUD is shown |
 | `compass_strip_in_top_band` | The strip's screen rectangle is within the screen, horizontally centred within 2 pixels and inside the top fifth, under the HUD's root object |
+| `compass_strip_in_bottom_band` | With `compass_position` at `Bottom`, the strip's screen rectangle is within the screen, horizontally centred within 2 pixels and inside the bottom fifth, under the HUD's root object |
+| `compass_position_switch` | Switching `compass_position` from `Top` to `Bottom` and back while the game runs puts a new strip in the top, bottom and top band in turn |
+| `compass_distance_style` | Pins 10 m and 70 m away are drawn at the size and opacity the curve gives at their share of the range: from 28 canvas units and fully opaque at you to 16 units and 0.4 opaque at the range, linear in between |
+| `compass_target_beyond_range` | A navigation target 120 m away, beyond the 80 m range, is shown on its own marker at its bearing with its own icon, in `navigation_guide_color` at full opacity and at the full 28 units, unaffected by the distance curve |
+| `compass_target_not_duplicated` | A navigation target 10 m away in view is on its own marker and not also an ordinary marker, and with 24 other test pins in view the 24 ordinary markers show the nearest in view by the map's own rule, the target left out |
+| `compass_target_behind_hidden` | A navigation target 30 m behind you is not shown; with the navigation left on it, it is shown at the centre once the camera turns to face it and hidden again once the camera turns back |
+| `compass_target_follows_live_position` | A creature target whose pin lies 40 m away at 30 degrees, last seen 25 m away at -20 degrees and then 50 m away at 10 degrees with the same pin, has its marker at the bearing and its label at the distance of where it was last seen each time, and its pin is not an ordinary marker |
+| `compass_target_cleared` | A temporary marker navigated to shows on the target's marker; once navigation is cleared and the marker removed from the map, the target's marker is hidden and the removed marker is not shown as an ordinary marker in the same frame, before the next collection of pins (SKIP when nearer pins of yours would push it out of the 24 markers) |
+| `compass_label_faced` | A named pin 4 degrees from the centre is labelled `name [Nm]` at its marker's x, with the name localized and the horizontal distance rounded to the metre, and no target label shows without navigation |
+| `compass_label_not_rewritten` | With the pin, its name and the metre unchanged, the next update leaves text written into the label in place |
+| `compass_label_rename` | Renamed at the same distance, the pin's label reads the new name |
+| `compass_label_outside_window` | Turned 20 degrees to the left, with the test pins 24 and 25 degrees off the centre, no pin is labelled |
+| `compass_label_target` | A navigation target 45 degrees to the left is labelled at its marker's x while the faced pin keeps its own label |
+| `compass_labels_after_position_change` | After `compass_position` changes to `Bottom` and back to `Top`, both labels read as before, above the strip at the bottom and below it at the top |
+| `compass_labels_after_recreation` | After `enable_compass` is turned off, which removes the strip, and on again, both labels read as before |
+| `compass_label_faced_target_once` | When the faced pin is the navigation target, only the target label shows, at its marker's x |
+| `compass_label_target_in_window` | With a pin at 0 degrees and the navigation target at 20 degrees, outside the 10-degree window, both are labelled; with the target at 4 degrees, inside the window, only the target is labelled, though the pin is nearer the centre |
+| `compass_labels_option_off` | With `enable_compass_labels` off neither label shows; turned back on, both show again |
+| `compass_avoids_event_bar` | At the top, the event bar shown and moved over the band of the strip and its labels moves the strip down so that its top is 8 units below the bar and neither the strip nor its labels overlap it; hidden again, the strip goes back. The section first checks on its own that the moved bar overlaps the band (FAIL when it does not) |
+| `compass_avoids_boss_bar` | The same for the bar of the test creature marked as a boss (SKIP outside a single-player world) |
+| `compass_bottom_ignores_bars` | At the bottom, each of those bars moved over the strip and its labels leaves the strip where it is |
 | `compass_pins_removed` | None of the section's test pins is left on the map, and every pin there before the section still is |
+| `compass_navigation_restored` | Your navigation target is set again, compared by its target state, position, name and creature rather than by pin, since a temporary marker comes back as a new pin; with none before, none is left |
+| `compass_icon_filter_restored` | After your navigation is set again, which can add a temporary marker and so turn its icon type back on, every icon type in the minimap's filter is shown or hidden as before the section |
 | `compass_settings_restored` | Every setting the section changed is back at your value |
 
 "The map's own rule" is worked out by the check over every pin on the map: the
 pins the minimap would draw (icon filter, shared-map fade, automatic-pin
 filters), within range and the half view, nearest first. A check whose test pins
 that rule would push out of the 24 markers in favour of nearer pins of yours
-SKIPs as inconclusive; run it away from crowded pins. The section removes only
-its own test pins, and puts back the camera, the map mode, the HUD and the
+SKIPs as inconclusive; run it away from crowded pins. So do the label checks
+when a pin of yours lies at least as near the centre as the test pin (or, for
+`compass_label_outside_window`, within 10 degrees of it), and the three bar
+checks while a boss's bar is already shown. The section removes only
+its own test pins, and puts back the camera, the map mode, the HUD, the event
+bar's place and visibility, your navigation target and, after it, the
 minimap's icon filter (vanilla turns a hidden icon type back on when a pin of
-that type is added), also through the session hand-back when a run is cut
-short. How the strip looks, its legibility at other GUI scales and screen
-shapes, and its overlap with the boss and event bars remain an in-game
+that type is added, which a temporary marker set again with your navigation
+is), and removes the test creature with its boss flag and bar, also through
+the session hand-back when a run is cut short. How the strip looks, the
+legibility of its labels and the fade, its legibility at other GUI scales and
+screen shapes, its collisions with the bars at the bottom of the screen, and its
+avoidance of a real boss fight's bar and a real event's bar remain an in-game
 judgement outside this section.
 
 #### `supply`

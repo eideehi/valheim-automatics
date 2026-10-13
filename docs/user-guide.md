@@ -380,7 +380,8 @@ navigate, whether the target is on screen or not. It gathers around you and
 streams ahead in a straight line about 1.5 m above the ground, stops appearing
 within 5 m of the target, and is hidden while the large map is open. It is only
 drawn for you and adds nothing to the world. Turn it off with
-`Navigation Guide Swarm`, or change its colour with `Navigation Guide Color`.
+`Navigation Guide Swarm`, or change its colour with `Navigation Guide Color`,
+which also colours the navigation target's icon on the compass.
 
 ### Looked-at object bar
 
@@ -401,20 +402,38 @@ open, the game is paused or the HUD is hidden; the module must be running.
 ### Compass
 
 Turn on `Compass` (off by default) to show a strip at the top centre of the
-screen with the cardinal directions and the icons of nearby map pins. The strip
-covers the 180 degrees ahead of the camera: what is straight ahead sits in the
-middle, and what is to your left or right at the ends. Each pin's icon sits in
-the direction of the pin from you, and the letters N, E, S and W mark the
-directions.
+screen with the cardinal directions and the icons of nearby map pins. Set
+`Compass Position` to `Bottom` to show it at the bottom centre instead; the
+change applies at once. The strip covers the 180 degrees ahead of the camera:
+what is straight ahead sits in the middle, and what is to your left or right at
+the ends. Each pin's icon sits in the direction of the pin from you, and the
+letters N, E, S and W mark the directions.
 
 `Compass Pin Range` limits the horizontal distance from you (100 meters by
 default, configurable from 10 to 300). Of the pins in range ahead of you, the
-24 nearest are shown, nearer icons drawn over farther ones. The compass shows
-your own, automatic and shared pins as the map shows them: an icon type you
-turned off on the map, `Hide Pins Outside Explored Area`, the categories of
-`Enhance the Map` and a search with `Apply to minimap` on hide pins on the
-compass too. Area markers are not shown. The navigation target is an ordinary
-pin here, shown while it is in range.
+24 nearest are shown, nearer icons drawn over farther ones. Icons get smaller
+and fainter with distance: full size and fully opaque next to you, and a little
+over half that size and 40 percent opaque at the edge of the range. The
+compass shows your own, automatic and shared pins as the map shows them: an
+icon type you turned off on the map, `Hide Pins Outside Explored Area`, the
+categories of `Enhance the Map` and a search with `Apply to minimap` on hide
+pins on the compass too. Area markers are not shown.
+
+The navigation target has an icon of its own, in `Navigation Guide Color`, at
+full size and drawn over the other icons, whatever its distance. It does not
+take one of the 24 places, and like any pin it is hidden while it lies behind
+you.
+
+With `Compass Pin Names` on (the default), the pin you face and the navigation
+target are named with their horizontal distance in brackets, such as
+`Boar [10m]`. The pin you face is the one nearest the middle of the strip,
+within 10 degrees of it. While the navigation target is within those 10
+degrees, only the target is named. The names show below the strip at the top
+and above it at the bottom.
+
+At the top, the strip moves down while a boss's health bar or the bar of an
+ongoing event, such as a raid, would cover it, and moves back once the bar is
+gone. At the bottom it stays where it is.
 
 The strip is hidden while the large map is open, the game is paused, the HUD is
 hidden, you are dead or the world has no map; the module must be running.

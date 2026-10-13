@@ -285,7 +285,7 @@ Maximum horizontal distance in meters from the player for showing the looked-at 
 - Acceptable value range: From 10 to 300
 
 ### Compass / [enable_compass]
-Show a compass strip at the top centre of the screen with the cardinal directions and the icons of nearby map pins in the direction they lie. It covers the 180 degrees ahead of the camera and shows up to the 24 nearest pins there within Compass Pin Range. Pins that the map's icon filters, Hide Pins Outside Explored Area or Enhance the Map's categories and minimap search hide are not shown, nor are area markers. The strip is hidden while the large map is open, the game is paused, the HUD is hidden, you are dead or the world has no map. Off by default; requires the module to be running.
+Show a compass strip at the top or bottom centre of the screen (see Compass Position) with the cardinal directions and the icons of nearby map pins in the direction they lie. It covers the 180 degrees ahead of the camera and shows up to the 24 nearest pins there within Compass Pin Range, nearer icons larger and more opaque. The navigation target is shown in that view whatever its distance, in Navigation Guide Color and over the other icons. Pins that the map's icon filters, Hide Pins Outside Explored Area or Enhance the Map's categories and minimap search hide are not shown, nor are area markers. At the top, the strip moves down while a boss's health bar or the event bar would cover it. The strip is hidden while the large map is open, the game is paused, the HUD is hidden, you are dead or the world has no map. Off by default; requires the module to be running.
 
 - Default value: false
 
@@ -294,6 +294,17 @@ Maximum horizontal distance in meters from the player for showing a map pin on t
 
 - Default value: 100
 - Acceptable value range: From 10 to 300
+
+### Compass Position / [compass_position]
+Specify where the compass strip sits: Top, at the top centre of the screen, or Bottom, at the bottom centre. Pin names show below the strip at the top and above it at the bottom. Only at the top does the strip move down for a boss's health bar or the event bar.
+
+- Default value: Top
+- Acceptable values: Top, Bottom
+
+### Compass Pin Names / [enable_compass_labels]
+Specify whether the compass shows the name and horizontal distance of the pin you face and of the navigation target, in the form Name [10m]. The pin you face is the one nearest the centre of the strip within 10 degrees of it; while the navigation target is within those 10 degrees, only the target is named.
+
+- Default value: true
 
 ### Map Navigation Start Key / [navigation_start_key]
 Specify the modifier key used to start navigation by left-clicking a pin on the large map. Left click is fixed.
@@ -306,7 +317,7 @@ Specify whether a swarm of small glowing lights leads you toward the navigation 
 - Default value: true
 
 ### Navigation Guide Color / [navigation_guide_color]
-Specify the HTML color code of the navigation guide swarm. Examples: #FF30C8, #FF30C8FF
+Specify the HTML color code of the navigation guide swarm and of the navigation target's icon on the compass. Examples: #FF30C8, #FF30C8FF
 
 - Default value: #FF30C8
 

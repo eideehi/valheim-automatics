@@ -43,6 +43,8 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<float> _aimedObjectBarRange;
         private static ConfigEntry<bool> _enableCompass;
         private static ConfigEntry<float> _compassPinRange;
+        private static ConfigEntry<CompassPosition> _compassPosition;
+        private static ConfigEntry<bool> _enableCompassLabels;
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
         private static ConfigEntry<bool> _enableNavigationGuide;
         private static ConfigEntry<string> _navigationGuideColor;
@@ -106,6 +108,10 @@ namespace Automatics.AutomaticMapping
         internal static ConfigEntry<bool> EnableCompassEntry => _enableCompass;
         public static float CompassPinRange => _compassPinRange.Value;
         internal static ConfigEntry<float> CompassPinRangeEntry => _compassPinRange;
+        public static CompassPosition CompassPosition => _compassPosition.Value;
+        internal static ConfigEntry<CompassPosition> CompassPositionEntry => _compassPosition;
+        public static bool EnableCompassLabels => _enableCompassLabels.Value;
+        internal static ConfigEntry<bool> EnableCompassLabelsEntry => _enableCompassLabels;
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
         public static bool EnableNavigationGuide => _enableNavigationGuide.Value;
         internal static ConfigEntry<bool> EnableNavigationGuideEntry => _enableNavigationGuide;
@@ -202,6 +208,8 @@ namespace Automatics.AutomaticMapping
             _aimedObjectBarRange = config.Bind("aimed_object_bar_range", 50f, (10f, 300f));
             _enableCompass = config.Bind("enable_compass", false);
             _compassPinRange = config.Bind("compass_pin_range", 100f, (10f, 300f));
+            _compassPosition = config.Bind("compass_position", CompassPosition.Top);
+            _enableCompassLabels = config.Bind("enable_compass_labels", true);
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
             _enableNavigationGuide = config.Bind("enable_navigation_guide", true);
@@ -291,5 +299,14 @@ namespace Automatics.AutomaticMapping
             PinAnimalIncludesFish = list != null && list.Contains("Fish");
             PinAnimalIncludesBird = list != null && list.Contains("Bird");
         }
+    }
+
+    public enum CompassPosition
+    {
+        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_mapping_compass_position_top")]
+        Top,
+
+        [LocalizedDescription(Automatics.L10NPrefix, "@config_automatic_mapping_compass_position_bottom")]
+        Bottom
     }
 }
