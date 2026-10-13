@@ -17,6 +17,7 @@ defaults, and accepted value ranges, see [CONFIG.md](../CONFIG.md).
 - [Automatic pickup](#automatic-pickup)
 - [Automatic farming](#automatic-farming)
 - [Automatic supply](#automatic-supply)
+- [Automatic woodcutting](#automatic-woodcutting)
 - [Console commands](#console-commands)
 
 ## Start here
@@ -65,8 +66,9 @@ stay off for that session, and tries again at the next start. If you delete the
 configuration file, the next start is a new install, with every module turned
 off.
 
-Automatic supply is the exception: it is new, so an existing configuration
-without its `Module` entry keeps it off until you turn it on.
+Automatic supply and automatic woodcutting are the exceptions: they are new, so an
+existing configuration without their `Module` entry keeps them off until you turn
+them on.
 
 | Module | Entry | When the change takes effect |
 | --- | --- | --- |
@@ -80,12 +82,13 @@ without its `Module` entry keeps it off until you turn it on.
 | Automatic storage | `Module` | While the game is running. No restart. |
 | Automatic repair | `Module` | While the game is running. No restart. |
 | Automatic supply | `Module` | While the game is running. No restart. |
+| Automatic woodcutting | `Module` | While the game is running. No restart. |
 
 When you turn automatic door, automatic pickup, automatic processing, automatic
-mapping, automatic mining, automatic feeding, automatic farming, automatic repair or automatic
-storage off, it stops starting new automatic actions, such as door movement,
+mapping, automatic mining, automatic feeding, automatic farming, automatic repair, automatic
+storage or automatic woodcutting off, it stops starting new automatic actions, such as door movement,
 pickups, item transfers, pin updates, mining passes, feeding, harvests,
-replanting and sowing, repairs, and storage passes, right away, and lets an action that is
+replanting and sowing, repairs, storage passes and woodcutting passes, right away, and lets an action that is
 already in progress finish. For automatic
 storage, `Store Items Key` does nothing from then on, and a storage pass that has
 already started still moves every item it selected. For automatic mining, a
@@ -94,12 +97,15 @@ damage, pickaxe durability, noise and skill updates. For automatic feeding, an
 animal that has already taken a feed item out of a container or your inventory
 still eats it. For automatic farming, a pass that has already started replants
 every crop it harvested. For automatic repair, an accepted batch finishes all of
-its repairs and tool costs. The switch itself completes
+its repairs and tool costs. For automatic woodcutting, a pass that has already
+started completes its hit, including damage, axe durability, noise and the skill
+update. The switch itself completes
 over the next few frames, when the module's patches and hooks are removed, along
 with the components automatic door adds to doors, automatic pickup adds to
 players and items, automatic mapping adds to fish, birds, ships, rocks and flora,
-automatic mining adds to destructible mineral objects, and automatic feeding adds
-to animals that can be tamed. Turning any of them
+automatic mining adds to destructible mineral objects, automatic feeding adds
+to animals that can be tamed, and automatic woodcutting adds to trees and logs.
+Turning any of them
 back on also completes over the next few frames, and it then also works on
 objects that appeared while it was off. If the Automatics
 log reports that this Harmony build cannot remove patches at runtime, turning one
@@ -998,6 +1004,48 @@ hotbar are not supplied.
 | `Supply Range` | How far from you containers are used, 10 m by default (1–64). |
 
 Its `Module` option takes effect without a restart. See
+[Module disable options](#module-disable-options).
+
+## Automatic woodcutting
+
+Automatic woodcutting chops trees and fallen logs around the player with the axe
+in your right hand. It is off by default, including in an existing configuration:
+an update never turns it on for you.
+
+Each attempt hits one target once, the way a swing of the axe would, and then
+stops. The target is the nearest standing tree or fallen log that:
+
+- the axe in your right hand can cut: the axe has durability left and a tool tier
+  of at least the target's;
+- lies within `Woodcutting Range` of your eyes;
+- nothing hides from your eyes: a wall, a rock or another tree in between stops
+  the hit.
+
+When no tree or log qualifies, nothing happens and nothing is spent. Axes in your
+inventory are not used.
+
+The hit counts as yours and lands on the side facing you, so a felled tree falls
+away from you. It wears the axe by one hit's durability, scaled
+by the world's durability modifier, makes noise and raises the skill a swing of
+that axe raises on a tree. It uses no stamina and does not push a log.
+
+The periodic run fells any tree in range, including trees you planted and trees
+next to your buildings, whenever you hold an axe. Falling trees and rolling logs
+can hurt you and damage your buildings, as they do when you chop by hand. Set
+`Woodcutting Interval` to `0` to chop only with the shortcut, or put the axe away
+near trees you want to keep.
+
+| Setting | Effect |
+| --- | --- |
+| `Woodcutting Interval` | How often woodcutting is attempted, 1.5 seconds by default (0–4). Set it to `0` to chop only with the shortcut. |
+| `Woodcutting Range` | How far from your eyes a tree or log can be hit, 3 m by default (0–32). `0` uses the axe's attack range. |
+| `Attempt Woodcutting Key` | Optional shortcut that attempts woodcutting once per key press, whatever the interval is. Unbound by default. |
+
+Its `Module` option takes effect without a restart. Turning it off stops new
+woodcutting immediately and lets a pass already in progress finish its hit. The
+module's patches, hooks and tree components are removed over the next few frames.
+Turning it back on also completes over the next few frames and finds trees and
+logs that appeared while it was off. See
 [Module disable options](#module-disable-options).
 
 ## Console commands

@@ -7,7 +7,7 @@ Automatics is a mod that automates the tedious tasks of life in Valheim. Most of
 
 ## Features
 
-> **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair, Automatic Storage and Automatic Supply can all switch without restarting the game. Turning one off stops new actions immediately and lets work already in progress finish; the switch completes over the next few frames. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
+> **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair, Automatic Storage, Automatic Supply and Automatic Woodcutting can all switch without restarting the game. Turning one off stops new actions immediately and lets work already in progress finish; the switch completes over the next few frames. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
 
 For released feature documentation, see [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/user-guide.md).
 
@@ -58,6 +58,10 @@ Harvests grown crops around the player and replants the regrowing sapling at eac
 ### Automatic supply
 
 Lets nearby containers supply what you use by hand. When you craft at a crafting station, build with the hammer or plant with the cultivator, items in accessible containers within `Supply Range` (10 m by default) count toward the requirements, and what your inventory lacks is taken from them, nearest first. Adding fuel to a fire, ore or fuel to a smelter-type station, or food to a cooking station takes one suitable item from a nearby container when you carry none. A craft or placement never completes without being fully paid for, and anything taken for an action that does not use it goes back. Warded, private, in-use and other containers you cannot access are never used. It starts off, even in an existing configuration.
+
+### Automatic woodcutting
+
+Automatically chops trees and fallen logs around the player with the axe in your right hand. Woodcutting runs at the configured interval (0 turns it off) and each time the woodcutting shortcut is pressed. Each attempt hits one target once, as a swing would: the nearest tree or log within `Woodcutting Range` (3 m by default) that the axe is strong enough to cut and that nothing hides from your eyes. The hit wears the axe and raises the skill a swing raises, but uses no stamina. The periodic run fells any tree in range, including ones you planted, and falling trees and rolling logs can hurt you and your buildings. It starts off, even in an existing configuration.
 
 ## Console commands
 

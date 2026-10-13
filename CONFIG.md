@@ -1261,3 +1261,27 @@ Specify the range around the player within which containers supply items for man
 
 - Default value: 10
 - Acceptable value range: From 1 to 64
+
+## [ #13 Automatic Woodcutting ] / [automatic_woodcutting]
+### Module / [module]
+Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
+
+- Default value: Disabled
+- Acceptable values: Enabled, Disabled
+
+### Woodcutting Interval / [woodcutting_interval]
+Specify the interval between woodcutting attempts. Set to 0 to turn periodic woodcutting off. (Unit: seconds)
+
+- Default value: 1.5
+- Acceptable value range: From 0 to 4
+
+### Woodcutting Range / [woodcutting_range]
+Specify the maximum distance to search for a tree or log. If set to 0, the axe's attack range is used. (Unit: meters)
+
+- Default value: 3
+- Acceptable value range: From 0 to 32
+
+### Attempt Woodcutting Key / [woodcutting_key]
+Specify a shortcut key that attempts woodcutting once each time it is pressed, whatever the interval is. To cut wood only with the key, set Woodcutting Interval to 0.
+
+- Default value:

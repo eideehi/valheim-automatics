@@ -224,8 +224,9 @@ namespace Automatics
         }
 
         // The sections of the nine modules kept running across the update. Each binds a `module`
-        // entry whose default is Disabled. Automatic Supply is left out on purpose: it did not
-        // exist when those files were written, so it stays off for every config, upgraders included.
+        // entry whose default is Disabled. Automatic Supply and Automatic Woodcutting are left out
+        // on purpose: they did not exist when those files were written, so they stay off for every
+        // config, upgraders included.
         private static readonly string[] ModuleSections =
         {
             "automatic_door",

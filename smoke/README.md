@@ -200,9 +200,9 @@ safe.
 `automatics_smoke_lifecycle` (no arguments) exercises the runtime module
 lifecycle on Automatic Pickup; with the argument `mapping` it exercises Automatic
 Mapping instead, and with `door`, `farming`, `feeding`, `mining`, `repair`,
-`storage` or `supply` it exercises Automatic Door, Automatic Farming, Automatic
-Feeding, Automatic Mining, Automatic Repair, Automatic Storage or Automatic Supply
-through the module runner
+`storage`, `supply` or `woodcutting` it exercises Automatic Door, Automatic
+Farming, Automatic Feeding, Automatic Mining, Automatic Repair, Automatic Storage,
+Automatic Supply or Automatic Woodcutting through the module runner
 the migrated modules share (described after this one). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
@@ -381,9 +381,10 @@ Safety, on top of the rules above:
 
 - The check only ever pauses the module, never turns it on for you. If its
   `module` setting is not `Enabled` when it starts, or its precondition does not
-  hold, every check SKIPs and nothing is written. The one exception is `supply`:
-  Automatic Supply is off by default, so the run turns it on first and puts the
-  recorded setting back off afterwards.
+  hold, every check SKIPs and nothing is written. The exceptions are `supply` and
+  `woodcutting`: Automatic Supply and Automatic Woodcutting are off by default, so
+  the run turns the module on first and puts the recorded setting back off
+  afterwards.
 - Automatic Storage moves items only when `Store Items` is pressed, and the
   check never presses it, so no item moves.
 - The handler counts are shared with other modules, so turning another module on
@@ -558,6 +559,43 @@ Automatic Supply is off by default, so unlike the other modules it is turned on
 for the run when it is off in your settings: the write is recorded through the
 session before it is made, and the setting is put back off at the end, on a
 throw and at any hand-back trigger, unless you changed it meanwhile.
+
+#### `automatics_smoke_lifecycle woodcutting`
+
+`woodcutting` uses the descriptor-driven runner for three off/on cycles of
+`automatic_woodcutting / module`. It spawns nothing and changes no other setting.
+Automatic Woodcutting is off by default, so, as with `supply`, it is turned on for
+the run when it is off in your settings: the write is recorded through the session
+before it is made, and the setting is put back off at the end, on a throw and at
+any hand-back trigger, unless you changed it meanwhile.
+
+Before anything is written, and again immediately before every re-enable, the
+runner requires a local player with no axe equipped. Every woodcutting pass needs
+an axe in the right hand, so while the module is on for the check it cannot hit a
+tree. With an axe equipped nothing is written and every check SKIPs, asking you to
+unequip it; if one is equipped later, that cycle and the remaining on-side checks
+SKIP without the re-enable write, and the existing restoration path puts the
+setting back. Do not equip an axe while the command is running.
+
+In addition to the runner's state, patch and error checks, the Woodcutting
+descriptor checks:
+
+| Check | Asserts |
+|---|---|
+| `woodcutting_timer_state_captured` | The timer count immediately before each disable request was recorded without changing it |
+| `woodcutting_off_stopped_at_request` | In the frame of the disable request the module remains applied but starts no new woodcutting pass |
+| `woodcutting_off_probes_as_expected` | The three Woodcutting hook handlers and every `AutomaticWoodcutting` component are gone, `AllInstance.Count` is zero, and each Woodcutting-owned handler's own occurrence in its hook is zero |
+| `woodcutting_timers_cleared` | A non-empty timer table observed immediately before disabling is empty while the module is off; if it was already empty, cleanup was not observable and the check SKIPs |
+| `woodcutting_on_patches_applied` | The patches under Woodcutting's Harmony id exactly match `Automatics.AutomaticWoodcutting.Patches`: the `Awake` postfixes of `TreeBase` and `TreeLog` |
+| `woodcutting_on_probes_at_baseline` | All three handlers are restored, every currently eligible unique `TreeBase` and `TreeLog` GameObject with a ZDO has one component, and `AllInstance.Count` matches the active components rather than a stale baseline |
+| `woodcutting_components_current_generation` | Every eligible tree and log object, including inactive objects, has an `AutomaticWoodcutting` component stamped with the current activation generation |
+| `woodcutting_interval_timer_resumed` | When `woodcutting_interval` is above 0, its hook takes up its timer again within 30 frames of the enable; SKIP at 0 |
+
+Turning the module off stops new woodcutting immediately and lets a pass already
+accepted by a player hook finish its hit, including the damage and the axe's wear.
+The patches, subscriptions and components are removed over the next few frames.
+Turning it back on scans loaded inactive objects as well as active ones. With no
+axe equipped, the check hits no tree, wears no tool and creates no drop.
 
 #### `automatics_smoke_lifecycle repair`
 
@@ -888,7 +926,7 @@ Safety, on top of the `rpc` rules:
 
 `automatics_smoke_features all` runs every section below, and
 `automatics_smoke_features <section>` runs one of them: `pickup`, `pin`,
-`mining`, `planting`, `farming`, `guide`, `compass` or `supply`. Run it from the in-game console while
+`mining`, `planting`, `farming`, `guide`, `compass`, `supply` or `woodcutting`. Run it from the in-game console while
 a single-player world is loaded. Each section drives the real game code path of
 one feature against objects it spawns next to the player. The run ends with one
 `[Automatics Smoke] Summary: ...` line over every section it ran. A section that
@@ -1297,3 +1335,57 @@ object whose removal fails is kept for the next hand-back trigger. The real UI
 paths (a craft through the crafting panel, a placement with the hammer, a grid
 planting with seeds only in a chest) and multiplayer container use remain
 in-game checks outside this section.
+
+#### `woodcutting`
+
+Run `automatics_smoke_features woodcutting` in a single-player world with
+Automatic Woodcutting enabled, standing on open level ground with two free
+inventory slots, and with no building piece, tree, log, creature or other
+destructible object within 2.5 m of the point 1 m in front of you (the section
+SKIPs and names it). `woodcutting_range` has to reach 2 m: the default of 3 does,
+and 0 uses the axe's attack range. The section:
+
+- sets `woodcutting_interval` to 0 before it equips or spawns anything, so no
+  periodic pass runs while it holds a test axe. The write is recorded through the
+  session like every setting a section changes, and put back at the end. One check
+  sets it to 1 s and back to 0 around a single call, in the same frame;
+- spawns a non-persistent beech 2 m in front of you and gives it a health no hit
+  reaches, so it never falls and drops nothing;
+- adds the first earlier-biome axe whose tool tier reaches the tree, and a club,
+  and equips the axe;
+- adds an observer patch, removed at the end of the section, that records every
+  damage call on the test tree, whoever makes it, and every skill raise of yours,
+  and drops every damage call on any other tree or log, whoever makes it.
+
+The whole section runs in one frame. The hit checks call the module's per-target
+entry, `AutomaticWoodcutting.Chop`, which every woodcutting pass uses for each
+candidate.
+
+| Check | Asserts |
+|---|---|
+| `woodcutting_tree_registered` | The tree spawned while the module runs carries an `AutomaticWoodcutting` component of the running generation |
+| `woodcutting_hit_damage` | One call of the entry hits the test tree once and takes health; the note gives the hit's distance from your eyes and its height against them |
+| `woodcutting_hit_data` | The hit's attacker is you, its hit type is `PlayerHit`, its push force is 0, its direction is level and points from you toward the tree, and its skill is the one a real swing of the axe uses on a tree: the attack's special-hit skill when trees are its special-hit type, otherwise the axe's own skill |
+| `woodcutting_hit_durability` | The axe lost its per-hit drain, scaled by the world durability rate |
+| `woodcutting_hit_skill_once` | That skill was raised exactly once, by the raise amount of the axe's attack |
+| `woodcutting_refused_no_weapon` | With nothing in your right hand, the entry hits nothing and spends nothing: no damage call, and no change of the tree's health, the axe's durability or any skill |
+| `woodcutting_refused_other_weapon` | The same with the club in your right hand |
+| `woodcutting_refused_no_durability` | The same with the axe's durability at 0 (put back afterwards; SKIP for an axe that does not use durability) |
+| `woodcutting_refused_tool_tier` | The same with the test tree's minimum tool tier raised above the axe's (put back afterwards) |
+| `woodcutting_refused_blocked` | The same with a non-persistent wood wall spawned across the line from your eyes to where the hit landed, and removed again in the same frame (SKIP when the wall does not end up on that line) |
+| `woodcutting_interval_zero_no_pass` | With `woodcutting_interval` at 0, the module's interval hook, given a 10-second step, hits nothing |
+| `woodcutting_interval_pass` | With `woodcutting_interval` set to 1 s, the same hook given a 2-second step runs one pass that hits the test tree once and nothing else, and the interval is written back to 0 straight after the call (SKIP under the same condition as `woodcutting_key_pass`) |
+| `woodcutting_key_pass` | At interval 0, one pass run through the call the key makes when it goes down hits the test tree once and nothing else (SKIP when a tree or log of your world is not farther from you than the test tree, since the pass could go to it) |
+| `woodcutting_refused_out_of_range` | With `woodcutting_range` set below the distance from your eyes to where the hit landed, the entry hits nothing and spends nothing |
+| `woodcutting_world_guarded` | The section ran to its end under the guard; the note counts the damage calls on other trees and logs it dropped |
+| `woodcutting_settings_restored` | Reported when the section changed a setting: every setting it changed is back at your value |
+
+When the section cannot start it SKIPs `woodcutting_section` and names the
+reason: the module is off, the interval could not be set to 0, something stands
+near the spot or between your eyes and the test tree, the range does not reach
+it, or the inventory is full. At the end the added axe and club are removed from
+your inventory, the items you had equipped are equipped again, the axe's skill and
+its special-hit skill are put back, and the test tree is removed. The hits still
+count toward your tree statistics. Felling a real tree, the fall direction, hits on
+a fallen log and the feel of the interval remain in-game checks outside this
+section.

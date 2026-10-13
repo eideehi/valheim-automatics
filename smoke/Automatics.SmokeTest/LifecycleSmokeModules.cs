@@ -38,6 +38,10 @@ using SupplyModule = Automatics.AutomaticSupply.Module;
 using SupplyPatches = Automatics.AutomaticSupply.Patches;
 using SupplyScope = Automatics.AutomaticSupply.SupplyScope;
 using SupplyTransfer = Automatics.AutomaticSupply.SupplyTransfer;
+using WoodcuttingComponent = Automatics.AutomaticWoodcutting.AutomaticWoodcutting;
+using WoodcuttingConfig = Automatics.AutomaticWoodcutting.Config;
+using WoodcuttingModule = Automatics.AutomaticWoodcutting.Module;
+using WoodcuttingPatches = Automatics.AutomaticWoodcutting.Patches;
 
 namespace Automatics.SmokeTest
 {
@@ -75,7 +79,8 @@ namespace Automatics.SmokeTest
                 ["mining"] = DescribeMining,
                 ["repair"] = DescribeRepair,
                 ["storage"] = DescribeStorage,
-                ["supply"] = DescribeSupply
+                ["supply"] = DescribeSupply,
+                ["woodcutting"] = DescribeWoodcutting
             };
 
         // Automatic Door owns one patch, four hook subscriptions and one component on every Door
@@ -829,6 +834,156 @@ namespace Automatics.SmokeTest
                     })
                 }
             };
+        }
+
+        // How many frames the check waits, after an enable, for the woodcutting interval hook to
+        // take up its timer again.
+        private const int WoodcuttingTimerFrames = 30;
+
+        // Automatic Woodcutting owns two patches, three hook subscriptions and one component on
+        // every tree and log with a ZDO. It is off by default, so when it is off in your settings
+        // the run turns it on first and puts it back off at the end. The precondition keeps it
+        // from hitting a tree in an on interval: without an axe in the right hand a pass hits
+        // nothing.
+        private static ModuleDescriptor DescribeWoodcutting()
+        {
+            var timerCountBeforeDisable = -1;
+            return new ModuleDescriptor
+            {
+                Argument = "woodcutting",
+                EnableWhenOff = true,
+                Module = WoodcuttingModule.Instance,
+                Active = () => WoodcuttingModule.Active,
+                Running = () => WoodcuttingModule.Running,
+                PatchTypes = new[] { typeof(WoodcuttingPatches) },
+                Probes = new[]
+                {
+                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
+                    Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
+                    Probe.Counter("woodcutting.OnPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(WoodcuttingModule),
+                            "OnPlayerAwake"), OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("woodcutting.OnPlayerUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(WoodcuttingModule),
+                            "OnPlayerUpdate"), OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("woodcutting.OnPlayerFixedUpdate.handler",
+                        () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(WoodcuttingModule),
+                            "OnPlayerFixedUpdate"), OffExpectation.Zero, 0, () => 1),
+                    Probe.Components<WoodcuttingComponent>(CountEligibleTrees),
+                    Probe.Counter("AllInstance.Count", () => WoodcuttingComponent.AllInstanceCount,
+                        OffExpectation.Zero, 0, CountActiveWoodcuttingComponents)
+                },
+                Precondition = WoodcuttingPrecondition,
+                Extras = new[]
+                {
+                    new ExtraCheck("timer_state_captured", Phase.BeforeRequest,
+                        (record, cycle) =>
+                        {
+                            timerCountBeforeDisable = WoodcuttingModule.WoodcuttingTimerCount;
+                            var name = record.Check("timer_state_captured");
+                            record.Cycle(name, cycle, timerCountBeforeDisable >= 0,
+                                $"recorded {timerCountBeforeDisable} woodcutting timer(s) before disabling",
+                                "the woodcutting timer table could not be read before disabling");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("timers_cleared", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            var count = WoodcuttingModule.WoodcuttingTimerCount;
+                            var name = record.Check("timers_cleared");
+                            if (timerCountBeforeDisable == 0)
+                                record.CycleSkip(name, cycle,
+                                    "the woodcutting timer table was already empty before disabling, so cleanup could not be observed");
+                            else
+                                record.Cycle(name, cycle, timerCountBeforeDisable > 0 && count == 0,
+                                    $"the {timerCountBeforeDisable} woodcutting timer(s) present before disabling were cleared",
+                                    $"the woodcutting timer table had {timerCountBeforeDisable} entry or entries before disabling and holds {count} while off");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("components_current_generation", Phase.AfterOn,
+                        (record, cycle) =>
+                        {
+                            var trees = EligibleTrees();
+                            var generation = WoodcuttingModule.Generation;
+                            var attached = trees.Count(x =>
+                            {
+                                var component = x.GetComponent<WoodcuttingComponent>();
+                                return component && component.ScopeGeneration == generation;
+                            });
+                            var name = record.Check("components_current_generation");
+                            record.Cycle(name, cycle, trees.Length > 0 && attached == trees.Length,
+                                $"all {attached} eligible tree and log object(s) carry the current generation {generation}",
+                                $"{attached} of {trees.Length} eligible tree and log object(s) carry the current generation {generation}");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
+                    new ExtraCheck("interval_timer_resumed", Phase.AfterOn, WoodcuttingIntervalTimerResumed)
+                }
+            };
+        }
+
+        // The interval hook takes up its timer again on its first physics step after the enable,
+        // and it does so whatever the player holds. Waiting for that here also leaves the next
+        // cycle's disable a timer to clear.
+        private static IEnumerator WoodcuttingIntervalTimerResumed(CycleRecorder record, int cycle)
+        {
+            var name = record.Check("interval_timer_resumed");
+            if (!Player.m_localPlayer)
+            {
+                record.CycleSkip(name, cycle, "there is no local player");
+                yield break;
+            }
+
+            if (WoodcuttingConfig.WoodcuttingInterval <= 0f)
+            {
+                record.CycleSkip(name, cycle,
+                    "woodcutting_interval is 0, so the module keeps no interval timer");
+                yield break;
+            }
+
+            for (var frame = 0;
+                 frame < WoodcuttingTimerFrames && WoodcuttingModule.WoodcuttingTimerCount == 0;
+                 frame++)
+                yield return null;
+
+            var count = WoodcuttingModule.WoodcuttingTimerCount;
+            record.Cycle(name, cycle, count > 0,
+                $"the interval hook took up its timer again ({count} held)",
+                $"the interval hook took up no timer within {WoodcuttingTimerFrames} frames of the enable");
+        }
+
+        private static GameObject[] EligibleTrees()
+        {
+            var eligible = new HashSet<GameObject>();
+            AddNetworked(eligible, Object.FindObjectsByType<TreeBase>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None));
+            AddNetworked(eligible, Object.FindObjectsByType<TreeLog>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None));
+            return eligible.ToArray();
+        }
+
+        private static int CountEligibleTrees()
+        {
+            return EligibleTrees().Length;
+        }
+
+        private static int CountActiveWoodcuttingComponents()
+        {
+            return Object.FindObjectsByType<WoodcuttingComponent>(
+                    FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Count(x => x && x.gameObject.activeInHierarchy);
+        }
+
+        // Every pass needs an axe in the right hand. An axe equipped anywhere refuses the run, so
+        // the module never holds one while the check turns it on.
+        private static string WoodcuttingPrecondition()
+        {
+            var player = Player.m_localPlayer;
+            if (!player) return "there is no local player";
+
+            var axe = player.GetInventory().GetEquippedItems()
+                .Any(x => x != null && x.m_shared.m_skillType == Skills.SkillType.Axes);
+            return axe ? "unequip the axe and run the check again" : null;
         }
 
         private static void AddRepairCleanupCheck(List<ExtraCheck> extras, Type owner, string field)

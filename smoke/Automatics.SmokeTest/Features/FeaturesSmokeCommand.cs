@@ -50,7 +50,8 @@ namespace Automatics.SmokeTest
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("farming", FarmingFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("guide", GuideFeatureSmoke.Run),
             new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("compass", CompassFeatureSmoke.Run),
-            new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("supply", SupplyFeatureSmoke.Run)
+            new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("supply", SupplyFeatureSmoke.Run),
+            new KeyValuePair<string, Func<FeatureRun, IEnumerator>>("woodcutting", WoodcuttingFeatureSmoke.Run)
         };
 
         private static readonly ManualLogSource Log =
