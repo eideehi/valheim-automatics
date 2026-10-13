@@ -250,6 +250,7 @@ namespace Automatics.AutomaticWoodcutting
             var hitData = new HitData
             {
                 m_toolTier = (short)shared.m_toolTier,
+                m_itemWorldLevel = (byte)axe.m_worldLevel,
                 m_statusEffectHash = shared.m_attackStatusEffect != null
                     ? shared.m_attackStatusEffect.NameHash()
                     : 0,

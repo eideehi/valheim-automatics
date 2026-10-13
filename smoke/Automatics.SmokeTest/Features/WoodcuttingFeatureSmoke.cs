@@ -274,6 +274,8 @@ namespace Automatics.SmokeTest
                 Vector3.Dot(record.Dir, toTree) < 0.9f)
                 problems.Add($"direction {record.Dir} is not level and from you toward the tree {toTree}");
             if (record.Skill != expectedSkill) problems.Add($"skill {record.Skill}, expected {expectedSkill}");
+            if (record.ItemWorldLevel != (byte)axe.m_worldLevel)
+                problems.Add($"item world level {record.ItemWorldLevel}, expected {(byte)axe.m_worldLevel}");
             if (problems.Count == 0)
                 run.Pass(names[1],
                     $"attacker you, {record.HitType}, push force 0, level direction toward the tree, skill {record.Skill}");
@@ -879,6 +881,7 @@ namespace Automatics.SmokeTest
             public Vector3 Dir;
             public Vector3 Point;
             public Skills.SkillType Skill;
+            public byte ItemWorldLevel;
         }
 
         // Patches added for the section only and removed at its end. While attached, they record
@@ -995,7 +998,8 @@ namespace Automatics.SmokeTest
                         PushForce = hit.m_pushForce,
                         Dir = hit.m_dir,
                         Point = hit.m_point,
-                        Skill = hit.m_skill
+                        Skill = hit.m_skill,
+                        ItemWorldLevel = hit.m_itemWorldLevel
                     });
                 return true;
             }

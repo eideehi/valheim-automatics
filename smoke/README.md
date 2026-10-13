@@ -1365,7 +1365,7 @@ candidate.
 |---|---|
 | `woodcutting_tree_registered` | The tree spawned while the module runs carries an `AutomaticWoodcutting` component of the running generation |
 | `woodcutting_hit_damage` | One call of the entry hits the test tree once and takes health; the note gives the hit's distance from your eyes and its height against them |
-| `woodcutting_hit_data` | The hit's attacker is you, its hit type is `PlayerHit`, its push force is 0, its direction is level and points from you toward the tree, and its skill is the one a real swing of the axe uses on a tree: the attack's special-hit skill when trees are its special-hit type, otherwise the axe's own skill |
+| `woodcutting_hit_data` | The hit's attacker is you, its hit type is `PlayerHit`, its push force is 0, its direction is level and points from you toward the tree, and its skill is the one a real swing of the axe uses on a tree: the attack's special-hit skill when trees are its special-hit type, otherwise the axe's own skill, and its item world level is the axe's |
 | `woodcutting_hit_durability` | The axe lost its per-hit drain, scaled by the world durability rate |
 | `woodcutting_hit_skill_once` | That skill was raised exactly once, by the raise amount of the axe's attack |
 | `woodcutting_refused_no_weapon` | With nothing in your right hand, the entry hits nothing and spends nothing: no damage call, and no change of the tree's health, the axe's durability or any skill |
