@@ -71,6 +71,11 @@ Any container can be added. Identifier: A unique string that does not overlap wi
 
 - Default value:
 
+### User-defined Tree / [custom_tree]
+Any tree can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the tree. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the standing tree. Its fallen logs and its stump count as this tree. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
+
+- Default value:
+
 ## [ #3 Automatic Door ] / [automatic_door]
 ### Module / [module]
 Turn this module on or off. While it is off, Automatics adds none of its logic to the game. The change applies while the game is running, so no restart is needed.
@@ -1280,6 +1285,11 @@ Turn this module on or off. While it is off, Automatics adds none of its logic t
 - Default value: Disabled
 - Acceptable values: Enabled, Disabled
 
+### Cut Nearby Trees Automatically / [enable_automatic_woodcutting]
+Specify whether to cut nearby trees, logs and stumps automatically. The module's other features, such as area woodcutting, are not affected.
+
+- Default value: true
+
 ### Woodcutting Interval / [woodcutting_interval]
 Specify the interval between woodcutting attempts. Set to 0 to turn periodic woodcutting off. (Unit: seconds)
 
@@ -1287,12 +1297,39 @@ Specify the interval between woodcutting attempts. Set to 0 to turn periodic woo
 - Acceptable value range: From 0 to 4
 
 ### Woodcutting Range / [woodcutting_range]
-Specify the maximum distance to search for a tree or log. If set to 0, the axe's attack range is used. (Unit: meters)
+Specify the maximum distance to search for a tree, log or stump. If set to 0, the axe's attack range is used. (Unit: meters)
 
 - Default value: 3
 - Acceptable value range: From 0 to 32
+
+### Allow Woodcutting Tree / [allow_woodcutting_tree]
+Specify the trees to be cut automatically and by area woodcutting. A fallen log or a stump counts as the tree it came from.
+
+- Default value: Beech, Birch, Oak, Fir, Pine, AncientTree, YggdrasilShoot, ScorchedTree, TimberTree
+
+### Need To Equip Axe For Woodcutting / [need_to_equip_axe]
+Specify whether an axe needs to be in your right hand to attempt automatic woodcutting. Disabling this option uses the axe in your right hand if it can cut the target, otherwise the lowest-tier axe in the player's inventory that can. If no suitable axe is found, automatic woodcutting is not attempted.
+
+- Default value: true
 
 ### Attempt Woodcutting Key / [woodcutting_key]
 Specify a shortcut key that attempts woodcutting once each time it is pressed, whatever the interval is. To cut wood only with the key, set Woodcutting Interval to 0.
 
 - Default value:
+
+### Area Woodcutting / [enable_area_woodcutting]
+Specify whether an axe swing that hits an allowed tree, log or stump also hits other allowed trees, logs and stumps near the hit point. Each extra target wears the axe as a hit does; stamina and skill gain stay once per swing. Requires the module to be running.
+
+- Default value: true
+
+### Area Woodcutting Radius / [area_woodcutting_radius]
+Specify how far from the hit point area woodcutting reaches. (Unit: meters)
+
+- Default value: 3
+- Acceptable value range: From 1 to 10
+
+### Area Woodcutting Max Targets / [area_woodcutting_max_targets]
+Specify the maximum number of extra trees, logs or stumps one swing can hit.
+
+- Default value: 8
+- Acceptable value range: From 1 to 32

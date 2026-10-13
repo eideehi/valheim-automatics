@@ -10,7 +10,8 @@ namespace Automatics.AutomaticWoodcutting
     ///     Automatic Woodcutting on the module lifecycle. A scope owns its patches, three hook
     ///     subscriptions and every <see cref="AutomaticWoodcutting" /> component it attaches, so
     ///     turning the module off removes them without interrupting a woodcutting pass already
-    ///     begun.
+    ///     begun. Passes and area woodcutting are peer features: enable_automatic_woodcutting
+    ///     turns only the passes off.
     /// </summary>
     internal sealed class Module : IAutomaticsModule
     {
@@ -95,6 +96,7 @@ namespace Automatics.AutomaticWoodcutting
         private static void Cleanup()
         {
             WoodcuttingTimers.Clear();
+            AreaWoodcutting.Reset();
         }
 
         [AutomaticsInitializer(11)]
@@ -111,6 +113,16 @@ namespace Automatics.AutomaticWoodcutting
         internal static void AttachTree(GameObject target)
         {
             if (!Discovering) return;
+
+            CurrentScope.TryAttach<AutomaticWoodcutting>(target, out _);
+        }
+
+        // A Destructible is a target only when it is the stump of a tree: the stump prefab of a
+        // standing tree prefab.
+        internal static void AttachStump(GameObject target, ZDO zdo)
+        {
+            if (!Discovering) return;
+            if (!TreeSpecies.IsStub(zdo.GetPrefab())) return;
 
             CurrentScope.TryAttach<AutomaticWoodcutting>(target, out _);
         }
@@ -134,11 +146,22 @@ namespace Automatics.AutomaticWoodcutting
 
                 scope.Attach<AutomaticWoodcutting>(log.gameObject);
             }
+
+            foreach (var destructible in UnityEngine.Object.FindObjectsByType<Destructible>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (!Objects.GetZNetView(destructible, out var zNetView)) continue;
+                var zdo = zNetView.GetZDO();
+                if (zdo == null || !TreeSpecies.IsStub(zdo.GetPrefab())) continue;
+
+                scope.Attach<AutomaticWoodcutting>(destructible.gameObject);
+            }
         }
 
         private static void OnPlayerUpdate(Player player, bool takeInput)
         {
             if (!Module.Running) return;
+            if (!Config.EnableAutomaticWoodcutting) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
             if (Config.WoodcuttingKey.MainKey == KeyCode.None) return;
@@ -160,6 +183,7 @@ namespace Automatics.AutomaticWoodcutting
         private static void OnPlayerFixedUpdate(Player player, float delta)
         {
             if (!Module.Running) return;
+            if (!Config.EnableAutomaticWoodcutting) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             // An interval of 0 turns the periodic passes off; the key still works.
             if (Config.WoodcuttingInterval <= 0f) return;

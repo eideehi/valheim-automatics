@@ -38,10 +38,12 @@ using SupplyModule = Automatics.AutomaticSupply.Module;
 using SupplyPatches = Automatics.AutomaticSupply.Patches;
 using SupplyScope = Automatics.AutomaticSupply.SupplyScope;
 using SupplyTransfer = Automatics.AutomaticSupply.SupplyTransfer;
+using WoodcuttingArea = Automatics.AutomaticWoodcutting.AreaWoodcutting;
 using WoodcuttingComponent = Automatics.AutomaticWoodcutting.AutomaticWoodcutting;
 using WoodcuttingConfig = Automatics.AutomaticWoodcutting.Config;
 using WoodcuttingModule = Automatics.AutomaticWoodcutting.Module;
 using WoodcuttingPatches = Automatics.AutomaticWoodcutting.Patches;
+using WoodcuttingSpecies = Automatics.AutomaticWoodcutting.TreeSpecies;
 
 namespace Automatics.SmokeTest
 {
@@ -840,11 +842,11 @@ namespace Automatics.SmokeTest
         // take up its timer again.
         private const int WoodcuttingTimerFrames = 30;
 
-        // Automatic Woodcutting owns two patches, three hook subscriptions and one component on
-        // every tree and log with a ZDO. It is off by default, so when it is off in your settings
-        // the run turns it on first and puts it back off at the end. The precondition keeps it
-        // from hitting a tree in an on interval: without an axe in the right hand a pass hits
-        // nothing.
+        // Automatic Woodcutting owns the patches that attach its component and those of area
+        // woodcutting, three hook subscriptions and one component on every tree, log and tree
+        // stump with a ZDO. It is off by default, so when it is off in your settings the run turns
+        // it on first and puts it back off at the end. The precondition keeps it from hitting a
+        // tree in an on interval: without a usable axe a pass hits nothing.
         private static ModuleDescriptor DescribeWoodcutting()
         {
             var timerCountBeforeDisable = -1;
@@ -901,6 +903,17 @@ namespace Automatics.SmokeTest
                                     $"the woodcutting timer table had {timerCountBeforeDisable} entry or entries before disabling and holds {count} while off");
                             return Enumerable.Empty<object>().GetEnumerator();
                         }),
+                    // A swing context lives only inside one Attack.DoMeleeAttack call, and the
+                    // disable clears it as well.
+                    new ExtraCheck("area_swing_cleared", Phase.WhileOff,
+                        (record, cycle) =>
+                        {
+                            var name = record.Check("area_swing_cleared");
+                            record.Cycle(name, cycle, !WoodcuttingArea.SwingActive && !WoodcuttingArea.Expanding,
+                                "no area-woodcutting swing is open while off",
+                                "an area-woodcutting swing is still open while the module is off");
+                            return Enumerable.Empty<object>().GetEnumerator();
+                        }),
                     new ExtraCheck("components_current_generation", Phase.AfterOn,
                         (record, cycle) =>
                         {
@@ -913,8 +926,8 @@ namespace Automatics.SmokeTest
                             });
                             var name = record.Check("components_current_generation");
                             record.Cycle(name, cycle, trees.Length > 0 && attached == trees.Length,
-                                $"all {attached} eligible tree and log object(s) carry the current generation {generation}",
-                                $"{attached} of {trees.Length} eligible tree and log object(s) carry the current generation {generation}");
+                                $"all {attached} eligible tree, log and stump object(s) carry the current generation {generation}",
+                                $"{attached} of {trees.Length} eligible tree, log and stump object(s) carry the current generation {generation}");
                             return Enumerable.Empty<object>().GetEnumerator();
                         }),
                     new ExtraCheck("interval_timer_resumed", Phase.AfterOn, WoodcuttingIntervalTimerResumed)
@@ -934,10 +947,10 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            if (WoodcuttingConfig.WoodcuttingInterval <= 0f)
+            if (!CutsOnAnInterval())
             {
                 record.CycleSkip(name, cycle,
-                    "woodcutting_interval is 0, so the module keeps no interval timer");
+                    "woodcutting_interval is 0 or woodcutting is turned off in the settings, so it keeps no interval timer");
                 yield break;
             }
 
@@ -952,6 +965,13 @@ namespace Automatics.SmokeTest
                 $"the interval hook took up no timer within {WoodcuttingTimerFrames} frames of the enable");
         }
 
+        // The guards of Module.OnPlayerFixedUpdate that decide whether it keeps a timer at all.
+        private static bool CutsOnAnInterval()
+        {
+            return WoodcuttingConfig.EnableAutomaticWoodcutting && WoodcuttingConfig.WoodcuttingInterval > 0f;
+        }
+
+        // Trees and logs, and the Destructibles that are the stump prefab of a tree.
         private static GameObject[] EligibleTrees()
         {
             var eligible = new HashSet<GameObject>();
@@ -959,6 +979,14 @@ namespace Automatics.SmokeTest
                 FindObjectsInactive.Include, FindObjectsSortMode.None));
             AddNetworked(eligible, Object.FindObjectsByType<TreeLog>(
                 FindObjectsInactive.Include, FindObjectsSortMode.None));
+            foreach (var destructible in Object.FindObjectsByType<Destructible>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (!Objects.GetZNetView(destructible, out var zNetView)) continue;
+                var zdo = zNetView.GetZDO();
+                if (zdo != null && WoodcuttingSpecies.IsStub(zdo.GetPrefab()))
+                    eligible.Add(destructible.gameObject);
+            }
             return eligible.ToArray();
         }
 
@@ -974,16 +1002,21 @@ namespace Automatics.SmokeTest
                 .Count(x => x && x.gameObject.activeInHierarchy);
         }
 
-        // Every pass needs an axe in the right hand. An axe equipped anywhere refuses the run, so
-        // the module never holds one while the check turns it on.
+        // Every pass needs an axe in the right hand or, with need_to_equip_axe off, anywhere in
+        // the inventory. Such an axe refuses the run, so the module never has one while the check
+        // turns it on.
         private static string WoodcuttingPrecondition()
         {
             var player = Player.m_localPlayer;
             if (!player) return "there is no local player";
 
-            var axe = player.GetInventory().GetEquippedItems()
-                .Any(x => x != null && x.m_shared.m_skillType == Skills.SkillType.Axes);
-            return axe ? "unequip the axe and run the check again" : null;
+            var inventory = player.GetInventory();
+            var items = WoodcuttingConfig.NeedToEquipAxe ? inventory.GetEquippedItems() : inventory.GetAllItems();
+            if (!items.Any(x => x != null && x.m_shared.m_skillType == Skills.SkillType.Axes)) return null;
+
+            return WoodcuttingConfig.NeedToEquipAxe
+                ? "unequip the axe and run the check again"
+                : "need_to_equip_axe is off, so an axe anywhere in the inventory is used; move your axes to a chest and run the check again";
         }
 
         private static void AddRepairCleanupCheck(List<ExtraCheck> extras, Type owner, string field)

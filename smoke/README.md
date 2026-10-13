@@ -570,12 +570,15 @@ before it is made, and the setting is put back off at the end, on a throw and at
 any hand-back trigger, unless you changed it meanwhile.
 
 Before anything is written, and again immediately before every re-enable, the
-runner requires a local player with no axe equipped. Every woodcutting pass needs
-an axe in the right hand, so while the module is on for the check it cannot hit a
-tree. With an axe equipped nothing is written and every check SKIPs, asking you to
-unequip it; if one is equipped later, that cycle and the remaining on-side checks
-SKIP without the re-enable write, and the existing restoration path puts the
-setting back. Do not equip an axe while the command is running.
+runner requires a local player with no axe the passes could use: none equipped
+while `Need To Equip Axe For Woodcutting` is on, and none anywhere in the
+inventory while it is off. Every woodcutting pass needs such an axe, so while the
+module is on for the check it cannot hit a tree, log or stump. The check never
+swings, so area woodcutting has nothing to expand. With such an axe nothing is
+written and every check SKIPs, asking you to unequip it or move it to a chest; if
+one turns up later, that cycle and the remaining on-side checks SKIP without the
+re-enable write, and the existing restoration path puts the setting back. Do not
+equip or pick up an axe while the command is running.
 
 In addition to the runner's state, patch and error checks, the Woodcutting
 descriptor checks:
@@ -586,16 +589,18 @@ descriptor checks:
 | `woodcutting_off_stopped_at_request` | In the frame of the disable request the module remains applied but starts no new woodcutting pass |
 | `woodcutting_off_probes_as_expected` | The three Woodcutting hook handlers and every `AutomaticWoodcutting` component are gone, `AllInstance.Count` is zero, and each Woodcutting-owned handler's own occurrence in its hook is zero |
 | `woodcutting_timers_cleared` | A non-empty timer table observed immediately before disabling is empty while the module is off; if it was already empty, cleanup was not observable and the check SKIPs |
-| `woodcutting_on_patches_applied` | The patches under Woodcutting's Harmony id exactly match `Automatics.AutomaticWoodcutting.Patches`: the `Awake` postfixes of `TreeBase` and `TreeLog` |
-| `woodcutting_on_probes_at_baseline` | All three handlers are restored, every currently eligible unique `TreeBase` and `TreeLog` GameObject with a ZDO has one component, and `AllInstance.Count` matches the active components rather than a stale baseline |
-| `woodcutting_components_current_generation` | Every eligible tree and log object, including inactive objects, has an `AutomaticWoodcutting` component stamped with the current activation generation |
-| `woodcutting_interval_timer_resumed` | When `woodcutting_interval` is above 0, its hook takes up its timer again within 30 frames of the enable; SKIP at 0 |
+| `woodcutting_area_swing_cleared` | No area-woodcutting swing is open, and no extra hit is being applied, while the module is off |
+| `woodcutting_on_patches_applied` | The patches under Woodcutting's Harmony id exactly match `Automatics.AutomaticWoodcutting.Patches`: the `Awake` postfixes of `TreeBase` and `TreeLog`, the `Destructible.Start` postfix for stumps, and the swing and damage patches of area woodcutting |
+| `woodcutting_on_probes_at_baseline` | All three handlers are restored, every currently eligible unique `TreeBase`, `TreeLog` and stump GameObject with a ZDO has one component, and `AllInstance.Count` matches the active components rather than a stale baseline. A stump is a `Destructible` whose prefab is the stump prefab of a standing tree prefab |
+| `woodcutting_components_current_generation` | Every eligible tree, log and stump object, including inactive objects, has an `AutomaticWoodcutting` component stamped with the current activation generation |
+| `woodcutting_interval_timer_resumed` | When `enable_automatic_woodcutting` is on and `woodcutting_interval` is above 0, its hook takes up its timer again within 30 frames of the enable; SKIP otherwise |
 
 Turning the module off stops new woodcutting immediately and lets a pass already
 accepted by a player hook finish its hit, including the damage and the axe's wear.
 The patches, subscriptions and components are removed over the next few frames.
-Turning it back on scans loaded inactive objects as well as active ones. With no
-axe equipped, the check hits no tree, wears no tool and creates no drop.
+Turning it back on scans loaded inactive objects as well as active
+ones. With no usable axe, the check hits no tree, wears no tool and creates no
+drop.
 
 #### `automatics_smoke_lifecycle repair`
 
@@ -926,7 +931,7 @@ Safety, on top of the `rpc` rules:
 
 `automatics_smoke_features all` runs every section below, and
 `automatics_smoke_features <section>` runs one of them: `pickup`, `pin`,
-`mining`, `planting`, `farming`, `guide`, `compass`, `supply` or `woodcutting`. Run it from the in-game console while
+`mining`, `planting`, `farming`, `guide`, `compass`, `supply`, `woodcutting` or `woodcuttingarea`. Run it from the in-game console while
 a single-player world is loaded. Each section drives the real game code path of
 one feature against objects it spawns next to the player. The run ends with one
 `[Automatics Smoke] Summary: ...` line over every section it ran. A section that
@@ -1375,7 +1380,7 @@ in-game checks outside this section.
 #### `woodcutting`
 
 Run `automatics_smoke_features woodcutting` in a single-player world with
-Automatic Woodcutting enabled, standing on open level ground with two free
+Automatic Woodcutting enabled, standing on open level ground with five free
 inventory slots, and with no building piece, tree, log, creature or other
 destructible object within 2.5 m of the point 1 m in front of you (the section
 SKIPs and names it). `woodcutting_range` has to reach 2 m: the default of 3 does,
@@ -1383,45 +1388,156 @@ and 0 uses the axe's attack range. The section:
 
 - sets `woodcutting_interval` to 0 before it equips or spawns anything, so no
   periodic pass runs while it holds a test axe. The write is recorded through the
-  session like every setting a section changes, and put back at the end. One check
-  sets it to 1 s and back to 0 around a single call, in the same frame;
+  session like every setting a section changes, and put back at the end. Some
+  checks set it to 1 s and back to 0 around a single call, in the same frame;
+- checks the tree data against the prefabs of the loaded world. The species each
+  log and stump prefab should have is worked out by the section itself, from the
+  prefabs alone, and the module's resolver is compared with it;
+- writes, where yours differ, the settings the checks assume:
+  `enable_automatic_mining` off when Automatic Mining mines on an interval, so it
+  cannot wear a pickaxe of yours or raise your Pickaxes skill while the section
+  runs across frames; `enable_automatic_woodcutting` on, `need_to_equip_axe` on,
+  and the beech's species in `allow_woodcutting_tree`. A
+  check that needs another value writes it and writes this one back straight
+  after;
 - spawns a non-persistent beech 2 m in front of you and gives it a health no hit
-  reaches, so it never falls and drops nothing;
+  reaches, and nothing to drop, so it falls only when the section fells it at the
+  end;
 - adds the first earlier-biome axe whose tool tier reaches the tree, and a club,
-  and equips the axe;
+  and equips the axe; the inventory check adds one axe of each other tier;
+- registers a hand-back with the session, run at the end and whenever the run is
+  cut short, that removes the added items, equips your items again, and puts back
+  the skills a check can raise (the axes' skill and special-hit skill, and the
+  club's) and the durability of your own axes;
 - adds an observer patch, removed at the end of the section, that records every
-  damage call on the test tree, whoever makes it, and every skill raise of yours,
-  and drops every damage call on any other tree or log, whoever makes it.
+  damage call on the test objects, whoever makes it, and every skill raise of
+  yours, and drops every damage call on any other tree, log or stump, whoever
+  makes it; other destructibles are left alone. When a test tree is felled, the
+  log and the stump it spawns become test objects in the same frame: recorded with
+  the session, non-persistent, at a health no hit reaches, and the log held where
+  it spawned instead of falling. The observer's removal is registered with the
+  session before its patches go on, so a run cut short still removes them.
 
-The whole section runs in one frame. The hit checks call the module's per-target
-entry, `AutomaticWoodcutting.Chop`, which every woodcutting pass uses for each
-candidate.
+Everything up to the felling runs in one frame. The hit checks call the module's
+per-target entry, `AutomaticWoodcutting.Chop`, which every woodcutting pass uses
+for each candidate; the pass checks call the hooks the interval and the key use.
+The felling checks span frames: a stump gets the component in its `Start`, and a
+log takes damage 0.2 seconds after it spawns.
 
 | Check | Asserts |
 |---|---|
+| `woodcutting_species_identifiers_match` | Every built-in tree identifier matches at least one standing tree (`TreeBase`) prefab of the loaded world. A FAIL names the identifiers of the earlier biomes and counts the others; the log file names them all |
+| `woodcutting_species_coverage` | The section walks every standing tree prefab's log, that log's smaller logs in turn, and its stump, and gives each of them the species of every tree that leads to it. The module resolves each of those prefabs to exactly that set, each standing tree prefab to its own species, and no `TreeLog` prefab is left without one. A FAIL counts the prefabs that lead to no species and those resolved differently; the log file names them |
+| `woodcutting_species_shared_allowed` | For every log or stump prefab that trees of more than one species lead to, by the same walk, `allow_woodcutting_tree` holding any one of those species alone allows it, and holding none of them does not; the list is written back straight after. The note counts them; the log file names them with their species |
 | `woodcutting_tree_registered` | The tree spawned while the module runs carries an `AutomaticWoodcutting` component of the running generation |
 | `woodcutting_hit_damage` | One call of the entry hits the test tree once and takes health; the note gives the hit's distance from your eyes and its height against them |
 | `woodcutting_hit_data` | The hit's attacker is you, its hit type is `PlayerHit`, its push force is 0, its direction is level and points from you toward the tree, and its skill is the one a real swing of the axe uses on a tree: the attack's special-hit skill when trees are its special-hit type, otherwise the axe's own skill, and its item world level is the axe's |
 | `woodcutting_hit_durability` | The axe lost its per-hit drain, scaled by the world durability rate |
-| `woodcutting_hit_skill_once` | That skill was raised exactly once, by the raise amount of the axe's attack |
-| `woodcutting_refused_no_weapon` | With nothing in your right hand, the entry hits nothing and spends nothing: no damage call, and no change of the tree's health, the axe's durability or any skill |
+| `woodcutting_hit_skill_once` | The skill raise follows the rule of a swing as the attack's fields define it: when the tree is of the attack's special-hit or skill-hit type, the hit's skill is raised exactly once, by the raise amount of the axe's attack; otherwise nothing is raised. The comparison with what a real swing raises is in `woodcuttingarea` |
+| `woodcutting_refused_no_weapon` | With nothing in your right hand, the entry hits nothing and spends nothing: no damage call, and no change of the tree's health, the axe's durability, your stamina or any skill |
 | `woodcutting_refused_other_weapon` | The same with the club in your right hand |
 | `woodcutting_refused_no_durability` | The same with the axe's durability at 0 (put back afterwards; SKIP for an axe that does not use durability) |
 | `woodcutting_refused_tool_tier` | The same with the test tree's minimum tool tier raised above the axe's (put back afterwards) |
 | `woodcutting_refused_blocked` | The same with a non-persistent wood wall spawned across the line from your eyes to where the hit landed, and removed again in the same frame (SKIP when the wall does not end up on that line) |
 | `woodcutting_interval_zero_no_pass` | With `woodcutting_interval` at 0, the module's interval hook, given a 10-second step, hits nothing |
 | `woodcutting_interval_pass` | With `woodcutting_interval` set to 1 s, the same hook given a 2-second step runs one pass that hits the test tree once and nothing else, and the interval is written back to 0 straight after the call (SKIP under the same condition as `woodcutting_key_pass`) |
-| `woodcutting_key_pass` | At interval 0, one pass run through the call the key makes when it goes down hits the test tree once and nothing else (SKIP when a tree or log of your world is not farther from you than the test tree, since the pass could go to it) |
-| `woodcutting_refused_out_of_range` | With `woodcutting_range` set below the distance from your eyes to where the hit landed, the entry hits nothing and spends nothing |
-| `woodcutting_world_guarded` | The section ran to its end under the guard; the note counts the damage calls on other trees and logs it dropped |
+| `woodcutting_key_pass` | At interval 0, one pass run through the call the key makes when it goes down hits the test tree once and nothing else (SKIP when a tree, log or stump of your world is not farther from you than the test object, since the pass could go to it; the same holds for every later check that runs a pass) |
+| `woodcutting_refused_out_of_range` | With `woodcutting_range` set below the distance from your eyes to where the hit landed, the entry hits nothing and spends nothing; the range is written back straight after |
+| `woodcutting_species_tree` | The test tree resolves to its species, which `allow_woodcutting_tree` allows |
+| `woodcutting_species_removed_tree` | With that species taken out of `allow_woodcutting_tree`, the tree is not allowed and a key pass leaves it alone; the list is written back straight after |
+| `woodcutting_switch_off_no_pass` | With `enable_automatic_woodcutting` off and `woodcutting_interval` at 1 s, the interval hook given a 2-second step hits nothing and takes up no timer; both are written back straight after. The key's path has the same guard but cannot be pressed from the console |
+| `woodcutting_inventory_axe_used` | With `need_to_equip_axe` off and nothing in your right hand, a key pass hits the test tree with the lowest-tier axe of your inventory whose tool tier reaches it (the first such one on a tie): the hit carries that axe's tool tier and world level, and only that axe loses durability. The tree's tier is raised, for this check only, to the second of the available tiers, so the lowest test axe does not reach it. Your own axes count too, and their durability is put back |
+| `woodcutting_inventory_axe_needs_equip` | With `need_to_equip_axe` on and nothing in your right hand, the same pass hits nothing and wears no axe |
+| `woodcutting_felling_spawned` | With the tree at 1 health, one hit of the entry fells it into a log and a stump, both taken as test objects |
+| `woodcutting_fresh_log_refused` | In that frame the log carries a component of the running generation, the entry refuses it without wearing the axe, and a key pass leaves it alone |
+| `woodcutting_stump_attached` | Within 10 frames, the stump carries a component of the running generation, attached by the module's own `Destructible.Start` postfix |
+| `woodcutting_species_log_stump` | Once the log can take damage, the log and the stump resolve to the felled tree's species and are allowed |
+| `woodcutting_species_removed_log_stump` | With that species taken out of `allow_woodcutting_tree`, the log and the stump are not allowed, unless another allowed species also leads to them, and a key pass leaves the ones that are not alone; the list is written back straight after |
+| `woodcutting_log_hit_after_delay` | The entry hits the log once (SKIP when something stands between your eyes and the log) |
+| `woodcutting_log_skill` | The skill raise on the log follows the same rule as on the tree |
+| `woodcutting_stump_pass_hit` | With the log removed, a key pass hits the stump once |
+| `woodcutting_stump_skill` | The skill raise on the stump follows the same rule |
+| `woodcutting_other_destructible_not_attached` | A non-persistent destructible of the earlier biomes that is not the stump of a tree, spawned 2 m behind you, has run its `Start` and carries no component |
+| `woodcutting_world_guarded` | The section ran to its end under the guard; the note counts the damage calls on other trees, logs and stumps it dropped |
 | `woodcutting_settings_restored` | Reported when the section changed a setting: every setting it changed is back at your value |
 
 When the section cannot start it SKIPs `woodcutting_section` and names the
-reason: the module is off, the interval could not be set to 0, something stands
-near the spot or between your eyes and the test tree, the range does not reach
-it, or the inventory is full. At the end the added axe and club are removed from
-your inventory, the items you had equipped are equipped again, the axe's skill and
-its special-hit skill are put back, and the test tree is removed. The hits still
-count toward your tree statistics. Felling a real tree, the fall direction, hits on
-a fallen log and the feel of the interval remain in-game checks outside this
+reason: the module is off, the interval or another setting could not be written,
+something stands near the spot or between your eyes and the test tree, the range
+does not reach it, or the inventory is full. At the end the added axes and club
+are removed from your inventory, the items you had equipped are equipped again,
+the skills are put back, and the test objects,
+including the log and the stump, are removed. The hits still count toward your
+tree statistics. The fall direction of a real tree, real stumps of your world and
+the feel of the interval remain in-game checks outside this
 section.
+
+#### `woodcuttingarea`
+
+Run `automatics_smoke_features woodcuttingarea` in a single-player world with
+Automatic Woodcutting enabled and `enable_area_woodcutting` on, standing on open
+level ground with two free inventory slots. It needs room: no allowed tree, log or
+stump of your world within the raised area radius of the spot in front of you, and
+no building piece or other destructible object at any of the spots the test trees
+go to (the section SKIPs and names it). It spawns non-persistent trees around the
+spot in front of you, each with a health no hit reaches and nothing to drop:
+
+- a beech 1.6 m in front of you, the first swing's target, at 1 health so that
+  swing fells it;
+- a beech a little beyond the reach of a swing, and another beside it that is felled
+  at once into a log and a stump. These three are the targets that qualify;
+- a beech whose minimum tool tier is raised above the axe's;
+- two trees of a second early species, one felled at once into a log and a stump;
+- a beech to the side, a little beyond the area radius.
+
+It turns Automatic Mining's passes off when they run on an interval, as in
+`woodcutting`, and `enable_automatic_woodcutting` off for the section, so no pass
+hits the test trees and the swings show area woodcutting working with the passes off, sets
+`area_woodcutting_radius` to fit the trees, `area_woodcutting_max_targets` to 2,
+below the three targets that qualify, and `allow_woodcutting_tree` to the beech's
+species alone. It adds an axe whose tool tier reaches both species and equips it,
+turns you to face the trees, lowers your view a little, refills your stamina before
+each swing, and starts real attacks with `Humanoid.StartAttack`. An observer patch,
+removed at the end of the section, records the melee call, every damage call on the
+test objects, the point of each swing's first direct hit on an allowed test object,
+and every skill raise and stamina use of yours. Every distance below is measured
+from that observed point. The observer's removal is registered with the session
+before its patches go on, so a run cut short still removes them. While it is in place,
+it also guards your world: a hit of yours on anything but the test objects is
+dropped, and so is the terrain operation a hit on the ground would spawn. The log
+and the stump a felling of a test tree spawns become test objects in the same frame,
+as in `woodcutting`.
+
+| Check | Asserts |
+|---|---|
+| `woodcutting_area_expands` | The first swing hit a test object, and area woodcutting added at least one extra hit, each seen as a damage call on a test object |
+| `woodcutting_area_cap_and_radius` | That swing added exactly `area_woodcutting_max_targets` extra hits while more targets qualified, each within `area_woodcutting_radius` of the swing's first direct hit on an allowed target as the observer saw it, none on an object the swing or an earlier extra hit already hit, and all on the targets that qualify (SKIP when the swing itself hit so many of them that the cap could not be reached, or no direct hit on an allowed test object was seen) |
+| `woodcutting_area_damage_applied` | Every extra target lost health |
+| `woodcutting_area_durability_per_target` | The axe lost the vanilla per-hit drain, scaled by the world durability rate, once for the swing and once per extra target |
+| `woodcutting_area_skill_once` | No skill was raised more than once for the swing (SKIP when none was raised) |
+| `woodcutting_area_stamina_once` | Stamina was used exactly once for the swing |
+| `woodcutting_area_with_passes_off` | `enable_automatic_woodcutting` was off and the swing still expanded |
+| `woodcutting_area_fresh_log_skipped` | The log the swing's own felling of its target spawned took no hit and kept its health |
+| `woodcutting_area_tool_tier_skipped` | The tree above the axe's tool tier took no hit |
+| `woodcutting_area_species_skipped` | The tree, log and stump of the species left out of `allow_woodcutting_tree` took no hit |
+| `woodcutting_area_outside_radius_untouched` | The tree that the physics engine's own sphere overlap at the observed first hit confirms lies beyond `area_woodcutting_radius` took no hit (SKIP when it came within the radius) |
+| `woodcutting_area_stops_when_axe_breaks` | A second swing, with the cap raised and the axe worn down to one and a half hits, added exactly one extra hit while at least two targets qualified, and left the axe with no durability. The axe's durability is put back afterwards |
+| `woodcutting_area_excluded_hittable` | With the tool tier put back, the second species allowed, the radius raised and the cap lifted, a third swing hit each target the first swing left out: those the cap left out, the tree above the tool tier, the second species' tree, log and stump, and the far tree when the physics engine confirms it lies within the raised radius. The fresh log took a hit of the second or third swing |
+| `woodcutting_area_trigger_point` | In each axe swing that hit an allowed test object itself, area woodcutting centred its expansion on the point of the first such hit the observer saw, and no swing expanded without one |
+| `woodcutting_area_trees_logs_stumps` | Across the axe swings, extra hits landed on at least one standing tree, one log and one stump |
+| `woodcutting_area_not_from_automatic_woodcutting` | A hit of the module's own entry on a test object in front of you adds no extra hit |
+| `woodcutting_area_not_from_other_weapons` | A real swing with an added club that hits a test object adds no extra hit |
+| `woodcutting_area_skill_rule_log` | With its stump removed, the log the first swing's felling spawned stands alone in front of you. A real axe swing that hits only that log raises the same skills, by the same amounts, as a hit of the module's entry on it (SKIP, naming the reason, only when the swing hits something else as well or the entry cannot reach the log from your eyes) |
+| `woodcutting_area_skill_rule_tree` | The same with a test tree spawned alone at that spot |
+| `woodcutting_area_skill_rule_stump` | The same with a stump spawned alone at that spot from the tree's stump prefab, once it has the component; you look further down for this swing |
+| `woodcutting_area_world_guarded` | The section ran to its end under the guard; the note counts the hits on other objects and the terrain operations it dropped |
+| `woodcutting_area_settings_restored` | Every setting the section changed is back at your value |
+
+An attack that does not start within 1 second, or triggers no melee hit within 3
+seconds, SKIPs the swing's checks and names the reason; so does a swing that hits
+none of the test objects. At the end the added axe and club are removed from your
+inventory, the items you had equipped are equipped again, and your view pitch,
+skills, stamina and settings are put back. The swings and fellings still count toward your
+statistics. Do not move or attack while the section runs. Area woodcutting in a
+real forest, with real stumps and falling trees, remains an in-game check outside
+this section.

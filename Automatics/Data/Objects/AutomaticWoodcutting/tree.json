@@ -1,0 +1,96 @@
+{
+  "type": "tree",
+  "order": 0,
+  "values": [
+    {
+      "identifier": "Beech",
+      "label": "$prop_beech",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Beech(1|_small\\d+)$"
+        }
+      ]
+    },
+    {
+      "identifier": "Birch",
+      "label": "$prop_birch",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Birch\\d+(_aut)?$"
+        }
+      ]
+    },
+    {
+      "identifier": "Oak",
+      "label": "$prop_oak",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Oak1$"
+        }
+      ]
+    },
+    {
+      "identifier": "Fir",
+      "label": "$prop_fir",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^FirTree(_small(_dead)?)?$"
+        }
+      ]
+    },
+    {
+      "identifier": "Pine",
+      "label": "$prop_pine",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^Pinetree_01$"
+        }
+      ]
+    },
+    {
+      "identifier": "AncientTree",
+      "label": "$prop_ancienttree",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^SwampTree1$"
+        }
+      ]
+    },
+    {
+      "identifier": "YggdrasilShoot",
+      "label": "$prop_yggashoot",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^YggaShoot(\\d+|_small\\d+)$"
+        }
+      ]
+    },
+    {
+      "identifier": "ScorchedTree",
+      "label": "$prop_ashlandstree",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^AshlandsTree\\d+(_big)?$"
+        }
+      ]
+    },
+    {
+      "identifier": "TimberTree",
+      "label": "$prop_timberwoodtree",
+      "matches": [
+        {
+          "regex": true,
+          "value": "^(FirTree_big|Pinetree_Snow)$"
+        }
+      ]
+    }
+  ]
+}

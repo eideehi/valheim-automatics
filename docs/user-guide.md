@@ -98,13 +98,14 @@ animal that has already taken a feed item out of a container or your inventory
 still eats it. For automatic farming, a pass that has already started replants
 every crop it harvested. For automatic repair, an accepted batch finishes all of
 its repairs and tool costs. For automatic woodcutting, a pass that has already
-started completes its hit, including damage, axe durability, noise and the skill
-update. The switch itself completes
+started completes its hit, including damage, axe durability, noise and
+the skill update. The switch itself completes
 over the next few frames, when the module's patches and hooks are removed, along
 with the components automatic door adds to doors, automatic pickup adds to
 players and items, automatic mapping adds to fish, birds, ships, rocks and flora,
 automatic mining adds to destructible mineral objects, automatic feeding adds
-to animals that can be tamed, and automatic woodcutting adds to trees and logs.
+to animals that can be tamed, and automatic woodcutting adds to trees, logs and
+tree stumps.
 Turning any of them
 back on also completes over the next few frames, and it then also works on
 objects that appeared while it was off. If the Automatics
@@ -123,11 +124,12 @@ turn it back on, it recognises the saved pins it added and adds the other pins
 again as their objects come into range. A vehicle that moved more than 8 meters
 while the module was off can get a second pin; delete the old one.
 
-In automatic mapping, automatic mining and automatic farming, a second switch
-turns only the module's main automatic feature on or off: `Pin Nearby Objects
-Automatically`, `Mine Nearby Minerals Automatically` and `Harvest And Replant
-Automatically`. The module's other features, such as map navigation, area mining
-and grid planting, keep working while that switch is off. The other modules have
+In automatic mapping, automatic mining, automatic farming and automatic
+woodcutting, a second switch turns only the module's main automatic feature on or
+off: `Pin Nearby Objects Automatically`, `Mine Nearby Minerals Automatically`,
+`Harvest And Replant Automatically` and `Cut Nearby Trees Automatically`. The
+module's other features, such as map navigation, area mining, grid planting and
+area woodcutting, keep working while that switch is off. The other modules have
 only the `Module` option. Before this version they also had a switch of their own,
 such as `Automatic Door`; a configuration where that switch was off gets its
 module turned off once, and the switch is removed.
@@ -137,7 +139,7 @@ module turned off once, and the switch is removed.
 Several allowlists use object definitions. Built-in definitions cover known
 Valheim objects. The `General` section lets you add user-defined definitions for
 animals, dungeons, flora, minerals, monsters, spawners, spots, doors, vehicles,
-other objects, and containers.
+other objects, containers, and trees.
 
 User-defined object fields:
 
@@ -148,7 +150,9 @@ User-defined object fields:
 | `Pattern` | The internal name or prefab name to match. Prefix with `r/` to use a regular expression. |
 
 After adding a user-defined object, enable it in the matching allowlist, such as
-`Allow Pinning Spot` or `Allow Container`. See
+`Allow Pinning Spot` or `Allow Container`. A user-defined tree's pattern matches
+the prefab name of the standing tree; its fallen logs and its stump count as that
+tree. See
 [Add user-defined object to Automatics](add-user-defined-object.md) for a
 step-by-step example.
 
@@ -1027,44 +1031,72 @@ Its `Module` option takes effect without a restart. See
 
 ## Automatic woodcutting
 
-Automatic woodcutting chops trees and fallen logs around the player with the axe
-in your right hand. It is off by default, including in an existing configuration:
-an update never turns it on for you.
+Automatic woodcutting chops trees, fallen logs and tree stumps around the player
+with an axe. It is off by default, including in an existing configuration: an
+update never turns it on for you.
 
 Each attempt hits one target once, the way a swing of the axe would, and then
-stops. The target is the nearest standing tree or fallen log that:
+stops. The target is the nearest tree, log or stump that:
 
-- the axe in your right hand can cut: the axe has durability left and a tool tier
-  of at least the target's;
+- is of a kind `Allow Woodcutting Tree` allows. A fallen log or a stump counts as
+  the tree it came from;
+- can take a hit now: a log that a felling has just spawned is skipped for the
+  moment the game ignores hits on it;
+- an axe can cut: the axe has durability left and a tool tier of at least the
+  target's. It is the axe in your right hand; with `Need To Equip Axe For
+  Woodcutting` off, when the axe in hand cannot cut the target or you hold none,
+  it is the lowest-tier axe in your inventory that can;
 - lies within `Woodcutting Range` of your eyes;
 - nothing hides from your eyes: a wall, a rock or another tree in between stops
   the hit.
 
-When no tree or log qualifies, nothing happens and nothing is spent. Axes in your
-inventory are not used.
+When no target qualifies, nothing happens and nothing is spent.
 
 The hit counts as yours and lands on the side facing you, so a felled tree falls
-away from you. It wears the axe by one hit's durability, scaled
-by the world's durability modifier, makes noise and raises the skill a swing of
-that axe raises on a tree. It uses no stamina and does not push a log.
+away from you. It wears the axe by one hit's durability, scaled by the world's
+durability modifier, makes noise and raises the skill a swing of that axe raises
+on that target, if any. It uses no stamina and does not push a log.
 
-The periodic run fells any tree in range, including trees you planted and trees
-next to your buildings, whenever you hold an axe. Falling trees and rolling logs
-can hurt you and damage your buildings, as they do when you chop by hand. Set
-`Woodcutting Interval` to `0` to chop only with the shortcut, or put the axe away
-near trees you want to keep.
+The periodic run fells any allowed tree in range, including trees you planted and
+trees next to your buildings, whenever you have a usable axe. With area
+woodcutting, one swing can fell the tree you hit and up to `Area Woodcutting Max
+Targets` more, nine trees in all by default. Falling trees and rolling logs can
+hurt you and damage your buildings, as they do when you chop by hand. Set
+`Woodcutting Interval` to `0` to chop only with the shortcut, turn `Area
+Woodcutting` off, or put the axe away near trees you want to keep.
 
 | Setting | Effect |
 | --- | --- |
+| `Cut Nearby Trees Automatically` | Turns automatic woodcutting on or off. Area woodcutting is not affected. On by default. |
 | `Woodcutting Interval` | How often woodcutting is attempted, 1.5 seconds by default (0–4). Set it to `0` to chop only with the shortcut. |
-| `Woodcutting Range` | How far from your eyes a tree or log can be hit, 3 m by default (0–32). `0` uses the axe's attack range. |
+| `Woodcutting Range` | How far from your eyes a tree, log or stump can be hit, 3 m by default (0–32). `0` uses the axe's attack range. |
+| `Allow Woodcutting Tree` | Which kinds of tree automatic woodcutting and area woodcutting may cut. Every kind by default. |
+| `Need To Equip Axe For Woodcutting` | Requires the axe to be in your right hand. If disabled, Automatics can use an axe from the inventory. On by default. |
 | `Attempt Woodcutting Key` | Optional shortcut that attempts woodcutting once per key press, whatever the interval is. Unbound by default. |
+| `Area Woodcutting` | When your own axe swing hits an allowed tree, log or stump, also hits other allowed ones near the hit. On by default. |
+| `Area Woodcutting Radius` | How far from the hit area woodcutting reaches (3 meters by default, 1 to 10). |
+| `Area Woodcutting Max Targets` | How many extra trees, logs or stumps one swing can hit (8 by default, 1 to 32). |
+
+When your own axe swing hits an allowed tree, log or stump, area woodcutting
+applies the same hit to the nearest other allowed trees, logs and stumps within
+`Area Woodcutting Radius` of that first hit, up to `Area Woodcutting Max Targets`.
+It skips targets the swing already hit, targets the axe's tool tier does not reach
+and logs that cannot take a hit yet, and it does not need a clear line to them.
+Each extra target wears the axe by one hit's durability, scaled by the world's
+durability modifier, and it stops when the axe breaks. Stamina and the skill gain
+stay once per swing. Only your own axe swings expand: hits by automatic
+woodcutting, other weapons and other characters do not, and the extra hits never
+expand again. It works only while this module is running, and also while `Cut
+Nearby Trees Automatically` is off.
+
+Trees from other mods can be added in `User-defined Tree`; see
+[User-defined objects](#user-defined-objects).
 
 Its `Module` option takes effect without a restart. Turning it off stops new
 woodcutting immediately and lets a pass already in progress finish its hit. The
 module's patches, hooks and tree components are removed over the next few frames.
-Turning it back on also completes over the next few frames and finds trees and
-logs that appeared while it was off. See
+Turning it back on also completes over the next few frames and finds trees, logs
+and stumps that appeared while it was off. See
 [Module disable options](#module-disable-options).
 
 ## Console commands
