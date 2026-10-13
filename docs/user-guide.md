@@ -392,6 +392,27 @@ default, configurable from 10 to 300). The object must also be within
 `Object Pin Range` from the camera. The bar is hidden while the large map is
 open, the game is paused or the HUD is hidden; the module must be running.
 
+### Compass
+
+Turn on `Compass` (off by default) to show a strip at the top centre of the
+screen with the cardinal directions and the icons of nearby map pins. The strip
+covers the 180 degrees ahead of the camera: what is straight ahead sits in the
+middle, and what is to your left or right at the ends. Each pin's icon sits in
+the direction of the pin from you, and the letters N, E, S and W mark the
+directions.
+
+`Compass Pin Range` limits the horizontal distance from you (100 meters by
+default, configurable from 10 to 300). Of the pins in range ahead of you, the
+24 nearest are shown, nearer icons drawn over farther ones. The compass shows
+your own, automatic and shared pins as the map shows them: an icon type you
+turned off on the map, `Hide Pins Outside Explored Area`, the categories of
+`Enhance the Map` and a search with `Apply to minimap` on hide pins on the
+compass too. Area markers are not shown. The navigation target is an ordinary
+pin here, shown while it is in range.
+
+The strip is hidden while the large map is open, the game is paused, the HUD is
+hidden, you are dead or the world has no map; the module must be running.
+
 ### Large map controls
 
 With `Enhance the Map` on (the default) and the module running, open the large

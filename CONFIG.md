@@ -284,6 +284,17 @@ Maximum horizontal distance in meters from the player for showing the looked-at 
 - Default value: 50
 - Acceptable value range: From 10 to 300
 
+### Compass / [enable_compass]
+Show a compass strip at the top centre of the screen with the cardinal directions and the icons of nearby map pins in the direction they lie. It covers the 180 degrees ahead of the camera and shows up to the 24 nearest pins there within Compass Pin Range. Pins that the map's icon filters, Hide Pins Outside Explored Area or Enhance the Map's categories and minimap search hide are not shown, nor are area markers. The strip is hidden while the large map is open, the game is paused, the HUD is hidden, you are dead or the world has no map. Off by default; requires the module to be running.
+
+- Default value: false
+
+### Compass Pin Range / [compass_pin_range]
+Maximum horizontal distance in meters from the player for showing a map pin on the compass.
+
+- Default value: 100
+- Acceptable value range: From 10 to 300
+
 ### Map Navigation Start Key / [navigation_start_key]
 Specify the modifier key used to start navigation by left-clicking a pin on the large map. Left click is fixed.
 

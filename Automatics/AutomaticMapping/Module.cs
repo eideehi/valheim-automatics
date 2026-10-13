@@ -236,8 +236,8 @@ namespace Automatics.AutomaticMapping
         /// <summary>
         ///     Everything the scans keep between calls: the dynamic and static pin caches, the
         ///     static object cache and its tiles, the navigation target with its overlay and guide
-        ///     swarm, the scan timers and the profiler. A disable and a new world session both start again from
-        ///     here (R6.1 / R6.2).
+        ///     swarm, the compass, the scan timers and the profiler. A disable and a new world
+        ///     session both start again from here (R6.1 / R6.2).
         /// </summary>
         internal static void ResetSession()
         {
@@ -256,13 +256,15 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        ///     The navigation overlay and guide swarm, and the manual pin shortcut. Both check the
-        ///     module gate; <see cref="Navigation.Update" /> opens with the gate itself, and hides
-        ///     the overlay and the swarm in the frame a stop is requested.
+        ///     The navigation overlay and guide swarm, the compass, and the manual pin shortcut.
+        ///     All check the module gate; <see cref="Navigation.Update" /> opens with the gate
+        ///     itself, and hides the overlay and the swarm in the frame a stop is requested, and
+        ///     <see cref="Compass.Update" /> removes the compass in that frame.
         /// </summary>
         private static void OnPlayerUpdate(Player player, bool takeInput)
         {
             Navigation.Update(player);
+            Compass.Update(player);
             ObjectPinning.OnPlayerUpdate(player, takeInput);
             Navigation.OnPlayerUpdate(player, takeInput);
         }

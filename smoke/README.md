@@ -270,9 +270,10 @@ A failing check names what it saw, for example:
 
 Takes `automatic_mapping / module` from `Enabled` through three off → on cycles
 by writing the setting, the way a user does, and makes sure it ends at its
-starting value. It spawns nothing and changes no other setting. Before the first
-cycle it records a baseline: the saved pins, the handler counts, the component
-counts and the minimap's icon tables.
+starting value. It spawns nothing. It turns `enable_compass` on for the run and
+puts it back at the end, as it does for the looked-at object bar and map filter
+settings it uses. Before the first cycle it records a baseline: the saved pins,
+the handler counts, the component counts and the minimap's icon tables.
 
 | Check | Asserts |
 |---|---|
@@ -281,6 +282,7 @@ counts and the minimap's icon tables.
 | `mapping_off_stopped_at_request` | Right after the disable request the module is still applied but no longer running, which is what every entry point checks, and the static scan's pass counter does not move until `Disabled`: the stop takes hold at the request, not at the teardown |
 | `mapping_off_patches_removed` | No patch is left under Mapping's Harmony id (SKIP when runtime patch removal is unavailable) |
 | `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode`, `AutomaticsNavigationOverlay` or `AutomaticsNavigationGuide` is left in the scene |
+| `mapping_off_compass_removed` | The compass, seen on the small map before the large map is opened for the filter checks, is gone in the frame of the disable request once the compass update of the player's frame has run there, and no `AutomaticsCompass` is left once the module is `Disabled` |
 | `mapping_off_saved_pins_kept` | The saved pins are the ones there were before the run: type, name, position to 0.1 m, owner and checked flag. A vehicle pin's position is left out, because it follows its vehicle |
 | `mapping_off_unsaved_pins_removed` | None of the unsaved pins the module held just before the disable is on the map (SKIP when it held none) |
 | `mapping_on_state_enabled` | The registry reports `Enabled` after the enable request |
@@ -289,6 +291,7 @@ counts and the minimap's icon tables.
 | `mapping_on_counts_at_baseline` | The handler counts of the hooks, caches and registries Mapping subscribes to, the component counts, and the lengths of `Minimap.m_icons` and `m_visibleIconTypes` are what they were before the run |
 | `mapping_on_scans_resumed` | Within 10 s the static scan has run again and, if it held pins before the run, it holds one again (SKIP when a setting keeps the static scan from running on its own, such as `static_object_mapping_key`) |
 | `mapping_on_saved_pins_kept` | 4 s after the enable, once the flora pins are placed again, the saved pins are still the ones there were before the run |
+| `mapping_on_compass_option_off_removed` | With the module running, the compass is shown on the small map, is gone in the frame `enable_compass` is turned off and is not left in the scene two frames later; the option is then turned back on for the next cycle |
 
 The component counts are sampled again for up to 10 frames before a mismatch is
 reported, because an object the game spawns or despawns in the same frame has
@@ -885,7 +888,7 @@ Safety, on top of the `rpc` rules:
 
 `automatics_smoke_features all` runs every section below, and
 `automatics_smoke_features <section>` runs one of them: `pickup`, `pin`,
-`mining`, `planting`, `farming`, `guide` or `supply`. Run it from the in-game console while
+`mining`, `planting`, `farming`, `guide`, `compass` or `supply`. Run it from the in-game console while
 a single-player world is loaded. Each section drives the real game code path of
 one feature against objects it spawns next to the player. The run ends with one
 `[Automatics Smoke] Summary: ...` line over every section it ran. A section that
@@ -1186,6 +1189,55 @@ The section removes only its own test pin and puts back the map mode and your
 navigation target, also through the session hand-back when a run is cut short.
 Whether the swarm looks like glowing insects, and its frame cost, remain an
 in-game judgement outside this section.
+
+#### `compass`
+
+Run `automatics_smoke_features compass` in a world with Automatic Mapping
+running, the HUD shown and the large map closed (the section SKIPs otherwise,
+in a world without a map, and while a pin search applies to the minimap). Stand
+still while it runs. Everything runs in one frame: the section adds unsaved test
+pins at known bearings and distances from you, turns the camera to known
+headings and runs the compass update itself, so no scan moves or removes a pin
+in between. For the section it turns `enable_compass` and `enable_map_enhancements`
+on, sets `compass_pin_range` to 80 m, clears `map_filter_hidden_categories` and
+turns `hide_unexplored_automatic_mapping_pins` off, and it changes them further
+for single checks as described below.
+
+| Check | Asserts |
+|---|---|
+| `compass_strip_shown` | The strip exists, is shown and sits under the HUD's root object |
+| `compass_letters_facing_north` | Facing north, N is at the centre and E and W at the strip's ends, each within 1 canvas unit, and S is hidden |
+| `compass_letters_follow_turning` | At headings 30 and 225 each letter is where its angle from the heading puts it, or hidden beyond the half view |
+| `compass_letters_localized` | The letters read N, E, S and W, or 北, 東, 南 and 西 in Japanese |
+| `compass_marker_positions` | Pins at -60, 0, 30 and 75 degrees from the heading, 20 to 70 m away, are shown within 1 canvas unit of `angle / 90 × 300` |
+| `compass_marker_icons` | Each of those markers shows its own pin's icon; the four pins have four different icon types (SKIP when those share a sprite) |
+| `compass_range_cut` | A pin 90 m away in view is not shown with the range at 80 m and is shown with it at 100 m |
+| `compass_view_cut` | Pins at 180 and -100 degrees are not shown; turned to face each without collecting the pins again, each is shown at the centre |
+| `compass_icon_type_toggle` | With its icon type turned off in the minimap's icon filter, a pin is hidden while a pin of another type stays; turned back on, it is shown again |
+| `compass_category_filter` | An automatic pin registered with a live Flora category on explored ground is hidden while `map_filter_hidden_categories` holds `Flora`, and shown again once it is empty |
+| `compass_manual_pin_kept` | A manual pin of the same type stays shown while Flora is hidden, and a manual pin on unexplored ground stays shown with `hide_unexplored_automatic_mapping_pins` on |
+| `compass_unexplored_filter` | An automatic pin 110 to 290 m away on unexplored ground (with the range at 300 m and the camera facing it) is shown until `hide_unexplored_automatic_mapping_pins` is turned on and hidden after, while an automatic pin on explored ground stays (SKIP when `enable_automatic_mapping` is off or everything in that distance is explored) |
+| `compass_cap_nearest_in_view` | With 24 pins 5 to 28 m behind you and 30 pins 32 to 61 m ahead, the 24 shown are the nearest in view by the map's own rule, and none of the pins behind is among them |
+| `compass_cap_after_turn` | Turned around before the next collection of pins, the 24 shown are again the nearest in view, now the pins behind, and none of the pins ahead |
+| `compass_nearer_on_top` | The shown pins run nearest first, and each marker is drawn over the next |
+| `compass_hidden_on_large_map` | With the large map open the strip is hidden, and it is shown again with the small map |
+| `compass_hidden_without_minimap` | With the map mode the game uses while you are dead and in a world without a map, the strip is hidden, and it is shown again with the small map |
+| `compass_hidden_with_hud_hidden` | With the HUD hidden the strip is hidden, and it is shown again once the HUD is shown |
+| `compass_strip_in_top_band` | The strip's screen rectangle is within the screen, horizontally centred within 2 pixels and inside the top fifth, under the HUD's root object |
+| `compass_pins_removed` | None of the section's test pins is left on the map, and every pin there before the section still is |
+| `compass_settings_restored` | Every setting the section changed is back at your value |
+
+"The map's own rule" is worked out by the check over every pin on the map: the
+pins the minimap would draw (icon filter, shared-map fade, automatic-pin
+filters), within range and the half view, nearest first. A check whose test pins
+that rule would push out of the 24 markers in favour of nearer pins of yours
+SKIPs as inconclusive; run it away from crowded pins. The section removes only
+its own test pins, and puts back the camera, the map mode, the HUD and the
+minimap's icon filter (vanilla turns a hidden icon type back on when a pin of
+that type is added), also through the session hand-back when a run is cut
+short. How the strip looks, its legibility at other GUI scales and screen
+shapes, and its overlap with the boss and event bars remain an in-game
+judgement outside this section.
 
 #### `supply`
 

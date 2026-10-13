@@ -11,6 +11,7 @@ using ModUtils;
 using UnityEngine;
 using Object = UnityEngine.Object;
 using AimedObjectBar = Automatics.AutomaticMapping.AimedObjectBar;
+using Compass = Automatics.AutomaticMapping.Compass;
 using Navigation = Automatics.AutomaticMapping.Navigation;
 using MappingMap = Automatics.AutomaticMapping.Map;
 using MapFilter = Automatics.AutomaticMapping.MapFilter;
@@ -37,6 +38,8 @@ namespace Automatics.SmokeTest
     //   - while off, no patch is left under its Harmony id, no component of its own and no
     //     navigation overlay, aimed label, filter row or guide swarm is left in the scene, the saved pins
     //     are the ones there were before the run, and no unsaved pin the module held is left on the map;
+    //   - the compass, seen on the small map before each disable, is gone from the frame of the
+    //     stop request on, and turning its option off alone removes it while the module runs;
     //   - while on, the patches are exactly the declared set, every eligible object in the scene
     //     carries its component from the running generation, the handler counts, component counts
     //     and minimap icon tables are what they were before the run, the scans run again, and the
@@ -45,7 +48,7 @@ namespace Automatics.SmokeTest
     // vehicle is, so the saved-pin comparison leaves the position of the vehicle pins out.
     //
     // It spawns no world object and records the
-    // module toggle, aimed-bar and filter settings through SmokeSession. It only ever turns
+    // module toggle, aimed-bar, compass and filter settings through SmokeSession. It only ever turns
     // Automatic Mapping off and back on: when the module is
     // off in the user's settings, every check SKIPs and nothing is written.
     internal static partial class LifecycleSmokeCommand
@@ -92,6 +95,7 @@ namespace Automatics.SmokeTest
             private const string OffStopped = "mapping_off_stopped_at_request";
             private const string OffPatches = "mapping_off_patches_removed";
             private const string OffComponents = "mapping_off_components_removed";
+            private const string OffCompass = "mapping_off_compass_removed";
             private const string OffFilterControls = "mapping_off_filter_controls_removed";
             private const string OffTooltip = "mapping_off_tooltip_removed";
             private const string OffFilterSearch = "mapping_off_filter_search_reset";
@@ -99,6 +103,7 @@ namespace Automatics.SmokeTest
             private const string OffUnsavedPins = "mapping_off_unsaved_pins_removed";
             private const string OnState = "mapping_on_state_enabled";
             private const string OnFilterSearch = "mapping_on_filter_search_empty";
+            private const string OnCompassOption = "mapping_on_compass_option_off_removed";
             private const string OnPatches = "mapping_on_patches_applied";
             private const string OnComponents = "mapping_on_components_attached";
             private const string OnBaseline = "mapping_on_counts_at_baseline";
@@ -111,17 +116,18 @@ namespace Automatics.SmokeTest
             // are reported in.
             private static readonly string[] Order =
             {
-                Settled, OffState, OffStopped, OffPatches, OffComponents, OffFilterControls, OffFilterSearch, OffTooltip,
-                OffSavedPins, OffUnsavedPins,
-                OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, Restored, NoErrors
+                Settled, OffState, OffStopped, OffPatches, OffComponents, OffCompass, OffFilterControls, OffFilterSearch,
+                OffTooltip, OffSavedPins, OffUnsavedPins,
+                OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, OnCompassOption,
+                Restored, NoErrors
             };
 
             // Recorded once per cycle, and a PASS only when every cycle passed.
             private static readonly HashSet<string> PerCycle = new HashSet<string>(StringComparer.Ordinal)
             {
-                OffState, OffStopped, OffPatches, OffComponents, OffFilterControls, OffFilterSearch, OffTooltip,
-                OffSavedPins, OffUnsavedPins,
-                OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins
+                OffState, OffStopped, OffPatches, OffComponents, OffCompass, OffFilterControls, OffFilterSearch,
+                OffTooltip, OffSavedPins, OffUnsavedPins,
+                OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, OnCompassOption
             };
 
             private static readonly FieldInfo PinsField = AccessTools.Field(typeof(Minimap), "m_pins");
@@ -157,6 +163,7 @@ namespace Automatics.SmokeTest
             private HashSet<Minimap.PinData> _pinsBefore;
             private Func<string, bool> _navigationHandBack;
             private Func<string, bool> _filterHandBack;
+            private SmokeSession.SettingRestoration _compassSetting;
             private string _notReached = "not reached: an earlier step stopped the run";
 
             public MappingRun(int runId, string runner)
@@ -281,6 +288,14 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
+                if (!SmokeSession.BeginSetting(RunId, MappingConfig.EnableCompassEntry,
+                        out _compassSetting, out var compassRefusal) ||
+                    !SmokeSession.WriteSetting(RunId, _compassSetting, true, out compassRefusal))
+                {
+                    Stopped("compass setting precondition failed: " + compassRefusal);
+                    yield break;
+                }
+
                 foreach (var pair in new[]
                 {
                     new KeyValuePair<ConfigEntryBase, object>(MappingConfig.EnableMapEnhancementsEntry, true),
@@ -381,6 +396,9 @@ namespace Automatics.SmokeTest
                     AimedId = ZDOID.None
                 });
                 var aimedActive = AimBarFeatureSmoke.ActivateExistingLabel(Player.m_localPlayer, out var aimedPrecondition);
+                // The compass shows only on the small map, so it is seen before the large map opens.
+                Compass.Update(Player.m_localPlayer);
+                var compassShown = Compass.Root && Compass.Root.activeInHierarchy;
                 var marker = Navigation.TemporaryMarker;
                 var markerActive = marker != null && !marker.m_save && AllPins().Contains(marker);
 
@@ -425,6 +443,12 @@ namespace Automatics.SmokeTest
                 var appliedAtRequest = MappingModule.Active;
                 var runningAtRequest = MappingModule.Running;
 
+                // The update the player's next frame makes, run in the frame of the request: the
+                // compass goes there, before the pump takes anything apart.
+                var compassBeforeRequest = Compass.Root != null;
+                Compass.Update(Player.m_localPlayer);
+                var compassAtRequest = Compass.Root != null || CountCompasses(true) > 0;
+
                 var wait = Await(ModuleState.Disabled, true, true, null, () =>
                 {
                     if (ModuleRegistry.GetState(_moduleName) == ModuleState.Disabled) return;
@@ -436,6 +460,12 @@ namespace Automatics.SmokeTest
 
                 // Object.Destroy takes effect at the end of the frame the pump ran in.
                 for (var i = 0; i < DestroySettleFrames; i++) yield return null;
+
+                var compassesLeft = CountCompasses(false);
+                Cycle(OffCompass, cycle, compassShown && compassBeforeRequest && !compassAtRequest && compassesLeft == 0 &&
+                    !Compass.Root,
+                    "the compass seen on the small map was gone in the frame of the disable request, and none is left",
+                    $"compass cleanup failed: shown on the small map before={compassShown}, present at the request={compassBeforeRequest}, still there after the update in that frame={compassAtRequest}, left after disabling={compassesLeft}");
 
                 var filterRoots = FindAll<RectTransform>().Count(x => x.name == MapFilter.ObjectName);
                 Cycle(OffFilterControls, cycle, controlsActive && !MapFilter.Root &&
@@ -566,7 +596,33 @@ namespace Automatics.SmokeTest
                     $"the {saved.Count} saved pin(s) are the ones there were before the run",
                     DescribeDifference(_baseline.SavedPins, saved));
 
+                var option = CompassOption(cycle);
+                while (option.MoveNext()) yield return option.Current;
+
                 _proceed = true;
+            }
+
+            // With the module running, turning the compass option off alone removes the compass
+            // in that frame; the option is then turned back on for the next cycle.
+            private IEnumerator CompassOption(int cycle)
+            {
+                var player = Player.m_localPlayer;
+                Compass.Update(player);
+                var shown = Compass.Root && Compass.Root.activeInHierarchy;
+                if (!SmokeSession.WriteSetting(RunId, _compassSetting, false, out var refusal))
+                {
+                    CycleSkip(OnCompassOption, cycle, "inconclusive: enable_compass could not be turned off: " + refusal);
+                    yield break;
+                }
+
+                Compass.Update(player);
+                var goneInFrame = !Compass.Root && CountCompasses(true) == 0;
+                for (var i = 0; i < DestroySettleFrames; i++) yield return null;
+                var left = CountCompasses(false);
+                var restored = SmokeSession.WriteSetting(RunId, _compassSetting, true, out refusal);
+                Cycle(OnCompassOption, cycle, shown && goneInFrame && left == 0 && restored,
+                    "the compass seen on the small map was gone in the frame enable_compass was turned off, and none was left",
+                    $"compass option cleanup failed: shown before={shown}, gone in that frame={goneInFrame}, left afterwards={left}, option turned back on={restored}{(restored ? "" : " (" + refusal + ")")}");
             }
 
             // The static scan's counter was reset with the session, so a pass counted after the
@@ -934,6 +990,12 @@ namespace Automatics.SmokeTest
             private static int CountNavigationGuides()
             {
                 return FindAll<Transform>().Count(x => x.name == NavigationGuideName);
+            }
+
+            private static int CountCompasses(bool activeOnly)
+            {
+                return FindAll<RectTransform>().Count(x =>
+                    x.name == Compass.ObjectName && (!activeOnly || x.gameObject.activeInHierarchy));
             }
 
             private static int IconCount()

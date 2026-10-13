@@ -41,6 +41,8 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<KeyboardShortcut> _navigateToAimedObjectKey;
         private static ConfigEntry<bool> _enableAimedObjectBar;
         private static ConfigEntry<float> _aimedObjectBarRange;
+        private static ConfigEntry<bool> _enableCompass;
+        private static ConfigEntry<float> _compassPinRange;
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
         private static ConfigEntry<bool> _enableNavigationGuide;
         private static ConfigEntry<string> _navigationGuideColor;
@@ -100,6 +102,10 @@ namespace Automatics.AutomaticMapping
         internal static ConfigEntry<bool> EnableAimedObjectBarEntry => _enableAimedObjectBar;
         public static float AimedObjectBarRange => _aimedObjectBarRange.Value;
         internal static ConfigEntry<float> AimedObjectBarRangeEntry => _aimedObjectBarRange;
+        public static bool EnableCompass => _enableCompass.Value;
+        internal static ConfigEntry<bool> EnableCompassEntry => _enableCompass;
+        public static float CompassPinRange => _compassPinRange.Value;
+        internal static ConfigEntry<float> CompassPinRangeEntry => _compassPinRange;
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
         public static bool EnableNavigationGuide => _enableNavigationGuide.Value;
         internal static ConfigEntry<bool> EnableNavigationGuideEntry => _enableNavigationGuide;
@@ -194,6 +200,8 @@ namespace Automatics.AutomaticMapping
             _pinObjectRange = config.Bind("pin_object_range", 100f, (10f, 300f));
             _enableAimedObjectBar = config.Bind("enable_aimed_object_bar", false);
             _aimedObjectBarRange = config.Bind("aimed_object_bar_range", 50f, (10f, 300f));
+            _enableCompass = config.Bind("enable_compass", false);
+            _compassPinRange = config.Bind("compass_pin_range", 100f, (10f, 300f));
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
             _enableNavigationGuide = config.Bind("enable_navigation_guide", true);

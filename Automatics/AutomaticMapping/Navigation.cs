@@ -46,6 +46,7 @@ namespace Automatics.AutomaticMapping
             _guideErrorLogged = false;
             DestroyOverlay();
             AimedObjectBar.Cleanup();
+            Compass.Cleanup();
             MapFilter.Cleanup();
             PinTooltip.Cleanup();
             PinCategories.Cleanup();

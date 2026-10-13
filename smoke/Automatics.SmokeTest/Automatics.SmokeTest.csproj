@@ -85,6 +85,7 @@
     <Compile Include="Features\MiningFeatureSmoke.cs" />
     <Compile Include="Features\PlantingFeatureSmoke.cs" />
     <Compile Include="Features\GuideFeatureSmoke.cs" />
+    <Compile Include="Features\CompassFeatureSmoke.cs" />
     <Compile Include="Features\SupplyFeatureSmoke.cs" />
     <Compile Include="Features\FarmingFeatureSmoke.cs" />
   </ItemGroup>
