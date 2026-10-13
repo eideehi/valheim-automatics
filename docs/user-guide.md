@@ -38,7 +38,9 @@ to edit Automatics options in game.
 
 When an update changes an object list's default, Automatics adds the objects newly
 included in that default once to lists that still hold a default it recognizes;
-lists whose defaults did not change get no additions. A list you edited is left as
+lists whose defaults did not change get no additions. Objects an update drops from
+a default are likewise removed once from lists that still hold exactly the previous
+default. A list you edited is left as
 it is, as are some lists kept unchanged since 1.4.0 or earlier; add the new names to
 those yourself. Objects you remove afterwards stay removed. Corrections to the
 entries themselves, such as a renamed object, apply to every list.
@@ -821,7 +823,7 @@ Key settings:
 | `Attempt Farming Key` | Optional shortcut that runs farming once per key press, whatever the interval is. |
 | `Farming Range` | How far farming harvests, replants and sows: around you, or around each designated container in `Nearby Containers` mode. |
 | `Container Search Range` | How far farming looks for role containers (`Player With Containers` and `Nearby Containers` modes): from each crop, and when sowing, from the designated container or from you. An existing configuration starts with its `Farming Range` value. |
-| `Allow Farming Crop` | Selects which crops are harvested and replanted. Crops without a plantable sapling are harvested only. |
+| `Allow Farming Crop` | Selects which crops are harvested and replanted. By default it lists only the crops the cultivator can plant; a wild plant you add, such as berries or mushrooms, has no plantable sapling and is harvested only. |
 | `Seed Reserve` | Keeps at least this many of each planting input where farming takes it from; sowing new ground stops at the reserve. Replanting a harvested spot does not keep it. |
 | `Farming Mode` | Selects where farming works and keeps its items: `Player Inventory`, `Player With Containers` or `Nearby Containers`. |
 | `Proactive Sowing` | Also sows into nearby empty cultivated ground, continuing the rows of a growing crop of the same kind nearby. |
@@ -923,7 +925,8 @@ can harvest and replant them: crops your game controls within `Farming Range` of
 you (`Player Inventory`), of you with a role container within `Container Search
 Range` of the crop (`Player With Containers`), or of a designated box with such a
 container near the crop (`Nearby Containers`). Periodic
-pickup still collects the others, such as wild berries farther away. In
+pickup still collects the others, such as crops farther away and the wild berries
+and mushrooms that `Allow Farming Crop` leaves out by default. In
 multiplayer, a crop another player's game controls is left to pickup and is not
 replanted.
 Turning the Automatic Farming module off, turning off `Harvest And Replant Automatically`,

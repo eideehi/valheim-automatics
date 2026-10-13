@@ -1130,6 +1130,13 @@ within 6 m; crops from the Mistlands update onward are counted, not named. It
 SKIPs when a container with a farming role is within 13 m, or when fewer than
 three empty cultivated cells lie within 3 m of you.
 
+Before it looks for a crop, a plot or role containers, so that none of those
+SKIPs stops it, the section runs one read-only check:
+
+| Check | Pass condition |
+| --- | --- |
+| `farming_default_crops_have_saplings` | For every Flora identifier (custom flora objects included), the sapling lookup that farming replants with (`CropPlanting.TryResolveSapling`) finds a sapling exactly when the identifier is in the default value of `Allow Farming Crop`. A pass gives only the counts; a FAIL names each identifier from before the Mistlands update that differs and says which way, and counts the later ones, which it names in the BepInEx log file only |
+
 For the length of the section it sets `Player With Containers` mode, a farming
 interval of 0, a farming range of 4 m, a container search range of 8 m, the
 chosen crop as the only allowed crop and a spacing factor of 2.5, then restores

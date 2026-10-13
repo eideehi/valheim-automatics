@@ -5,6 +5,7 @@ using System.Linq;
 using Automatics.AutomaticFarming;
 using Automatics.Valheim;
 using BepInEx.Configuration;
+using BepInEx.Logging;
 using HarmonyLib;
 using ModUtils;
 using UnityEngine;
@@ -21,7 +22,8 @@ namespace Automatics.SmokeTest
     // replanted from them (also below Seed Reserve, which holds back only sowing), and sowing
     // continues the rows of a rotated crop. Everything runs synchronously on objects the section
     // spawns; the containers, crops and their contents are removed afterwards and no terrain is
-    // changed. A harvest may raise the pick skill, as a harvest by hand does.
+    // changed. A harvest may raise the pick skill, as a harvest by hand does. First, and without
+    // changing anything, it checks that the default crop list holds exactly the crops with a sapling.
     internal static class FarmingFeatureSmoke
     {
         private const string Label = "farming feature smoke";
@@ -51,6 +53,8 @@ namespace Automatics.SmokeTest
                 run.Skip("farming_section", "enable the Farming module");
                 yield break;
             }
+
+            CheckDefaultCrops(run);
 
             var origin = player.transform.position;
             if (!SelectCrop(origin, out var crop, out var cropReport))
@@ -166,6 +170,50 @@ namespace Automatics.SmokeTest
             public string SeedName;
             public int SeedAmount;
             public float Step;
+        }
+
+        // Flora identifiers that predate the Mistlands update; a failure names only these on screen.
+        private static readonly HashSet<string> EarlyFlora = new HashSet<string>(new[]
+        {
+            "Dandelion", "Mushroom", "Raspberries", "Blueberries", "Carrot", "CarrotSeeds", "YellowMushroom",
+            "Thistle", "Turnip", "TurnipSeeds", "Onion", "OnionSeeds", "Barley", "Cloudberries", "Flax"
+        }, StringComparer.Ordinal);
+
+        private static readonly ManualLogSource Log =
+            BepInEx.Logging.Logger.CreateLogSource("Automatics Smoke Farming");
+
+        // Read-only: the default of Allow Farming Crop is exactly the Flora identifiers the sapling
+        // lookup resolves, so that farming targets by default only crops it can replant. A pass
+        // gives counts; a failure names each early identifier that differs and counts the later
+        // ones, whose names go to the log file only.
+        private static void CheckDefaultCrops(FeatureRun run)
+        {
+            const string name = "farming_default_crops_have_saplings";
+            var entry = AccessTools.Field(typeof(FarmingConfig), "_allowFarmingCrop")?.GetValue(null) as ConfigEntry<StringList>;
+            if (entry == null)
+            {
+                run.Skip(name, "Allow Farming Crop is not bound");
+                return;
+            }
+
+            var defaults = new HashSet<string>((StringList)entry.DefaultValue, StringComparer.Ordinal);
+            var identifiers = ValheimObject.Flora.GetAllElements().Select(x => x.identifier).Union(defaults).ToList();
+            var mismatches = new List<string>();
+            var later = 0;
+            foreach (var identifier in identifiers)
+            {
+                var resolves = Planting.TryResolveSapling(identifier, out _);
+                if (resolves == defaults.Contains(identifier)) continue;
+                var mismatch = identifier + (resolves ? ": has a sapling but is not in the default" : ": in the default but has no sapling");
+                Log.LogWarning($"{name}: {mismatch}");
+                if (EarlyFlora.Contains(identifier)) mismatches.Add(mismatch);
+                else later++;
+            }
+            if (later > 0) mismatches.Add($"{later} later identifier(s) differ (named in the log file)");
+            Check(run, name, mismatches.Count == 0, mismatches.Count == 0
+                ? $"each of the {defaults.Count} default crop(s) has a sapling and none of the other " +
+                  $"{identifiers.Count - defaults.Count} Flora identifier(s) has one"
+                : string.Join("; ", mismatches.ToArray()));
         }
 
         // The first allowed crop that grows from seeds on cultivated ground in this biome, has no

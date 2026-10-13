@@ -248,7 +248,7 @@ namespace Automatics
         // called.
         internal const string DefaultsRevisionSection = "hidden";
         internal const string DefaultsRevisionKey = "defaults_revision";
-        internal const int DefaultsRevision = 2;
+        internal const int DefaultsRevision = 3;
 
         // A hidden entry recording that the pass for the Pickup All Nearby key has run. Binding
         // the key used to turn periodic pickup off; it no longer does, so that pass sets the
@@ -580,6 +580,12 @@ namespace Automatics
         // 1.7.0 first binds this list; its object JSON default equals 5d5cc7f^.
         private const string CropDefaults = "Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flex, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds";
 
+        // 1.8.0 fresh default, and what revision 2 and the Flax rename make of CropDefaults.
+        private const string CropRevision2Defaults = "Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flax, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr, Lingonberries, BlueMushroom";
+
+        // The wild plants revision 3 takes out of CropRevision2Defaults: no sapling grows them.
+        private const string WildCrops = "Dandelion, Mushroom, Raspberries, Blueberries, YellowMushroom, Thistle, Cloudberries, Fiddlehead, SmokePuff, Lingonberries, BlueMushroom";
+
         // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
         // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
         private const string ProcessingContainerDefaults = "PieceChestWood, PieceChest, PieceChestBlackmetal, PieceChestCharred";
@@ -658,12 +664,30 @@ namespace Automatics
             return true;
         }
 
+        // Runs each revision step the file is below, in order, and records the marker once.
         private static bool MigrateObjectDefaults(List<string> lines, int revision)
         {
             if (revision >= DefaultsRevision) return false;
-            var entries = ReadEntries(lines);
-            var hasMarker = entries.ContainsKey((DefaultsRevisionSection, DefaultsRevisionKey));
+            var hasMarker = ReadEntries(lines).ContainsKey((DefaultsRevisionSection, DefaultsRevisionKey));
 
+            if (revision < 2)
+                MigrateObjectDefaultsRevision2(lines);
+            if (revision < 3)
+                RemoveWildCrops(lines, "automatic_farming", "allow_farming_crop");
+
+            // Update every existing marker in place, retaining its comments and section layout.
+            // A file without a marker gets one at the end, after the migrated entries.
+            if (hasMarker)
+                RewriteEveryEntry(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
+            else
+                AppendSection(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
+            Automatics.Logger.Message($"Record the config defaults revision {DefaultsRevision}");
+            return true;
+        }
+
+        private static void MigrateObjectDefaultsRevision2(List<string> lines)
+        {
+            var entries = ReadEntries(lines);
             foreach (var list in ObjectListsRevision2)
             {
                 if (!entries.TryGetValue((list.Section, list.Key), out var entry)) continue;
@@ -692,15 +716,22 @@ namespace Automatics
 
             RenameFlax(lines, "automatic_farming", "allow_farming_crop");
             RenameFlax(lines, "automatic_mapping", "allow_pinning_flora");
+        }
 
-            // Update every existing marker in place, retaining its comments and section layout.
-            // A file without a marker gets one at the end, after the migrated entries.
-            if (hasMarker)
-                RewriteEveryEntry(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
-            else
-                AppendSection(lines, DefaultsRevisionSection, DefaultsRevisionKey, FormatRevision());
-            Automatics.Logger.Message($"Record the config defaults revision {DefaultsRevision}");
-            return true;
+        // Revision 3. A crop list still equal to CropRevision2Defaults, read after revision 2 and
+        // the Flax rename of the same run, loses the wild plants; the other elements keep their
+        // order. Like revision 2, it compares raw elements as a set, ordinally.
+        private static void RemoveWildCrops(List<string> lines, string section, string key)
+        {
+            if (!ReadEntries(lines).TryGetValue((section, key), out var entry)) return;
+            var values = ParseObjectList(entry.Value);
+            if (!new HashSet<string>(values, StringComparer.Ordinal).SetEquals(ParseObjectList(CropRevision2Defaults)))
+                return;
+
+            var wild = new HashSet<string>(ParseObjectList(WildCrops), StringComparer.Ordinal);
+            values = values.Where(x => !wild.Contains(x)).ToList();
+            lines[entry.Index] = $"{key} = {string.Join(", ", values.Select(Csv.Escape))}";
+            Automatics.Logger.Message($"Remove values: [{section}] {key} -= [{WildCrops}]");
         }
 
         // Rewrites every line holding the entry, keeping its comments and section layout.

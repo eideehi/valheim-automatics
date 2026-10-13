@@ -25,7 +25,7 @@ namespace Automatics
             Run("a key BepInEx cannot read counts as unbound", UnreadableKeyCountsAsUnbound);
             Run("every key BepInEx reads as bound is taken as bound", ReadableKeyFormsCountAsBound);
             Run("a config without the key entry gets no key written, so the Left Shift + E default applies", MissingKeyEntryIsLeftToTheDefault);
-            Run("a revision-two config without the pickup gate runs the pass and gets the gate", RevisionTwoConfigWithoutTheGateRuns);
+            Run("a revision-three config without the pickup gate runs the pass and gets the gate", RevisionThreeConfigWithoutTheGateRuns);
             Run("the gate alone is a change worth writing", GateAloneIsWritten);
             Run("the revision-two steps do not run again", RevisionTwoStepsDoNotRerun);
             Run("a config without either marker gets both, the pickup gate after the defaults marker", ConfigWithoutMarkersGetsBoth);
@@ -37,7 +37,7 @@ namespace Automatics
             Run("a positive interval set after the pass survives the next start", PositiveIntervalSetLaterSurvives);
         }
 
-        // A current config: revision two, with the Pickup section holding the given entries. A
+        // A current config: revision three, with the Pickup section holding the given entries. A
         // null key or interval leaves that entry out.
         private static string[] PickupLines(string key, string interval, string gate = null)
         {
@@ -53,7 +53,7 @@ namespace Automatics
             };
             if (interval != null) lines.Add("automatic_pickup_interval = " + interval);
             if (key != null) lines.Add("pickup_all_nearby_key = " + key);
-            lines.AddRange(new[] { "", "[hidden]", "", "defaults_revision = 2" });
+            lines.AddRange(new[] { "", "[hidden]", "", "defaults_revision = 3" });
             if (gate != null) lines.Add(PickupGateKey + " = " + gate);
             return lines.ToArray();
         }
@@ -180,7 +180,7 @@ namespace Automatics
             AssertDoesNotContain(Migrate(lines), "pickup_all_nearby_key");
         }
 
-        private static void RevisionTwoConfigWithoutTheGateRuns()
+        private static void RevisionThreeConfigWithoutTheGateRuns()
         {
             var migrated = Migrate(PickupLines("LeftAlt", "1.5"));
             AssertInterval(migrated, "0");
@@ -199,7 +199,7 @@ namespace Automatics
                 "[automatic_door]",
                 "module = Disabled",
                 "[hidden]",
-                "defaults_revision = 2"
+                "defaults_revision = 3"
             };
             AssertOnlyTheGateWasAdded(lines);
         }
@@ -208,7 +208,8 @@ namespace Automatics
         {
             // A list that still holds the default revision two appended to, a list with the flax
             // entry's old spelling, and module entries missing: revision two would change all of
-            // them, and the marker says it has run. Only the pickup pass may act.
+            // them, and the marker says it has run. Only the pickup pass may act, besides
+            // revision three, which finds nothing to change here and only advances the marker.
             var lines = new[]
             {
                 "## Settings file was created by plugin Automatics v1.7.0",
@@ -227,6 +228,7 @@ namespace Automatics
             var migrated = Migrate(lines);
             var expected = lines.ToList();
             expected[expected.IndexOf("automatic_pickup_interval = 1")] = "automatic_pickup_interval = 0";
+            expected[expected.IndexOf("defaults_revision = 2")] = "defaults_revision = 3";
             expected.Add(PickupGateKey + " = " + PickupGateValue);
             var text = string.Join(Environment.NewLine, expected) + Environment.NewLine;
             if (migrated != text)
@@ -235,8 +237,8 @@ namespace Automatics
 
         private static void ConfigWithoutMarkersGetsBoth()
         {
-            // A 1.7.0 config: revision two runs, and the pickup pass after it. The gate goes
-            // right after the defaults marker.
+            // A 1.7.0 config: revisions two and three run, and the pickup pass after them. The
+            // gate goes right after the defaults marker.
             var migrated = Migrate(
                 "## Settings file was created by plugin Automatics v1.7.0",
                 "## Plugin GUID: net.eidee.valheim.automatics",
@@ -255,7 +257,7 @@ namespace Automatics
                 .Where(x => x.Length > 0 && !x.StartsWith("#", StringComparison.Ordinal) &&
                             !x.StartsWith("[", StringComparison.Ordinal))
                 .ToList();
-            if (entries[entries.Count - 2] != "defaults_revision = 2" ||
+            if (entries[entries.Count - 2] != "defaults_revision = 3" ||
                 entries[entries.Count - 1] != PickupGateKey + " = " + PickupGateValue)
                 throw new Exception($"The defaults marker and then the pickup gate should be the last entries in:\n{migrated}");
         }

@@ -37,7 +37,7 @@ namespace Automatics
 
             var representative = RepresentativeList;
             Run($"[{representative.Section}] {representative.Key} leaves quoted spaces untouched at revision two", () =>
-                AssertBytesUnchanged(string.Join("\r\n", RevisionLines(representative, Corrupted(representative), "2"))));
+                AssertOnlyMarkerAdvanced(RevisionLines(representative, Corrupted(representative), "2")));
 
             Run("trimming deduplicates ordinally and keeps first positions with CSV escaping", () =>
             {
@@ -49,12 +49,12 @@ namespace Automatics
                 AssertBytesUnchanged(result);
             });
             // The unsupported defaults revision cases cover each way a marker goes unrecognized.
-            Run("unrecognized marker '3' leaves corrupted lists untouched", () =>
+            Run("unrecognized marker '4' leaves corrupted lists untouched", () =>
             {
                 var lines = fixtures.SelectMany(f => new[] { "[" + f.Section + "]",
                     f.Key + " = \" First \", \" Second\", First" });
                 var content = "# Automatics v1.7.0\n" + string.Join("\n", lines) +
-                    "\n[hidden]\ndefaults_revision = 3\npickup_key_decoupled = 1\n";
+                    "\n[hidden]\ndefaults_revision = 4\npickup_key_decoupled = 1\n";
                 AssertBytesUnchanged(content);
             });
             Run("whitespace repair leaves lists outside the released migration alone", () =>

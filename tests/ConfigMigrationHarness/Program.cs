@@ -28,7 +28,7 @@ namespace Automatics
 
         private const string MarkerSection = "hidden";
         private const string MarkerKey = "defaults_revision";
-        private const string MarkerValue = "2";
+        private const string MarkerValue = "3";
 
         private static int Main()
         {
@@ -326,7 +326,7 @@ namespace Automatics
                 "[general]",
                 "custom_door = MyDoor, Custom door, MyDoorPrefab",
                 "[hidden]",
-                "defaults_revision = 2",
+                "defaults_revision = 3",
                 "pickup_key_decoupled = 1"
             };
 
@@ -364,7 +364,7 @@ namespace Automatics
                 "[automatic_pickup]",
                 "module = Enabled",
                 "[hidden]",
-                "defaults_revision = 2");
+                "defaults_revision = 3");
 
             AssertContains(current, "[automatic_pickup]");
             AssertEqual(1, CountOccurrences(current, "module = Enabled"), "A current config should keep its pickup module value.");
@@ -515,7 +515,7 @@ namespace Automatics
                 "[automatic_processing]",
                 "module = Disabled",
                 "[hidden]",
-                "defaults_revision = 2",
+                "defaults_revision = 3",
                 "pickup_key_decoupled = 1"
             };
 
@@ -755,7 +755,7 @@ namespace Automatics
                 "[automatic_feeding]",
                 "module = Disabled",
                 "[hidden]",
-                "defaults_revision = 2",
+                "defaults_revision = 3",
                 "pickup_key_decoupled = 1"
             };
 
@@ -913,7 +913,7 @@ namespace Automatics
                             !x.StartsWith("[", StringComparison.Ordinal))
                 .ToList();
             var lastEntry = entries[entries.Count - 2];
-            if (lastEntry != "defaults_revision = 2" || entries[entries.Count - 1] != "pickup_key_decoupled = 1")
+            if (lastEntry != "defaults_revision = 3" || entries[entries.Count - 1] != "pickup_key_decoupled = 1")
                 throw new Exception($"The marker should be the last entry before the pickup key marker, got '{lastEntry}' in:\n{migrated}");
 
             // A section the file has gains the entry under its header; it is not written twice.
@@ -1006,7 +1006,7 @@ namespace Automatics
                 "",
                 "[hidden]",
                 "",
-                "defaults_revision = 2",
+                "defaults_revision = 3",
                 "pickup_key_decoupled = 1",
                 ""
             };
@@ -1328,7 +1328,7 @@ namespace Automatics
             var migrated = Migrate("## Settings file was created by plugin Automatics v1.7.0",
                 "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = " + value);
             AssertModule(migrated, "automatic_repair", value);
-            AssertEqual(1, CountOccurrences(migrated, "defaults_revision = 2"), "The defaults marker is added once.");
+            AssertEqual(1, CountOccurrences(migrated, "defaults_revision = 3"), "The defaults marker is added once.");
         }
 
         private static void RepairInnerValuesSurviveMigration()
@@ -1357,7 +1357,7 @@ namespace Automatics
         {
             var lines = new[] { "## Settings file was created by plugin Automatics v1.7.0",
                 "## Plugin GUID: net.eidee.valheim.automatics", "[automatic_repair]", "module = Disabled",
-                "crafting_station_search_range = 11", "[hidden]", "defaults_revision = 2", "pickup_key_decoupled = 1" };
+                "crafting_station_search_range = 11", "[hidden]", "defaults_revision = 3", "pickup_key_decoupled = 1" };
             var expected = string.Join(Environment.NewLine, lines) + Environment.NewLine;
             if (Migrate(lines) != expected)
                 throw new Exception("A current Repair config must not be rewritten.");

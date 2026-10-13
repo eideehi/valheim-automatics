@@ -67,7 +67,7 @@ namespace Automatics
                 lines.Add("");
             }
 
-            lines.AddRange(new[] { "[hidden]", "defaults_revision = 2", "pickup_key_decoupled = 1",
+            lines.AddRange(new[] { "[hidden]", "defaults_revision = 3", "pickup_key_decoupled = 1",
                 ConfigMigration.SettingsRevisionKey + " = " + revision });
             return lines.ToArray();
         }

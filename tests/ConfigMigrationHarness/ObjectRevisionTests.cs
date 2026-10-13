@@ -17,6 +17,9 @@ namespace Automatics
             public string Before160;
             public string After160;
             public string[] HistoricalDefaults;
+            // The list a chain from OldDefault ends with once revision 3 has changed it again;
+            // null where revision 3 leaves what revision 2 wrote.
+            public string AfterRevision3;
         }
 
         // Frozen from the tagged Config.cs bindings and object JSON, independently of the
@@ -118,7 +121,8 @@ namespace Automatics
                 HistoricalDefaults = new[]
                 {
                     "Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flex, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds",
-                }
+                },
+                AfterRevision3 = "Carrot, CarrotSeeds, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Flax, JotunPuffs, Magecap, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr"
             },
             new ObjectListFixture
             {
@@ -159,12 +163,13 @@ namespace Automatics
             {
                 var name = $"[{fixture.Section}] {fixture.Key}";
                 Run(name + " appends exactly the new objects to the previous default", () =>
-                    AssertMigratedList(fixture, fixture.OldDefault, ExpectedList(fixture.OldDefault, fixture)));
+                    AssertMigratedList(fixture, fixture.OldDefault, fixture.AfterRevision3 ?? ExpectedList(fixture.OldDefault, fixture)));
                 foreach (var historical in fixture.HistoricalDefaults)
                 {
                     var value = historical;
                     Run(name + " recognizes historical default " + value, () =>
-                        AssertMigratedList(fixture, value, ExpectedList(string.Join(", ", ModUtils.Csv.ParseLine(value, true).Select(x => x.Trim())), fixture)));
+                        AssertMigratedList(fixture, value, fixture.AfterRevision3 ??
+                            ExpectedList(string.Join(", ", ModUtils.Csv.ParseLine(value, true).Select(x => x.Trim())), fixture)));
                 }
                 if (fixture.Before160 != null)
                 {
@@ -227,7 +232,7 @@ namespace Automatics
             });
             Run("an explicit revision zero migrates lists without changing module defaults", RevisionZeroWithMarker);
             Run("missing object keys are never added", MissingObjectKeysStayMissing);
-            foreach (var value in new[] { "unknown", "-1", "3", "2147483648", "" })
+            foreach (var value in new[] { "unknown", "-1", "4", "2147483648", "" })
             {
                 var marker = value;
                 Run("unsupported defaults revision '" + marker + "' skips only the object revision", () =>
@@ -246,8 +251,9 @@ namespace Automatics
             Run("a read-only revision one file warns and keeps its marker for retry", ReadOnlyObjectRevision);
             Run("quoted CSV, duplicate identifiers and empty elements still match an unedited set", CsvDefaultsMatch);
             Run("object identifiers and section and key names compare ordinally", ObjectRevisionIsOrdinal);
-            Run("a revision two new install writes exactly the markers", NewInstallWritesExactlyMarker);
+            Run("a new install writes exactly the markers, at revision three", NewInstallWritesExactlyMarker);
             RunWhitespaceRepairTests();
+            RunWildCropRemovalTests();
         }
 
         // Runs the check on every list and names each list that fails it.
@@ -332,7 +338,7 @@ namespace Automatics
             var lines = RevisionLines(fixture, value);
             lines[2] = "  " + fixture.Key + "	=  " + value + "  ";
             var expected = (string[])lines.Clone();
-            expected[4] = "defaults_revision = 2";
+            expected[4] = "defaults_revision = 3";
             // Flax spelling is corrected even when the list was edited.
             if (fixture.Key == "allow_farming_crop" && value.Split(", ").Contains("Flex"))
                 expected[2] = fixture.Key + " = " + value.Replace("Flex", "Flax");
@@ -346,6 +352,16 @@ namespace Automatics
             var bytes = new UTF8Encoding(false).GetBytes(content);
             if (!MigrateBytes(bytes).SequenceEqual(bytes))
                 throw new Exception("The config must stay byte for byte.");
+        }
+
+        // A revision two file: the revision two steps do not run again, so only the marker
+        // changes, to revision three, and every other byte stays.
+        private static void AssertOnlyMarkerAdvanced(string[] lines)
+        {
+            var content = string.Join("\r\n", lines);
+            var expected = new UTF8Encoding(false).GetBytes(content.Replace("defaults_revision = 2", "defaults_revision = 3"));
+            if (!MigrateBytes(new UTF8Encoding(false).GetBytes(content)).SequenceEqual(expected))
+                throw new Exception("A revision two file may change only its revision marker.");
         }
 
         private static void ObjectRevisionIsIdempotent()
@@ -362,7 +378,7 @@ namespace Automatics
         {
             var f = ObjectListFixtures[0];
             var value = ExpectedList(f.OldDefault, f).Replace(", TimberwoodGate", "");
-            AssertBytesUnchanged(string.Join("\r\n", RevisionLines(f, value, "2")));
+            AssertBytesUnchanged(string.Join("\r\n", RevisionLines(f, value, "3")));
         }
 
         private static void EditedObjectLinesKeepBytes()
@@ -373,7 +389,7 @@ namespace Automatics
                 var text = string.Join("\r\n", RevisionLines(f, value)) + "\r\n";
                 text = text.Replace(f.Key + " = ", "  " + f.Key + "\t=   ");
                 var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(text)).ToArray();
-                var expected = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(text.Replace("defaults_revision = 1", "defaults_revision = 2"))).ToArray();
+                var expected = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(text.Replace("defaults_revision = 1", "defaults_revision = 3"))).ToArray();
                 if (!MigrateBytes(bytes).SequenceEqual(expected))
                     throw new Exception("An edited line's bytes, BOM or CRLF changed.");
             }
@@ -441,7 +457,7 @@ namespace Automatics
             foreach (var section in ModuleSections)
                 AssertModule(result, section, section == "automatic_door" ? "Disabled" : "Enabled");
             AssertMarker(result);
-            if (!result.TrimEnd().EndsWith("defaults_revision = 2" + Environment.NewLine + "pickup_key_decoupled = 1", StringComparison.Ordinal))
+            if (!result.TrimEnd().EndsWith("defaults_revision = 3" + Environment.NewLine + "pickup_key_decoupled = 1", StringComparison.Ordinal))
                 throw new Exception("The marker, followed by the pickup key marker, must be last.");
         }
 
@@ -496,7 +512,7 @@ namespace Automatics
                 "[system]", "enable_logging = true" };
             var expected = (string[])lines.Clone();
             expected[2] = f.Key + " = " + ExpectedList(f.OldDefault, f);
-            expected[9] = "defaults_revision = 2";
+            expected[9] = "defaults_revision = 3";
             var result = Migrate(lines);
             AssertMarker(result);
             AssertEqual(1, CountOccurrences(result, "[hidden]"), "The hidden header must not be duplicated.");
@@ -510,7 +526,7 @@ namespace Automatics
                 "NexusID = 1170", "# second", "defaults_revision = 1", "[system]", "defaults_revision = 1",
                 "[hidden]", "# third", "defaults_revision = 1", "pickup_key_decoupled = 1" };
             var expected = (string[])lines.Clone();
-            foreach (var i in new[] { 3, 6, 11 }) expected[i] = "defaults_revision = 2";
+            foreach (var i in new[] { 3, 6, 11 }) expected[i] = "defaults_revision = 3";
             if (Migrate(lines) != string.Join(Environment.NewLine, expected) + Environment.NewLine)
                 throw new Exception("Every hidden marker should be updated without moving or deleting lines.");
         }
@@ -580,10 +596,10 @@ namespace Automatics
 
         private static void NewInstallWritesExactlyMarker()
         {
-            var expected = "[hidden]" + Environment.NewLine + "defaults_revision = 2" + Environment.NewLine +
+            var expected = "[hidden]" + Environment.NewLine + "defaults_revision = 3" + Environment.NewLine +
                 "pickup_key_decoupled = 1" + Environment.NewLine;
             if (MigrateWithoutAConfigFile() != expected)
-                throw new Exception("A new install must write only the revision two marker and the pickup key marker.");
+                throw new Exception("A new install must write only the revision three marker and the pickup key marker.");
         }
     }
 }

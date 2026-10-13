@@ -102,7 +102,7 @@ namespace Automatics
             AssertSettingsRevision(migrated);
         }
 
-        // A revision-two config holding the given Automatic Processing lines and, when given, a
+        // A revision-three config holding the given Automatic Processing lines and, when given, a
         // settings revision marker.
         private static string[] FireLines(IEnumerable<string> processing, string revision = null)
         {
@@ -116,7 +116,7 @@ namespace Automatics
                 "storage_connection_effect_color = #4FA9FF"
             };
             lines.AddRange(processing);
-            lines.AddRange(new[] { "allow_processing_by_piece_smelter = All", "", "[hidden]", "", "defaults_revision = 2", "pickup_key_decoupled = 1" });
+            lines.AddRange(new[] { "allow_processing_by_piece_smelter = All", "", "[hidden]", "", "defaults_revision = 3", "pickup_key_decoupled = 1" });
             if (revision != null) lines.Add(ConfigMigration.SettingsRevisionKey + " = " + revision);
             return lines.ToArray();
         }
@@ -262,9 +262,9 @@ namespace Automatics
 
         private static void SettingsRevisionGoesAfterTheOtherMarkers()
         {
-            var onlyDefaults = MigrateRaw("[hidden]", "defaults_revision = 2", "", "[automatic_door]", "module = Enabled");
+            var onlyDefaults = MigrateRaw("[hidden]", "defaults_revision = 3", "", "[automatic_door]", "module = Enabled");
             var lines = onlyDefaults.Split(new[] { Environment.NewLine }, StringSplitOptions.None).ToList();
-            var defaults = lines.IndexOf("defaults_revision = 2");
+            var defaults = lines.IndexOf("defaults_revision = 3");
             var pickup = lines.FindIndex(x => x.StartsWith("pickup_key_decoupled", StringComparison.Ordinal));
             var settings = lines.FindIndex(x => x.StartsWith(ConfigMigration.SettingsRevisionKey, StringComparison.Ordinal));
             if (!(defaults >= 0 && pickup == defaults + 1 && settings == pickup + 1))

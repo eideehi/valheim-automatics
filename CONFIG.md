@@ -1187,7 +1187,7 @@ Specify how far farming looks for the role containers it puts the harvest into a
 ### Allow Farming Crop / [allow_farming_crop]
 Specify the crops to be automatically harvested and replanted. Crops that have no plantable sapling are harvested only.
 
-- Default value: Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flax, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr, Lingonberries, BlueMushroom
+- Default value: Carrot, CarrotSeeds, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Flax, JotunPuffs, Magecap, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr
 
 ### Seed Reserve / [seed_reserve]
 Specify the number of each planting input to keep in the containers or inventory farming uses. Sowing new ground stops at this reserve; replanting a harvested spot does not keep it.

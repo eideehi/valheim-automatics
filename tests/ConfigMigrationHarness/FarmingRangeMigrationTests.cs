@@ -20,7 +20,7 @@ namespace Automatics
             };
             if (range != null) lines.Add("farming_range = " + range);
             if (containerRange != null) lines.Add("container_search_range = " + containerRange);
-            lines.AddRange(new[] { "", "[hidden]", "defaults_revision = 2", "pickup_key_decoupled = 1",
+            lines.AddRange(new[] { "", "[hidden]", "defaults_revision = 3", "pickup_key_decoupled = 1",
                 ConfigMigration.SettingsRevisionKey + " = " + revision });
             return lines.ToArray();
         }
