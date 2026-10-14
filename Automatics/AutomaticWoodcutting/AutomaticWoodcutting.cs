@@ -8,6 +8,17 @@ using UnityEngine;
 namespace Automatics.AutomaticWoodcutting
 {
     /// <summary>
+    ///     The form of a woodcutting target, one half of the kind area woodcutting compares: a
+    ///     standing tree or a small tree, a fallen log, or a tree stump.
+    /// </summary>
+    internal enum TargetForm
+    {
+        Tree,
+        Log,
+        Stump
+    }
+
+    /// <summary>
     ///     Sits on every standing tree, small tree, fallen log and tree stump with a ZDO while the
     ///     module runs. A pass hits the nearest allowed one that a usable axe can hit, once, the way
     ///     a swing would, and stops there.
@@ -33,6 +44,7 @@ namespace Automatics.AutomaticWoodcutting
 
         internal Component Owner => _component;
         internal IDestructible Target => _target;
+        internal string PrefabName => _prefabName;
 
         // A tree and a log let a tier 0 hit through whatever the world's tool rule says, as their
         // own damage handlers do; a Destructible's, a stump's or a small tree's, does not.
@@ -143,6 +155,21 @@ namespace Automatics.AutomaticWoodcutting
         internal bool IsAllowed()
         {
             return TreeSpecies.IsAllowed(_prefabName);
+        }
+
+        // A Destructible is a stump when it is the stump prefab of a standing tree prefab, and
+        // otherwise a small tree.
+        internal TargetForm GetForm()
+        {
+            switch (_component)
+            {
+                case TreeLog _:
+                    return TargetForm.Log;
+                case Destructible _ when TreeSpecies.IsStub(_prefabName.GetStableHashCode()):
+                    return TargetForm.Stump;
+                default:
+                    return TargetForm.Tree;
+            }
         }
 
         /// <summary>

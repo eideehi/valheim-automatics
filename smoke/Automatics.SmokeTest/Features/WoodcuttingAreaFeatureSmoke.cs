@@ -29,8 +29,12 @@ namespace Automatics.SmokeTest
     //   - the second, with the axe worn down to one and a half hits, expands until the axe breaks;
     //   - the third, with every exclusion lifted, reaches each target the first one left out;
     //   - a club swing and a hit of the module's own entry expand nothing;
-    //   - last, a log, a tree and a stump stand alone in front of you in turn, and what a real
-    //     swing at each raised is compared with what a hit of the module's entry on it raises.
+    //   - then a log, a tree and a stump stand alone in front of you in turn, and what a real
+    //     swing at each raised is compared with what a hit of the module's entry on it raises;
+    //   - last, every earlier test object is removed and a beech in front of you is swung at,
+    //     with a tree of another species and a beech stump nearer the hit than a second beech:
+    //     with the cap at 1 the extra hit goes to the second beech, with the cap at 3 to all three,
+    //     the second beech first.
     // An observer patch, removed afterwards, records the melee call, every damage call on the test
     // objects, the point of each swing's first direct hit on an allowed test object, and every
     // skill raise and stamina use of the player. It drops any hit of the player on another object
@@ -57,6 +61,12 @@ namespace Automatics.SmokeTest
 
         // Standing trees of the earlier biomes for the second species, in order of preference.
         private static readonly string[] SecondTreePrefabs = { "FirTree", "Pinetree_01", "Birch1", "Birch2", "Oak1" };
+
+        // The tree of another species for the same-kind check, in order of preference.
+        private static readonly string[] KindOtherTreePrefabs = { "Birch1", "Birch2" };
+
+        // How much farther out than the decoys the second beech of the same-kind check stands.
+        private const float KindFarOffset = 2.5f;
 
         public static IEnumerator Run(FeatureRun run)
         {
@@ -248,6 +258,12 @@ namespace Automatics.SmokeTest
                 player.EquipItem(axe, false);
                 yield return null;
                 steps = SkillRule(run, player, axe, fixture, state, spawned);
+                while (steps.MoveNext()) yield return steps.Current;
+
+                steps = WaitForAttackEnd(player);
+                while (steps.MoveNext()) yield return steps.Current;
+
+                steps = SameKindFirst(run, held, player, axe, fixture, state, spawned);
                 while (steps.MoveNext()) yield return steps.Current;
 
                 steps = WaitForAttackEnd(player);
@@ -810,6 +826,304 @@ namespace Automatics.SmokeTest
             return string.Join(", ", raises.OrderBy(x => x.Skill).Select(x => $"{x.Skill} by {x.Value:0.###}").ToArray());
         }
 
+        // -- Same kind first --------------------------------------------------------------------
+
+        // Area woodcutting takes the targets of the same kind as the one the swing hit first, the
+        // same form and a species in common, before any other. Every earlier test object is
+        // removed, and a beech is spawned where the first swing's target stood, with three
+        // targets beyond the swing's reach: a tree of another species and a beech stump, both
+        // nearer the swing's hit than a second beech farther out. Their tool tier is lowered to
+        // the axe's, and allow_woodcutting_tree holds both species, so only the kind can keep a
+        // decoy back. With area_woodcutting_max_targets at 1, a swing at the beech has to give its
+        // one extra hit to the second beech; with the cap at 3, a second swing reaches all three,
+        // the second beech first and then the decoys nearest first. A swing counts only when the
+        // distances from its observed hit to the targets, measured the way area woodcutting
+        // measures them, put both decoys nearer than the second beech and all three within the
+        // radius.
+        private static IEnumerator SameKindFirst(FeatureRun run,
+            Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held, Player player, ItemDrop.ItemData axe,
+            Fixture fixture, WoodcuttingFeatureSmoke.PlayerState state, List<GameObject> spawned)
+        {
+            var names = new[] { "woodcutting_area_same_kind_first", "woodcutting_area_same_kind_then_others" };
+            string skip = null;
+            string otherPrefab = null;
+            if (player.RightItem != axe) skip = "the test axe could not be equipped again";
+            else otherPrefab = PickKindOtherTree(fixture.Species, out skip);
+            if (skip != null)
+            {
+                foreach (var name in names) run.Skip(name, skip);
+                yield break;
+            }
+
+            foreach (var go in spawned) WoodcuttingFeatureSmoke.RemoveTestObject(go);
+            yield return null;
+            Physics.SyncTransforms();
+
+            var setup = fixture.PlanKind();
+            var otherSpecies = WoodcuttingFeatureSmoke.SpeciesOf(otherPrefab).First();
+            var blocker = fixture.FindKindBlocker(player, setup);
+            if (blocker != null)
+                skip = $"{blocker} is near the spots in front of you where the test trees go; face open ground and retry";
+            else if (!Write(run, held, WoodcuttingConfig.AllowWoodcuttingTreeEntry,
+                         new StringList(new[] { fixture.Species, otherSpecies })))
+                skip = "allow_woodcutting_tree could not be written for the check";
+            else if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingRadiusEntry, setup.Radius))
+                skip = $"area_woodcutting_radius could not be set to {setup.Radius:0.#} for the check";
+            else if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingMaxTargetsEntry, 1))
+                skip = "area_woodcutting_max_targets could not be set to 1 for the check";
+            if (skip == null)
+            {
+                var nearby = new List<WoodcuttingArea.Target>();
+                WoodcuttingComponent.CollectAreaTargets(fixture.TriggerSpot, setup.Radius + 2f, nearby);
+                if (nearby.Count > 0)
+                    skip = $"an allowed tree, log or stump of your world is within {setup.Radius + 2f:0.#} m of the spot in front of you, and area woodcutting could hit it; move away from trees and retry";
+            }
+            if (skip == null)
+            {
+                var stubPrefab = ZNetScene.instance.GetPrefab(WoodcuttingFeatureSmoke.TreePrefab)
+                    .GetComponent<TreeBase>().m_stubPrefab;
+                setup.Trigger = fixture.SpawnAt(WoodcuttingFeatureSmoke.TreePrefab, setup.TriggerSpot, spawned, out skip);
+                if (setup.Trigger)
+                    setup.Other = fixture.SpawnAt(otherPrefab, setup.OtherSpot, spawned, out skip);
+                if (setup.Other)
+                    setup.Stump = fixture.SpawnAt(stubPrefab.name, setup.StumpSpot, spawned, out skip);
+                if (setup.Stump)
+                    setup.Same = fixture.SpawnAt(WoodcuttingFeatureSmoke.TreePrefab, setup.SameSpot, spawned, out skip);
+            }
+            if (skip != null)
+            {
+                foreach (var name in names) run.Skip(name, skip);
+                yield break;
+            }
+
+            var otherTree = setup.Other.GetComponent<TreeBase>();
+            otherTree.m_minToolTier = Mathf.Min(otherTree.m_minToolTier, fixture.AxeTier);
+            var stump = setup.Stump.GetComponent<Destructible>();
+            stump.m_minToolTier = Mathf.Min(stump.m_minToolTier, fixture.AxeTier);
+
+            // The stump gets the module's component in its Start; one more frame lets every other
+            // Start of it run, one that subscribes to its damage included.
+            for (var frame = 0; frame < WoodcuttingFeatureSmoke.StartFrames &&
+                                !setup.Stump.GetComponent<WoodcuttingComponent>(); frame++)
+                yield return null;
+            yield return null;
+            stump.m_spawnWhenDamaged = null;
+            stump.m_onDamaged = null;
+            foreach (var spawner in setup.Stump.GetComponentsInChildren<SpawnOnDamaged>(true))
+                spawner.m_spawnOnDamage = null;
+            Physics.SyncTransforms();
+
+            var unready = setup.All.Count(x =>
+            {
+                var component = x ? x.GetComponent<WoodcuttingComponent>() : null;
+                return !component || component.ScopeGeneration != WoodcuttingModule.Generation ||
+                       !component.IsStanding() || !component.IsAllowed() ||
+                       component.GetMinToolTier() > fixture.AxeTier;
+            });
+            if (unready > 0)
+            {
+                foreach (var name in names)
+                    run.Skip(name,
+                        $"{unready} of the 4 test objects carry no component of the running generation, cannot take a hit yet, are not allowed or are above the axe's tool tier");
+                yield break;
+            }
+
+            var capped = new SwingResult { Name = "capped" };
+            var steps = KindSwing(player, axe, fixture, state, capped, spawned);
+            while (steps.MoveNext()) yield return steps.Current;
+            CheckSameKindCapped(run, names[0], capped, setup);
+
+            if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingMaxTargetsEntry, 3))
+            {
+                run.Skip(names[1], "area_woodcutting_max_targets could not be set to 3 for the check");
+                yield break;
+            }
+            var open = new SwingResult { Name = "uncapped" };
+            steps = KindSwing(player, axe, fixture, state, open, spawned);
+            while (steps.MoveNext()) yield return steps.Current;
+            CheckSameKindThenOthers(run, names[1], open, setup);
+        }
+
+        private static IEnumerator KindSwing(Player player, ItemDrop.ItemData axe, Fixture fixture,
+            WoodcuttingFeatureSmoke.PlayerState state, SwingResult swing, List<GameObject> spawned)
+        {
+            var steps = WaitForAttackEnd(player);
+            while (steps.MoveNext()) yield return steps.Current;
+            Physics.SyncTransforms();
+            axe.m_durability = axe.GetMaxDurability();
+            steps = Swing(player, axe, fixture.Facing, ViewPitch, state, swing, spawned);
+            while (steps.MoveNext()) yield return steps.Current;
+        }
+
+        // With the cap at 1, the swing's one extra hit went to the second beech, and the decoys,
+        // both nearer the hit, took none.
+        private static void CheckSameKindCapped(FeatureRun run, string name, SwingResult swing, KindSetup setup)
+        {
+            var reason = KindDistances(swing, setup, out var distances, out var failed);
+            if (reason != null)
+            {
+                if (failed) run.Fail(name, reason);
+                else run.Skip(name, reason);
+                return;
+            }
+
+            var extras = swing.Records.Where(x => x.Extra).ToList();
+            var decoyHits = swing.Records.Count(x => x.Target &&
+                                                     (x.Target.gameObject == setup.Other ||
+                                                      x.Target.gameObject == setup.Stump));
+            var decoysDamaged = new[] { setup.Other, setup.Stump }.Count(x =>
+                !(WoodcuttingFeatureSmoke.ReadHealth(TargetOf(x)) >= WoodcuttingFeatureSmoke.SeededHealth));
+            if (swing.Expanded == 1 && extras.Count == 1 && extras[0].Target &&
+                extras[0].Target.gameObject == setup.Same && swing.BlockedExtras == 0 && decoyHits == 0 &&
+                decoysDamaged == 0)
+                run.Pass(name,
+                    $"with the cap at 1, the one extra hit went to the beech {distances.Same:0.##} m from the hit, not to the tree of the other species ({distances.Other:0.##} m) or the beech stump ({distances.Stump:0.##} m)");
+            else
+                run.Fail(name,
+                    $"with the cap at 1: {swing.Expanded} extra hit(s) counted, {extras.Count} observed, first on {Describe(extras.FirstOrDefault(), setup)}; {decoyHits} hit(s) on the decoys, {decoysDamaged} decoy(s) lost health, {swing.BlockedExtras} extra hit(s) on other objects (beech {distances.Same:0.##} m, other species {distances.Other:0.##} m, stump {distances.Stump:0.##} m)");
+        }
+
+        // With the cap at 3, the swing reached the second beech first and then both decoys,
+        // nearest first.
+        private static void CheckSameKindThenOthers(FeatureRun run, string name, SwingResult swing, KindSetup setup)
+        {
+            var reason = KindDistances(swing, setup, out var distances, out var failed);
+            if (reason != null)
+            {
+                if (failed) run.Fail(name, reason);
+                else run.Skip(name, reason);
+                return;
+            }
+
+            var extras = swing.Records.Where(x => x.Extra).Select(x => x.Target ? x.Target.gameObject : null).ToList();
+            var expected = new List<GameObject> { setup.Same };
+            // Their order is checked only when it does not hang on a hundredth of a metre.
+            var ordered = Mathf.Abs(distances.Other - distances.Stump) > 0.01f;
+            expected.AddRange(distances.Other <= distances.Stump
+                ? new[] { setup.Other, setup.Stump }
+                : new[] { setup.Stump, setup.Other });
+            var sameSet = extras.Count == 3 && new HashSet<GameObject>(extras).SetEquals(expected);
+            var inOrder = sameSet && extras[0] == setup.Same && (!ordered || extras.SequenceEqual(expected));
+            if (swing.Expanded == 3 && swing.BlockedExtras == 0 && inOrder)
+                run.Pass(name,
+                    $"with the cap at 3, the swing hit the beech ({distances.Same:0.##} m) first, then {(distances.Other <= distances.Stump ? "the tree of the other species and the stump" : "the stump and the tree of the other species")}{(ordered ? ", nearest first" : " (equally near)")}");
+            else
+                run.Fail(name,
+                    $"with the cap at 3: {swing.Expanded} extra hit(s) counted, observed in order [{string.Join(", ", extras.Select(x => Describe(x, setup)).ToArray())}], {swing.BlockedExtras} on other objects (beech {distances.Same:0.##} m, other species {distances.Other:0.##} m, stump {distances.Stump:0.##} m)");
+        }
+
+        // Why the swing cannot count, or null. It counts when it hit the beech in front of you and
+        // no other test object itself, area woodcutting centred on that hit as the observer saw
+        // it, and the distances from there put both decoys nearer than the second beech, all
+        // three within the radius. failed is true when the reason is the module's own fault, an
+        // expansion centred away from the observed hit, rather than the layout's.
+        private static string KindDistances(SwingResult swing, KindSetup setup,
+            out (float Same, float Other, float Stump) distances, out bool failed)
+        {
+            distances = (float.NaN, float.NaN, float.NaN);
+            failed = false;
+            if (!swing.Completed) return swing.Problem;
+            var direct = swing.Records.Where(x => !x.Extra).ToList();
+            if (direct.Count == 0) return "the swing hit none of the test objects; face open level ground and retry";
+            if (direct.Any(x => !x.Target || x.Target.gameObject != setup.Trigger) || swing.BlockedDirect > 0)
+                return "the swing hit something besides the beech in front of you itself";
+            if (!swing.ObservedTrigger.HasValue) return "no direct hit on the beech in front of you was seen";
+            var centre = swing.ObservedTrigger.Value;
+            if (Vector3.Distance(centre, swing.Trigger) > 0.001f)
+            {
+                failed = true;
+                return $"area woodcutting centred its expansion {Vector3.Distance(centre, swing.Trigger):0.###} m away from the observed hit";
+            }
+
+            distances = (SurfaceDistance(setup.Same, centre), SurfaceDistance(setup.Other, centre),
+                SurfaceDistance(setup.Stump, centre));
+            if (!(distances.Other < distances.Same && distances.Stump < distances.Same))
+                return $"the decoys did not both end up nearer the hit than the second beech (beech {distances.Same:0.##} m, other species {distances.Other:0.##} m, stump {distances.Stump:0.##} m); retry on level ground";
+            if (distances.Same > setup.Radius)
+                return $"the second beech ended up {distances.Same:0.##} m from the hit, beyond the radius of {setup.Radius:0.##} m";
+            return null;
+        }
+
+        // The distance from centre to the nearest surface point of the object's enabled, solid
+        // colliders, found the way area woodcutting finds it: Unity's closest point on a box,
+        // sphere, capsule or convex mesh collider, otherwise where a ray from centre toward the
+        // collider's bounds centre enters it. Infinity when no such point is found.
+        private static float SurfaceDistance(GameObject go, Vector3 centre)
+        {
+            var nearest = float.PositiveInfinity;
+            if (!go) return nearest;
+            foreach (var collider in go.GetComponentsInChildren<Collider>(false))
+            {
+                if (!collider.enabled || collider.isTrigger) continue;
+
+                Vector3 point;
+                if (collider is BoxCollider || collider is SphereCollider || collider is CapsuleCollider ||
+                    collider is MeshCollider mesh && mesh.convex)
+                {
+                    point = collider.ClosestPoint(centre);
+                }
+                else
+                {
+                    var toCenter = collider.bounds.center - centre;
+                    var length = toCenter.magnitude;
+                    if (length <= 0.001f ||
+                        !collider.Raycast(new Ray(centre, toCenter / length), out var hit, length))
+                        continue;
+                    point = hit.point;
+                }
+
+                nearest = Mathf.Min(nearest, Vector3.Distance(point, centre));
+            }
+            return nearest;
+        }
+
+        private static string Describe(DamageRecord record, KindSetup setup)
+        {
+            return Describe(record.Target ? record.Target.gameObject : null, setup);
+        }
+
+        private static string Describe(GameObject go, KindSetup setup)
+        {
+            if (!go) return "nothing";
+            if (go == setup.Same) return "the second beech";
+            if (go == setup.Other) return "the tree of the other species";
+            if (go == setup.Stump) return "the beech stump";
+            if (go == setup.Trigger) return "the beech in front of you";
+            return "another test object";
+        }
+
+        // A standing tree of the earlier biomes of one species other than the test species.
+        private static string PickKindOtherTree(string species, out string skip)
+        {
+            skip = null;
+            foreach (var name in KindOtherTreePrefabs)
+            {
+                if (!ZNetScene.instance.GetPrefab(name)?.GetComponent<TreeBase>()) continue;
+                var of = WoodcuttingFeatureSmoke.SpeciesOf(name);
+                if (of.Count == 1 && !of.Contains(species)) return name;
+            }
+
+            skip = $"none of {string.Join(", ", KindOtherTreePrefabs)} is available as a tree of a species other than {species}";
+            return null;
+        }
+
+        // The spots of the same-kind check, its radius, and what was spawned there.
+        private sealed class KindSetup
+        {
+            public Vector3 TriggerSpot;
+            public Vector3 OtherSpot;
+            public Vector3 StumpSpot;
+            public Vector3 SameSpot;
+            public float Radius;
+
+            public GameObject Trigger;
+            public GameObject Other;
+            public GameObject Stump;
+            public GameObject Same;
+
+            public IEnumerable<GameObject> All => new[] { Trigger, Other, Stump, Same };
+        }
+
         // -- Test objects ---------------------------------------------------------------------
 
         private static Component TargetOf(GameObject go)
@@ -933,11 +1247,21 @@ namespace Automatics.SmokeTest
                     o + f * TriggerDistance - r * Mathf.Min(Radius + 1.8f, LiftedRadius - 0.8f));
             }
 
-            // Anything near the spots or in the swing's reach: a building piece or a destructible.
-            // Returns its name, or null.
             public string FindBlocker(Player player)
             {
-                var areas = Spots().Select(x => (x.Spot, ClearRadius))
+                return FindBlocker(player, Spots().Select(x => x.Spot));
+            }
+
+            public string FindKindBlocker(Player player, KindSetup setup)
+            {
+                return FindBlocker(player, new[] { setup.TriggerSpot, setup.OtherSpot, setup.StumpSpot, setup.SameSpot });
+            }
+
+            // Anything near the spots or in the swing's reach: a building piece or a destructible.
+            // Returns its name, or null.
+            private string FindBlocker(Player player, IEnumerable<Vector3> spots)
+            {
+                var areas = spots.Select(x => (x, ClearRadius))
                     .Concat(new[] { (_origin + Facing * (TriggerDistance * 0.5f), TriggerDistance + ClearRadius) });
                 foreach (var (center, radius) in areas)
                 foreach (var collider in Physics.OverlapSphere(center + Vector3.up, radius, ~0, QueryTriggerInteraction.Ignore))
@@ -1068,7 +1392,13 @@ namespace Automatics.SmokeTest
             // stood, at a health no hit reaches.
             public GameObject SpawnFront(string prefab, List<GameObject> spawned, out string skip)
             {
-                var position = TriggerSpot;
+                return SpawnAt(prefab, TriggerSpot, spawned, out skip);
+            }
+
+            // A test tree or stump at the spot, at a health no hit reaches.
+            public GameObject SpawnAt(string prefab, Vector3 spot, List<GameObject> spawned, out string skip)
+            {
+                var position = spot;
                 position.y = ZoneSystem.instance.GetGroundHeight(position);
                 var go = WoodcuttingFeatureSmoke.SpawnTestObject(prefab, position, Quaternion.identity, out skip);
                 if (!go) return null;
@@ -1089,6 +1419,25 @@ namespace Automatics.SmokeTest
 
                 skip = $"the spawned {prefab} has no health to seed";
                 return null;
+            }
+
+            // The spots of the same-kind check, every one but the first beyond the swing's reach,
+            // on the ring of the targets that qualify or past it: a beech where the first swing's
+            // target stood, the tree of the other species straight beyond it, the beech stump on
+            // the ring off to the side, and the second beech straight ahead, KindFarOffset farther
+            // out. The radius takes all of them in.
+            public KindSetup PlanKind()
+            {
+                var lateral = Mathf.Min(1.3f, _ring * 0.5f);
+                var along = Mathf.Sqrt(_ring * _ring - lateral * lateral);
+                return new KindSetup
+                {
+                    TriggerSpot = _origin + Facing * TriggerDistance,
+                    OtherSpot = _origin + Facing * _ring,
+                    StumpSpot = _origin + Facing * along + _right * lateral,
+                    SameSpot = _origin + Facing * (_ring + KindFarOffset),
+                    Radius = Mathf.Min(_ring + KindFarOffset, 10f)
+                };
             }
 
             // The test objects in front of you, nearest first, for a hit of the module's entry.

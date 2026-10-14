@@ -50,9 +50,26 @@ namespace Automatics.AutomaticWoodcutting
             }
 
             if (!TryGetRoots(prefabName, out var roots)) return;
-            foreach (var root in roots)
-                if (Globals.Tree.GetIdentify(root, out identifier))
+            for (var i = 0; i < roots.Count; i++)
+                if (Globals.Tree.GetIdentify(roots[i], out identifier))
                     identifiers.Add(identifier);
+        }
+
+        /// <summary>
+        ///     Whether the object with this prefab name has any of these species identifiers, by the
+        ///     same rule as <see cref="GetSpecies" />.
+        /// </summary>
+        internal static bool HasAnySpecies(string prefabName, ISet<string> identifiers)
+        {
+            if (Globals.Tree.GetIdentify(prefabName, out var identifier))
+                return identifiers.Contains(identifier);
+
+            if (!TryGetRoots(prefabName, out var roots)) return false;
+            for (var i = 0; i < roots.Count; i++)
+                if (Globals.Tree.GetIdentify(roots[i], out identifier) && identifiers.Contains(identifier))
+                    return true;
+
+            return false;
         }
 
         /// <summary>

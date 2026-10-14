@@ -320,7 +320,7 @@
     "@config_automatic_woodcutting_woodcutting_key_name": "伐採を試行するキー",
     "@config_automatic_woodcutting_woodcutting_key_description": "押す度に一度だけ自動伐採を試行するショートカットキーを指定します。間隔の設定に関係なく動作します。キーでのみ伐採したい場合は「伐採間隔」を0にしてください。",
     "@config_automatic_woodcutting_enable_area_woodcutting_name": "範囲伐採",
-    "@config_automatic_woodcutting_enable_area_woodcutting_description": "伐採を許可された木、丸太、切り株を斧で叩いた時に、命中地点の近くにある他の許可された木、丸太、切り株にも同じ攻撃を与えるかどうかを指定します。追加の対象ごとに1回分の耐久度を消費します。スタミナとスキルの上昇は1振りにつき1回のままです。モジュールが動作している必要があります。",
+    "@config_automatic_woodcutting_enable_area_woodcutting_description": "伐採を許可された木、丸太、切り株を斧で叩いた時に、命中地点の近くにある他の許可された木、丸太、切り株にも同じ攻撃を与えるかどうかを指定します。叩いた対象と同じ種類のもの (同じ形で同じ種類の木のもの) を優先します。追加の対象ごとに1回分の耐久度を消費します。スタミナとスキルの上昇は1振りにつき1回のままです。モジュールが動作している必要があります。",
     "@config_automatic_woodcutting_area_woodcutting_radius_name": "範囲伐採の半径",
     "@config_automatic_woodcutting_area_woodcutting_radius_description": "範囲伐採が届く命中地点からの距離を指定します。 (単位: メートル)",
     "@config_automatic_woodcutting_area_woodcutting_max_targets_name": "範囲伐採の最大対象数",

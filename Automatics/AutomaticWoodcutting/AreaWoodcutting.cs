@@ -6,21 +6,32 @@ namespace Automatics.AutomaticWoodcutting
 {
     /// <summary>
     ///     Area woodcutting: a local-player axe swing that hits an allowed tree, log or stump also
-    ///     hits other allowed trees, logs and stumps near the first such hit. The swing context
-    ///     lives from the Attack.DoMeleeAttack prefix that began it to that call's finalizer; the
-    ///     damage prefixes record what the swing hit, and only the postfix of a swing that
-    ///     completed expands, once.
+    ///     hits other allowed trees, logs and stumps near the first such hit, those of the same
+    ///     kind as what that hit struck before the others. The swing context lives from the
+    ///     Attack.DoMeleeAttack prefix that began it to that call's finalizer; the damage prefixes
+    ///     record what the swing hit, and only the postfix of a swing that completed expands, once.
     /// </summary>
     internal static class AreaWoodcutting
     {
         private static readonly HashSet<Component> HitObjects = new HashSet<Component>();
         private static readonly List<Target> Candidates = new List<Target>();
+        private static readonly HashSet<string> TriggerSpecies = new HashSet<string>(StringComparer.Ordinal);
+
+        // The targets of the same kind as the trigger's first, then the others; nearest first
+        // within each.
+        private static readonly Comparison<Target> ByKindThenDistance = (x, y) =>
+            x.SameKind != y.SameKind ? (x.SameKind ? -1 : 1) : x.Distance.CompareTo(y.Distance);
 
         private static bool _swing;
         private static bool _expanding;
         private static Player _player;
         private static ItemDrop.ItemData _weapon;
         private static HitData _trigger;
+
+        // The form and the prefab name of the target the trigger hit, kept apart from the target
+        // itself: the swing may fell it before the expansion.
+        private static TargetForm _triggerForm;
+        private static string _triggerPrefab;
 
         // Smoke probes: the extra hits applied since start, whether one is being applied, and
         // where the last expansion was centred.
@@ -46,7 +57,8 @@ namespace Automatics.AutomaticWoodcutting
 
         /// <summary>
         ///     Records one hit of the swing. The first hit on an allowed tree, log or stump becomes
-        ///     the trigger, as a copy taken before the hit is sent.
+        ///     the trigger, as a copy taken before the hit is sent, together with the form and the
+        ///     prefab name of what it hit.
         /// </summary>
         internal static void RecordHit(Component target, HitData hit)
         {
@@ -56,14 +68,19 @@ namespace Automatics.AutomaticWoodcutting
 
             if (_trigger != null) return;
             var component = target.GetComponent<AutomaticWoodcutting>();
-            if (component && component.IsAllowed())
-                _trigger = hit.Clone();
+            if (!component || !component.IsAllowed()) return;
+
+            _trigger = hit.Clone();
+            _triggerForm = component.GetForm();
+            _triggerPrefab = component.PrefabName;
         }
 
         /// <summary>
-        ///     Applies the trigger hit to the nearest allowed targets the swing did not hit. The
-        ///     swing has already paid its own durability, stamina and skill gain; each extra target
-        ///     wears the axe once more, and nothing else is charged or raised.
+        ///     Applies the trigger hit to the allowed targets the swing did not hit: first those of
+        ///     the same kind as the target the trigger hit, of its form and sharing a species with
+        ///     it, then the others, each nearest first. The swing has already paid its own
+        ///     durability, stamina and skill gain; each extra target wears the axe once more, and
+        ///     nothing else is charged or raised.
         /// </summary>
         internal static void Expand()
         {
@@ -76,7 +93,16 @@ namespace Automatics.AutomaticWoodcutting
             Candidates.Clear();
             AutomaticWoodcutting.CollectAreaTargets(trigger.m_point, Config.AreaWoodcuttingRadius,
                 Candidates);
-            Candidates.Sort((x, y) => x.Distance.CompareTo(y.Distance));
+            TriggerSpecies.Clear();
+            TreeSpecies.GetSpecies(_triggerPrefab, TriggerSpecies);
+            for (var i = 0; i < Candidates.Count; i++)
+            {
+                var candidate = Candidates[i].Component;
+                if (candidate.GetForm() == _triggerForm &&
+                    TreeSpecies.HasAnySpecies(candidate.PrefabName, TriggerSpecies))
+                    Candidates[i] = Candidates[i].AsSameKind();
+            }
+            Candidates.Sort(ByKindThenDistance);
 
             var shared = _weapon.m_shared;
             var remaining = Config.AreaWoodcuttingMaxTargets;
@@ -119,6 +145,7 @@ namespace Automatics.AutomaticWoodcutting
             {
                 _expanding = false;
                 Candidates.Clear();
+                TriggerSpecies.Clear();
             }
         }
 
@@ -134,25 +161,37 @@ namespace Automatics.AutomaticWoodcutting
             _player = null;
             _weapon = null;
             _trigger = null;
+            _triggerForm = default;
+            _triggerPrefab = null;
             HitObjects.Clear();
             Candidates.Clear();
+            TriggerSpecies.Clear();
         }
 
         internal readonly struct Target
         {
             public Target(AutomaticWoodcutting component, Collider collider, Vector3 point,
-                float distance)
+                float distance, bool sameKind = false)
             {
                 Component = component;
                 Collider = collider;
                 Point = point;
                 Distance = distance;
+                SameKind = sameKind;
             }
 
             public AutomaticWoodcutting Component { get; }
             public Collider Collider { get; }
             public Vector3 Point { get; }
             public float Distance { get; }
+
+            // Of the same kind as the target the swing's trigger hit.
+            public bool SameKind { get; }
+
+            public Target AsSameKind()
+            {
+                return new Target(Component, Collider, Point, Distance, true);
+            }
         }
     }
 }

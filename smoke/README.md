@@ -1509,10 +1509,11 @@ spot in front of you, each with a health no hit reaches and nothing to drop:
 
 It turns Automatic Mining's passes off when they run on an interval, as in
 `woodcutting`, and `enable_automatic_woodcutting` off for the section, so no pass
-hits the test trees and the swings show area woodcutting working with the passes off, sets
-`area_woodcutting_radius` to fit the trees, `area_woodcutting_max_targets` to 2,
-below the three targets that qualify, and `allow_woodcutting_tree` to the beech's
-species alone. It adds an axe whose tool tier reaches both species and equips it,
+hits the test trees and the swings show area woodcutting working with the passes
+off, sets `area_woodcutting_radius` to fit the trees,
+`area_woodcutting_max_targets` to 2, below the three targets that qualify, and
+`allow_woodcutting_tree` to the beech's species alone. The same-kind checks at
+the end write these three settings again for themselves. It adds an axe whose tool tier reaches both species and equips it,
 turns you to face the trees, lowers your view a little, refills your stamina before
 each swing, and starts real attacks with `Humanoid.StartAttack`. An observer patch,
 removed at the end of the section, records the melee call, every damage call on the
@@ -1524,6 +1525,25 @@ it also guards your world: a hit of yours on anything but the test objects is
 dropped, and so is the terrain operation a hit on the ground would spawn. The log
 and the stump a felling of a test tree spawns become test objects in the same frame,
 as in `woodcutting`.
+
+Last, the section removes every test object so far and checks that area
+woodcutting takes the targets of the same kind as the one it hit first. It looks
+again for building pieces and destructible objects at the new spots, and for
+allowed trees, logs and stumps of your world within the new radius plus 2 m of
+the spot in front of you (the checks SKIP and name it). It sets
+`allow_woodcutting_tree` to the beech's species and the birch's,
+`area_woodcutting_radius` to fit the layout (at most 10 m) and
+`area_woodcutting_max_targets` to 1, and spawns, non-persistent and at a health
+no hit reaches: a beech 1.6 m in front of you, the swing's target; a birch
+straight beyond it and a beech stump to the side, both just beyond the reach of a
+swing; and a second beech straight ahead, 2.5 m farther out. The birch's and the
+stump's tool tier is lowered to the axe's where it is above it, and the stump's
+damage spawns nothing. A swing counts only when it hit the beech in front of you
+and nothing else itself, and the distances from the hit to each target, measured
+as area woodcutting measures them (the nearest point of each enabled, solid
+collider), put the birch and the stump nearer than the second beech and all
+three within the radius; otherwise the check SKIPs and gives the distances. A
+check FAILs when area woodcutting centred its expansion away from that hit.
 
 | Check | Asserts |
 |---|---|
@@ -1547,6 +1567,8 @@ as in `woodcutting`.
 | `woodcutting_area_skill_rule_log` | With its stump removed, the log the first swing's felling spawned stands alone in front of you. A real axe swing that hits only that log raises the same skills, by the same amounts, as a hit of the module's entry on it (SKIP, naming the reason, only when the swing hits something else as well or the entry cannot reach the log from your eyes) |
 | `woodcutting_area_skill_rule_tree` | The same with a test tree spawned alone at that spot |
 | `woodcutting_area_skill_rule_stump` | The same with a stump spawned alone at that spot from the tree's stump prefab, once it has the component; you look further down for this swing |
+| `woodcutting_area_same_kind_first` | With `area_woodcutting_max_targets` at 1, a swing at the beech in front of you adds exactly one extra hit, on the second beech, while the birch (a tree of another species) and the beech stump (another form), both nearer the hit, take no hit and keep their health |
+| `woodcutting_area_same_kind_then_others` | With the cap at 3, a second swing adds exactly three extra hits: the second beech first, then the birch and the stump, nearest first (their order is not checked when their distances differ by 0.01 m or less) |
 | `woodcutting_area_world_guarded` | The section ran to its end under the guard; the note counts the hits on other objects and the terrain operations it dropped |
 | `woodcutting_area_settings_restored` | Every setting the section changed is back at your value |
 

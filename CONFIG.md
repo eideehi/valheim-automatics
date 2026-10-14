@@ -1318,7 +1318,7 @@ Specify a shortcut key that attempts woodcutting once each time it is pressed, w
 - Default value:
 
 ### Area Woodcutting / [enable_area_woodcutting]
-Specify whether an axe swing that hits an allowed tree, log or stump also hits other allowed trees, logs and stumps near the hit point. Each extra target wears the axe as a hit does; stamina and skill gain stay once per swing. Requires the module to be running.
+Specify whether an axe swing that hits an allowed tree, log or stump also hits other allowed trees, logs and stumps near the hit point, taking those of the same kind as the one hit (the same form and the same kind of tree) before the others. Each extra target wears the axe as a hit does; stamina and skill gain stay once per swing. Requires the module to be running.
 
 - Default value: true
 
