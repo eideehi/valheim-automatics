@@ -23,13 +23,13 @@ namespace Automatics.AutomaticWoodcutting
                 Module.AttachTree(__instance.gameObject);
         }
 
-        // Only a tree's stump: every other Destructible is left as it is.
+        // Only a tree's stump or a small tree: every other Destructible is left as it is.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Destructible), "Start")]
         private static void Destructible_Start_Postfix(Destructible __instance, ZNetView ___m_nview)
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
-                Module.AttachStump(__instance.gameObject, ___m_nview.GetZDO());
+                Module.AttachDestructible(__instance.gameObject, ___m_nview.GetZDO());
         }
 
         // __state is true only for the call whose prefix opened the swing context, so a melee

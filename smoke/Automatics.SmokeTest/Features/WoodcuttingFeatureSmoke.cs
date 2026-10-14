@@ -35,7 +35,10 @@ namespace Automatics.SmokeTest
     // and an axe taken from the inventory. Last, the tree is felled: the log it spawns is
     // refused until the game lets it take damage and hit after that, and its stump gets the
     // component from the real Destructible.Start hook and is hit by a pass, while another
-    // Destructible spawned next to you gets none.
+    // Destructible spawned next to you gets none. After the felling, small trees, Destructibles the
+    // tree data names by their own prefab name, are spawned in turn where the tree stood: each gets
+    // the component from the same hook, is allowed only while its species is, and is hit by a pass;
+    // a Destructible the tree data does not name and a planted sapling get none.
     // An observer patch, removed at the end, records every damage call on the test objects and
     // every skill raise of the player, drops every damage call on any other tree, log or stump,
     // whoever makes it, and takes the log and stump a felling of a test tree spawns as test
@@ -71,6 +74,13 @@ namespace Automatics.SmokeTest
         // Destructibles of the earlier biomes that are not the stump of a tree, for the check that
         // only stumps get the component; the first one available is used.
         private static readonly string[] OtherDestructiblePrefabs = { "stubbe", "Bush01", "Bush02_en" };
+
+        // Small trees of the earlier biomes, Destructibles the tree data names by their own prefab
+        // name; each one the loaded world has is checked.
+        private static readonly string[] SmallTreePrefabs = { "Beech_small1", "Beech_small2" };
+
+        // A planted sapling, which the tree data does not name.
+        private const string SaplingPrefab = "Beech_Sapling";
 
         // Tree identifiers that predate the Mistlands update; a check names only these on screen.
         internal static readonly HashSet<string> EarlyTrees = new HashSet<string>(new[]
@@ -267,6 +277,11 @@ namespace Automatics.SmokeTest
 
                 CheckOtherDestructible(run, otherObject, otherSkip);
 
+                // The small trees go where the test tree stood, also when it was not felled.
+                RemoveTestObject(treeObject);
+                steps = SmallTrees(run, held, player, axe, spot, facing, treeSpecies, spawned);
+                while (steps.MoveNext()) yield return steps.Current;
+
                 run.Pass("woodcutting_world_guarded",
                     $"dropped {HitObserver.BlockedHits} damage call(s) on trees, logs and stumps other than the test objects");
             }
@@ -373,6 +388,42 @@ namespace Automatics.SmokeTest
                     : $"{unresolved} prefab(s) lead to no species and {mismatched} resolve to other species than the prefabs lead to (named in the log file)");
 
             CheckSharedSpecies(run, held, walked);
+            CheckSmallTreeCoverage(run, prefabs);
+        }
+
+        // Every prefab of the loaded world whose own name a built-in tree identifier matches, and
+        // that is neither a standing tree nor a log, is a small tree. It has to carry a
+        // Destructible and a ZNetView on its root, the ones the module's Destructible.Start hook
+        // sees, or it could never be a target. The screen gives counts; the log file names them.
+        private static void CheckSmallTreeCoverage(FeatureRun run, List<GameObject> prefabs)
+        {
+            const string name = "woodcutting_small_tree_coverage";
+            var builtIn = WoodcuttingTrees.Tree.GetElements().Where(x => x?.matches != null).ToList();
+            var small = prefabs
+                .Where(x => !x.GetComponent<TreeBase>() && !x.GetComponent<TreeLog>() &&
+                            builtIn.Any(e => e.matches.Any(m => m != null && m.Matches(x.name))))
+                .OrderBy(x => x.name, StringComparer.Ordinal)
+                .ToList();
+            var missing = 0;
+            foreach (var prefab in small)
+            {
+                if (prefab.GetComponent<Destructible>() && prefab.GetComponent<ZNetView>())
+                {
+                    Log.LogInfo($"{name}: {prefab.name} is a small tree with a Destructible");
+                    continue;
+                }
+                missing++;
+                Log.LogWarning($"{name}: {prefab.name} matches a built-in tree identifier but has no Destructible or no ZNetView on its root");
+            }
+
+            if (small.Count == 0)
+                run.Fail(name, "the built-in tree data names no small tree prefab of the loaded world");
+            else if (missing == 0)
+                run.Pass(name,
+                    $"each of the {small.Count} small tree prefab(s) the built-in tree data names carries a Destructible and a ZNetView on its root (named in the log file)");
+            else
+                run.Fail(name,
+                    $"{missing} of the {small.Count} small tree prefab(s) the built-in tree data names have no Destructible or no ZNetView on their root, so they can never be a target (named in the log file)");
         }
 
         // Each log and stump prefab with the species of the standing trees whose prefabs lead to
@@ -1406,6 +1457,304 @@ namespace Automatics.SmokeTest
                 run.Fail(name, $"{Objects.GetPrefabName(other)}, a Destructible that is not a stump, carries a component");
         }
 
+        // -- Small trees ------------------------------------------------------------------------
+
+        // Small trees: Destructibles whose own prefab name the tree data names. Once the felled
+        // tree's log and stump are gone, each of SmallTreePrefabs the loaded world has is spawned
+        // in turn where the test tree stood. It has to get the component in its Start, resolve to
+        // the test tree's species and be allowed only while that species is, and take one hit of
+        // a key pass. Before that hit it is given a health no hit reaches, and its damage spawns
+        // nothing and reaches no ward, so the hit leaves nothing behind. Last, a Destructible
+        // prefab the tree data does not name and a planted sapling get no component.
+        private static IEnumerator SmallTrees(FeatureRun run,
+            Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held, Player player,
+            ItemDrop.ItemData axe, Vector3 spot, Vector3 facing, string species, List<GameObject> spawned)
+        {
+            var registered = new Tally("woodcutting_small_tree_registered");
+            var allowed = new Tally("woodcutting_small_tree_species");
+            var hit = new Tally("woodcutting_small_tree_pass_hit");
+
+            foreach (var go in spawned) RemoveTestObject(go);
+            yield return null;
+
+            var available = SmallTreePrefabs.Where(x => ZNetScene.instance.GetPrefab(x)).ToList();
+            if (available.Count == 0)
+            {
+                var none = $"none of the small tree prefabs is available ({string.Join(", ", SmallTreePrefabs)})";
+                registered.Skip(none);
+                allowed.Skip(none);
+                hit.Skip(none);
+            }
+
+            foreach (var prefabName in available)
+            {
+                var go = SpawnTestObject(prefabName, spot, Quaternion.identity, out var spawnSkip);
+                if (!go)
+                {
+                    registered.Skip(spawnSkip);
+                    allowed.Skip(spawnSkip);
+                    hit.Skip(spawnSkip);
+                    continue;
+                }
+                spawned.Add(go);
+                HitObserver.Add(go);
+
+                // The module's component comes with the Destructible's Start; one more frame lets
+                // every other Start of the object run, one that subscribes to its damage included.
+                for (var frame = 0; frame < StartFrames && !go.GetComponent<WoodcuttingComponent>(); frame++)
+                    yield return null;
+                yield return null;
+                Physics.SyncTransforms();
+
+                var destructible = go.GetComponent<Destructible>();
+                var component = go.GetComponent<WoodcuttingComponent>();
+                if (!destructible || !component || component.ScopeGeneration != WoodcuttingModule.Generation ||
+                    component.Owner != destructible)
+                {
+                    registered.Fail(
+                        $"{prefabName} carries {(destructible ? "a Destructible" : "no Destructible")} and {(component ? $"a component of generation {component.ScopeGeneration} on {(component.Owner == destructible ? "it" : "another part")}" : "no component")}, not one of the running generation {WoodcuttingModule.Generation}");
+                    allowed.Skip($"{prefabName} carries no component of the running generation");
+                    hit.Skip($"{prefabName} carries no component of the running generation");
+                    RemoveTestObject(go);
+                    continue;
+                }
+                registered.Pass($"{prefabName} carries a component of generation {component.ScopeGeneration} after its Start");
+
+                CheckSmallTreeSpecies(run, held, allowed, prefabName, component, species);
+
+                destructible.m_spawnWhenDamaged = null;
+                destructible.m_onDamaged = null;
+                destructible.m_triggerPrivateArea = false;
+                foreach (var spawner in go.GetComponentsInChildren<SpawnOnDamaged>(true))
+                    spawner.m_spawnOnDamage = null;
+                if (!SeedHealth(destructible))
+                    hit.Skip($"{prefabName} has no health to seed");
+                else
+                    CheckSmallTreeHit(hit, prefabName, player, destructible, axe);
+
+                RemoveTestObject(go);
+                yield return null;
+            }
+
+            registered.Report(run);
+            allowed.Report(run);
+            hit.Report(run);
+
+            var steps = CheckUnnamedDestructibles(run, registered.Passed, spot, facing, spawned);
+            while (steps.MoveNext()) yield return steps.Current;
+        }
+
+        // The small tree resolves to the test tree's species, and is allowed while that species is
+        // in allow_woodcutting_tree and not without it; the list is written back straight after.
+        private static void CheckSmallTreeSpecies(FeatureRun run,
+            Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held, Tally tally, string prefabName,
+            WoodcuttingComponent component, string species)
+        {
+            var of = SpeciesOf(prefabName);
+            var with = component.IsAllowed();
+            var list = WoodcuttingConfig.AllowWoodcuttingTree;
+            if (!Write(run, held, WoodcuttingConfig.AllowWoodcuttingTreeEntry,
+                    new StringList(list.Where(x => x != species))))
+            {
+                tally.Skip($"allow_woodcutting_tree could not be written without {species}");
+                return;
+            }
+
+            bool without;
+            try
+            {
+                without = component.IsAllowed();
+            }
+            finally
+            {
+                Write(run, held, WoodcuttingConfig.AllowWoodcuttingTreeEntry, list);
+            }
+
+            if (of.Count == 1 && of.Contains(species) && with && !without)
+                tally.Pass($"{prefabName} resolves to {species}, allowed with it in allow_woodcutting_tree and not without it");
+            else
+                tally.Fail(
+                    $"{prefabName} resolves to {of.Count} species ({(of.Contains(species) ? species : "not " + species)}), is {(with ? "" : "not ")}allowed with {species} and {(without ? "still " : "not ")}allowed without it");
+        }
+
+        // One key pass hits the small tree once and takes health; it has to be the nearest
+        // candidate, so the pass cannot go to a tree, log or stump of your world.
+        private static void CheckSmallTreeHit(Tally tally, string prefabName, Player player, Destructible tree,
+            ItemDrop.ItemData axe)
+        {
+            if (player.RightItem != axe)
+            {
+                tally.Skip("the test axe is not in your right hand");
+                return;
+            }
+            if (tree.m_minToolTier > axe.m_shared.m_toolTier)
+            {
+                tally.Skip($"{prefabName} needs tool tier {tree.m_minToolTier}, above the test axe's {axe.m_shared.m_toolTier}");
+                return;
+            }
+            var nearer = FindNearerTarget(player, tree);
+            if (nearer != null)
+            {
+                tally.Skip(nearer);
+                return;
+            }
+
+            var health = ReadHealth(tree);
+            var blocked = HitObserver.BlockedHits;
+            HitObserver.Reset();
+            WoodcuttingModule.RunKeyPass(player);
+            var records = HitObserver.Records.Where(x => x.Target == tree).ToList();
+            var others = HitObserver.BlockedHits - blocked;
+            var after = ReadHealth(tree);
+            if (records.Count == 1 && after < health && others == 0)
+            {
+                tally.Pass($"a key pass hit {prefabName} once and took {health - after:0.##} health");
+                return;
+            }
+
+            var obstacle = records.Count == 0 && others == 0 ? FindObstacle(player, tree) : null;
+            if (obstacle != null)
+                tally.Skip(obstacle.Replace("test tree", "small tree"));
+            else
+                tally.Fail($"{prefabName}: {records.Count} hit(s) on it, {others} on other trees, logs or stumps, health {health:0.##} -> {after:0.##}");
+        }
+
+        // A Destructible prefab that is neither the stump of a tree nor named by the tree data,
+        // and a planted sapling, get no component once their Start has run. Only checked once a
+        // small tree got the component from the same hook, so the hook is known to run. The
+        // prefab is chosen by PickUnnamedDestructible and named in the log file only.
+        private static IEnumerator CheckUnnamedDestructibles(FeatureRun run, bool hookSeen, Vector3 spot,
+            Vector3 facing, List<GameObject> spawned)
+        {
+            const string name = "woodcutting_small_tree_others_not_attached";
+            if (!hookSeen)
+            {
+                run.Skip(name, "no small tree got the component from the Destructible.Start hook, so no component here would prove nothing");
+                yield break;
+            }
+
+            var objects = new List<(GameObject Go, string Shown)>();
+            var unnamed = PickUnnamedDestructible();
+            if (unnamed)
+            {
+                var go = SpawnTestObject(unnamed.name, spot, Quaternion.identity, out _);
+                if (go)
+                {
+                    spawned.Add(go);
+                    objects.Add((go, "a Destructible prefab the tree data does not name"));
+                    Log.LogInfo($"{name}: spawned {unnamed.name}, type {unnamed.GetComponent<Destructible>().m_destructibleType}");
+                }
+            }
+            if (ZNetScene.instance.GetPrefab(SaplingPrefab))
+            {
+                var at = spot + Vector3.Cross(Vector3.up, facing) * 1.2f;
+                at.y = ZoneSystem.instance.GetGroundHeight(at);
+                var go = SpawnTestObject(SaplingPrefab, at, Quaternion.identity, out _);
+                if (go)
+                {
+                    spawned.Add(go);
+                    objects.Add((go, SaplingPrefab));
+                }
+            }
+            if (objects.Count == 0)
+            {
+                run.Skip(name, $"neither a Destructible the tree data does not name nor {SaplingPrefab} could be spawned");
+                yield break;
+            }
+
+            // Destructible clears its first-frame flag in Start, the call the module's hook follows.
+            var firstFrame = AccessTools.Field(typeof(Destructible), "m_firstFrame");
+            for (var frame = 0; frame < StartFrames && objects.Any(x => !Started(x.Go, firstFrame)); frame++)
+                yield return null;
+
+            var problems = new List<string>();
+            var notes = new List<string>();
+            foreach (var (go, shown) in objects)
+            {
+                if (!go)
+                {
+                    problems.Add($"{shown} is gone");
+                    continue;
+                }
+                var destructible = go.GetComponent<Destructible>();
+                if (destructible && !Started(go, firstFrame))
+                {
+                    problems.Add($"the Start of {shown} could not be seen to have run");
+                    continue;
+                }
+
+                var zdo = Objects.GetZNetView(go.transform, out var nview) && nview != null ? nview.GetZDO() : null;
+                var taken = zdo != null && WoodcuttingModule.IsTargetDestructible(go, zdo);
+                if (go.GetComponent<WoodcuttingComponent>() || taken)
+                    problems.Add($"{shown} {(taken ? "is taken as a target" : "carries a component")}");
+                else
+                    notes.Add(destructible ? $"{shown} got no component" : $"{shown} has no Destructible and got no component");
+            }
+
+            foreach (var (go, _) in objects) RemoveTestObject(go);
+            if (problems.Count == 0)
+                run.Pass(name, string.Join("; ", notes.ToArray()));
+            else
+                run.Fail(name, string.Join("; ", problems.ToArray()));
+        }
+
+        // Whether the object's Destructible, if it has one, has run its Start.
+        private static bool Started(GameObject go, FieldInfo firstFrame)
+        {
+            var destructible = go ? go.GetComponent<Destructible>() : null;
+            return !destructible || firstFrame != null && !(bool)firstFrame.GetValue(destructible);
+        }
+
+        // A Destructible prefab that is neither the stump of a tree nor named by the tree data,
+        // chosen the same way every run: the first by ordinal name among those of type Tree, else
+        // among all of them. Nothing that grows or spawns creatures is chosen.
+        private static GameObject PickUnnamedDestructible()
+        {
+            var candidates = ZNetScene.instance.m_prefabs
+                .Where(x => x && x.GetComponent<Destructible>() && x.GetComponent<ZNetView>() &&
+                            !x.GetComponent<TreeBase>() && !x.GetComponent<TreeLog>() &&
+                            !x.GetComponent<Plant>() && !x.GetComponent<SpawnArea>() &&
+                            !x.GetComponent<CreatureSpawner>() && !x.GetComponent<Character>() &&
+                            !WoodcuttingSpecies.IsStub(x.name.GetStableHashCode()) &&
+                            !WoodcuttingTrees.Tree.GetIdentify(x.name, out _))
+                .OrderBy(x => x.name, StringComparer.Ordinal)
+                .ToList();
+            return candidates.FirstOrDefault(x =>
+                       (x.GetComponent<Destructible>().m_destructibleType & DestructibleType.Tree) != 0) ??
+                   candidates.FirstOrDefault();
+        }
+
+        // The outcomes of one check over several test objects: it fails when any of them failed,
+        // skips when none passed, and passes otherwise, noting the ones skipped.
+        private sealed class Tally
+        {
+            private readonly string _name;
+            private readonly List<string> _passes = new List<string>();
+            private readonly List<string> _fails = new List<string>();
+            private readonly List<string> _skips = new List<string>();
+
+            public Tally(string name)
+            {
+                _name = name;
+            }
+
+            public bool Passed => _fails.Count == 0 && _passes.Count > 0;
+
+            public void Pass(string note) => _passes.Add(note);
+            public void Fail(string message) => _fails.Add(message);
+            public void Skip(string message) => _skips.Add(message);
+
+            public void Report(FeatureRun run)
+            {
+                if (_fails.Count > 0)
+                    run.Fail(_name, string.Join("; ", _fails.ToArray()));
+                else if (_passes.Count == 0)
+                    run.Skip(_name, string.Join("; ", _skips.Distinct().ToArray()));
+                else
+                    run.Pass(_name, string.Join("; ", _passes.Concat(_skips.Select(x => "skipped: " + x)).ToArray()));
+            }
+        }
+
         private static void CheckRefused(FeatureRun run, string name, string condition, Player player,
             WoodcuttingComponent component, TreeBase tree, ItemDrop.ItemData axe)
         {
@@ -1863,8 +2212,8 @@ namespace Automatics.SmokeTest
 
         // Patches added for the section only and removed at its end. While attached, they record
         // every damage call on the test objects and every skill raise of the player, and drop
-        // every damage call on any other tree, log or stump, whoever makes it, so no check can
-        // damage one of your world; a Destructible that is not a stump is left alone. A call on a
+        // every damage call on any other tree, small tree, log or stump, whoever makes it, so no
+        // check can damage one of your world; any other Destructible is left alone. A call on a
         // test object is recorded whatever its attacker, so a malformed hit fails the field checks
         // instead of passing unseen. The log and stump a felling of a test tree spawns become test
         // objects in the frame they spawn.
@@ -1891,6 +2240,11 @@ namespace Automatics.SmokeTest
             public static bool IsTestObject(GameObject go)
             {
                 return go && TestObjects.Contains(go);
+            }
+
+            public static void Add(GameObject go)
+            {
+                if (_attached && go) TestObjects.Add(go);
             }
 
             public static bool Attach(Player player, GameObject tree, List<GameObject> spawned, out string problem)
@@ -1993,7 +2347,7 @@ namespace Automatics.SmokeTest
                 if (!_attached) return true;
                 if (!__instance || !TestObjects.Contains(__instance.gameObject))
                 {
-                    if (__instance is Destructible destructible && !IsStump(destructible)) return true;
+                    if (__instance is Destructible destructible && !IsTarget(destructible)) return true;
                     BlockedHits++;
                     return false;
                 }
@@ -2015,10 +2369,11 @@ namespace Automatics.SmokeTest
                 return true;
             }
 
-            private static bool IsStump(Destructible destructible)
+            // A stump or a small tree: a Destructible the module takes as a target.
+            private static bool IsTarget(Destructible destructible)
             {
                 var zdo = Objects.GetZNetView(destructible, out var nview) && nview != null ? nview.GetZDO() : null;
-                return zdo != null && WoodcuttingSpecies.IsStub(zdo.GetPrefab());
+                return zdo != null && WoodcuttingModule.IsTargetDestructible(destructible.gameObject, zdo);
             }
 
             private static void RaisePostfix(Player __instance, Skills.SkillType skill, float value)

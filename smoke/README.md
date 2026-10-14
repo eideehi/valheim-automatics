@@ -590,9 +590,9 @@ descriptor checks:
 | `woodcutting_off_probes_as_expected` | The three Woodcutting hook handlers and every `AutomaticWoodcutting` component are gone, `AllInstance.Count` is zero, and each Woodcutting-owned handler's own occurrence in its hook is zero |
 | `woodcutting_timers_cleared` | A non-empty timer table observed immediately before disabling is empty while the module is off; if it was already empty, cleanup was not observable and the check SKIPs |
 | `woodcutting_area_swing_cleared` | No area-woodcutting swing is open, and no extra hit is being applied, while the module is off |
-| `woodcutting_on_patches_applied` | The patches under Woodcutting's Harmony id exactly match `Automatics.AutomaticWoodcutting.Patches`: the `Awake` postfixes of `TreeBase` and `TreeLog`, the `Destructible.Start` postfix for stumps, and the swing and damage patches of area woodcutting |
-| `woodcutting_on_probes_at_baseline` | All three handlers are restored, every currently eligible unique `TreeBase`, `TreeLog` and stump GameObject with a ZDO has one component, and `AllInstance.Count` matches the active components rather than a stale baseline. A stump is a `Destructible` whose prefab is the stump prefab of a standing tree prefab |
-| `woodcutting_components_current_generation` | Every eligible tree, log and stump object, including inactive objects, has an `AutomaticWoodcutting` component stamped with the current activation generation |
+| `woodcutting_on_patches_applied` | The patches under Woodcutting's Harmony id exactly match `Automatics.AutomaticWoodcutting.Patches`: the `Awake` postfixes of `TreeBase` and `TreeLog`, the `Destructible.Start` postfix for stumps and small trees, and the swing and damage patches of area woodcutting |
+| `woodcutting_on_probes_at_baseline` | All three handlers are restored, every currently eligible unique `TreeBase`, `TreeLog`, stump and small tree GameObject with a ZDO has one component, and `AllInstance.Count` matches the active components rather than a stale baseline. A stump is a `Destructible` whose prefab is the stump prefab of a standing tree prefab, and a small tree a `Destructible` whose own prefab name the tree data names |
+| `woodcutting_components_current_generation` | Every eligible tree, small tree, log and stump object, including inactive objects, has an `AutomaticWoodcutting` component stamped with the current activation generation |
 | `woodcutting_interval_timer_resumed` | When `enable_automatic_woodcutting` is on and `woodcutting_interval` is above 0, its hook takes up its timer again within 30 frames of the enable; SKIP otherwise |
 
 Turning the module off stops new woodcutting immediately and lets a pass already
@@ -1411,12 +1411,13 @@ and 0 uses the axe's attack range. The section:
   club's) and the durability of your own axes;
 - adds an observer patch, removed at the end of the section, that records every
   damage call on the test objects, whoever makes it, and every skill raise of
-  yours, and drops every damage call on any other tree, log or stump, whoever
-  makes it; other destructibles are left alone. When a test tree is felled, the
-  log and the stump it spawns become test objects in the same frame: recorded with
-  the session, non-persistent, at a health no hit reaches, and the log held where
-  it spawned instead of falling. The observer's removal is registered with the
-  session before its patches go on, so a run cut short still removes them.
+  yours, and drops every damage call on any other tree, small tree, log or stump,
+  whoever makes it; other destructibles are left alone. When a test tree is
+  felled, the log and the stump it spawns become test objects in the same frame:
+  recorded with the session, non-persistent, at a health no hit reaches, and the
+  log held where it spawned instead of falling. The observer's removal is
+  registered with the session before its patches go on, so a run cut short still
+  removes them.
 
 Everything up to the felling runs in one frame. The hit checks call the module's
 per-target entry, `AutomaticWoodcutting.Chop`, which every woodcutting pass uses
@@ -1424,11 +1425,23 @@ for each candidate; the pass checks call the hooks the interval and the key use.
 The felling checks span frames: a stump gets the component in its `Start`, and a
 log takes damage 0.2 seconds after it spawns.
 
+After the felling, the section removes the test tree, its log and its stump, and
+spawns small trees where the tree stood, one at a time: non-persistent
+Destructibles the tree data names by their own prefab name, `Beech_small1` and,
+when the world has it, `Beech_small2`. Once its `Start` has run, each is given a
+health no hit reaches, and its damage is set to spawn nothing and to reach no
+ward, so a hit leaves nothing behind. Then a Destructible prefab that is neither
+a stump nor named by the tree data is spawned where the tree stood, and
+`Beech_Sapling` 1.2 m to the right of it. That prefab is picked the same way
+every run: the first by ordinal name among those of type `Tree`, else among all
+of them, never one that grows or spawns creatures; the log file names it.
+
 | Check | Asserts |
 |---|---|
 | `woodcutting_species_identifiers_match` | Every built-in tree identifier matches at least one standing tree (`TreeBase`) prefab of the loaded world. A FAIL names the identifiers of the earlier biomes and counts the others; the log file names them all |
 | `woodcutting_species_coverage` | The section walks every standing tree prefab's log, that log's smaller logs in turn, and its stump, and gives each of them the species of every tree that leads to it. The module resolves each of those prefabs to exactly that set, each standing tree prefab to its own species, and no `TreeLog` prefab is left without one. A FAIL counts the prefabs that lead to no species and those resolved differently; the log file names them |
 | `woodcutting_species_shared_allowed` | For every log or stump prefab that trees of more than one species lead to, by the same walk, `allow_woodcutting_tree` holding any one of those species alone allows it, and holding none of them does not; the list is written back straight after. The note counts them; the log file names them with their species |
+| `woodcutting_small_tree_coverage` | Every prefab of the loaded world whose own name a built-in tree identifier matches, and that is neither a standing tree (`TreeBase`) nor a log (`TreeLog`), is a small tree and carries a `Destructible` and a `ZNetView` on its root, so it can be a target. It FAILs when the tree data names no such prefab. The screen gives counts; the log file names them |
 | `woodcutting_tree_registered` | The tree spawned while the module runs carries an `AutomaticWoodcutting` component of the running generation |
 | `woodcutting_hit_damage` | One call of the entry hits the test tree once and takes health; the note gives the hit's distance from your eyes and its height against them |
 | `woodcutting_hit_data` | The hit's attacker is you, its hit type is `PlayerHit`, its push force is 0, its direction is level and points from you toward the tree, and its skill is the one a real swing of the axe uses on a tree: the attack's special-hit skill when trees are its special-hit type, otherwise the axe's own skill, and its item world level is the axe's |
@@ -1458,6 +1471,10 @@ log takes damage 0.2 seconds after it spawns.
 | `woodcutting_stump_pass_hit` | With the log removed, a key pass hits the stump once |
 | `woodcutting_stump_skill` | The skill raise on the stump follows the same rule |
 | `woodcutting_other_destructible_not_attached` | A non-persistent destructible of the earlier biomes that is not the stump of a tree, spawned 2 m behind you, has run its `Start` and carries no component |
+| `woodcutting_small_tree_registered` | Each small tree, once its `Start` has run, carries an `AutomaticWoodcutting` component of the running generation on its `Destructible` (SKIP when neither small tree prefab is available) |
+| `woodcutting_small_tree_species` | Each small tree resolves to the beech's species alone, and is allowed while that species is in `allow_woodcutting_tree` and not while it is taken out; the list is written back straight after |
+| `woodcutting_small_tree_pass_hit` | One key pass hits each small tree once, takes health and hits nothing else (SKIP when a tree, log or stump of your world is not farther from you than the small tree, when something stands between your eyes and it, or when its tool tier is above the test axe's) |
+| `woodcutting_small_tree_others_not_attached` | Once their `Start` has run, the picked Destructible and `Beech_Sapling` carry no component, and the module's rule does not take them as targets. It runs only after a small tree got the component from the same hook (SKIP otherwise); the screen does not name the picked prefab |
 | `woodcutting_world_guarded` | The section ran to its end under the guard; the note counts the damage calls on other trees, logs and stumps it dropped |
 | `woodcutting_settings_restored` | Reported when the section changed a setting: every setting it changed is back at your value |
 
@@ -1466,11 +1483,11 @@ reason: the module is off, the interval or another setting could not be written,
 something stands near the spot or between your eyes and the test tree, the range
 does not reach it, or the inventory is full. At the end the added axes and club
 are removed from your inventory, the items you had equipped are equipped again,
-the skills are put back, and the test objects,
-including the log and the stump, are removed. The hits still count toward your
-tree statistics. The fall direction of a real tree, real stumps of your world and
-the feel of the interval remain in-game checks outside this
-section.
+the skills are put back, and the test objects, including the log, the stump, the
+small trees and the other Destructibles the section spawned, are removed. The
+hits still count toward your tree statistics. The fall direction of a real tree,
+real stumps of your world and the feel of the interval remain in-game checks
+outside this section.
 
 #### `woodcuttingarea`
 

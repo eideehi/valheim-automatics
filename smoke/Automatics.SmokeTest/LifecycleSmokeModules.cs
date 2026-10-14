@@ -43,7 +43,6 @@ using WoodcuttingComponent = Automatics.AutomaticWoodcutting.AutomaticWoodcuttin
 using WoodcuttingConfig = Automatics.AutomaticWoodcutting.Config;
 using WoodcuttingModule = Automatics.AutomaticWoodcutting.Module;
 using WoodcuttingPatches = Automatics.AutomaticWoodcutting.Patches;
-using WoodcuttingSpecies = Automatics.AutomaticWoodcutting.TreeSpecies;
 
 namespace Automatics.SmokeTest
 {
@@ -971,7 +970,8 @@ namespace Automatics.SmokeTest
             return WoodcuttingConfig.EnableAutomaticWoodcutting && WoodcuttingConfig.WoodcuttingInterval > 0f;
         }
 
-        // Trees and logs, and the Destructibles that are the stump prefab of a tree.
+        // Trees and logs, and the Destructibles the module takes: the stump prefab of a tree, or
+        // a small tree whose own prefab name the tree data names.
         private static GameObject[] EligibleTrees()
         {
             var eligible = new HashSet<GameObject>();
@@ -984,7 +984,7 @@ namespace Automatics.SmokeTest
             {
                 if (!Objects.GetZNetView(destructible, out var zNetView)) continue;
                 var zdo = zNetView.GetZDO();
-                if (zdo != null && WoodcuttingSpecies.IsStub(zdo.GetPrefab()))
+                if (zdo != null && WoodcuttingModule.IsTargetDestructible(destructible.gameObject, zdo))
                     eligible.Add(destructible.gameObject);
             }
             return eligible.ToArray();

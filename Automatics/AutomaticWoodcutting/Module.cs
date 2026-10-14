@@ -117,12 +117,21 @@ namespace Automatics.AutomaticWoodcutting
             CurrentScope.TryAttach<AutomaticWoodcutting>(target, out _);
         }
 
-        // A Destructible is a target only when it is the stump of a tree: the stump prefab of a
-        // standing tree prefab.
-        internal static void AttachStump(GameObject target, ZDO zdo)
+        /// <summary>
+        ///     Whether a Destructible is a woodcutting target: the stump of a tree, that is the stump
+        ///     prefab of a standing tree prefab, or a small tree, one whose own prefab name the tree
+        ///     data names. Any other Destructible, a bush or a planted sapling among them, is not.
+        /// </summary>
+        internal static bool IsTargetDestructible(GameObject target, ZDO zdo)
+        {
+            return TreeSpecies.IsStub(zdo.GetPrefab()) ||
+                   Globals.Tree.GetIdentify(Objects.GetPrefabName(target), out _);
+        }
+
+        internal static void AttachDestructible(GameObject target, ZDO zdo)
         {
             if (!Discovering) return;
-            if (!TreeSpecies.IsStub(zdo.GetPrefab())) return;
+            if (!IsTargetDestructible(target, zdo)) return;
 
             CurrentScope.TryAttach<AutomaticWoodcutting>(target, out _);
         }
@@ -152,7 +161,7 @@ namespace Automatics.AutomaticWoodcutting
             {
                 if (!Objects.GetZNetView(destructible, out var zNetView)) continue;
                 var zdo = zNetView.GetZDO();
-                if (zdo == null || !TreeSpecies.IsStub(zdo.GetPrefab())) continue;
+                if (zdo == null || !IsTargetDestructible(destructible.gameObject, zdo)) continue;
 
                 scope.Attach<AutomaticWoodcutting>(destructible.gameObject);
             }

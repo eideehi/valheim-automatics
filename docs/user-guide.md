@@ -104,8 +104,8 @@ over the next few frames, when the module's patches and hooks are removed, along
 with the components automatic door adds to doors, automatic pickup adds to
 players and items, automatic mapping adds to fish, birds, ships, rocks and flora,
 automatic mining adds to destructible mineral objects, automatic feeding adds
-to animals that can be tamed, and automatic woodcutting adds to trees, logs and
-tree stumps.
+to animals that can be tamed, and automatic woodcutting adds to trees, small
+trees, logs and tree stumps.
 Turning any of them
 back on also completes over the next few frames, and it then also works on
 objects that appeared while it was off. If the Automatics
@@ -151,8 +151,8 @@ User-defined object fields:
 
 After adding a user-defined object, enable it in the matching allowlist, such as
 `Allow Pinning Spot` or `Allow Container`. A user-defined tree's pattern matches
-the prefab name of the standing tree; its fallen logs and its stump count as that
-tree. See
+the prefab name of the standing tree, or of a small tree that breaks without
+falling; its fallen logs and its stump count as that tree. See
 [Add user-defined object to Automatics](add-user-defined-object.md) for a
 step-by-step example.
 
@@ -1032,15 +1032,16 @@ Its `Module` option takes effect without a restart. See
 
 ## Automatic woodcutting
 
-Automatic woodcutting chops trees, fallen logs and tree stumps around the player
-with an axe. It is off by default, including in an existing configuration: an
-update never turns it on for you.
+Automatic woodcutting chops trees, small trees, fallen logs and tree stumps
+around the player with an axe. It is off by default, including in an existing
+configuration: an update never turns it on for you.
 
 Each attempt hits one target once, the way a swing of the axe would, and then
 stops. The target is the nearest tree, log or stump that:
 
-- is of a kind `Allow Woodcutting Tree` allows. A fallen log or a stump counts as
-  the tree it came from;
+- is of a kind `Allow Woodcutting Tree` allows. A small tree is of the kind its
+  own name gives, so a small beech is a beech, and a fallen log or a stump counts
+  as the tree it came from;
 - can take a hit now: a log that a felling has just spawned is skipped for the
   moment the game ignores hits on it;
 - an axe can cut: the axe has durability left and a tool tier of at least the
@@ -1096,8 +1097,8 @@ Trees from other mods can be added in `User-defined Tree`; see
 Its `Module` option takes effect without a restart. Turning it off stops new
 woodcutting immediately and lets a pass already in progress finish its hit. The
 module's patches, hooks and tree components are removed over the next few frames.
-Turning it back on also completes over the next few frames and finds trees, logs
-and stumps that appeared while it was off. See
+Turning it back on also completes over the next few frames and finds trees,
+small trees, logs and stumps that appeared while it was off. See
 [Module disable options](#module-disable-options).
 
 ## Console commands

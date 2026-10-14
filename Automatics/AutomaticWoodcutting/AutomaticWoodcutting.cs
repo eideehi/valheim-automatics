@@ -8,9 +8,9 @@ using UnityEngine;
 namespace Automatics.AutomaticWoodcutting
 {
     /// <summary>
-    ///     Sits on every standing tree, fallen log and tree stump with a ZDO while the module runs.
-    ///     A pass hits the nearest allowed one that a usable axe can hit, once, the way a swing
-    ///     would, and stops there.
+    ///     Sits on every standing tree, small tree, fallen log and tree stump with a ZDO while the
+    ///     module runs. A pass hits the nearest allowed one that a usable axe can hit, once, the way
+    ///     a swing would, and stops there.
     /// </summary>
     [DisallowMultipleComponent]
     internal sealed class AutomaticWoodcutting : MonoBehaviour, IScopedComponent
@@ -35,7 +35,7 @@ namespace Automatics.AutomaticWoodcutting
         internal IDestructible Target => _target;
 
         // A tree and a log let a tier 0 hit through whatever the world's tool rule says, as their
-        // own damage handlers do; a stump's does not.
+        // own damage handlers do; a Destructible's, a stump's or a small tree's, does not.
         internal bool AlwaysAllowTierZero => !(_component is Destructible);
 
         static AutomaticWoodcutting()

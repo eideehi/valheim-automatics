@@ -72,7 +72,7 @@ Any container can be added. Identifier: A unique string that does not overlap wi
 - Default value:
 
 ### User-defined Tree / [custom_tree]
-Any tree can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the tree. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the standing tree. Its fallen logs and its stump count as this tree. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
+Any tree can be added. Identifier: A unique string that does not overlap with any other identifier. Whitespace is not allowed. Label: The name of the tree. Mainly used in the GUI. If you specify an internal name, it will be translated automatically. Pattern: A pattern matching the prefab name of the standing tree, or of a small tree that breaks without falling. Its fallen logs and its stump count as this tree. Exact matches are evaluated. Prefix the pattern with r/ to use a regular expression.
 
 - Default value:
 
@@ -1303,7 +1303,7 @@ Specify the maximum distance to search for a tree, log or stump. If set to 0, th
 - Acceptable value range: From 0 to 32
 
 ### Allow Woodcutting Tree / [allow_woodcutting_tree]
-Specify the trees to be cut automatically and by area woodcutting. A fallen log or a stump counts as the tree it came from.
+Specify the trees to be cut automatically and by area woodcutting. A small tree is of the kind its own name gives (a small beech is a beech), and a fallen log or a stump counts as the tree it came from.
 
 - Default value: Beech, Birch, Oak, Fir, Pine, AncientTree, YggdrasilShoot, ScorchedTree, TimberTree
 
