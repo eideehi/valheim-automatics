@@ -46,11 +46,12 @@ namespace Automatics.AutomaticMapping
         private static readonly Color BackgroundColor = new Color(0f, 0f, 0f, 0.4f);
 
         // Also by eye: an icon's size at the player and at the range, and its opacity at the
-        // range, linear in between; how far from the centre a pin counts as faced; the name
-        // labels; and the gap left below a bar the strip moves out of the way of.
-        internal const float NearIconSize = 28f;
-        internal const float FarIconSize = 16f;
-        internal const float FarIconAlpha = 0.4f;
+        // range, eased so that most of the change comes near the player; how far from the
+        // centre a pin counts as faced; the name labels; and the gap left below a bar the strip
+        // moves out of the way of.
+        internal const float NearIconSize = 32f;
+        internal const float FarIconSize = 12f;
+        internal const float FarIconAlpha = 0.25f;
         internal const float FocusAngle = 10f;
         private const float FocusOffset = FocusAngle / (FieldOfView / 2f) * (Width / 2f);
         private const float LabelFontSize = 16f;
@@ -263,11 +264,15 @@ namespace Automatics.AutomaticMapping
         }
 
         // Full size and opacity at the player, the far size and opacity at the range and
-        // beyond, linear in between. Each is written only when it changes.
+        // beyond. In between, the change follows an ease-out curve, 1 - (1 - t)^2 of the share
+        // of the range, so it is fastest near the player and nearby icons differ clearly. Each
+        // is written only when it changes.
         private static void SetDistanceStyle(int index, float rangeFraction)
         {
-            var scale = Mathf.Lerp(1f, FarIconSize / NearIconSize, rangeFraction);
-            var alpha = Mathf.Lerp(1f, FarIconAlpha, rangeFraction);
+            var t = Mathf.Clamp01(rangeFraction);
+            var f = 1f - (1f - t) * (1f - t);
+            var scale = Mathf.Lerp(1f, FarIconSize / NearIconSize, f);
+            var alpha = Mathf.Lerp(1f, FarIconAlpha, f);
             var marker = Markers[index];
             if (MarkerScales[index] != scale)
             {

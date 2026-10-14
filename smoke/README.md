@@ -1257,7 +1257,7 @@ flag and its bar are removed in the same frame.
 | `compass_strip_shown` | The strip exists, is shown and sits under the HUD's root object |
 | `compass_letters_facing_north` | Facing north, N is at the centre and E and W at the strip's ends, each within 1 canvas unit, and S is hidden |
 | `compass_letters_follow_turning` | At headings 30 and 225 each letter is where its angle from the heading puts it, or hidden beyond the half view |
-| `compass_letters_localized` | The letters read N, E, S and W, or 北, 東, 南 and 西 in Japanese |
+| `compass_letters_localized` | The letters read N, E, S and W, in Japanese as in English |
 | `compass_marker_positions` | Pins at -60, 0, 30 and 75 degrees from the heading, 20 to 70 m away, are shown within 1 canvas unit of `angle / 90 × 300` |
 | `compass_marker_icons` | Each of those markers shows its own pin's icon; the four pins have four different icon types (SKIP when those share a sprite) |
 | `compass_range_cut` | A pin 90 m away in view is not shown with the range at 80 m and is shown with it at 100 m |
@@ -1275,8 +1275,8 @@ flag and its bar are removed in the same frame.
 | `compass_strip_in_top_band` | The strip's screen rectangle is within the screen, horizontally centred within 2 pixels and inside the top fifth, under the HUD's root object |
 | `compass_strip_in_bottom_band` | With `compass_position` at `Bottom`, the strip's screen rectangle is within the screen, horizontally centred within 2 pixels and inside the bottom fifth, under the HUD's root object |
 | `compass_position_switch` | Switching `compass_position` from `Top` to `Bottom` and back while the game runs puts a new strip in the top, bottom and top band in turn |
-| `compass_distance_style` | Pins 10 m and 70 m away are drawn at the size and opacity the curve gives at their share of the range: from 28 canvas units and fully opaque at you to 16 units and 0.4 opaque at the range, linear in between |
-| `compass_target_beyond_range` | A navigation target 120 m away, beyond the 80 m range, is shown on its own marker at its bearing with its own icon, in `navigation_guide_color` at full opacity and at the full 28 units, unaffected by the distance curve |
+| `compass_distance_style` | Pins 10 m, half the range (40 m) and just inside the range (79.5 m) away are drawn at the size and opacity the eased curve gives at their share t of the range, with f = 1 - (1 - t)^2: from 32 canvas units and fully opaque at you to 12 units and 0.25 opaque at the range, falling fastest near you (about 17 units and 0.44 opaque at half the range, where a linear fall would give 22 and 0.63) |
+| `compass_target_beyond_range` | A navigation target 120 m away, beyond the 80 m range, is shown on its own marker at its bearing with its own icon, in `navigation_guide_color` at full opacity and at the full 32 units, unaffected by the distance curve |
 | `compass_target_not_duplicated` | A navigation target 10 m away in view is on its own marker and not also an ordinary marker, and with 24 other test pins in view the 24 ordinary markers show the nearest in view by the map's own rule, the target left out |
 | `compass_target_behind_hidden` | A navigation target 30 m behind you is not shown; with the navigation left on it, it is shown at the centre once the camera turns to face it and hidden again once the camera turns back |
 | `compass_target_follows_live_position` | A creature target whose pin lies 40 m away at 30 degrees, last seen 25 m away at -20 degrees and then 50 m away at 10 degrees with the same pin, has its marker at the bearing and its label at the distance of where it was last seen each time, and its pin is not an ordinary marker |

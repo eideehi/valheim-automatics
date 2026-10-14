@@ -57,7 +57,7 @@ namespace Automatics.SmokeTest
         // N, E, S and W, as the English and the Japanese translations write them.
         private static readonly string[][] LetterTexts =
         {
-            new[] { "N", "北" }, new[] { "E", "東" }, new[] { "S", "南" }, new[] { "W", "西" }
+            new[] { "N" }, new[] { "E" }, new[] { "S" }, new[] { "W" }
         };
 
         internal static IEnumerator Run(FeatureRun run)
@@ -617,17 +617,21 @@ namespace Automatics.SmokeTest
                 $"top={top} ({topDetail}); bottom={bottom} ({bottomDetail}); top again={back} ({backDetail}); a new strip for each change={recreated}");
         }
 
-        // A pin 10 m and one 70 m away take the size and opacity the curve gives at their
-        // distance.
+        // A pin 10 m, one half the range and one at the range (just inside it, since a pin
+        // beyond the range is not collected) away take the size and opacity the eased curve
+        // gives at their share of the range: with t the share and f = 1 - (1 - t)^2, the size
+        // is NearIconSize x lerp(1, FarIconSize / NearIconSize, f) and the opacity
+        // lerp(1, FarIconAlpha, f). At half the range that is well away from a linear fall.
         private static void CheckDistanceStyle(Fixture fixture)
         {
             var near = fixture.Manual(fixture.At(fixture.Heading + 15f, 10f), Minimap.PinType.Icon0);
-            var far = fixture.Manual(fixture.At(fixture.Heading - 15f, 70f), Minimap.PinType.Icon1);
+            var mid = fixture.Manual(fixture.At(fixture.Heading + 45f, TestRange / 2f), Minimap.PinType.Icon2);
+            var far = fixture.Manual(fixture.At(fixture.Heading - 15f, TestRange - 0.5f), Minimap.PinType.Icon1);
             try
             {
                 fixture.Face(fixture.Heading);
                 fixture.Refresh();
-                var crowded = fixture.Crowded(near, far);
+                var crowded = fixture.Crowded(near, mid, far);
                 if (crowded != null)
                 {
                     fixture.Run.Skip("compass_distance_style", crowded);
@@ -635,12 +639,13 @@ namespace Automatics.SmokeTest
                 }
                 var parts = new List<string>();
                 var passed = true;
-                foreach (var pin in new[] { near, far })
+                foreach (var pin in new[] { near, mid, far })
                 {
                     var marker = MarkerOf(pin);
-                    var fraction = fixture.Distance(pin) / TestRange;
-                    var size = Mathf.Lerp(Compass.NearIconSize, Compass.FarIconSize, fraction);
-                    var alpha = Mathf.Lerp(1f, Compass.FarIconAlpha, fraction);
+                    var t = Mathf.Clamp01(fixture.Distance(pin) / TestRange);
+                    var f = 1f - (1f - t) * (1f - t);
+                    var size = Compass.NearIconSize * Mathf.Lerp(1f, Compass.FarIconSize / Compass.NearIconSize, f);
+                    var alpha = Mathf.Lerp(1f, Compass.FarIconAlpha, f);
                     var shown = marker && marker.gameObject.activeSelf;
                     var actualSize = shown ? Size(marker) : float.NaN;
                     var actualAlpha = shown ? ColorOf(marker).a : float.NaN;
@@ -651,7 +656,7 @@ namespace Automatics.SmokeTest
             }
             finally
             {
-                fixture.Remove(new[] { near, far });
+                fixture.Remove(new[] { near, mid, far });
             }
         }
 

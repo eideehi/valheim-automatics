@@ -416,12 +416,13 @@ letters N, E, S and W mark the directions.
 `Compass Pin Range` limits the horizontal distance from you (100 meters by
 default, configurable from 10 to 300). Of the pins in range ahead of you, the
 24 nearest are shown, nearer icons drawn over farther ones. Icons get smaller
-and fainter with distance: full size and fully opaque next to you, and a little
-over half that size and 40 percent opaque at the edge of the range. The
-compass shows your own, automatic and shared pins as the map shows them: an
-icon type you turned off on the map, `Hide Pins Outside Explored Area`, the
-categories of `Enhance the Map` and a search with `Apply to minimap` on hide
-pins on the compass too. Area markers are not shown.
+and fainter with distance, most quickly close to you: full size and fully
+opaque next to you, and a little over a third of that size and 25 percent
+opaque at the edge of the range. The compass shows your own, automatic and
+shared pins as the map shows them: an icon type you turned off on the map,
+`Hide Pins Outside Explored Area`, the categories of `Enhance the Map` and a
+search with `Apply to minimap` on hide pins on the compass too. Area markers
+are not shown.
 
 The navigation target has an icon of its own, in `Navigation Guide Color`, at
 full size and drawn over the other icons, whatever its distance. It does not
