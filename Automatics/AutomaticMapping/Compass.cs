@@ -15,7 +15,8 @@ namespace Automatics.AutomaticMapping
     ///     the minimap would draw, without the minimap's viewport: the icon filters, the
     ///     shared-map fade and the automatic-pin filters apply, area pins are left out, and so is
     ///     every pin beyond <see cref="Config.CompassPinRange" />. Nearer icons are larger and
-    ///     more opaque.
+    ///     brighter, and the nearest are taller than the strip, so they overflow it above and
+    ///     below.
     ///     <para>
     ///         The pins in range are collected and sorted by distance on a timer, and again in the
     ///         frame the navigation target changes. Every frame then places the nearest of them
@@ -35,6 +36,9 @@ namespace Automatics.AutomaticMapping
 
         // Design choices, to be tuned by eye: the angle the strip covers, its size and place in
         // canvas units, the letter size, how many pins it shows and how often it collects them.
+        // The margins are measured to the content, not to the strip's edge: the nearest icons
+        // overflow the strip by IconOverflow above and below, so the strip is set in by that
+        // much more.
         internal const float FieldOfView = 180f;
         internal const float Width = 600f;
         private const float Height = 36f;
@@ -43,15 +47,21 @@ namespace Automatics.AutomaticMapping
         private const float LetterSize = 20f;
         internal const int MarkerCount = 24;
         private const float RefreshInterval = 0.25f;
-        private static readonly Color BackgroundColor = new Color(0f, 0f, 0f, 0.4f);
+        private static readonly Color BackgroundColor = new Color(0f, 0f, 0f, 0.6f);
 
-        // Also by eye: an icon's size at the player and at the range, and its opacity at the
-        // range, eased so that most of the change comes near the player; how far from the
-        // centre a pin counts as faced; the name labels; and the gap left below a bar the strip
-        // moves out of the way of.
-        internal const float NearIconSize = 32f;
+        // Also by eye: an icon's size at the player and at the range, and its grey tint and
+        // opacity at the range, eased so that most of the change comes near the player; how
+        // far from the centre a pin counts as faced; the name labels; and the gap left below a
+        // bar the strip moves out of the way of. The near size is larger than the strip is
+        // tall, and the icons are centred on it, so each overflows by IconOverflow above and
+        // below; the labels and the avoidance band allow for that. The distance is carried
+        // mainly by the tint, which reads against both a bright sky and a dark ground, and
+        // the opacity only falls to a floor, so far icons stay legible.
+        internal const float NearIconSize = 52f;
         internal const float FarIconSize = 12f;
-        internal const float FarIconAlpha = 0.25f;
+        internal const float FarIconAlpha = 0.6f;
+        internal const float FarIconTint = 0.55f;
+        internal const float IconOverflow = (NearIconSize - Height) / 2f;
         internal const float FocusAngle = 10f;
         private const float FocusOffset = FocusAngle / (FieldOfView / 2f) * (Width / 2f);
         private const float LabelFontSize = 16f;
@@ -84,8 +94,7 @@ namespace Automatics.AutomaticMapping
         private static readonly List<Candidate> Candidates = new List<Candidate>();
         private static readonly List<Minimap.PinData> Shown = new List<Minimap.PinData>(MarkerCount);
         private static readonly Image[] Markers = new Image[MarkerCount];
-        private static readonly float[] MarkerScales = new float[MarkerCount];
-        private static readonly float[] MarkerAlphas = new float[MarkerCount];
+        private static readonly float[] MarkerFades = new float[MarkerCount];
         private static readonly RectTransform[] LetterRects = new RectTransform[LetterKeys.Length];
         private static readonly PinLabel FacedLabel = new PinLabel();
         private static readonly PinLabel TargetLabel = new PinLabel();
@@ -263,31 +272,28 @@ namespace Automatics.AutomaticMapping
             return faced;
         }
 
-        // Full size and opacity at the player, the far size and opacity at the range and
-        // beyond. In between, the change follows an ease-out curve, 1 - (1 - t)^2 of the share
-        // of the range, so it is fastest near the player and nearby icons differ clearly. Each
-        // is written only when it changes.
+        // White, full size and opaque at the player; at the range and beyond, the far size,
+        // a grey tint and the far opacity. In between, the change follows an ease-out curve,
+        // f = 1 - (1 - t)^2 of the share of the range, so it is fastest near the player and
+        // nearby icons differ clearly. The size, the grey and the opacity all follow f, so they
+        // are written only when f changes.
         private static void SetDistanceStyle(int index, float rangeFraction)
         {
             var t = Mathf.Clamp01(rangeFraction);
             var f = 1f - (1f - t) * (1f - t);
+            if (MarkerFades[index] == f) return;
+            MarkerFades[index] = f;
             var scale = Mathf.Lerp(1f, FarIconSize / NearIconSize, f);
+            var grey = Mathf.Lerp(1f, FarIconTint, f);
             var alpha = Mathf.Lerp(1f, FarIconAlpha, f);
             var marker = Markers[index];
-            if (MarkerScales[index] != scale)
-            {
-                MarkerScales[index] = scale;
-                marker.rectTransform.localScale = new Vector3(scale, scale, 1f);
-            }
-            if (MarkerAlphas[index] != alpha)
-            {
-                MarkerAlphas[index] = alpha;
-                marker.color = new Color(1f, 1f, 1f, alpha);
-            }
+            marker.rectTransform.localScale = new Vector3(scale, scale, 1f);
+            marker.color = new Color(grey, grey, grey, alpha);
         }
 
         // The navigation target at any distance, in the guide's colour at full size and
-        // opacity, and hidden outside the half view like any other pin.
+        // opacity, without the grey tint of the distance, and hidden outside the half view like
+        // any other pin.
         private static bool PlaceTarget(Vector3 origin, float heading, Minimap.PinData target, out float x,
             out float distance)
         {
@@ -332,21 +338,24 @@ namespace Automatics.AutomaticMapping
             else TargetLabel.Hide();
         }
 
-        // At the top, while the boss bar or the event bar is shown over the band the strip and
-        // its labels take by default, the strip moves down until its top is a gap below the bar,
-        // and it goes back once neither is. At the bottom it stays. Where the bars are is
-        // vanilla's prefab data, so their rects are read as they are.
+        // At the top, while the boss bar or the event bar is shown over the band the strip, its
+        // overflowing icons and its labels take by default, the strip moves down until its
+        // icons' top edge is a gap below the bar, and it goes back once neither is. At the
+        // bottom it stays. The strip's default top is the top margin plus the overflow below
+        // the screen's top edge, so the icons, not the strip, are the margin from it. Where the
+        // bars are is vanilla's prefab data, so their rects are read as they are.
         private static void PlaceStrip(Hud hud, EnemyHud enemyHud)
         {
             var strip = (RectTransform)Root.transform;
-            var y = BottomMargin;
+            var y = BottomMargin + IconOverflow;
             if (_position == CompassPosition.Top)
             {
                 var parent = (RectTransform)strip.parent;
                 var area = parent.rect;
-                var top = area.yMax - TopMargin;
-                var band = Rect.MinMaxRect(area.center.x - Width / 2f, top - Height - LabelHeight,
-                    area.center.x + Width / 2f, top);
+                var top = area.yMax - TopMargin - IconOverflow;
+                var band = Rect.MinMaxRect(area.center.x - Width / 2f,
+                    top - Height - IconOverflow - LabelHeight, area.center.x + Width / 2f,
+                    top + IconOverflow);
                 var below = Below(parent, band, GetBossHud(enemyHud), top);
                 below = Below(parent, band, hud.m_eventBar.transform as RectTransform, below);
                 y = below - area.yMax;
@@ -354,8 +363,9 @@ namespace Automatics.AutomaticMapping
             if (strip.anchoredPosition.y != y) strip.anchoredPosition = new Vector2(0f, y);
         }
 
-        // The highest the strip's top may be with the bar: a gap below the bar while it is
-        // shown over the band, else the given top. The rect is read in the strip parent's space.
+        // The highest the strip's top may be with the bar: while the bar is shown over the
+        // band, the gap below it plus the overflow, so the overflowing icons keep the gap, else
+        // the given top. The rect is read in the strip parent's space.
         private static float Below(RectTransform parent, Rect band, RectTransform bar, float top)
         {
             if (!bar || !bar.gameObject.activeInHierarchy) return top;
@@ -363,7 +373,7 @@ namespace Automatics.AutomaticMapping
             var min = parent.InverseTransformPoint(Corners[0]);
             var max = parent.InverseTransformPoint(Corners[2]);
             var rect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
-            return rect.Overlaps(band) ? Mathf.Min(top, rect.yMin - AvoidanceGap) : top;
+            return rect.Overlaps(band) ? Mathf.Min(top, rect.yMin - AvoidanceGap - IconOverflow) : top;
         }
 
         // The boss bar is found in the enemy HUD's table only when the boss or the enemy HUD
@@ -411,7 +421,7 @@ namespace Automatics.AutomaticMapping
                 strip.anchorMin = strip.anchorMax = new Vector2(0.5f, edge);
                 strip.pivot = new Vector2(0.5f, edge);
                 strip.sizeDelta = new Vector2(Width, Height);
-                strip.anchoredPosition = new Vector2(0f, position == CompassPosition.Top ? -TopMargin : BottomMargin);
+                strip.anchoredPosition = new Vector2(0f, position == CompassPosition.Top ? -TopMargin - IconOverflow : BottomMargin + IconOverflow);
                 var background = root.AddComponent<Image>();
                 background.color = BackgroundColor;
                 background.raycastTarget = false;
@@ -428,7 +438,8 @@ namespace Automatics.AutomaticMapping
                     Markers[i] = CreateMarker(strip, "Marker");
                 _targetMarker = CreateMarker(strip, "TargetMarker");
 
-                // Below the strip at the top, above it at the bottom.
+                // Below the strip at the top, above it at the bottom, clear of the icons'
+                // overflow.
                 CreateLabel(FacedLabel, source, strip, edge);
                 CreateLabel(TargetLabel, source, strip, edge);
 
@@ -475,7 +486,7 @@ namespace Automatics.AutomaticMapping
             rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f - edge);
             rect.pivot = new Vector2(0.5f, edge);
             rect.sizeDelta = new Vector2(LabelWidth, LabelHeight);
-            rect.anchoredPosition = Vector2.zero;
+            rect.anchoredPosition = new Vector2(0f, edge == 1f ? -IconOverflow : IconOverflow);
             label.Attach(rect, text.GetComponent(TextType));
         }
 
@@ -502,9 +513,8 @@ namespace Automatics.AutomaticMapping
             Candidates.Clear();
             Shown.Clear();
             Array.Clear(Markers, 0, Markers.Length);
-            // Zero is no scale or opacity a marker is given, so a new strip writes each of them.
-            Array.Clear(MarkerScales, 0, MarkerScales.Length);
-            Array.Clear(MarkerAlphas, 0, MarkerAlphas.Length);
+            // Below zero is no fade a marker is given, so a new strip writes each of them.
+            for (var i = 0; i < MarkerFades.Length; i++) MarkerFades[i] = -1f;
             Array.Clear(LetterRects, 0, LetterRects.Length);
             _targetMarker = null;
             FacedLabel.Reset();
@@ -558,7 +568,8 @@ namespace Automatics.AutomaticMapping
                     _meters = meters;
                     TextProperty.SetValue(_text, _displayName + " [" + meters + "m]");
                 }
-                Rect.anchoredPosition = new Vector2(x, 0f);
+                // The height is the offset the label was created with.
+                Rect.anchoredPosition = new Vector2(x, Rect.anchoredPosition.y);
                 if (!Rect.gameObject.activeSelf) Rect.gameObject.SetActive(true);
             }
 

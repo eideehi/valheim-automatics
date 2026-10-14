@@ -618,9 +618,10 @@ namespace Automatics.SmokeTest
         }
 
         // A pin 10 m, one half the range and one at the range (just inside it, since a pin
-        // beyond the range is not collected) away take the size and opacity the eased curve
-        // gives at their share of the range: with t the share and f = 1 - (1 - t)^2, the size
-        // is NearIconSize x lerp(1, FarIconSize / NearIconSize, f) and the opacity
+        // beyond the range is not collected) away take the size, grey tint and opacity the
+        // eased curve gives at their share of the range: with t the share and
+        // f = 1 - (1 - t)^2, the size is NearIconSize x lerp(1, FarIconSize / NearIconSize, f),
+        // the red, green and blue are each lerp(1, FarIconTint, f) and the opacity
         // lerp(1, FarIconAlpha, f). At half the range that is well away from a linear fall.
         private static void CheckDistanceStyle(Fixture fixture)
         {
@@ -645,12 +646,15 @@ namespace Automatics.SmokeTest
                     var t = Mathf.Clamp01(fixture.Distance(pin) / TestRange);
                     var f = 1f - (1f - t) * (1f - t);
                     var size = Compass.NearIconSize * Mathf.Lerp(1f, Compass.FarIconSize / Compass.NearIconSize, f);
+                    var tint = Mathf.Lerp(1f, Compass.FarIconTint, f);
                     var alpha = Mathf.Lerp(1f, Compass.FarIconAlpha, f);
                     var shown = marker && marker.gameObject.activeSelf;
                     var actualSize = shown ? Size(marker) : float.NaN;
-                    var actualAlpha = shown ? ColorOf(marker).a : float.NaN;
-                    passed &= shown && Mathf.Abs(actualSize - size) <= 0.05f && Mathf.Abs(actualAlpha - alpha) <= 0.01f;
-                    parts.Add($"{fixture.Distance(pin):0.0} m away: size {actualSize:0.00} (expected {size:0.00}), alpha {actualAlpha:0.00} (expected {alpha:0.00})");
+                    var actualColor = shown ? ColorOf(marker) : default(Color);
+                    passed &= shown && Mathf.Abs(actualSize - size) <= 0.05f &&
+                              Mathf.Abs(actualColor.r - tint) <= 0.01f && Mathf.Abs(actualColor.g - tint) <= 0.01f &&
+                              Mathf.Abs(actualColor.b - tint) <= 0.01f && Mathf.Abs(actualColor.a - alpha) <= 0.01f;
+                    parts.Add($"{fixture.Distance(pin):0.0} m away: size {actualSize:0.00} (expected {size:0.00}), tint r {actualColor.r:0.00} g {actualColor.g:0.00} b {actualColor.b:0.00} (expected {tint:0.00}), alpha {actualColor.a:0.00} (expected {alpha:0.00})");
                 }
                 Check(fixture.Run, "compass_distance_style", passed, string.Join("; ", parts));
             }
@@ -963,7 +967,8 @@ namespace Automatics.SmokeTest
         }
 
         // The labels shown come back with the same text after Top, Bottom and Top again, on the
-        // side of the strip away from the screen's edge, and after the strip is recreated.
+        // side of the strip away from the screen's edge and beyond the icons' overflow, and
+        // after the strip is recreated.
         private static void CheckLabelsKept(Fixture fixture, string facedText, string targetText)
         {
             var sides = new List<string>();
@@ -979,15 +984,15 @@ namespace Automatics.SmokeTest
                 {
                     var rect = ParentRect(label);
                     var side = position == CompassPosition.Top
-                        ? rect.yMax <= strip.yMin + Tolerance
-                        : rect.yMin >= strip.yMax - Tolerance;
+                        ? rect.yMax <= strip.yMin - Compass.IconOverflow + Tolerance
+                        : rect.yMin >= strip.yMax + Compass.IconOverflow - Tolerance;
                     if (!side)
                         sides.Add($"at the {position} a label spans y {rect.yMin:0.0}-{rect.yMax:0.0} against the strip's {strip.yMin:0.0}-{strip.yMax:0.0}");
                 }
             }
             Check(fixture.Run, "compass_labels_after_position_change", kept && sides.Count == 0,
                 $"both labels read the same after Bottom and Top={kept}; " +
-                (sides.Count == 0 ? "below the strip at the top and above it at the bottom" : string.Join("; ", sides)));
+                (sides.Count == 0 ? "below the strip's icons at the top and above them at the bottom" : string.Join("; ", sides)));
 
             fixture.Write(MappingConfig.EnableCompassEntry, false);
             Compass.Update(fixture.Player);
@@ -999,9 +1004,9 @@ namespace Automatics.SmokeTest
                 $"the strip was removed with enable_compass off={gone}; recreated, both labels read the same={back}");
         }
 
-        // At the top, the event bar and a boss's bar moved over the band the strip and its labels
-        // take push the strip down until it clears them, and it goes back once they hide; at the
-        // bottom it stays.
+        // At the top, the event bar and a boss's bar moved over the band the strip, its
+        // overflowing icons and its labels take push the strip down until the icons clear them
+        // by the gap, and it goes back once they hide; at the bottom it stays.
         private static void CheckAvoidance(Fixture fixture, Hud hud)
         {
             var enemyHud = EnemyHud.instance;
@@ -1041,7 +1046,8 @@ namespace Automatics.SmokeTest
             CheckAvoid(fixture, "compass_avoids_boss_bar", fixture.Track(bar));
         }
 
-        // One bar: moved over the default band, shown, then hidden, at the top; then moved over the
+        // One bar: moved over the default band, which reaches IconOverflow above and below the
+        // strip, and below that for the label, shown, then hidden, at the top; then moved over the
         // band at the bottom and shown again. Its place and visibility are put back by the caller.
         private static void CheckAvoid(Fixture fixture, string name, RectTransform bar)
         {
@@ -1051,7 +1057,8 @@ namespace Automatics.SmokeTest
             ForceUpdateCanvases();
             var strip = (RectTransform)Compass.Root.transform;
             var start = ParentRect(strip);
-            var band = Rect.MinMaxRect(start.xMin, start.yMin - Compass.LabelHeight, start.xMax, start.yMax);
+            var band = Rect.MinMaxRect(start.xMin, start.yMin - Compass.IconOverflow - Compass.LabelHeight, start.xMax,
+                start.yMax + Compass.IconOverflow);
             MoveOnto(bar, band);
             bar.gameObject.SetActive(true);
             var barRect = ParentRect(bar);
@@ -1069,17 +1076,18 @@ namespace Automatics.SmokeTest
             Compass.Update(player);
             ForceUpdateCanvases();
             var moved = ParentRect(strip);
-            var movedBand = Rect.MinMaxRect(moved.xMin, moved.yMin - Compass.LabelHeight, moved.xMax, moved.yMax);
+            var movedBand = Rect.MinMaxRect(moved.xMin, moved.yMin - Compass.IconOverflow - Compass.LabelHeight, moved.xMax,
+                moved.yMax + Compass.IconOverflow);
             var down = moved.yMax < start.yMax - Tolerance;
             var clear = !movedBand.Overlaps(barRect);
-            var gap = Mathf.Abs(moved.yMax - (barRect.yMin - Compass.AvoidanceGap)) <= Tolerance;
+            var gap = Mathf.Abs(moved.yMax - (barRect.yMin - Compass.AvoidanceGap - Compass.IconOverflow)) <= Tolerance;
             bar.gameObject.SetActive(false);
             Compass.Update(player);
             ForceUpdateCanvases();
             var back = ParentRect(strip);
             var returned = Mathf.Abs(back.yMax - start.yMax) <= Tolerance && Mathf.Abs(back.yMin - start.yMin) <= Tolerance;
             Check(fixture.Run, name, down && clear && gap && returned,
-                $"with the bar at y {barRect.yMin:0.0}-{barRect.yMax:0.0} over the band, the strip's top went from {start.yMax:0.0} to {moved.yMax:0.0} (expected {barRect.yMin - Compass.AvoidanceGap:0.0}); clear of the bar with its labels={clear}; back at {back.yMax:0.0} once the bar hid={returned}");
+                $"with the bar at y {barRect.yMin:0.0}-{barRect.yMax:0.0} over the band, the strip's top went from {start.yMax:0.0} to {moved.yMax:0.0} (expected {barRect.yMin - Compass.AvoidanceGap - Compass.IconOverflow:0.0}, the gap plus the {Compass.IconOverflow:0.0} the icons overflow it); clear of the bar with its icons and labels={clear}; back at {back.yMax:0.0} once the bar hid={returned}");
 
             fixture.Write(MappingConfig.CompassPositionEntry, CompassPosition.Bottom);
             try
@@ -1088,7 +1096,8 @@ namespace Automatics.SmokeTest
                 ForceUpdateCanvases();
                 strip = (RectTransform)Compass.Root.transform;
                 var bottom = ParentRect(strip);
-                var bottomBand = Rect.MinMaxRect(bottom.xMin, bottom.yMin, bottom.xMax, bottom.yMax + Compass.LabelHeight);
+                var bottomBand = Rect.MinMaxRect(bottom.xMin, bottom.yMin - Compass.IconOverflow, bottom.xMax,
+                    bottom.yMax + Compass.IconOverflow + Compass.LabelHeight);
                 MoveOnto(bar, bottomBand);
                 bar.gameObject.SetActive(true);
                 var bottomOverlaps = ParentRect(bar).Overlaps(bottomBand);
