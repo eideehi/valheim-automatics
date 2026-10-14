@@ -6,10 +6,11 @@ namespace Automatics.AutomaticWoodcutting
 {
     /// <summary>
     ///     Area woodcutting: a local-player axe swing that hits an allowed tree, log or stump also
-    ///     hits other allowed trees, logs and stumps near the first such hit, those of the same
-    ///     kind as what that hit struck before the others. The swing context lives from the
-    ///     Attack.DoMeleeAttack prefix that began it to that call's finalizer; the damage prefixes
-    ///     record what the swing hit, and only the postfix of a swing that completed expands, once.
+    ///     hits other allowed trees, logs and stumps near the first such hit; while
+    ///     Config.AreaWoodcuttingSameKindFirst is on, those of the same kind as what that hit struck
+    ///     come before the others. The swing context lives from the Attack.DoMeleeAttack prefix
+    ///     that began it to that call's finalizer; the damage prefixes record what the swing hit,
+    ///     and only the postfix of a swing that completed expands, once.
     /// </summary>
     internal static class AreaWoodcutting
     {
@@ -17,10 +18,13 @@ namespace Automatics.AutomaticWoodcutting
         private static readonly List<Target> Candidates = new List<Target>();
         private static readonly HashSet<string> TriggerSpecies = new HashSet<string>(StringComparer.Ordinal);
 
-        // The targets of the same kind as the trigger's first, then the others; nearest first
-        // within each.
+        // While the same-kind option is on: the targets of the same kind as the trigger's first,
+        // then the others; nearest first within each.
         private static readonly Comparison<Target> ByKindThenDistance = (x, y) =>
             x.SameKind != y.SameKind ? (x.SameKind ? -1 : 1) : x.Distance.CompareTo(y.Distance);
+
+        private static readonly Comparison<Target> ByDistance = (x, y) =>
+            x.Distance.CompareTo(y.Distance);
 
         private static bool _swing;
         private static bool _expanding;
@@ -76,11 +80,12 @@ namespace Automatics.AutomaticWoodcutting
         }
 
         /// <summary>
-        ///     Applies the trigger hit to the allowed targets the swing did not hit: first those of
-        ///     the same kind as the target the trigger hit, of its form and sharing a species with
-        ///     it, then the others, each nearest first. The swing has already paid its own
-        ///     durability, stamina and skill gain; each extra target wears the axe once more, and
-        ///     nothing else is charged or raised.
+        ///     Applies the trigger hit to the allowed targets the swing did not hit. While
+        ///     Config.AreaWoodcuttingSameKindFirst is on, first those of the same kind as the target
+        ///     the trigger hit, of its form and sharing a species with it, then the others, each
+        ///     nearest first; while it is off, all of them nearest first. The swing has already paid
+        ///     its own durability, stamina and skill gain; each extra target wears the axe once
+        ///     more, and nothing else is charged or raised.
         /// </summary>
         internal static void Expand()
         {
@@ -93,16 +98,23 @@ namespace Automatics.AutomaticWoodcutting
             Candidates.Clear();
             AutomaticWoodcutting.CollectAreaTargets(trigger.m_point, Config.AreaWoodcuttingRadius,
                 Candidates);
-            TriggerSpecies.Clear();
-            TreeSpecies.GetSpecies(_triggerPrefab, TriggerSpecies);
-            for (var i = 0; i < Candidates.Count; i++)
+            if (Config.AreaWoodcuttingSameKindFirst)
             {
-                var candidate = Candidates[i].Component;
-                if (candidate.GetForm() == _triggerForm &&
-                    TreeSpecies.HasAnySpecies(candidate.PrefabName, TriggerSpecies))
-                    Candidates[i] = Candidates[i].AsSameKind();
+                TriggerSpecies.Clear();
+                TreeSpecies.GetSpecies(_triggerPrefab, TriggerSpecies);
+                for (var i = 0; i < Candidates.Count; i++)
+                {
+                    var candidate = Candidates[i].Component;
+                    if (candidate.GetForm() == _triggerForm &&
+                        TreeSpecies.HasAnySpecies(candidate.PrefabName, TriggerSpecies))
+                        Candidates[i] = Candidates[i].AsSameKind();
+                }
+                Candidates.Sort(ByKindThenDistance);
             }
-            Candidates.Sort(ByKindThenDistance);
+            else
+            {
+                Candidates.Sort(ByDistance);
+            }
 
             var shared = _weapon.m_shared;
             var remaining = Config.AreaWoodcuttingMaxTargets;

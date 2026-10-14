@@ -17,6 +17,7 @@ namespace Automatics.AutomaticWoodcutting
         private static ConfigEntry<bool> _enableAreaWoodcutting;
         private static ConfigEntry<float> _areaWoodcuttingRadius;
         private static ConfigEntry<int> _areaWoodcuttingMaxTargets;
+        private static ConfigEntry<bool> _areaWoodcuttingSameKindFirst;
 
         public static ConfigEntry<AutomaticsModule> ModuleEntry => _module;
         public static bool EnableAutomaticWoodcutting => _enableAutomaticWoodcutting.Value;
@@ -35,6 +36,8 @@ namespace Automatics.AutomaticWoodcutting
         internal static ConfigEntry<float> AreaWoodcuttingRadiusEntry => _areaWoodcuttingRadius;
         public static int AreaWoodcuttingMaxTargets => _areaWoodcuttingMaxTargets.Value;
         internal static ConfigEntry<int> AreaWoodcuttingMaxTargetsEntry => _areaWoodcuttingMaxTargets;
+        public static bool AreaWoodcuttingSameKindFirst => _areaWoodcuttingSameKindFirst.Value;
+        internal static ConfigEntry<bool> AreaWoodcuttingSameKindFirstEntry => _areaWoodcuttingSameKindFirst;
 
         public static void Initialize()
         {
@@ -58,6 +61,7 @@ namespace Automatics.AutomaticWoodcutting
             _enableAreaWoodcutting = config.Bind("enable_area_woodcutting", true);
             _areaWoodcuttingRadius = config.Bind("area_woodcutting_radius", 3f, (1f, 10f));
             _areaWoodcuttingMaxTargets = config.Bind("area_woodcutting_max_targets", 8, (1, 32));
+            _areaWoodcuttingSameKindFirst = config.Bind("area_woodcutting_same_kind_first", true);
 
             config.ChangeSection("general", 32);
             config.BindCustomValheimObject("custom_tree", Globals.Tree);

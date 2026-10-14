@@ -1075,18 +1075,21 @@ Woodcutting` off, or put the axe away near trees you want to keep.
 | `Allow Woodcutting Tree` | Which kinds of tree automatic woodcutting and area woodcutting may cut. Every kind by default. |
 | `Need To Equip Axe For Woodcutting` | Requires the axe to be in your right hand. If disabled, Automatics can use an axe from the inventory. On by default. |
 | `Attempt Woodcutting Key` | Optional shortcut that attempts woodcutting once per key press, whatever the interval is. Unbound by default. |
-| `Area Woodcutting` | When your own axe swing hits an allowed tree, log or stump, also hits other allowed ones near the hit, those of the same kind first. On by default. |
+| `Area Woodcutting` | When your own axe swing hits an allowed tree, log or stump, also hits other allowed ones near the hit. On by default. |
 | `Area Woodcutting Radius` | How far from the hit area woodcutting reaches (3 meters by default, 1 to 10). |
 | `Area Woodcutting Max Targets` | How many extra trees, logs or stumps one swing can hit (8 by default, 1 to 32). |
+| `Area Woodcutting Same Kind First` | Takes the targets of the same kind as the one you hit before the others. On by default. |
 
 When your own axe swing hits an allowed tree, log or stump, area woodcutting
 applies the same hit to other allowed trees, logs and stumps within `Area
 Woodcutting Radius` of that first hit, up to `Area Woodcutting Max Targets`.
-Targets of the same kind as the one you hit come before the others: of the same
-form, a standing or small tree, a fallen log or a stump, and of the same kind of
-tree. A swing at a beech goes on to the other beeches around it before their logs
-and stumps and before trees of other kinds. Within each group the nearest come
-first, and the cap counts both groups together.
+With `Area Woodcutting Same Kind First` on (the default), targets of the same
+kind as the one you hit come before the others: of the same form, a standing or
+small tree, a fallen log or a stump, and of the same kind of tree. A swing at a
+beech goes on to the other beeches around it before their logs and stumps and
+before trees of other kinds. Within each group the nearest come first, and the
+cap counts both groups together. With it off, the nearest targets are taken
+whatever their kind.
 It skips targets the swing already hit, targets the axe's tool tier does not reach
 and logs that cannot take a hit yet, and it does not need a clear line to them.
 Each extra target wears the axe by one hit's durability, scaled by the world's

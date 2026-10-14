@@ -828,23 +828,30 @@ namespace Automatics.SmokeTest
 
         // -- Same kind first --------------------------------------------------------------------
 
-        // Area woodcutting takes the targets of the same kind as the one the swing hit first, the
-        // same form and a species in common, before any other. Every earlier test object is
+        // While area_woodcutting_same_kind_first is on, area woodcutting takes the targets of the
+        // same kind as the one the swing hit first, the same form and a species in common, before
+        // any other; while it is off, it takes the nearest whatever their kind. Every earlier test object is
         // removed, and a beech is spawned where the first swing's target stood, with three
         // targets beyond the swing's reach: a tree of another species and a beech stump, both
         // nearer the swing's hit than a second beech farther out. Their tool tier is lowered to
         // the axe's, and allow_woodcutting_tree holds both species, so only the kind can keep a
         // decoy back. With area_woodcutting_max_targets at 1, a swing at the beech has to give its
         // one extra hit to the second beech; with the cap at 3, a second swing reaches all three,
-        // the second beech first and then the decoys nearest first. A swing counts only when the
-        // distances from its observed hit to the targets, measured the way area woodcutting
-        // measures them, put both decoys nearer than the second beech and all three within the
-        // radius.
+        // the second beech first and then the decoys nearest first. Both write the option on
+        // first. A third swing, with the option off and the cap at 1, has to give its one extra
+        // hit to the nearest of the three, a decoy, and none to the second beech. A swing counts
+        // only when the distances from its observed hit to the targets, measured the way area
+        // woodcutting measures them, put both decoys nearer than the second beech and all three
+        // within the radius.
         private static IEnumerator SameKindFirst(FeatureRun run,
             Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held, Player player, ItemDrop.ItemData axe,
             Fixture fixture, WoodcuttingFeatureSmoke.PlayerState state, List<GameObject> spawned)
         {
-            var names = new[] { "woodcutting_area_same_kind_first", "woodcutting_area_same_kind_then_others" };
+            var names = new[]
+            {
+                "woodcutting_area_same_kind_first", "woodcutting_area_same_kind_then_others",
+                "woodcutting_area_same_kind_off"
+            };
             string skip = null;
             string otherPrefab = null;
             if (player.RightItem != axe) skip = "the test axe could not be equipped again";
@@ -871,6 +878,9 @@ namespace Automatics.SmokeTest
                 skip = $"area_woodcutting_radius could not be set to {setup.Radius:0.#} for the check";
             else if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingMaxTargetsEntry, 1))
                 skip = "area_woodcutting_max_targets could not be set to 1 for the check";
+            else if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingSameKindFirstEntry, true) ||
+                     !WoodcuttingConfig.AreaWoodcuttingSameKindFirst)
+                skip = "area_woodcutting_same_kind_first could not be set to true for the check";
             if (skip == null)
             {
                 var nearby = new List<WoodcuttingArea.Target>();
@@ -936,12 +946,30 @@ namespace Automatics.SmokeTest
             if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingMaxTargetsEntry, 3))
             {
                 run.Skip(names[1], "area_woodcutting_max_targets could not be set to 3 for the check");
+            }
+            else
+            {
+                var open = new SwingResult { Name = "uncapped" };
+                steps = KindSwing(player, axe, fixture, state, open, spawned);
+                while (steps.MoveNext()) yield return steps.Current;
+                CheckSameKindThenOthers(run, names[1], open, setup);
+            }
+
+            if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingSameKindFirstEntry, false) ||
+                WoodcuttingConfig.AreaWoodcuttingSameKindFirst)
+            {
+                run.Skip(names[2], "area_woodcutting_same_kind_first could not be set to false for the check");
                 yield break;
             }
-            var open = new SwingResult { Name = "uncapped" };
-            steps = KindSwing(player, axe, fixture, state, open, spawned);
+            if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingMaxTargetsEntry, 1))
+            {
+                run.Skip(names[2], "area_woodcutting_max_targets could not be set to 1 for the check");
+                yield break;
+            }
+            var off = new SwingResult { Name = "same kind off" };
+            steps = KindSwing(player, axe, fixture, state, off, spawned);
             while (steps.MoveNext()) yield return steps.Current;
-            CheckSameKindThenOthers(run, names[1], open, setup);
+            CheckSameKindOff(run, names[2], off, setup);
         }
 
         private static IEnumerator KindSwing(Player player, ItemDrop.ItemData axe, Fixture fixture,
@@ -1010,6 +1038,34 @@ namespace Automatics.SmokeTest
             else
                 run.Fail(name,
                     $"with the cap at 3: {swing.Expanded} extra hit(s) counted, observed in order [{string.Join(", ", extras.Select(x => Describe(x, setup)).ToArray())}], {swing.BlockedExtras} on other objects (beech {distances.Same:0.##} m, other species {distances.Other:0.##} m, stump {distances.Stump:0.##} m)");
+        }
+
+        // With the option off and the cap at 1, the swing's one extra hit went to the nearest of the
+        // three targets, a decoy, and the second beech, the farthest, took none. Two decoys whose
+        // distances differ by 0.01 m or less both count as the nearest.
+        private static void CheckSameKindOff(FeatureRun run, string name, SwingResult swing, KindSetup setup)
+        {
+            var reason = KindDistances(swing, setup, out var distances, out var failed);
+            if (reason != null)
+            {
+                if (failed) run.Fail(name, reason);
+                else run.Skip(name, reason);
+                return;
+            }
+
+            var nearest = Mathf.Min(distances.Other, distances.Stump);
+            var accepted = new List<GameObject>();
+            if (distances.Other - nearest <= 0.01f) accepted.Add(setup.Other);
+            if (distances.Stump - nearest <= 0.01f) accepted.Add(setup.Stump);
+            var extras = swing.Records.Where(x => x.Extra).ToList();
+            var sameHits = swing.Records.Count(x => x.Target && x.Target.gameObject == setup.Same);
+            if (swing.Expanded == 1 && extras.Count == 1 && extras[0].Target &&
+                accepted.Contains(extras[0].Target.gameObject) && swing.BlockedExtras == 0 && sameHits == 0)
+                run.Pass(name,
+                    $"with the option off and the cap at 1, the one extra hit went to {Describe(extras[0], setup)} ({nearest:0.##} m from the hit), the nearest, and not to the second beech ({distances.Same:0.##} m)");
+            else
+                run.Fail(name,
+                    $"with the option off and the cap at 1: {swing.Expanded} extra hit(s) counted, {extras.Count} observed, first on {Describe(extras.FirstOrDefault(), setup)}; {sameHits} hit(s) on the second beech, {swing.BlockedExtras} extra hit(s) on other objects (beech {distances.Same:0.##} m, other species {distances.Other:0.##} m, stump {distances.Stump:0.##} m)");
         }
 
         // Why the swing cannot count, or null. It counts when it hit the beech in front of you and
