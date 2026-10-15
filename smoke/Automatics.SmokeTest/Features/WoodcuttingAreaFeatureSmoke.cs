@@ -234,7 +234,8 @@ namespace Automatics.SmokeTest
                 CheckKindsExpanded(run, swings);
                 CheckTriggerPoints(run, swings);
 
-                CheckNotFromEntry(run, player, fixture);
+                steps = CheckNotFromEntry(run, player, fixture);
+                while (steps.MoveNext()) yield return steps.Current;
 
                 steps = WaitForAttackEnd(player);
                 while (steps.MoveNext()) yield return steps.Current;
@@ -662,24 +663,43 @@ namespace Automatics.SmokeTest
         }
 
         // A hit of the module's own entry on a test object in front of you expands nothing.
-        private static void CheckNotFromEntry(FeatureRun run, Player player, Fixture fixture)
+        private static IEnumerator CheckNotFromEntry(FeatureRun run, Player player, Fixture fixture)
         {
             const string name = "woodcutting_area_not_from_automatic_woodcutting";
             SwingObserver.Reset();
             var expanded = WoodcuttingArea.ExpandedHitCount;
-            WoodcuttingComponent chopped = null;
-            foreach (var go in fixture.InFront())
+            var chopped = ChopInFront(player, fixture);
+            if (!chopped)
             {
-                var component = go ? go.GetComponent<WoodcuttingComponent>() : null;
-                if (!component || !component.Chop(player)) continue;
-                chopped = component;
-                break;
+                // A refused entry spends nothing, so it is tried once more after the next physics
+                // step, as the woodcutting section looks again before it gives up.
+                yield return new WaitForFixedUpdate();
+                Physics.SyncTransforms();
+                if (!player)
+                {
+                    run.Skip(name, "you were gone after the section waited a physics step");
+                    yield break;
+                }
+                SwingObserver.Reset();
+                expanded = WoodcuttingArea.ExpandedHitCount;
+                chopped = ChopInFront(player, fixture);
+                if (chopped)
+                    WoodcuttingFeatureSmoke.Log.LogWarning(
+                        $"{name}: the module's entry hit a test object only after the section waited a physics step");
             }
 
             if (!chopped)
             {
-                run.Skip(name, "the module's entry hit none of the test objects in front of you");
-                return;
+                const string headline =
+                    "the module's entry hit none of the test objects in front of you, also after a physics step";
+                var front = fixture.InFront().ToList();
+                if (front.Count == 0)
+                    WoodcuttingFeatureSmoke.Log.LogWarning($"{name}: {headline}; none of them is left");
+                foreach (var go in front)
+                    WoodcuttingFeatureSmoke.LogReach(name, headline, player, go.transform);
+                run.Skip(name,
+                    "the module's entry hit none of the test objects in front of you, also after a physics step (the details are in the log file)");
+                yield break;
             }
 
             var extras = SwingObserver.Records.Count(x => x.Extra);
@@ -687,6 +707,18 @@ namespace Automatics.SmokeTest
                 run.Pass(name, "a hit of the module's own entry on a test object expanded nothing");
             else
                 run.Fail(name, $"{WoodcuttingArea.ExpandedHitCount - expanded} extra hit(s) counted, {extras} observed");
+        }
+
+        // A hit of the module's entry on the nearest test object in front of you it reaches.
+        // Returns the component that hit, or null.
+        private static WoodcuttingComponent ChopInFront(Player player, Fixture fixture)
+        {
+            foreach (var go in fixture.InFront())
+            {
+                var component = go ? go.GetComponent<WoodcuttingComponent>() : null;
+                if (component && component.Chop(player)) return component;
+            }
+            return null;
         }
 
         // The skills a hit of the module's entry raises on a log, a tree and a stump, each against
@@ -786,8 +818,27 @@ namespace Automatics.SmokeTest
             SwingObserver.Reset();
             if (!component.Chop(player))
             {
-                run.Skip(name, "the module's entry could not reach the target from your eyes");
-                yield break;
+                // A refused entry spends nothing, so it is tried once more after the next physics
+                // step, as the woodcutting section looks again before it gives up.
+                yield return new WaitForFixedUpdate();
+                Physics.SyncTransforms();
+                SwingObserver.Reset();
+                if (!player || !target)
+                {
+                    run.Skip(name, "you or the target were gone after the section waited a physics step");
+                    yield break;
+                }
+                if (!component.Chop(player))
+                {
+                    WoodcuttingFeatureSmoke.LogReach(name,
+                        "the module's entry could not reach the target from your eyes, also after a physics step",
+                        player, target.transform);
+                    run.Skip(name,
+                        "the module's entry could not reach the target from your eyes, also after a physics step (the details are in the log file)");
+                    yield break;
+                }
+                WoodcuttingFeatureSmoke.Log.LogWarning(
+                    $"{name}: the module's entry reached the target only after the section waited a physics step");
             }
 
             var module = Describe(SwingObserver.Raises);

@@ -1390,9 +1390,10 @@ and 0 uses the axe's attack range. The section:
   periodic pass runs while it holds a test axe. The write is recorded through the
   session like every setting a section changes, and put back at the end. Some
   checks set it to 1 s and back to 0 around a single call, in the same frame;
-- checks the tree data against the prefabs of the loaded world. The species each
-  log and stump prefab should have is worked out by the section itself, from the
-  prefabs alone, and the module's resolver is compared with it;
+- checks the tree data against the prefabs of the loaded world and the trees the
+  world generator places. The species each log and stump prefab should have is
+  worked out by the section itself, from the prefabs alone, and the module's
+  resolver is compared with it;
 - writes, where yours differ, the settings the checks assume:
   `enable_automatic_mining` off when Automatic Mining mines on an interval, so it
   cannot wear a pickaxe of yours or raise your Pickaxes skill while the section
@@ -1419,7 +1420,10 @@ and 0 uses the axe's attack range. The section:
   registered with the session before its patches go on, so a run cut short still
   removes them.
 
-Everything up to the felling runs in one frame. The hit checks call the module's
+Everything up to the felling runs in one frame, with one exception: when no ray
+from your eyes meets anything at all on its way to the test tree just spawned,
+the section waits for the next physics step and looks once more (see the end of
+this section). The hit checks call the module's
 per-target entry, `AutomaticWoodcutting.Chop`, which every woodcutting pass uses
 for each candidate; the pass checks call the hooks the interval and the key use.
 The felling checks span frames: a stump gets the component in its `Start`, and a
@@ -1439,7 +1443,7 @@ of them, never one that grows or spawns creatures; the log file names it.
 | Check | Asserts |
 |---|---|
 | `woodcutting_species_identifiers_match` | Every built-in tree identifier matches at least one standing tree (`TreeBase`) prefab of the loaded world. A FAIL names the identifiers of the earlier biomes and counts the others; the log file names them all |
-| `woodcutting_species_coverage` | The section walks every standing tree prefab's log, that log's smaller logs in turn, and its stump, and gives each of them the species of every tree that leads to it. The module resolves each of those prefabs to exactly that set, each standing tree prefab to its own species, and no `TreeLog` prefab is left without one. A FAIL counts the prefabs that lead to no species and those resolved differently; the log file names them |
+| `woodcutting_species_coverage` | The section walks every standing tree prefab's log, that log's smaller logs in turn, and its stump, and gives each of them the species of every tree that leads to it. The module resolves each of those prefabs to exactly that set, each standing tree prefab to its own species, and a prefab that leads to no species to none. A prefab that leads to no species fails the check only when the world generator places it, or when it is a log or stump that a tree the generator places leads to. The generator places the prefabs of the enabled entries of its vegetation list (`ZoneSystem.m_vegetation`). The other prefabs that lead to no species, such as legacy prefabs, trees of an area the generator does not place and `TreeLog`s that are not wood, do not fail: the log file names each with the reason, and the note counts them. The log file also lists, in one line, the prefabs that lead to no species and are placed or reached from a placed tree. SKIP when the vegetation list is missing or has no enabled entry with a prefab, unless a prefab resolves differently. A FAIL counts the prefabs that fail for leading to no species and those resolved differently; the log file names them |
 | `woodcutting_species_shared_allowed` | For every log or stump prefab that trees of more than one species lead to, by the same walk, `allow_woodcutting_tree` holding any one of those species alone allows it, and holding none of them does not; the list is written back straight after. The note counts them; the log file names them with their species |
 | `woodcutting_small_tree_coverage` | Every prefab of the loaded world whose own name a built-in tree identifier matches, and that is neither a standing tree (`TreeBase`) nor a log (`TreeLog`), is a small tree and carries a `Destructible` and a `ZNetView` on its root, so it can be a target. It FAILs when the tree data names no such prefab. The screen gives counts; the log file names them |
 | `woodcutting_tree_registered` | The tree spawned while the module runs carries an `AutomaticWoodcutting` component of the running generation |
@@ -1466,22 +1470,35 @@ of them, never one that grows or spawns creatures; the log file names it.
 | `woodcutting_stump_attached` | Within 10 frames, the stump carries a component of the running generation, attached by the module's own `Destructible.Start` postfix |
 | `woodcutting_species_log_stump` | Once the log can take damage, the log and the stump resolve to the felled tree's species and are allowed |
 | `woodcutting_species_removed_log_stump` | With that species taken out of `allow_woodcutting_tree`, the log and the stump are not allowed, unless another allowed species also leads to them, and a key pass leaves the ones that are not alone; the list is written back straight after |
-| `woodcutting_log_hit_after_delay` | The entry hits the log once (SKIP when something stands between your eyes and the log) |
+| `woodcutting_log_hit_after_delay` | The entry hits the log once (SKIP when something stands between your eyes and the log, or no part of it is found at your eye height, also after one physics step; see below) |
 | `woodcutting_log_skill` | The skill raise on the log follows the same rule as on the tree |
-| `woodcutting_stump_pass_hit` | With the log removed, a key pass hits the stump once |
+| `woodcutting_stump_pass_hit` | With the log removed, a key pass hits the stump once (SKIP when something stands between your eyes and the stump, or no part of it is found at your eye height, also after one physics step) |
 | `woodcutting_stump_skill` | The skill raise on the stump follows the same rule |
 | `woodcutting_other_destructible_not_attached` | A non-persistent destructible of the earlier biomes that is not the stump of a tree, spawned 2 m behind you, has run its `Start` and carries no component |
 | `woodcutting_small_tree_registered` | Each small tree, once its `Start` has run, carries an `AutomaticWoodcutting` component of the running generation on its `Destructible` (SKIP when neither small tree prefab is available) |
 | `woodcutting_small_tree_species` | Each small tree resolves to the beech's species alone, and is allowed while that species is in `allow_woodcutting_tree` and not while it is taken out; the list is written back straight after |
-| `woodcutting_small_tree_pass_hit` | One key pass hits each small tree once, takes health and hits nothing else (SKIP when a tree, log or stump of your world is not farther from you than the small tree, when something stands between your eyes and it, or when its tool tier is above the test axe's) |
+| `woodcutting_small_tree_pass_hit` | One key pass hits each small tree once, takes health and hits nothing else (SKIP when a tree, log or stump of your world is not farther from you than the small tree, when something stands between your eyes and it, when no part of it is found at your eye height, also after one physics step, or when its tool tier is above the test axe's) |
 | `woodcutting_small_tree_others_not_attached` | Once their `Start` has run, the picked Destructible and `Beech_Sapling` carry no component, and the module's rule does not take them as targets. It runs only after a small tree got the component from the same hook (SKIP otherwise); the screen does not name the picked prefab |
 | `woodcutting_world_guarded` | The section ran to its end under the guard; the note counts the damage calls on other trees, logs and stumps it dropped |
 | `woodcutting_settings_restored` | Reported when the section changed a setting: every setting it changed is back at your value |
 
 When the section cannot start it SKIPs `woodcutting_section` and names the
 reason: the module is off, the interval or another setting could not be written,
-something stands near the spot or between your eyes and the test tree, the range
-does not reach it, or the inventory is full. At the end the added axes and club
+something stands near the spot or between your eyes and the test tree, no part of
+the test tree is found at your eye height, the range does not reach it, or the
+inventory is full. No part is found when no ray from your eyes toward the tree's
+colliders meets anything at all. The section then waits for the next physics
+step, syncs the physics engine with the transforms and looks once more, and it
+SKIPs only when that look meets nothing either. The log, stump and small tree hit
+checks do the same before they SKIP for that reason, and a hit the module refused
+still FAILs when the second look reaches its target. Such a SKIP says that the
+details are in the log file: the position of your eyes, of you and of the ground
+under you, the target's position and the ground there, and for each collider
+under the target, inactive, disabled and trigger ones included, its path and
+layer, whether it is enabled, a trigger and active, its type (and for a mesh
+collider whether it is convex), its bounds, the point the ray aims at, whether a
+ray along that line meets the collider itself and at what distance, and the first
+solid collider of any layer that ray meets. At the end the added axes and club
 are removed from your inventory, the items you had equipped are equipped again,
 the skills are put back, and the test objects, including the log, the stump, the
 small trees and the other Destructibles the section spawned, are removed. The
@@ -1567,9 +1584,9 @@ to false and the cap at 1, is judged by the same rules.
 | `woodcutting_area_excluded_hittable` | With the tool tier put back, the second species allowed, the radius raised and the cap lifted, a third swing hit each target the first swing left out: those the cap left out, the tree above the tool tier, the second species' tree, log and stump, and the far tree when the physics engine confirms it lies within the raised radius. The fresh log took a hit of the second or third swing |
 | `woodcutting_area_trigger_point` | In each axe swing that hit an allowed test object itself, area woodcutting centred its expansion on the point of the first such hit the observer saw, and no swing expanded without one |
 | `woodcutting_area_trees_logs_stumps` | Across the axe swings, extra hits landed on at least one standing tree, one log and one stump |
-| `woodcutting_area_not_from_automatic_woodcutting` | A hit of the module's own entry on a test object in front of you adds no extra hit |
+| `woodcutting_area_not_from_automatic_woodcutting` | A hit of the module's own entry on a test object in front of you adds no extra hit. When the entry hits none of them, it is tried once more after the next physics step (a refused entry spends nothing); SKIP when it still hits none, with the details of each object in the log file, as in `woodcutting` |
 | `woodcutting_area_not_from_other_weapons` | A real swing with an added club that hits a test object adds no extra hit |
-| `woodcutting_area_skill_rule_log` | With its stump removed, the log the first swing's felling spawned stands alone in front of you. A real axe swing that hits only that log raises the same skills, by the same amounts, as a hit of the module's entry on it (SKIP, naming the reason, only when the swing hits something else as well or the entry cannot reach the log from your eyes) |
+| `woodcutting_area_skill_rule_log` | With its stump removed, the log the first swing's felling spawned stands alone in front of you. A real axe swing that hits only that log raises the same skills, by the same amounts, as a hit of the module's entry on it (SKIP, naming the reason, only when the swing hits something else as well, or the entry cannot reach the log from your eyes, also when tried once more after the next physics step; the log file then gives the details, as in `woodcutting`) |
 | `woodcutting_area_skill_rule_tree` | The same with a test tree spawned alone at that spot |
 | `woodcutting_area_skill_rule_stump` | The same with a stump spawned alone at that spot from the tree's stump prefab, once it has the component; you look further down for this swing |
 | `woodcutting_area_same_kind_first` | With `area_woodcutting_same_kind_first` on and `area_woodcutting_max_targets` at 1, a swing at the beech in front of you adds exactly one extra hit, on the second beech, while the birch (a tree of another species) and the beech stump (another form), both nearer the hit, take no hit and keep their health |

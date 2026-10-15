@@ -233,10 +233,14 @@ namespace Automatics.SmokeTest
                 run.Pass("woodcutting_tree_registered",
                     $"the tree spawned while the module runs carries a component of generation {component.ScopeGeneration}");
 
-                var obstacle = FindObstacle(player, tree);
-                if (obstacle != null)
+                // The tree was spawned in this frame. When no ray from the eyes meets anything at
+                // all, the physics engine is given one step before the section gives up.
+                var probe = new ObstacleProbe();
+                var look = FindObstacleSettled(SectionCheck, player, tree, "test tree", probe);
+                while (look.MoveNext()) yield return look.Current;
+                if (probe.Obstacle != null)
                 {
-                    run.Skip(SectionCheck, obstacle);
+                    run.Skip(SectionCheck, probe.Obstacle);
                     yield break;
                 }
 
@@ -328,7 +332,8 @@ namespace Automatics.SmokeTest
         // out here from the prefabs alone, apart from the module: every standing tree prefab passes
         // its own species down its log, that log's smaller logs in turn, and its stump. The module
         // has to resolve each of them to exactly that set, each standing tree to its own species,
-        // and no log prefab may be left without one. Each prefab that trees of more than one
+        // and no prefab the world generator places, or a log or stump a placed tree leads to, may
+        // be left without one. Each prefab that trees of more than one
         // species lead to is then tried with each of those species alone in allow_woodcutting_tree,
         // which has to allow it, and with none of them, which must not; the list is written back
         // straight after. The screen gives counts and the species that predate the Mistlands
@@ -357,38 +362,128 @@ namespace Automatics.SmokeTest
                     : NameEarly(unmatched, "built-in identifier(s) match no standing tree prefab"));
 
             var walked = WalkTreePrefabs(trees);
+            CheckSpeciesCoverage(run, trees, logs, walked);
+            CheckSharedSpecies(run, held, walked);
+            CheckSmallTreeCoverage(run, prefabs);
+        }
 
-            const string coverageName = "woodcutting_species_coverage";
+        // Each standing tree prefab resolves to its own species, and each log and stump prefab a
+        // tree leads to, by the walk below, to exactly the species of the trees that lead to it.
+        // A prefab that leads to no species fails the check only when the world generator places
+        // it, or when it is a log or stump that a tree the generator places leads to. Any other
+        // (a legacy prefab, a tree of an area the generator does not place, a TreeLog that is not
+        // wood) is logged with the reason and counted in the note. Without the generator's
+        // vegetation list, which prefabs it places is unknown, and the check SKIPs where it would
+        // pass. The screen gives counts; every name goes to the log file.
+        private static void CheckSpeciesCoverage(FeatureRun run, List<GameObject> trees, List<GameObject> logs,
+            Dictionary<string, HashSet<string>> walked)
+        {
+            const string name = "woodcutting_species_coverage";
             var names = trees.Concat(logs).Select(x => x.name).Concat(walked.Keys)
                 .Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
-            var unresolved = 0;
+            var treeNames = new HashSet<string>(trees.Select(x => x.name), StringComparer.Ordinal);
+            var placed = PlacedPrefabs(out var unplacedReason);
+            var reachedFromPlaced = new HashSet<string>(StringComparer.Ordinal);
+            if (placed != null)
+                foreach (var tree in trees.Where(x => placed.Contains(x.name)))
+                foreach (var go in ReachedPrefabs(tree.GetComponent<TreeBase>()))
+                    reachedFromPlaced.Add(go.name);
+
+            var matched = 0;
             var mismatched = 0;
-            foreach (var name in names)
+            var placedGaps = new List<string>();
+            var reachedGaps = new List<string>();
+            var notPlaced = 0;
+            foreach (var prefab in names)
             {
-                var expected = ExpectedSpecies(name, walked);
-                var resolved = SpeciesOf(name);
-                if (expected.Count == 0)
+                var expected = ExpectedSpecies(prefab, walked);
+                if (expected.Count > 0)
                 {
-                    unresolved++;
-                    Log.LogWarning($"{coverageName}: no standing tree prefab leads to {name}, and it matches no identifier");
+                    matched++;
+                    var resolved = SpeciesOf(prefab);
+                    if (resolved.SetEquals(expected)) continue;
+                    mismatched++;
+                    Log.LogWarning(
+                        $"{name}: {prefab} resolves to [{string.Join(", ", resolved.OrderBy(x => x).ToArray())}], the prefabs lead to [{string.Join(", ", expected.OrderBy(x => x).ToArray())}]");
+                    continue;
                 }
-                else if (!resolved.SetEquals(expected))
+
+                // The module must not give a species to what nothing leads to, placed or not.
+                var unexpected = SpeciesOf(prefab);
+                if (unexpected.Count > 0)
                 {
                     mismatched++;
                     Log.LogWarning(
-                        $"{coverageName}: {name} resolves to [{string.Join(", ", resolved.OrderBy(x => x).ToArray())}], the prefabs lead to [{string.Join(", ", expected.OrderBy(x => x).ToArray())}]");
+                        $"{name}: {prefab} resolves to [{string.Join(", ", unexpected.OrderBy(x => x).ToArray())}], the prefabs lead to none");
+                    continue;
+                }
+
+                const string none = "it matches no identifier, and no standing tree prefab that matches one leads to it";
+                if (placed == null)
+                {
+                    notPlaced++;
+                    Log.LogWarning($"{name}: {prefab}: {none}; whether the world generator places it is unknown");
+                }
+                else if (placed.Contains(prefab))
+                {
+                    placedGaps.Add(prefab);
+                    Log.LogWarning($"{name}: {prefab}: {none}, and the world generator places it");
+                }
+                else if (reachedFromPlaced.Contains(prefab))
+                {
+                    reachedGaps.Add(prefab);
+                    Log.LogWarning($"{name}: {prefab}: {none}, and a tree the world generator places leads to it");
+                }
+                else
+                {
+                    notPlaced++;
+                    Log.LogInfo(treeNames.Contains(prefab)
+                        ? $"{name}: {prefab}: {none}; not counted, since the world generator does not place it"
+                        : $"{name}: {prefab}: {none}; not counted, since the world generator neither places it nor places a tree that leads to it");
                 }
             }
-            if (trees.Count > 0 && unresolved == 0 && mismatched == 0)
-                run.Pass(coverageName,
-                    $"all {trees.Count} standing tree prefab(s) and the {names.Count - trees.Count} log and stump prefab(s) resolve to the species the prefabs lead to");
-            else
-                run.Fail(coverageName, trees.Count == 0
-                    ? "the loaded world has no standing tree prefab"
-                    : $"{unresolved} prefab(s) lead to no species and {mismatched} resolve to other species than the prefabs lead to (named in the log file)");
+            if (placed != null)
+                Log.LogInfo(placedGaps.Count + reachedGaps.Count == 0
+                    ? $"{name}: none of the prefabs that lead to no species is placed by the world generator or reached from a tree it places"
+                    : $"{name}: prefabs that lead to no species, placed by the world generator: [{string.Join(", ", placedGaps.ToArray())}]; reached from a tree it places: [{string.Join(", ", reachedGaps.ToArray())}]");
 
-            CheckSharedSpecies(run, held, walked);
-            CheckSmallTreeCoverage(run, prefabs);
+            var gaps = placedGaps.Count + reachedGaps.Count;
+            if (trees.Count == 0)
+                run.Fail(name, "the loaded world has no standing tree prefab");
+            else if (gaps > 0 || mismatched > 0)
+                run.Fail(name,
+                    $"{gaps} prefab(s) the world generator places, or a tree it places leads to, lead to no species and {mismatched} resolve to other species than the prefabs lead to (named in the log file)");
+            else if (placed == null)
+                run.Skip(name,
+                    $"{unplacedReason}, so which prefabs the world places is unknown; {notPlaced} prefab(s) lead to no species (named in the log file)");
+            else
+                run.Pass(name,
+                    $"the {matched} standing tree, log and stump prefab(s) that lead to a species resolve to exactly the species they lead to; {notPlaced} that lead to none are neither placed by the world generator nor reached from a tree it places (named in the log file)");
+        }
+
+        // The prefabs the world generator places: those of the enabled entries of the zone
+        // system's vegetation list, the list ZoneSystem.PlaceVegetation goes through for each new
+        // zone. Null, with the reason, when the list is missing or has no enabled entry with a
+        // prefab.
+        private static HashSet<string> PlacedPrefabs(out string reason)
+        {
+            reason = null;
+            var vegetation = ZoneSystem.instance ? ZoneSystem.instance.m_vegetation : null;
+            if (vegetation == null)
+            {
+                reason = "the zone system has no vegetation list";
+                return null;
+            }
+
+            var placed = new HashSet<string>(
+                vegetation.Where(x => x != null && x.m_enable && x.m_prefab).Select(x => x.m_prefab.name),
+                StringComparer.Ordinal);
+            if (placed.Count > 0) return placed;
+
+            reason = vegetation.Count == 0
+                ? "the zone system's vegetation list is empty"
+                : "no entry of the zone system's vegetation list is enabled with a prefab";
+            return null;
         }
 
         // Every prefab of the loaded world whose own name a built-in tree identifier matches, and
@@ -436,18 +531,7 @@ namespace Automatics.SmokeTest
             {
                 if (!WoodcuttingTrees.Tree.GetIdentify(prefab.name, out var species)) continue;
 
-                var tree = prefab.GetComponent<TreeBase>();
-                var reached = new List<GameObject>();
-                if (tree.m_stubPrefab) reached.Add(tree.m_stubPrefab);
-                var seen = new HashSet<GameObject>();
-                for (var log = tree.m_logPrefab; log && seen.Add(log);)
-                {
-                    reached.Add(log);
-                    var treeLog = log.GetComponent<TreeLog>();
-                    log = treeLog ? treeLog.m_subLogPrefab : null;
-                }
-
-                foreach (var go in reached)
+                foreach (var go in ReachedPrefabs(prefab.GetComponent<TreeBase>()))
                 {
                     if (!walked.TryGetValue(go.name, out var set))
                     {
@@ -458,6 +542,22 @@ namespace Automatics.SmokeTest
                 }
             }
             return walked;
+        }
+
+        // The prefabs a standing tree prefab leads to: its stump, its log, and that log's smaller
+        // logs in turn.
+        private static List<GameObject> ReachedPrefabs(TreeBase tree)
+        {
+            var reached = new List<GameObject>();
+            if (tree.m_stubPrefab) reached.Add(tree.m_stubPrefab);
+            var seen = new HashSet<GameObject>();
+            for (var log = tree.m_logPrefab; log && seen.Add(log);)
+            {
+                reached.Add(log);
+                var treeLog = log.GetComponent<TreeLog>();
+                log = treeLog ? treeLog.m_subLogPrefab : null;
+            }
+            return reached;
         }
 
         // A prefab that matches an identifier itself has that species, whatever leads to it.
@@ -1277,10 +1377,12 @@ namespace Automatics.SmokeTest
 
             CheckSpeciesRemovedLogStump(run, held, names[4], player, log, stump, logComponent, stumpComponent,
                 species, logSpecies, stumpSpecies);
-            CheckLogHit(run, names[5], player, log, logComponent, axe);
+            var steps = CheckLogHit(run, names[5], player, log, logComponent, axe);
+            while (steps.MoveNext()) yield return steps.Current;
 
-            RemoveTestObject(log.gameObject);
-            CheckStumpPass(run, names[6], player, stump, axe);
+            if (log) RemoveTestObject(log.gameObject);
+            steps = CheckStumpPass(run, names[6], player, stump, axe);
+            while (steps.MoveNext()) yield return steps.Current;
         }
 
         // The log the felling just spawned: the entry refuses it and a pass leaves it alone while
@@ -1373,7 +1475,7 @@ namespace Automatics.SmokeTest
         }
 
         // Past its spawn delay, the entry hits the log once.
-        private static void CheckLogHit(FeatureRun run, string name, Player player, TreeLog log,
+        private static IEnumerator CheckLogHit(FeatureRun run, string name, Player player, TreeLog log,
             WoodcuttingComponent component, ItemDrop.ItemData axe)
         {
             var health = ReadHealth(log);
@@ -1385,20 +1487,29 @@ namespace Automatics.SmokeTest
             {
                 run.Pass(name, $"past its spawn delay, the entry hit the log once and took {health - after:0.##} health");
                 CheckRaise(run, "woodcutting_log_skill", axe, log, "the log");
-                return;
+                yield break;
             }
 
             run.Skip("woodcutting_log_skill", "there was no hit on the log to inspect");
-            var obstacle = chopped ? null : FindObstacle(player, log);
-            if (obstacle != null)
-                run.Skip(name, obstacle.Replace("test tree", "test log"));
+            var failure = $"entry returned {chopped}, {records.Count} damage call(s) on the log, health {health:0.##} -> {after:0.##}";
+            if (chopped)
+            {
+                run.Fail(name, failure);
+                yield break;
+            }
+
+            var probe = new ObstacleProbe();
+            var look = FindObstacleSettled(name, player, log, "test log", probe);
+            while (look.MoveNext()) yield return look.Current;
+            if (probe.Obstacle != null)
+                run.Skip(name, probe.Obstacle);
             else
-                run.Fail(name, $"entry returned {chopped}, {records.Count} damage call(s) on the log, health {health:0.##} -> {after:0.##}");
+                run.Fail(name, failure + probe.LateNote);
         }
 
         // With the log removed, a key pass hits the stump: the stump has to be the nearest
         // candidate.
-        private static void CheckStumpPass(FeatureRun run, string name, Player player, Destructible stump,
+        private static IEnumerator CheckStumpPass(FeatureRun run, string name, Player player, Destructible stump,
             ItemDrop.ItemData axe)
         {
             var nearer = FindNearerTarget(player, stump);
@@ -1406,7 +1517,7 @@ namespace Automatics.SmokeTest
             {
                 run.Skip(name, nearer);
                 run.Skip("woodcutting_stump_skill", nearer);
-                return;
+                yield break;
             }
 
             var health = ReadHealth(stump);
@@ -1420,15 +1531,24 @@ namespace Automatics.SmokeTest
             {
                 run.Pass(name, $"a key pass hit the stump once and took {health - after:0.##} health");
                 CheckRaise(run, "woodcutting_stump_skill", axe, stump, "the stump");
-                return;
+                yield break;
             }
 
             run.Skip("woodcutting_stump_skill", "there was no hit on the stump to inspect");
-            var obstacle = records.Count == 0 && others == 0 ? FindObstacle(player, stump) : null;
-            if (obstacle != null)
-                run.Skip(name, obstacle.Replace("test tree", "test stump"));
+            var failure = $"{records.Count} hit(s) on the stump, {others} on other trees, logs or stumps, health {health:0.##} -> {after:0.##}";
+            if (records.Count > 0 || others > 0)
+            {
+                run.Fail(name, failure);
+                yield break;
+            }
+
+            var probe = new ObstacleProbe();
+            var look = FindObstacleSettled(name, player, stump, "test stump", probe);
+            while (look.MoveNext()) yield return look.Current;
+            if (probe.Obstacle != null)
+                run.Skip(name, probe.Obstacle);
             else
-                run.Fail(name, $"{records.Count} hit(s) on the stump, {others} on other trees, logs or stumps, health {health:0.##} -> {after:0.##}");
+                run.Fail(name, failure + probe.LateNote);
         }
 
         // A Destructible that is not the stump of a tree gets no component from the same hook.
@@ -1528,9 +1648,14 @@ namespace Automatics.SmokeTest
                 foreach (var spawner in go.GetComponentsInChildren<SpawnOnDamaged>(true))
                     spawner.m_spawnOnDamage = null;
                 if (!SeedHealth(destructible))
+                {
                     hit.Skip($"{prefabName} has no health to seed");
+                }
                 else
-                    CheckSmallTreeHit(hit, prefabName, player, destructible, axe);
+                {
+                    var check = CheckSmallTreeHit(hit, prefabName, player, destructible, axe);
+                    while (check.MoveNext()) yield return check.Current;
+                }
 
                 RemoveTestObject(go);
                 yield return null;
@@ -1579,24 +1704,24 @@ namespace Automatics.SmokeTest
 
         // One key pass hits the small tree once and takes health; it has to be the nearest
         // candidate, so the pass cannot go to a tree, log or stump of your world.
-        private static void CheckSmallTreeHit(Tally tally, string prefabName, Player player, Destructible tree,
+        private static IEnumerator CheckSmallTreeHit(Tally tally, string prefabName, Player player, Destructible tree,
             ItemDrop.ItemData axe)
         {
             if (player.RightItem != axe)
             {
                 tally.Skip("the test axe is not in your right hand");
-                return;
+                yield break;
             }
             if (tree.m_minToolTier > axe.m_shared.m_toolTier)
             {
                 tally.Skip($"{prefabName} needs tool tier {tree.m_minToolTier}, above the test axe's {axe.m_shared.m_toolTier}");
-                return;
+                yield break;
             }
             var nearer = FindNearerTarget(player, tree);
             if (nearer != null)
             {
                 tally.Skip(nearer);
-                return;
+                yield break;
             }
 
             var health = ReadHealth(tree);
@@ -1609,14 +1734,23 @@ namespace Automatics.SmokeTest
             if (records.Count == 1 && after < health && others == 0)
             {
                 tally.Pass($"a key pass hit {prefabName} once and took {health - after:0.##} health");
-                return;
+                yield break;
             }
 
-            var obstacle = records.Count == 0 && others == 0 ? FindObstacle(player, tree) : null;
-            if (obstacle != null)
-                tally.Skip(obstacle.Replace("test tree", "small tree"));
+            var failure = $"{prefabName}: {records.Count} hit(s) on it, {others} on other trees, logs or stumps, health {health:0.##} -> {after:0.##}";
+            if (records.Count > 0 || others > 0)
+            {
+                tally.Fail(failure);
+                yield break;
+            }
+
+            var probe = new ObstacleProbe();
+            var look = FindObstacleSettled(tally.Name, player, tree, "small tree", probe);
+            while (look.MoveNext()) yield return look.Current;
+            if (probe.Obstacle != null)
+                tally.Skip(probe.Obstacle);
             else
-                tally.Fail($"{prefabName}: {records.Count} hit(s) on it, {others} on other trees, logs or stumps, health {health:0.##} -> {after:0.##}");
+                tally.Fail(failure + probe.LateNote);
         }
 
         // A Destructible prefab that is neither the stump of a tree nor named by the tree data,
@@ -1738,6 +1872,7 @@ namespace Automatics.SmokeTest
                 _name = name;
             }
 
+            public string Name => _name;
             public bool Passed => _fails.Count == 0 && _passes.Count > 0;
 
             public void Pass(string note) => _passes.Add(note);
@@ -1872,18 +2007,17 @@ namespace Automatics.SmokeTest
         // Whether a ray from the eyes toward the middle of one of the test object's colliders, at
         // eye height, first meets the test object. Returns why not, or null. Asked of the physics
         // engine directly, so a refused hit can be told apart from something of your world in the
-        // way.
-        private static string FindObstacle(Player player, Component target)
+        // way. Nothing is true when no ray met anything at all.
+        private static string FindObstacle(Player player, Component target, string what, out bool nothing)
         {
+            nothing = false;
             var eye = player.m_eye.position;
             string obstacle = null;
             foreach (var collider in target.GetComponentsInChildren<Collider>())
             {
                 if (!collider.enabled || collider.isTrigger) continue;
 
-                var bounds = collider.bounds;
-                var aim = new Vector3(bounds.center.x, Mathf.Clamp(eye.y, bounds.min.y, bounds.max.y),
-                    bounds.center.z) - eye;
+                var aim = AimPoint(collider, eye) - eye;
                 if (!Physics.Raycast(eye, aim.normalized, out var hit, aim.magnitude + 1f, SwingMask.Value,
                         QueryTriggerInteraction.Ignore))
                     continue;
@@ -1893,9 +2027,128 @@ namespace Automatics.SmokeTest
                 obstacle = obstacle ?? Objects.GetPrefabName(first);
             }
 
-            return obstacle != null
-                ? $"{obstacle} stands between your eyes and the test tree; face open ground and retry"
-                : "no part of the test tree was found at your eye height; stand on level ground and retry";
+            if (obstacle != null)
+                return $"{obstacle} stands between your eyes and the {what}; face open ground and retry";
+            nothing = true;
+            return $"no part of the {what} was found at your eye height; stand on level ground and retry";
+        }
+
+        // The middle of the collider's bounds at eye height, kept within them.
+        private static Vector3 AimPoint(Collider collider, Vector3 eye)
+        {
+            var bounds = collider.bounds;
+            return new Vector3(bounds.center.x, Mathf.Clamp(eye.y, bounds.min.y, bounds.max.y), bounds.center.z);
+        }
+
+        // What FindObstacleSettled concluded.
+        private sealed class ObstacleProbe
+        {
+            // Why the eyes do not reach the test object, or null when they do.
+            public string Obstacle;
+
+            // The first look met nothing at all, and Obstacle is the answer of the look after a
+            // physics step.
+            public bool Retried;
+
+            // For a failure message: says when the eyes reached the object only after the wait.
+            public string LateNote => Retried && Obstacle == null
+                ? " (your eyes reached it only after a physics step; see the log file)"
+                : "";
+        }
+
+        // FindObstacle, but when no ray from the eyes meets anything at all, it waits for the
+        // next physics step, syncs the transforms with the physics engine and looks once more.
+        // When that look meets nothing either, LogReach writes the details to the log file.
+        private static IEnumerator FindObstacleSettled(string check, Player player, Component target, string what,
+            ObstacleProbe probe)
+        {
+            probe.Retried = false;
+            probe.Obstacle = FindObstacle(player, target, what, out var nothing);
+            if (!nothing) yield break;
+
+            yield return new WaitForFixedUpdate();
+            Physics.SyncTransforms();
+            probe.Retried = true;
+            if (!player || !target)
+            {
+                probe.Obstacle = $"you or the {what} were gone after the section waited a physics step";
+                yield break;
+            }
+
+            probe.Obstacle = FindObstacle(player, target, what, out nothing);
+            if (!nothing)
+            {
+                var then = probe.Obstacle ?? "the " + what + " was reached";
+                Log.LogWarning($"{check}: no ray from your eyes met anything until the section waited a physics step; then: {then}");
+                yield break;
+            }
+
+            LogReach(check, $"no part of the {what} was found at your eye height, also after a physics step",
+                player, target);
+            probe.Obstacle =
+                $"no part of the {what} was found at your eye height, also after a physics step; stand on level ground and retry (the details are in the log file)";
+        }
+
+        // The details of a target the eyes did not reach: where your eyes, you, the ground under
+        // you and the target are, and for each collider under the target, inactive, disabled and
+        // trigger ones included, its path, layer, state, type, bounds and the point a ray from the
+        // eyes aims at, and what that ray meets: the collider itself, and the first solid collider
+        // of any layer.
+        internal static void LogReach(string check, string headline, Player player, Component target)
+        {
+            var eye = player.m_eye.position;
+            var you = player.transform.position;
+            var at = target.transform.position;
+            var lines = new List<string>
+            {
+                $"{check}: {headline}. {Objects.GetPrefabName(target.gameObject)}:",
+                $"  eyes {eye.ToString("F2")}; you {you.ToString("F2")}, ground under you {Ground(you)}",
+                $"  target at {at.ToString("F2")}, ground there {Ground(at)}"
+            };
+
+            var colliders = target.GetComponentsInChildren<Collider>(true);
+            if (colliders.Length == 0) lines.Add("  no collider under the target");
+            foreach (var collider in colliders)
+            {
+                var bounds = collider.bounds;
+                var aimPoint = AimPoint(collider, eye);
+                var aim = aimPoint - eye;
+                var ray = new Ray(eye, aim.normalized);
+                var length = aim.magnitude + 1f;
+                var own = collider.Raycast(ray, out var ownHit, length)
+                    ? $"hit at {ownHit.distance:0.###} m"
+                    : "no hit";
+                var first = Physics.Raycast(ray, out var anyHit, length, ~0, QueryTriggerInteraction.Ignore)
+                    ? $"{Objects.GetPrefabName(Projectile.FindHitObject(anyHit.collider))}/{anyHit.collider.name} (layer {LayerMask.LayerToName(anyHit.collider.gameObject.layer)}) at {anyHit.distance:0.###} m"
+                    : "nothing";
+                var type = collider is MeshCollider mesh
+                    ? $"MeshCollider, convex {mesh.convex}"
+                    : collider.GetType().Name;
+                lines.Add(
+                    $"  {PathUnder(collider.transform, target.transform)}: layer {LayerMask.LayerToName(collider.gameObject.layer)}, enabled {collider.enabled}, trigger {collider.isTrigger}, active {collider.gameObject.activeInHierarchy}, {type}, bounds {bounds.min.ToString("F2")} to {bounds.max.ToString("F2")}, aim {aimPoint.ToString("F2")}; its own ray: {own}; first solid collider of any layer: {first}");
+            }
+
+            Log.LogWarning(string.Join("\n", lines.ToArray()));
+        }
+
+        private static string Ground(Vector3 position)
+        {
+            return ZoneSystem.instance && ZoneSystem.instance.GetGroundHeight(position, out var height)
+                ? height.ToString("0.##")
+                : "not found";
+        }
+
+        // The path of a transform from the root it sits under, the root's name included.
+        private static string PathUnder(Transform transform, Transform root)
+        {
+            var parts = new List<string>();
+            for (var t = transform; t; t = t.parent)
+            {
+                parts.Add(t.name);
+                if (t == root) break;
+            }
+            parts.Reverse();
+            return string.Join("/", parts.ToArray());
         }
 
         internal static string PickAxe(int minToolTier, out ItemDrop.ItemData.SharedData shared)
