@@ -1569,8 +1569,8 @@ swing; and a second beech straight ahead, 2.5 m farther out. The birch's and the
 stump's tool tier is lowered to the axe's where it is above it, and the stump's
 damage spawns nothing. A swing counts only when it hit the beech in front of you
 and nothing else itself, and the distances from the hit to each target, measured
-as area woodcutting measures them (the nearest point of each enabled, solid
-collider on the layers a swing hits), put the birch and the stump nearer than the second beech and all
+with area woodcutting's own measure (the nearest point it finds on the enabled,
+solid colliders on the layers a swing hits), put the birch and the stump nearer than the second beech and all
 three within the radius; otherwise the check SKIPs and gives the distances. A
 check FAILs when area woodcutting centred its expansion away from that hit. A
 third swing at the same layout, with `area_woodcutting_same_kind_first` written

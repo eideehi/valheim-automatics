@@ -215,8 +215,8 @@ namespace Automatics.AutomaticWoodcutting
 
         // The targets area woodcutting may add to a swing: every standing, allowed tree, log and
         // stump with a collider a swing can hit whose surface lies within radius of center, at
-        // its nearest such point. The caller applies the tool tier, what the swing already hit
-        // and the cap.
+        // the nearest point of it that GetNearestSurfacePoint finds. The caller applies the tool
+        // tier, what the swing already hit and the cap.
         internal static void CollectAreaTargets(Vector3 center, float radius,
             List<AreaWoodcutting.Target> targets)
         {
@@ -227,23 +227,29 @@ namespace Automatics.AutomaticWoodcutting
                 if (!instance.IsStanding()) continue;
                 if ((instance.transform.position - center).sqrMagnitude > cullSqr) continue;
                 if (!instance.IsAllowed()) continue;
-                if (!instance.GetNearestSurfacePoint(center, radius, out var collider, out var point,
-                        out var distance))
+                if (!GetNearestSurfacePoint(instance.transform, center, radius, out var collider,
+                        out var point, out var distance))
                     continue;
 
                 targets.Add(new AreaWoodcutting.Target(instance, collider, point, distance));
             }
         }
 
-        private bool GetNearestSurfacePoint(Vector3 center, float radius, out Collider collider,
-            out Vector3 point, out float distance)
+        // The nearest point within radius of center that area woodcutting finds on the colliders
+        // under root a swing can hit, the collider it lies on and its distance. root is the
+        // target's own transform, whose position is its root pivot: the foot of a tree's trunk,
+        // the middle of a log. The smoke checks measure with it too, also before a stump has
+        // this component, so it takes the transform rather than the component.
+        internal static bool GetNearestSurfacePoint(Transform root, Vector3 center, float radius,
+            out Collider collider, out Vector3 point, out float distance)
         {
             collider = null;
             point = Vector3.zero;
             distance = float.MaxValue;
 
+            var pivot = root.position;
             ColliderBuffer.Clear();
-            GetComponentsInChildren(false, ColliderBuffer);
+            root.GetComponentsInChildren(false, ColliderBuffer);
             foreach (var candidate in ColliderBuffer)
             {
                 if (!candidate.enabled || candidate.isTrigger) continue;
@@ -252,7 +258,7 @@ namespace Automatics.AutomaticWoodcutting
                 if ((SightMask & (1 << candidate.gameObject.layer)) == 0) continue;
                 // The bounds only reject: a trunk or a slanted log fills little of them.
                 if (candidate.bounds.SqrDistance(center) > radius * radius) continue;
-                if (!GetSurfacePoint(candidate, center, out var surface)) continue;
+                if (!GetSurfacePoint(candidate, center, pivot, out var surface)) continue;
 
                 var length = Vector3.Distance(surface, center);
                 if (length > radius || length >= distance) continue;
@@ -267,10 +273,16 @@ namespace Automatics.AutomaticWoodcutting
         }
 
         // A point on the collider's surface near origin. Unity finds the closest point only on
-        // primitive and convex mesh colliders; on any other collider the point is where a ray from
-        // origin toward the bounds centre enters it, which is never nearer than the closest point.
-        // An origin inside such a collider finds no entry, and the collider is not reached.
-        private static bool GetSurfacePoint(Collider collider, Vector3 origin, out Vector3 point)
+        // primitive and convex mesh colliders. On any other collider, such as a tree's single
+        // mesh of trunk and crown, the point is where a ray from origin enters it: first a ray
+        // toward the vertical line through pivot, at origin's height kept half a metre inside
+        // the collider's bounds, as a trunk rises along that line, so the ray also enters a
+        // trunk that stands wholly above or below origin on a slope; when that ray misses, or
+        // origin is that very point, a ray toward the bounds centre, which on a tree lies high in
+        // the crown. Either point is never nearer than the closest point. An origin inside such a
+        // collider finds no entry, and the collider is not reached.
+        private static bool GetSurfacePoint(Collider collider, Vector3 origin, Vector3 pivot,
+            out Vector3 point)
         {
             if (collider is BoxCollider || collider is SphereCollider || collider is CapsuleCollider ||
                 collider is MeshCollider mesh && mesh.convex)
@@ -279,10 +291,22 @@ namespace Automatics.AutomaticWoodcutting
                 return true;
             }
 
-            var toCenter = collider.bounds.center - origin;
-            var length = toCenter.magnitude;
+            var bounds = collider.bounds;
+            var inset = Mathf.Min(0.5f, bounds.extents.y);
+            var axis = new Vector3(pivot.x,
+                Mathf.Clamp(origin.y, bounds.min.y + inset, bounds.max.y - inset), pivot.z);
+            return GetEntryPoint(collider, origin, axis, out point) ||
+                   GetEntryPoint(collider, origin, bounds.center, out point);
+        }
+
+        // Where a ray from origin toward target enters the collider before it reaches target.
+        private static bool GetEntryPoint(Collider collider, Vector3 origin, Vector3 target,
+            out Vector3 point)
+        {
+            var toTarget = target - origin;
+            var length = toTarget.magnitude;
             if (length > 0.001f &&
-                collider.Raycast(new Ray(origin, toCenter / length), out var hit, length))
+                collider.Raycast(new Ray(origin, toTarget / length), out var hit, length))
             {
                 point = hit.point;
                 return true;

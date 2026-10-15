@@ -1290,40 +1290,15 @@ namespace Automatics.SmokeTest
             return null;
         }
 
-        // The distance from centre to the nearest surface point of the object's enabled, solid
-        // colliders on the layers a swing hits, found the way area woodcutting finds it: Unity's
-        // closest point on a box, sphere, capsule or convex mesh collider, otherwise where a ray
-        // from centre toward the collider's bounds centre enters it. Infinity when no such point
-        // is found.
+        // The distance from centre to the nearest point of the object's colliders a swing can
+        // hit, found by area woodcutting's own measure from the object's root, which needs no
+        // component of the module. Infinity when it finds no such point.
         private static float SurfaceDistance(GameObject go, Vector3 centre)
         {
-            var nearest = float.PositiveInfinity;
-            if (!go) return nearest;
-            foreach (var collider in go.GetComponentsInChildren<Collider>(false))
-            {
-                if (!collider.enabled || collider.isTrigger ||
-                    (WoodcuttingComponent.SightMask & (1 << collider.gameObject.layer)) == 0)
-                    continue;
-
-                Vector3 point;
-                if (collider is BoxCollider || collider is SphereCollider || collider is CapsuleCollider ||
-                    collider is MeshCollider mesh && mesh.convex)
-                {
-                    point = collider.ClosestPoint(centre);
-                }
-                else
-                {
-                    var toCenter = collider.bounds.center - centre;
-                    var length = toCenter.magnitude;
-                    if (length <= 0.001f ||
-                        !collider.Raycast(new Ray(centre, toCenter / length), out var hit, length))
-                        continue;
-                    point = hit.point;
-                }
-
-                nearest = Mathf.Min(nearest, Vector3.Distance(point, centre));
-            }
-            return nearest;
+            return go && WoodcuttingComponent.GetNearestSurfacePoint(go.transform, centre,
+                float.PositiveInfinity, out _, out _, out var distance)
+                ? distance
+                : float.PositiveInfinity;
         }
 
         private static string Describe(DamageRecord record, KindSetup setup)
