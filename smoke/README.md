@@ -38,21 +38,21 @@ The main plugin must be built in the same configuration first, because the smoke
 project references `Automatics/bin/<Configuration>/Automatics.dll` at compile time:
 
 ```bash
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim scripts/build.sh Debug
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim scripts/build.sh smoke Debug
+VALHEIM_DIR=/path/to/Valheim scripts/build.sh Debug
+VALHEIM_DIR=/path/to/Valheim scripts/build.sh smoke Debug
 ```
 
 `scripts/build.sh smoke Debug [clean] [deploy|no-deploy]` builds (and, on Debug,
 deploys) the smoke plugin. You can also build the smoke-only solution directly:
 
 ```bash
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/Automatics.SmokeTest.sln /p:Configuration=Debug "/p:Platform=Any CPU"
+VALHEIM_DIR=/path/to/Valheim dotnet msbuild smoke/Automatics.SmokeTest.sln /p:Configuration=Debug "/p:Platform=Any CPU"
 ```
 
 Pass `no-deploy` (or `/p:DeploySmoke=false`) to build without installing:
 
 ```bash
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim scripts/build.sh smoke Debug no-deploy
+VALHEIM_DIR=/path/to/Valheim scripts/build.sh smoke Debug no-deploy
 ```
 
 ## Deploy
@@ -71,7 +71,7 @@ Debug builds deploy automatically when the directory is available. Pass
 `DeploySmoke=true` to force deployment for another configuration:
 
 ```bash
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/Automatics.SmokeTest.sln /p:Configuration=Release "/p:Platform=Any CPU" /p:DeploySmoke=true
+VALHEIM_DIR=/path/to/Valheim dotnet msbuild smoke/Automatics.SmokeTest.sln /p:Configuration=Release "/p:Platform=Any CPU" /p:DeploySmoke=true
 ```
 
 If `DeploySmoke=true` is set and the Valheim or BepInEx directory cannot be
@@ -1080,7 +1080,7 @@ stamina. Do not move or attack while the section runs.
 To uninstall the smoke plugin, remove the dedicated deploy directory:
 
 ```bash
-rm -r /mnt/g/steam/steamapps/common/Valheim/BepInEx/plugins/AutomaticsSmoke
+rm -r "$VALHEIM_DIR/BepInEx/plugins/AutomaticsSmoke"
 ```
 
 The smoke project is optional developer tooling. The data checks under
