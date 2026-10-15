@@ -1490,8 +1490,10 @@ When the section cannot start it SKIPs `woodcutting_section` and names the
 reason: the module is off, the interval or another setting could not be written,
 something stands near the spot or between your eyes and the test tree, no part of
 the test tree is found at your eye height, the range does not reach it, or the
-inventory is full. No part is found when no ray from your eyes toward the tree's
-colliders meets anything at all. The section then waits for the next physics
+inventory is full. The section looks along rays from your eyes toward each of the
+tree's colliders, at eye height, aiming both at the vertical line through the
+tree's position and at the collider's own vertical centre line. No part is found
+when none of those rays meets anything at all. The section then waits for the next physics
 step, syncs the physics engine with the transforms and looks once more, and it
 SKIPs only when that look meets nothing either. The log, stump and small tree hit
 checks do the same before they SKIP for that reason, and a hit the module refused

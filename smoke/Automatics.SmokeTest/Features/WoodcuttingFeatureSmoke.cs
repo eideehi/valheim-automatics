@@ -2020,10 +2020,10 @@ namespace Automatics.SmokeTest
             return null;
         }
 
-        // Whether a ray from the eyes toward the middle of one of the test object's colliders, at
-        // eye height, first meets the test object. Returns why not, or null. Asked of the physics
-        // engine directly, so a refused hit can be told apart from something of your world in the
-        // way. Nothing is true when no ray met anything at all.
+        // Whether a ray from the eyes toward one of the test object's colliders, at eye height,
+        // first meets the test object. Returns why not, or null. Asked of the physics engine
+        // directly, so a refused hit can be told apart from something of your world in the way.
+        // Nothing is true when no ray met anything at all.
         private static string FindObstacle(Player player, Component target, string what, out bool nothing)
         {
             nothing = false;
@@ -2033,14 +2033,18 @@ namespace Automatics.SmokeTest
             {
                 if (!collider.enabled || collider.isTrigger) continue;
 
-                var aim = AimPoint(collider, eye) - eye;
-                if (!Physics.Raycast(eye, aim.normalized, out var hit, aim.magnitude + 1f, SwingMask.Value,
-                        QueryTriggerInteraction.Ignore))
-                    continue;
+                foreach (var point in AimPoints(collider, eye, target.transform.position))
+                {
+                    var aim = point - eye;
+                    if (aim.sqrMagnitude < 0.000001f) continue;
+                    if (!Physics.Raycast(eye, aim.normalized, out var hit, aim.magnitude + 1f, SwingMask.Value,
+                            QueryTriggerInteraction.Ignore))
+                        continue;
 
-                var first = Projectile.FindHitObject(hit.collider);
-                if (first == target.gameObject) return null;
-                obstacle = obstacle ?? Objects.GetPrefabName(first);
+                    var first = Projectile.FindHitObject(hit.collider);
+                    if (first == target.gameObject) return null;
+                    obstacle = obstacle ?? Objects.GetPrefabName(first);
+                }
             }
 
             if (obstacle != null)
@@ -2049,11 +2053,17 @@ namespace Automatics.SmokeTest
             return $"no part of the {what} was found at your eye height; stand on level ground and retry";
         }
 
-        // The middle of the collider's bounds at eye height, kept within them.
-        private static Vector3 AimPoint(Collider collider, Vector3 eye)
+        // Where the section looks on a collider, both at eye height kept within its bounds: the
+        // vertical line through the object's root, along which a tree's trunk rises, and the
+        // collider's own vertical centre line, which on a tree's single mesh of trunk and crown
+        // can stand a metre off the trunk. The section works these out itself rather than asking
+        // the module, whose entry it checks.
+        private static IEnumerable<Vector3> AimPoints(Collider collider, Vector3 eye, Vector3 root)
         {
             var bounds = collider.bounds;
-            return new Vector3(bounds.center.x, Mathf.Clamp(eye.y, bounds.min.y, bounds.max.y), bounds.center.z);
+            var height = Mathf.Clamp(eye.y, bounds.min.y, bounds.max.y);
+            yield return new Vector3(root.x, height, root.z);
+            yield return new Vector3(bounds.center.x, height, bounds.center.z);
         }
 
         // What FindObstacleSettled concluded.
