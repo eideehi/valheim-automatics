@@ -846,7 +846,12 @@ orientation, turned by the quarter turn closest to your own rotation. The hand-p
 crop and its grid then line up with the earlier rows, so a grid planted next to
 an earlier one continues it. The snapped position goes through the game's usual
 placement checks (cultivated ground, slope, ward, reach). Grown crops do not
-count, and with no such crop nearby, placement is unchanged.
+count, and with no such crop nearby, placement is unchanged. The preview goes only
+to lattice points where the crop has room to grow, which rules out a point next to
+a growing crop at the default spacing or beside an obstacle: it takes the nearest
+corner of the aimed lattice square that has room. When no corner has room, the
+preview shows as invalid and placing it is refused with the game's
+need-more-space message.
 
 Automatic farming harvests grown crops around the local player and replants the
 regrowing sapling at each harvested spot. It runs at the configured interval, and

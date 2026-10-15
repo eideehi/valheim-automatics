@@ -43,6 +43,15 @@ namespace Automatics.AutomaticFarming
                     ref waterSurface, water);
         }
 
+        // Runs as vanilla tints the ghost from its final status at the end of UpdatePlacementGhost,
+        // so a snapped update without room to grow turns red the way any invalid placement does.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Player), "SetPlacementGhostValid")]
+        private static void Player_SetPlacementGhostValid_Prefix(Player __instance, ref bool valid)
+        {
+            if (valid && LatticeSnapping.RefuseWithoutRoom(__instance)) valid = false;
+        }
+
         // Runs after a stop request too: the player's rotation step borrowed by a snapped update is
         // always put back, even when the update threw.
         [HarmonyFinalizer]

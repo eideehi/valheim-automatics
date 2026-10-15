@@ -674,12 +674,14 @@ namespace Automatics.SmokeTest
 
         // Runs the real Player.UpdatePlacementGhost with the camera briefly looking straight down at
         // an aimed point: with the unbound (always active) key at the free lattice cell (vanilla must
-        // call the snapped pose Valid), at an occupied cell (it must not), and at a point whose
+        // call the snapped pose Valid), next to an occupied cell (the ghost moves on to a free corner
+        // of the aimed lattice square), with blockers taking the grow space of the aimed square's
+        // corners (the ghost moves on, or stays refused as needing more space), and at a point whose
         // lattice point lies just beyond the reach (no snap); then with Left Alt released. The real
-        // Player.TryPlacePiece is driven at the free and the occupied cell with PlacePiece
-        // intercepted. Nothing renders in between: the camera, the reach, the piece selection and
-        // the rotation step are put back in the same frame. Returns the snapped ghost pose, or null
-        // when the path could not be driven.
+        // Player.TryPlacePiece is driven at the free cell, the moved ghost and the refused one with
+        // PlacePiece intercepted. Nothing renders in between: the camera, the reach, the piece
+        // selection and the rotation step are put back and the blockers removed in the same frame.
+        // Returns the snapped ghost pose, or null when the path could not be driven.
         private static KeyValuePair<Vector3, float>? CheckRealGhost(FeatureRun run, Player player, Piece piece,
             Harmony harmony, SmokeSession.SettingRestoration keySetting, Vector3 raw, Vector3 centre,
             Quaternion rotation, float spacing, Vector2Int expectedCell, List<GameObject> first)
@@ -688,6 +690,7 @@ namespace Automatics.SmokeTest
             var table = BuildPiecesField?.GetValue(player) as PieceTable;
             var camera = GameCamera.instance ? GameCamera.instance.transform : null;
             var place = AccessTools.Method(typeof(Player), nameof(Player.PlacePiece));
+            var blockers = new List<GameObject>();
             if (PlacementGhostField == null || PlacementStatusField == null || PlaceRotationField == null ||
                 PlaceDegreesField == null || UpdateGhost == null || SetupGhost == null || place == null || !table || !camera)
             {
@@ -739,6 +742,10 @@ namespace Automatics.SmokeTest
                     point.y = ZoneSystem.instance.GetGroundHeight(point);
                     return point;
                 };
+                Func<Vector2Int, Vector3> cellPoint = cell => ground(centre + rotation * new Vector3(cell.x * spacing, 0f, cell.y * spacing));
+                // A reach that takes in every corner of a lattice square, so none is passed over as out of reach.
+                Func<List<Vector2Int>, float> squareReach = corners => corners.Max(c => roomy(cellPoint(c)));
+                var plant = piece.GetComponent<Plant>();
 
                 if (!Grid.IsModifierHeld(player, FarmingConfig.GridPlantingKey))
                     run.Skip(name, "release the alternative placement button to drive the real ghost");
@@ -748,7 +755,8 @@ namespace Automatics.SmokeTest
                     var restored = (int)PlaceRotationField.GetValue(player) == steps &&
                                    Mathf.Approximately((float)PlaceDegreesField.GetValue(player), degrees);
                     var freeCell = ground(centre + rotation * new Vector3(expectedCell.x * spacing, 0f, expectedCell.y * spacing));
-                    var problem = CellProblem(piece, piece.GetComponent<Plant>(), freeCell);
+                    var problem = CellProblem(piece, plant, freeCell);
+                    var freeValid = false;
                     if (status == "NoRayHits") run.Skip(name, "the camera ray hit nothing at the aimed point");
                     else if (problem != null)
                     {
@@ -769,29 +777,163 @@ namespace Automatics.SmokeTest
                         if (ok)
                         {
                             result = new KeyValuePair<Vector3, float>(pos, yaw);
+                            freeValid = true;
                             CheckTryPlace(run, name + "_try_place", player, piece, true, pos, ghost.transform.rotation);
                         }
                         else run.Skip(name + "_try_place", "the snapped ghost at the free cell was not valid");
                     }
 
-                    // A cell of the first grid: the ray under the lattice point meets that crop.
+                    // Next to a cell of the first grid: that cell is the nearest corner of the aimed
+                    // square, and its crop leaves no room there, so the ghost moves on to the nearest
+                    // corner without a crop. The square's far column lies outside the first grid, so
+                    // one always exists.
                     var occupiedCell = new Vector2Int(Size / 2, 0);
-                    var occupant = first.FirstOrDefault(x => x && OnLattice(x.transform.position, centre, rotation, spacing, out var c) &&
-                                                             c == occupiedCell);
-                    if (!occupant) run.Skip(name + "_occupied", "the first grid has no crop in the cell next to the aim");
+                    Func<Vector2Int, bool> occupied = cell => first.Any(x =>
+                        x && OnLattice(x.transform.position, centre, rotation, spacing, out var c) && c == cell);
+                    var aimed = ground(centre + rotation * new Vector3((occupiedCell.x + 0.3f) * spacing, 0f, 0.25f * spacing));
+                    var aimedSquare = SquareCorners(aimed, centre, rotation, spacing);
+                    var movedCell = aimedSquare.First(c => !occupied(c));
+                    var movedProblem = CellProblem(piece, plant, cellPoint(movedCell));
+                    string occupiedSkip = null;
+                    if (!occupied(occupiedCell))
+                        occupiedSkip = "the first grid has no crop in the cell next to the aim";
+                    else if (movedProblem != null)
+                        occupiedSkip = $"the nearest free corner {movedCell} of the aimed square is not plantable here: {movedProblem}";
+                    else if ((status = aim(aimed, squareReach(aimedSquare))) == "NoRayHits")
+                        occupiedSkip = "the camera ray hit nothing at the aimed point";
+                    if (occupiedSkip != null)
+                    {
+                        run.Skip(name + "_occupied", occupiedSkip);
+                        run.Skip(name + "_occupied_try_place", occupiedSkip);
+                    }
                     else
                     {
-                        var aimed = ground(centre + rotation * new Vector3((occupiedCell.x + 0.3f) * spacing, 0f, 0.25f * spacing));
-                        status = aim(aimed, roomy(aimed));
-                        if (status == "NoRayHits") run.Skip(name + "_occupied", "the camera ray hit nothing at the aimed point");
+                        var onLattice = OnLattice(ghost.transform.position, centre, rotation, spacing, out var cell);
+                        var yaw = ghost.transform.eulerAngles.y;
+                        var ok = onLattice && cell == movedCell && YawOnLattice(yaw, rotation) && status == "Valid";
+                        Check(run, name + "_occupied", ok,
+                            $"ghost cell={cell}/{movedCell} (occupied {occupiedCell} nearest), onLattice={onLattice}, " +
+                            $"yaw={yaw:F1} (grid {rotation.eulerAngles.y:F1}), vanilla status={status} (Valid expected)");
+                        if (ok)
+                            CheckTryPlace(run, name + "_occupied_try_place", player, piece, true,
+                                ghost.transform.position, ghost.transform.rotation);
+                        else run.Skip(name + "_occupied_try_place", "the ghost did not move to the free corner as valid");
+                    }
+
+                    // The same aim as at the free cell, with blockers on a grow-space layer beside the
+                    // aimed square's corners, outside the square: each lies inside its corner's grow
+                    // sphere but clear of the ray down onto that corner, so vanilla alone would still
+                    // call the corner Valid. A blocker beside the nearest corner moves the ghost to the
+                    // next corner; one beside every corner keeps it on the nearest corner, refused as
+                    // needing more space; with the blockers gone the nearest corner is Valid again.
+                    // Natural rocks can keep a corner of one fixed square blocked, so the square is
+                    // searched: the free cell's square first (the aim raw), then squares whose lowest
+                    // corner lies two to four cells beyond either side of the first grid, rows -2 to 1,
+                    // in a fixed order. Each candidate is aimed at the same fractional offsets (.35, .3)
+                    // as raw, so its nearest corner is the lowest one and the second-nearest is the
+                    // next along the grid's x axis. The first candidate whose four corners all pass the
+                    // planting rules is used for every check below; every corner of every candidate lies
+                    // outside the first grid.
+                    var candidateAims = new List<Vector3> { raw };
+                    foreach (var lowX in new[] { 2, 3, 4, -5, -4, -3 })
+                        foreach (var lowZ in new[] { -2, -1, 0, 1 })
+                            if (lowX != expectedCell.x || lowZ != expectedCell.y)
+                                candidateAims.Add(ground(centre + rotation *
+                                                         new Vector3((lowX + 0.35f) * spacing, 0f, (lowZ + 0.3f) * spacing)));
+                    var squareAim = raw;
+                    var square = SquareCorners(raw, centre, rotation, spacing);
+                    var squareProblems = new List<string>();
+                    var squareFound = false;
+                    foreach (var candidateAim in candidateAims)
+                    {
+                        var candidateSquare = SquareCorners(candidateAim, centre, rotation, spacing);
+                        var candidateProblem = candidateSquare
+                            .Select(q => CellProblem(piece, plant, cellPoint(q))).FirstOrDefault(q => q != null);
+                        if (candidateProblem == null)
+                        {
+                            squareAim = candidateAim;
+                            square = candidateSquare;
+                            squareFound = true;
+                            break;
+                        }
+                        squareProblems.Add(candidateProblem);
+                    }
+                    var squareProblem = squareFound
+                        ? null
+                        : $"none of the {candidateAims.Count} lattice squares tried near the first grid has four plantable corners (first: " +
+                          string.Join("; ", squareProblems.Take(3)) + ")";
+                    var low = new Vector2Int(square.Min(c => c.x), square.Min(c => c.y));
+                    // True when the blocker took the grow space of the corner.
+                    Func<Vector2Int, bool> block = corner =>
+                    {
+                        var away = rotation * new Vector3(corner.x == low.x ? -1f : 1f, 0f, corner.y == low.y ? -1f : 1f);
+                        var blocker = new GameObject("Automatics smoke planting blocker");
+                        blockers.Add(blocker);
+                        SmokeSession.TrackSpawn(blocker);
+                        blocker.layer = LayerMask.NameToLayer("piece");
+                        blocker.transform.position = ground(cellPoint(corner) + away.normalized * (0.6f * plant.m_growRadius));
+                        blocker.AddComponent<BoxCollider>().size = Vector3.one * (0.4f * plant.m_growRadius);
+                        Physics.SyncTransforms();
+                        return CellProblem(piece, plant, cellPoint(corner)) != null;
+                    };
+                    string blockedSkip = null;
+                    if (!freeValid) blockedSkip = "the check at the free cell did not pass";
+                    else if (squareProblem != null) blockedSkip = squareProblem;
+                    else if (!block(square[0])) blockedSkip = "the test blocker did not take the grow space of the nearest corner";
+                    var reachAll = squareReach(square);
+                    var refused = false;
+                    if (blockedSkip != null)
+                    {
+                        foreach (var suffix in new[] { "_blocked_nearest", "_blocked_square", "_blocked_square_try_place" })
+                            run.Skip(name + suffix, blockedSkip);
+                    }
+                    else
+                    {
+                        status = aim(squareAim, reachAll);
+                        var onLattice = OnLattice(ghost.transform.position, centre, rotation, spacing, out var cell);
+                        var yaw = ghost.transform.eulerAngles.y;
+                        if (status == "NoRayHits") run.Skip(name + "_blocked_nearest", "the camera ray hit nothing at the aimed point");
+                        else
+                            Check(run, name + "_blocked_nearest",
+                                onLattice && cell == square[1] && YawOnLattice(yaw, rotation) && status == "Valid",
+                                $"ghost cell={cell}/{square[1]} (blocked {square[0]} nearest), onLattice={onLattice}, " +
+                                $"yaw={yaw:F1} (grid {rotation.eulerAngles.y:F1}), vanilla status={status} (Valid expected)");
+
+                        if (!square.Skip(1).All(block))
+                        {
+                            run.Skip(name + "_blocked_square", "a test blocker did not take the grow space of its corner");
+                            run.Skip(name + "_blocked_square_try_place", "a test blocker did not take the grow space of its corner");
+                        }
+                        else if ((status = aim(squareAim, reachAll)) == "NoRayHits")
+                        {
+                            run.Skip(name + "_blocked_square", "the camera ray hit nothing at the aimed point");
+                            run.Skip(name + "_blocked_square_try_place", "the camera ray hit nothing at the aimed point");
+                        }
                         else
                         {
-                            var onLattice = OnLattice(ghost.transform.position, centre, rotation, spacing, out var cell);
-                            Check(run, name + "_occupied", onLattice && cell == occupiedCell && status != "Valid",
-                                $"ghost cell={cell}/{occupiedCell}, onLattice={onLattice}, vanilla status={status} (not Valid expected)");
-                            CheckTryPlace(run, name + "_occupied_try_place", player, piece, false,
+                            refused = true;
+                            onLattice = OnLattice(ghost.transform.position, centre, rotation, spacing, out cell);
+                            yaw = ghost.transform.eulerAngles.y;
+                            Check(run, name + "_blocked_square",
+                                onLattice && cell == square[0] && YawOnLattice(yaw, rotation) && status == "MoreSpace",
+                                $"ghost cell={cell}/{square[0]}, onLattice={onLattice}, yaw={yaw:F1} (grid {rotation.eulerAngles.y:F1}), " +
+                                $"status={status} (MoreSpace expected)");
+                            CheckTryPlace(run, name + "_blocked_square_try_place", player, piece, false,
                                 ghost.transform.position, ghost.transform.rotation);
                         }
+                    }
+                    RemoveObjects(blockers);
+                    blockers.Clear();
+                    Physics.SyncTransforms();
+                    if (!refused)
+                        run.Skip(name + "_unblocked", blockedSkip ?? "the aimed square was not refused with every corner blocked");
+                    else if ((status = aim(squareAim, reachAll)) == "NoRayHits")
+                        run.Skip(name + "_unblocked", "the camera ray hit nothing at the aimed point");
+                    else
+                    {
+                        var onLattice = OnLattice(ghost.transform.position, centre, rotation, spacing, out var cell);
+                        Check(run, name + "_unblocked", onLattice && cell == square[0] && status == "Valid",
+                            $"with the blockers removed: ghost cell={cell}/{square[0]}, onLattice={onLattice}, vanilla status={status} (Valid expected)");
                     }
 
                     // The free cell's lattice point just beyond the reach, the aimed point just within.
@@ -841,6 +983,8 @@ namespace Automatics.SmokeTest
             {
                 _interceptPlace = false;
                 Grid.ClearPending();
+                RemoveObjects(blockers);
+                Physics.SyncTransforms();
                 camera.SetPositionAndRotation(cameraPosition, cameraRotation);
                 player.m_maxPlaceDistance = reach;
                 if (BuildPiecesField.GetValue(player) as PieceTable == table)
@@ -859,6 +1003,17 @@ namespace Automatics.SmokeTest
         {
             OnLattice(pos, centre, rotation, spacing, out var cell);
             return cell;
+        }
+
+        // The cells at the four corners of the lattice square that holds the point, nearest first
+        // on the ground plane: the order in which the snapped ghost tries them.
+        private static List<Vector2Int> SquareCorners(Vector3 pos, Vector3 centre, Quaternion rotation, float spacing)
+        {
+            var local = Quaternion.Inverse(rotation) * new Vector3(pos.x - centre.x, 0f, pos.z - centre.z) / spacing;
+            var x = Mathf.FloorToInt(local.x);
+            var z = Mathf.FloorToInt(local.z);
+            return new[] { new Vector2Int(x, z), new Vector2Int(x + 1, z), new Vector2Int(x, z + 1), new Vector2Int(x + 1, z + 1) }
+                .OrderBy(c => new Vector2(c.x - local.x, c.y - local.z).sqrMagnitude).ToList();
         }
 
         private static bool _interceptPlace;

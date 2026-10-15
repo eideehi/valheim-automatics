@@ -1109,6 +1109,11 @@ section turns it off for its synchronous checks and turns it back on afterwards,
 also through the session hand-back; stamina and durability are charged the same
 either way, as in vanilla. God mode is lifted and restored the same way, because the
 Debug build of Automatics skips stamina use while god mode is on.
+The first grid's centre is 4 to 12 m from you (farther when the grid is wide), and
+the snapping checks use ground up to about five cells from that centre, which is
+about 25 m for a tree sapling's 5 m spacing. Rocks, trees and pieces within a
+sapling's grow radius of a cell make that cell unusable, and the section uses
+only ground where none is.
 
 The session temporarily sets a 3×3 grid, spacing factor 2.5 and Left Alt, then
 restores the settings. It adds its own cultivators and seeds, captures and
@@ -1143,18 +1148,38 @@ position plus the rotated lattice offsets), not taken from the mod. It checks:
   the unbound key it checks that the ghost lies on the free lattice cell on the
   ground with a lattice yaw, that vanilla's placement status is Valid (SKIP when
   that cell fails the planting rules above) and that the player's rotation step is
-  back afterwards; aimed next to a cell of the first grid, the ghost snaps onto
-  that occupied cell and the status is not Valid; aimed so that the lattice point
-  lies just beyond the reach while the aimed point is within it, the ghost stays
-  at the aimed point with the player's rotation. Then, with Left Alt bound again
-  and released, the ghost stays at the aimed point with the player's rotation
-- the real `Player.TryPlacePiece` at the free and the occupied cell, with
-  `Player.PlacePiece` intercepted so nothing is placed: the free cell calls it
-  once at the snapped ghost pose, the occupied cell is rejected. The player's
-  no-cost toggle is on for each call, so vanilla counts the placement as cheated
-  and grants no achievement progress; the build statistics it increments are put
-  back and the grid request it records is dropped. The camera, the reach, the
-  table's selected piece and the rotation step are put back before the frame
+  back afterwards; aimed next to a cell of the first grid, whose crop leaves no
+  room to grow at that nearest corner of the aimed lattice square, the ghost moves
+  to the nearest corner without a crop, on the lattice with a lattice yaw, and the
+  status is Valid (SKIP when that corner fails the planting rules above); aimed
+  so that the lattice point lies just beyond the reach while the aimed point is
+  within it, the ghost stays at the aimed point with the player's rotation. Then,
+  with Left Alt bound again and released, the ghost stays at the aimed point with
+  the player's rotation. The corners come from the check's own oracle: the four
+  cells at the corners of the lattice square that holds the aimed point, nearest
+  first on the ground plane
+- grow space at the real ghost, aimed as at the free cell: the aim is the first
+  lattice square near the first grid (the free cell's square first, then the
+  squares in the columns two to four cells beyond either side of the first grid,
+  rows -2 to 1, in a fixed order) whose four corners pass the planting rules
+  above. With a test collider on the `piece` layer beside the nearest corner,
+  outside the square, inside that corner's grow radius but clear of the ray down
+  onto it (so vanilla alone would still call that corner Valid), the ghost lies
+  on the second-nearest corner with status Valid; with such a collider beside
+  every corner, the ghost stays on the nearest corner with status MoreSpace; with
+  the colliders removed, the nearest corner is Valid again. SKIP when the free
+  cell check did not pass, none of the squares tried (the SKIP names how many and
+  the first failing reasons) has four plantable corners, or a collider does not
+  take its corner's grow space. The colliders are removed before the section goes
+  on
+- the real `Player.TryPlacePiece` at the free cell, at the corner the ghost moved
+  to next to the first grid and at the square with every corner blocked, with
+  `Player.PlacePiece` intercepted so nothing is placed: the free cell and the
+  moved ghost call it once at the ghost pose, the blocked square is refused. The
+  player's no-cost toggle is on for each call, so vanilla counts the placement as
+  cheated and grants no achievement progress; the build statistics it increments
+  are put back and the grid request it records is dropped. The camera, the reach,
+  the table's selected piece and the rotation step are put back before the frame
   ends, and the key is unbound again for the rest of the section
 - a second grid planted at the snapped ghost pose (or at the snapped pose when
   the ghost could not be driven) puts every crop on the first grid's lattice

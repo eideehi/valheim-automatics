@@ -7,6 +7,10 @@ namespace Automatics.AutomaticFarming
 {
     // While the grid planting modifier is held, the crop ghost moves onto the lattice of the
     // nearest growing crop of the same kind: that crop's spacing, orientation and cell positions.
+    // Of the four lattice points at the corners of the lattice square under the aim, it takes the
+    // nearest one where the crop has room to grow, which vanilla placement does not check (a crop
+    // without room withers). When no corner has room it stays on the nearest one and the placement
+    // is refused as needing more space.
     // The pose is handed to vanilla instead of being forced onto the ghost afterwards: the ray
     // result becomes the ground under the lattice point, and the rotation fields vanilla reads right
     // after the ray test give the lattice yaw. Every placement status check in
@@ -16,6 +20,8 @@ namespace Automatics.AutomaticFarming
     {
         private static readonly AccessTools.FieldRef<Player, GameObject> PlacementGhost =
             AccessTools.FieldRefAccess<Player, GameObject>("m_placementGhost");
+        private static readonly AccessTools.FieldRef<Player, Player.PlacementStatus> PlacementStatus =
+            AccessTools.FieldRefAccess<Player, Player.PlacementStatus>("m_placementStatus");
         private static readonly AccessTools.FieldRef<Player, int> PlaceRotation =
             AccessTools.FieldRefAccess<Player, int>("m_placeRotation");
         private static readonly AccessTools.FieldRef<Player, float> PlaceRotationDegrees =
@@ -38,6 +44,8 @@ namespace Automatics.AutomaticFarming
         {
             internal Player Player;
             internal bool Snapped;
+            // Snapped to the nearest lattice point because no corner of the square had room.
+            internal bool NoRoom;
             internal int SavedRotation;
             internal float SavedDegrees;
         }
@@ -73,10 +81,13 @@ namespace Automatics.AutomaticFarming
             PlaceRotationDegrees(update.Player) = update.SavedDegrees;
         }
 
-        // Replaces the ray result of the open ghost update with the ground under the lattice point,
+        // Replaces the ray result of the open ghost update with the ground under a lattice point,
         // accepted by the same rules vanilla's own ray test applies (no rigidbody, within reach).
-        // Without a lattice, or when that ground cannot be hit, the vanilla result stays.
-        // Grow space is not checked, as vanilla placement does not check it (a plant checks it as it grows).
+        // The corners of the lattice square under the aim are tried nearest first, and the first one
+        // whose ground has room to grow (CropPlanting.HasGrowSpace) is taken; a farther corner whose
+        // ground cannot be hit is passed over. When no corner has room, the nearest one is taken and
+        // the update is marked for RefuseWithoutRoom. Without a lattice, or when the ground under the
+        // nearest corner cannot be hit, the vanilla result stays.
         internal static void SnapRayResult(Player player, ref Vector3 point, ref Vector3 normal, ref Piece piece,
             ref Heightmap heightmap, ref Collider waterSurface, bool water)
         {
@@ -87,15 +98,36 @@ namespace Automatics.AutomaticFarming
             var selected = player.GetSelectedPiece();
             if (!ghostPiece || !selected) return;
             var playerYaw = PlaceRotationDegrees(player) * PlaceRotation(player);
-            if (!TryLatticePose(selected, true, point, playerYaw, out var target, out var yaw)) return;
+            if (!TryLatticePose(selected, true, point, playerYaw, out var nearest, out var yaw)) return;
 
-            var climb = Vector3.Distance(new Vector3(point.x, 0f, point.z), new Vector3(target.x, 0f, target.z)) + 1f;
-            var origin = new Vector3(target.x, point.y + climb, target.z);
+            // The lattice yaw turns the anchor's axes by whole quarter turns, so its axes run along
+            // the same rows. Along them the aim lies within half a cell of the nearest corner; the
+            // next corners are one cell toward it along the axis on which it is farther from that
+            // corner, then along the other axis, then along both.
+            var growRadius = selected.GetComponent<Plant>().m_growRadius;
+            var spacing = growRadius * Config.SowingSpacingFactor;
+            var axes = Quaternion.Euler(0f, yaw, 0f);
+            var offset = Quaternion.Inverse(axes) * (point - nearest);
+            var stepX = axes * new Vector3(offset.x >= 0f ? spacing : -spacing, 0f, 0f);
+            var stepZ = axes * new Vector3(0f, 0f, offset.z >= 0f ? spacing : -spacing);
+            var xFirst = Mathf.Abs(offset.x) >= Mathf.Abs(offset.z);
             var mask = water ? PlaceWaterRayMask(player) : PlaceRayMask(player);
-            if (!Physics.Raycast(origin, Vector3.down, out var hit, climb * 2f, mask)) return;
             var reach = player.m_maxPlaceDistance + ghostPiece.m_extraPlacementDistance;
-            if (!hit.collider || hit.collider.attachedRigidbody ||
-                Vector3.Distance(player.m_eye.position, hit.point) >= reach) return;
+            var hit = default(RaycastHit);
+            var room = false;
+            for (var i = 0; i < 4 && !room; i++)
+            {
+                var corner = nearest;
+                if (i == 3 || (xFirst ? i == 1 : i == 2)) corner += stepX;
+                if (i == 3 || (xFirst ? i == 2 : i == 1)) corner += stepZ;
+                if (!TryGroundUnder(player, point, corner, mask, reach, out var ground))
+                {
+                    if (i == 0) return;
+                    continue;
+                }
+                room = CropPlanting.HasGrowSpace(ground.point, growRadius);
+                if (room || i == 0) hit = ground;
+            }
 
             point = hit.point;
             normal = hit.normal;
@@ -106,8 +138,34 @@ namespace Automatics.AutomaticFarming
             update.SavedRotation = PlaceRotation(player);
             update.SavedDegrees = PlaceRotationDegrees(player);
             update.Snapped = true;
+            update.NoRoom = !room;
             PlaceRotation(player) = 1;
             PlaceRotationDegrees(player) = yaw;
+        }
+
+        // Refuses the placement of an update that snapped with no room to grow. It runs when
+        // vanilla tints the ghost from its final status: Valid becomes MoreSpace, which
+        // Player.TryPlacePiece refuses with the game's need-more-space message, and vanilla's own
+        // tint then shows the ghost red. A status vanilla already set to something else is left as
+        // it is. Returns true when it refused the placement.
+        internal static bool RefuseWithoutRoom(Player player)
+        {
+            var update = _update;
+            if (update == null || !update.NoRoom || update.Player != player ||
+                PlacementStatus(player) != Player.PlacementStatus.Valid) return false;
+            PlacementStatus(player) = Player.PlacementStatus.MoreSpace;
+            return true;
+        }
+
+        // The ground under a lattice point, cast down from above the aimed height and accepted by
+        // the rules of vanilla's own ray test: no rigidbody, within reach.
+        private static bool TryGroundUnder(Player player, Vector3 aimed, Vector3 target, int mask, float reach,
+            out RaycastHit hit)
+        {
+            var climb = Vector3.Distance(new Vector3(aimed.x, 0f, aimed.z), new Vector3(target.x, 0f, target.z)) + 1f;
+            var origin = new Vector3(target.x, aimed.y + climb, target.z);
+            return Physics.Raycast(origin, Vector3.down, out hit, climb * 2f, mask) && hit.collider &&
+                   !hit.collider.attachedRigidbody && Vector3.Distance(player.m_eye.position, hit.point) < reach;
         }
 
         // The lattice pose for a crop aimed at rawPoint: the nearest lattice point of the nearest

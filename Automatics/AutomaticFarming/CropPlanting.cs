@@ -278,7 +278,7 @@ namespace Automatics.AutomaticFarming
         // despawning) is ignored so it does not self-block its own replant. A
         // still-standing crop (un-picked Pickable) DOES block, matching vanilla,
         // so a sapling is never placed where it would later settle NoSpace.
-        private static bool HasGrowSpace(Vector3 pos, float radius)
+        internal static bool HasGrowSpace(Vector3 pos, float radius)
         {
             var count = Physics.OverlapSphereNonAlloc(pos, radius, ColliderBuffer, SpaceMask);
             for (var i = 0; i < count; i++)
