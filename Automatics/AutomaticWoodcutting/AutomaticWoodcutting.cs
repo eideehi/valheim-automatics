@@ -54,7 +54,8 @@ namespace Automatics.AutomaticWoodcutting
         {
             AllInstance = new List<AutomaticWoodcutting>();
             ColliderBuffer = new List<Collider>();
-            // The layers Automatic Mining checks its line from the eyes against.
+            // The layers Automatic Mining checks its line from the eyes against, all of them
+            // layers a melee attack hits. Area woodcutting measures its reach on these alone.
             SightMaskLazy = new Lazy<int>(() =>
                 LayerMask.GetMask("piece", "Default", "static_solid", "Default_small"));
 
@@ -63,7 +64,7 @@ namespace Automatics.AutomaticWoodcutting
                 LogFirstFrame = AccessTools.FieldRefAccess<TreeLog, bool>(firstFrame);
         }
 
-        private static int SightMask => SightMaskLazy.Value;
+        internal static int SightMask => SightMaskLazy.Value;
 
         private void Awake()
         {
@@ -213,8 +214,9 @@ namespace Automatics.AutomaticWoodcutting
         }
 
         // The targets area woodcutting may add to a swing: every standing, allowed tree, log and
-        // stump with a collider whose surface lies within radius of center, at its nearest such
-        // point. The caller applies the tool tier, what the swing already hit and the cap.
+        // stump with a collider a swing can hit whose surface lies within radius of center, at
+        // its nearest such point. The caller applies the tool tier, what the swing already hit
+        // and the cap.
         internal static void CollectAreaTargets(Vector3 center, float radius,
             List<AreaWoodcutting.Target> targets)
         {
@@ -245,6 +247,9 @@ namespace Automatics.AutomaticWoodcutting
             foreach (var candidate in ColliderBuffer)
             {
                 if (!candidate.enabled || candidate.isTrigger) continue;
+                // Only a collider on a layer of SightMask, which a swing can hit, counts: a
+                // tree's view-blocking volume reaches metres beyond its trunk and crown.
+                if ((SightMask & (1 << candidate.gameObject.layer)) == 0) continue;
                 // The bounds only reject: a trunk or a slanted log fills little of them.
                 if (candidate.bounds.SqrDistance(center) > radius * radius) continue;
                 if (!GetSurfacePoint(candidate, center, out var surface)) continue;
