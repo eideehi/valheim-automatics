@@ -1496,9 +1496,13 @@ details are in the log file: the position of your eyes, of you and of the ground
 under you, the target's position and the ground there, and for each collider
 under the target, inactive, disabled and trigger ones included, its path and
 layer, whether it is enabled, a trigger and active, its type (and for a mesh
-collider whether it is convex), its bounds, the point the ray aims at, whether a
-ray along that line meets the collider itself and at what distance, and the first
-solid collider of any layer that ray meets. At the end the added axes and club
+collider whether it is convex) and its bounds. For each active, enabled, solid
+collider it adds each point the module's entry aims at on it (the point nearest
+your eyes on a box, sphere, capsule or convex mesh collider; on any other, the
+vertical line through the target's position and the collider's own vertical
+centre line, both at eye height kept within its bounds), whether a ray toward
+that point meets the collider itself and at what distance, and the first solid
+collider of any layer that ray meets. At the end the added axes and club
 are removed from your inventory, the items you had equipped are equipped again,
 the skills are put back, and the test objects, including the log, the stump, the
 small trees and the other Destructibles the section spawned, are removed. The

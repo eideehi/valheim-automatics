@@ -2091,8 +2091,10 @@ namespace Automatics.SmokeTest
 
         // The details of a target the eyes did not reach: where your eyes, you, the ground under
         // you and the target are, and for each collider under the target, inactive, disabled and
-        // trigger ones included, its path, layer, state, type, bounds and the point a ray from the
-        // eyes aims at, and what that ray meets: the collider itself, and the first solid collider
+        // trigger ones included, its path, layer, state, type and bounds. For each active,
+        // enabled, solid one, the only ones the module's entry aims at, it adds each point the
+        // entry aims at on it from the eyes, with the target's position as the root pivot, and
+        // what a ray toward that point meets: the collider itself, and the first solid collider
         // of any layer.
         internal static void LogReach(string check, string headline, Player player, Component target)
         {
@@ -2108,24 +2110,41 @@ namespace Automatics.SmokeTest
 
             var colliders = target.GetComponentsInChildren<Collider>(true);
             if (colliders.Length == 0) lines.Add("  no collider under the target");
+            var aimPoints = new List<Vector3>();
             foreach (var collider in colliders)
             {
                 var bounds = collider.bounds;
-                var aimPoint = AimPoint(collider, eye);
-                var aim = aimPoint - eye;
-                var ray = new Ray(eye, aim.normalized);
-                var length = aim.magnitude + 1f;
-                var own = collider.Raycast(ray, out var ownHit, length)
-                    ? $"hit at {ownHit.distance:0.###} m"
-                    : "no hit";
-                var first = Physics.Raycast(ray, out var anyHit, length, ~0, QueryTriggerInteraction.Ignore)
-                    ? $"{Objects.GetPrefabName(Projectile.FindHitObject(anyHit.collider))}/{anyHit.collider.name} (layer {LayerMask.LayerToName(anyHit.collider.gameObject.layer)}) at {anyHit.distance:0.###} m"
-                    : "nothing";
+                var aims = new List<string>();
+                aimPoints.Clear();
+                if (collider.enabled && !collider.isTrigger && collider.gameObject.activeInHierarchy)
+                    WoodcuttingComponent.GetAimPoints(collider, eye, at, aimPoints);
+                else
+                    aims.Add("the entry does not aim at it");
+                foreach (var aimPoint in aimPoints)
+                {
+                    var aim = aimPoint - eye;
+                    if (aim.magnitude < 0.001f)
+                    {
+                        aims.Add($"aim {aimPoint.ToString("F2")}, at your eyes, which the entry skips");
+                        continue;
+                    }
+
+                    var ray = new Ray(eye, aim.normalized);
+                    var length = aim.magnitude + 1f;
+                    var own = collider.Raycast(ray, out var ownHit, length)
+                        ? $"hit at {ownHit.distance:0.###} m"
+                        : "no hit";
+                    var first = Physics.Raycast(ray, out var anyHit, length, ~0, QueryTriggerInteraction.Ignore)
+                        ? $"{Objects.GetPrefabName(Projectile.FindHitObject(anyHit.collider))}/{anyHit.collider.name} (layer {LayerMask.LayerToName(anyHit.collider.gameObject.layer)}) at {anyHit.distance:0.###} m"
+                        : "nothing";
+                    aims.Add(
+                        $"aim {aimPoint.ToString("F2")}; its own ray: {own}; first solid collider of any layer: {first}");
+                }
                 var type = collider is MeshCollider mesh
                     ? $"MeshCollider, convex {mesh.convex}"
                     : collider.GetType().Name;
                 lines.Add(
-                    $"  {PathUnder(collider.transform, target.transform)}: layer {LayerMask.LayerToName(collider.gameObject.layer)}, enabled {collider.enabled}, trigger {collider.isTrigger}, active {collider.gameObject.activeInHierarchy}, {type}, bounds {bounds.min.ToString("F2")} to {bounds.max.ToString("F2")}, aim {aimPoint.ToString("F2")}; its own ray: {own}; first solid collider of any layer: {first}");
+                    $"  {PathUnder(collider.transform, target.transform)}: layer {LayerMask.LayerToName(collider.gameObject.layer)}, enabled {collider.enabled}, trigger {collider.isTrigger}, active {collider.gameObject.activeInHierarchy}, {type}, bounds {bounds.min.ToString("F2")} to {bounds.max.ToString("F2")}, {string.Join("; ", aims.ToArray())}");
             }
 
             Log.LogWarning(string.Join("\n", lines.ToArray()));

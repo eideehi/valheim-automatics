@@ -28,6 +28,7 @@ namespace Automatics.AutomaticWoodcutting
     {
         private static readonly IList<AutomaticWoodcutting> AllInstance;
         private static readonly List<Collider> ColliderBuffer;
+        private static readonly List<Vector3> AimBuffer;
         private static readonly Lazy<int> SightMaskLazy;
 
         // A log ignores damage until 0.2 s after it spawns. When the flag cannot be read, a log
@@ -54,6 +55,7 @@ namespace Automatics.AutomaticWoodcutting
         {
             AllInstance = new List<AutomaticWoodcutting>();
             ColliderBuffer = new List<Collider>();
+            AimBuffer = new List<Vector3>();
             // The layers Automatic Mining checks its line from the eyes against, all of them
             // layers a melee attack hits. Area woodcutting measures its reach on these alone.
             SightMaskLazy = new Lazy<int>(() =>
@@ -292,11 +294,18 @@ namespace Automatics.AutomaticWoodcutting
             }
 
             var bounds = collider.bounds;
-            var inset = Mathf.Min(0.5f, bounds.extents.y);
-            var axis = new Vector3(pivot.x,
-                Mathf.Clamp(origin.y, bounds.min.y + inset, bounds.max.y - inset), pivot.z);
-            return GetEntryPoint(collider, origin, axis, out point) ||
+            return GetEntryPoint(collider, origin, GetAxisPoint(bounds, origin, pivot), out point) ||
                    GetEntryPoint(collider, origin, bounds.center, out point);
+        }
+
+        // The point on the vertical line through pivot at origin's height, kept half a metre
+        // inside the bounds, or at their middle height when they are less than a metre tall.
+        // pivot is a target's root pivot, and a tree's trunk rises along that line.
+        private static Vector3 GetAxisPoint(Bounds bounds, Vector3 origin, Vector3 pivot)
+        {
+            var inset = Mathf.Min(0.5f, bounds.extents.y);
+            return new Vector3(pivot.x,
+                Mathf.Clamp(origin.y, bounds.min.y + inset, bounds.max.y - inset), pivot.z);
         }
 
         // Where a ray from origin toward target enters the collider before it reaches target.
@@ -377,53 +386,71 @@ namespace Automatics.AutomaticWoodcutting
             return Config.WoodcuttingRange > 0 ? Config.WoodcuttingRange : attack.m_attackRange;
         }
 
-        // Aims from the eyes at a point of each of the target's colliders and keeps the nearest
-        // landing. A ray lands only when the first thing it meets within range belongs to the
-        // target, as the first thing a swing meets is what it hits: a wall, a rock or another
-        // tree in between stops it.
+        // Aims from the eyes at each point GetAimPoints gives on each of the target's colliders
+        // and keeps the nearest landing. A ray lands only when the first thing it meets within
+        // range belongs to the target, as the first thing a swing meets is what it hits: a wall,
+        // a rock or another tree in between stops it.
         private bool GetHitPoint(Vector3 eye, float range, out Collider collider, out Vector3 point)
         {
             collider = null;
             point = Vector3.zero;
             var nearest = float.MaxValue;
 
+            var pivot = transform.position;
             ColliderBuffer.Clear();
             GetComponentsInChildren(false, ColliderBuffer);
             foreach (var candidate in ColliderBuffer)
             {
                 if (!candidate.enabled || candidate.isTrigger) continue;
 
-                var toAim = GetAimPoint(candidate, eye) - eye;
-                var length = toAim.magnitude;
-                if (length < 0.001f) continue;
+                GetAimPoints(candidate, eye, pivot, AimBuffer);
+                foreach (var aim in AimBuffer)
+                {
+                    var toAim = aim - eye;
+                    var length = toAim.magnitude;
+                    if (length < 0.001f) continue;
 
-                if (!Physics.Raycast(eye, toAim / length, out var hit, range, SightMask,
-                        QueryTriggerInteraction.Ignore))
-                    continue;
-                if (Projectile.FindHitObject(hit.collider) != gameObject) continue;
-                if (hit.distance >= nearest) continue;
+                    if (!Physics.Raycast(eye, toAim / length, out var hit, range, SightMask,
+                            QueryTriggerInteraction.Ignore))
+                        continue;
+                    if (Projectile.FindHitObject(hit.collider) != gameObject) continue;
+                    if (hit.distance >= nearest) continue;
 
-                nearest = hit.distance;
-                collider = hit.collider;
-                point = hit.point;
+                    nearest = hit.distance;
+                    collider = hit.collider;
+                    point = hit.point;
+                }
             }
 
             ColliderBuffer.Clear();
             return collider != null;
         }
 
-        // The point of the collider nearest the eyes where Unity can find one, which on a
-        // standing trunk is at eye height. On any other collider it is the collider's vertical
-        // centre line at eye height, kept within its bounds.
-        private static Vector3 GetAimPoint(Collider collider, Vector3 eye)
+        // The points of the collider the entry aims at from the eyes, into aims; pivot is the
+        // target's root pivot. On a primitive or convex mesh collider it is the point nearest
+        // the eyes, which on a standing trunk is at eye height. Unity finds no such point on any
+        // other collider, such as a tree's single mesh of trunk and crown, so on one there are
+        // two: the point GetAxisPoint gives at eye height on the vertical line through pivot,
+        // along which a trunk rises; and the collider's vertical centre line at eye height, kept
+        // within its bounds, which on a tree lies under the crown and can stand a metre off the
+        // trunk. Both are aimed at, not the second only when the first misses, so which ray
+        // lands nearest does not depend on the range, and a range short of that landing lands
+        // nothing. The smoke checks log these points.
+        internal static void GetAimPoints(Collider collider, Vector3 eye, Vector3 pivot,
+            List<Vector3> aims)
         {
+            aims.Clear();
             if (collider is BoxCollider || collider is SphereCollider || collider is CapsuleCollider ||
                 collider is MeshCollider mesh && mesh.convex)
-                return collider.ClosestPoint(eye);
+            {
+                aims.Add(collider.ClosestPoint(eye));
+                return;
+            }
 
             var bounds = collider.bounds;
             var center = bounds.center;
-            return new Vector3(center.x, Mathf.Clamp(eye.y, bounds.min.y, bounds.max.y), center.z);
+            aims.Add(GetAxisPoint(bounds, eye, pivot));
+            aims.Add(new Vector3(center.x, Mathf.Clamp(eye.y, bounds.min.y, bounds.max.y), center.z));
         }
 
         // The skill a real swing uses on this target: the attack's special-hit skill when the
