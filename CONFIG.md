@@ -1250,7 +1250,7 @@ Specify a shortcut key that cycles the role of the container you are looking at 
 - Default value:
 
 ### Grid Planting / [enable_grid_planting]
-Hold Grid Planting Key while planting by hand to add a grid of the same crop. Each extra crop costs what a hand-placed crop costs: seeds from your inventory (and from nearby containers while Automatic Supply is running), stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of Harvest And Replant Automatically, Farming Mode and Seed Reserve.
+Hold Grid Planting Key while planting by hand to add a grid of the same crop or tree sapling. Each extra crop costs what a hand-placed crop costs: seeds from your inventory (and from nearby containers while Automatic Supply is running), stamina and cultivator durability. As in vanilla, seeds are not needed in free-build worlds. Invalid cells are skipped; planting stops when you cannot pay. Independent of Harvest And Replant Automatically, Farming Mode and Seed Reserve.
 
 - Default value: true
 

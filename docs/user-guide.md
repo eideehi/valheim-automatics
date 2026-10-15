@@ -827,7 +827,8 @@ carry weight, tar restrictions, and pieces that should not be picked up.
 ## Automatic farming
 
 With the module enabled, hold Left Alt while planting with the cultivator to add
-more of the same crop in a grid aligned to the placement rotation. `Grid Planting`
+more of the same crop in a grid aligned to the placement rotation. Tree saplings
+get a grid the same way; their cells need no cultivated ground. `Grid Planting`
 is independent of automatic harvesting and sowing. `Grid Planting Size` defaults
 to 5 cells per side (1 disables it); `Grid Planting Key` can be changed or
 left unbound to make every manual crop placement a grid, except while alternate
