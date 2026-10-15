@@ -93,6 +93,13 @@ the main menu before a world loads. The smoke checks create temporary object JSO
 files only under `BepInEx/config/AutomaticsSmoke/` and clean them up on a
 best-effort basis.
 
+When a console command below, or one of its sections, has a precondition for
+running, state it in that command's or section's description, where the
+description starts. This covers anything that must hold before the run: the kind
+of world, enabled modules or settings, free inventory slots or carried items, and
+how much open ground the run needs around the player, in which direction and how
+far.
+
 ### Safety of the console commands
 
 The console commands below run in the world you load, so they are written to
