@@ -1513,8 +1513,9 @@ Automatic Woodcutting enabled and `enable_area_woodcutting` on, standing on open
 level ground with two free inventory slots. It needs room: no allowed tree, log or
 stump of your world within the raised area radius of the spot in front of you, and
 no building piece or other destructible object at any of the spots the test trees
-go to (the section SKIPs and names it). It spawns non-persistent trees around the
-spot in front of you, each with a health no hit reaches and nothing to drop:
+go to (the section SKIPs and names it). It spawns non-persistent trees and a stump
+around the spot in front of you, each with a health no hit reaches and nothing to
+drop:
 
 - a beech 1.6 m in front of you, the first swing's target, at 1 health so that
   swing fells it;
@@ -1522,20 +1523,28 @@ spot in front of you, each with a health no hit reaches and nothing to drop:
   at once into a log and a stump. These three are the targets that qualify;
 - a beech whose minimum tool tier is raised above the axe's;
 - two trees of a second early species, one felled at once into a log and a stump;
-- a beech to the side, a little beyond the area radius.
+- a beech stump to the side, moved once spawned so that the nearest point of its
+  colliders a swing can hit lies midway between the area radius and the raised
+  one (1.5 m from each) from where the first swing is expected to hit: the
+  middle of its target's trunk at eye height.
 
 It turns Automatic Mining's passes off when they run on an interval, as in
 `woodcutting`, and `enable_automatic_woodcutting` off for the section, so no pass
 hits the test trees and the swings show area woodcutting working with the passes
 off, sets `area_woodcutting_radius` to fit the trees,
-`area_woodcutting_max_targets` to 2, below the three targets that qualify, and
-`allow_woodcutting_tree` to the beech's species alone. The same-kind checks at
-the end write these three settings again for themselves, and also
-`area_woodcutting_same_kind_first`. It adds an axe whose tool tier reaches both species and equips it,
+`area_woodcutting_max_targets` to 2, below the three targets that qualify,
+`area_woodcutting_same_kind_first` to false, so the axe swings before the
+same-kind checks take the nearest targets whatever their kind, and
+`allow_woodcutting_tree` to the beech's species alone. The same-kind checks at the end write these four settings again
+for themselves. It adds an axe whose tool tier reaches both species and equips it,
 turns you to face the trees, lowers your view a little, refills your stamina before
-each swing, and starts real attacks with `Humanoid.StartAttack`. An observer patch,
-removed at the end of the section, records the melee call, every damage call on the
-test objects, the point of each swing's first direct hit on an allowed test object,
+each swing, and starts real attacks with `Humanoid.StartAttack`, only while the
+swing's weapon is in your right hand. The game unequips an axe whose durability
+runs out at its next physics step and equips nothing during an attack, so after
+the second swing wears the axe out, the section puts its durability back, waits
+for the attack to end and equips it again before the third swing and the hit of
+the module's entry. An observer patch, removed at the end of the section, records
+the melee call, every damage call on the test objects, the point of each swing's first direct hit on an allowed test object,
 and every skill raise and stamina use of yours. Every distance below is measured
 from that observed point. The observer's removal is registered with the session
 before its patches go on, so a run cut short still removes them. While it is in place,
@@ -1561,7 +1570,7 @@ stump's tool tier is lowered to the axe's where it is above it, and the stump's
 damage spawns nothing. A swing counts only when it hit the beech in front of you
 and nothing else itself, and the distances from the hit to each target, measured
 as area woodcutting measures them (the nearest point of each enabled, solid
-collider), put the birch and the stump nearer than the second beech and all
+collider on the layers a swing hits), put the birch and the stump nearer than the second beech and all
 three within the radius; otherwise the check SKIPs and gives the distances. A
 check FAILs when area woodcutting centred its expansion away from that hit. A
 third swing at the same layout, with `area_woodcutting_same_kind_first` written
@@ -1579,12 +1588,12 @@ to false and the cap at 1, is judged by the same rules.
 | `woodcutting_area_fresh_log_skipped` | The log the swing's own felling of its target spawned took no hit and kept its health |
 | `woodcutting_area_tool_tier_skipped` | The tree above the axe's tool tier took no hit |
 | `woodcutting_area_species_skipped` | The tree, log and stump of the species left out of `allow_woodcutting_tree` took no hit |
-| `woodcutting_area_outside_radius_untouched` | The tree that the physics engine's own sphere overlap at the observed first hit confirms lies beyond `area_woodcutting_radius` took no hit (SKIP when it came within the radius) |
+| `woodcutting_area_outside_radius_untouched` | A radius swing right after the first, with the first swing's radius and exclusions, `area_woodcutting_max_targets` raised to 32 and the axe at full durability, added fewer extra hits than the cap, so the cap could not have stopped it. Measured from its first direct hit on an allowed test object, usually the log or stump the first swing's felling left in front of you, it reached every target that qualifies within the radius as area woodcutting measures it (one within 0.01 m of the radius is not counted), apart from what it hit itself; no extra hit landed beyond the radius; and the stump that the physics engine's own sphere overlap confirms lies beyond the radius took no hit and kept its health. Only the stump's enabled, solid colliders on the layers a swing hits count, the ones area woodcutting measures its reach on. SKIP when one of them came within the radius, when the swing reached the cap, when no target that qualifies lay within the radius, or when the axe could not be equipped or the cap raised |
 | `woodcutting_area_stops_when_axe_breaks` | A second swing, with the cap raised and the axe worn down to one and a half hits, added exactly one extra hit while at least two targets qualified, and left the axe with no durability. The axe's durability is put back afterwards |
-| `woodcutting_area_excluded_hittable` | With the tool tier put back, the second species allowed, the radius raised and the cap lifted, a third swing hit each target the first swing left out: those the cap left out, the tree above the tool tier, the second species' tree, log and stump, and the far tree when the physics engine confirms it lies within the raised radius. The fresh log took a hit of the second or third swing |
+| `woodcutting_area_excluded_hittable` | With the tool tier put back, the second species allowed, the radius raised and the cap lifted, a third swing hit each target the first swing left out: those the cap left out, the tree above the tool tier, the second species' tree, log and stump, and the stump beyond the first radius when the physics engine confirms that one of those same colliders lies within the raised radius. The fresh log took a hit of the second or third swing. SKIP when the axe the second swing wore out could not be equipped again |
 | `woodcutting_area_trigger_point` | In each axe swing that hit an allowed test object itself, area woodcutting centred its expansion on the point of the first such hit the observer saw, and no swing expanded without one |
 | `woodcutting_area_trees_logs_stumps` | Across the axe swings, extra hits landed on at least one standing tree, one log and one stump |
-| `woodcutting_area_not_from_automatic_woodcutting` | A hit of the module's own entry on a test object in front of you adds no extra hit. When the entry hits none of them, it is tried once more after the next physics step (a refused entry spends nothing); SKIP when it still hits none, with the details of each object in the log file, as in `woodcutting` |
+| `woodcutting_area_not_from_automatic_woodcutting` | A hit of the module's own entry on a test object in front of you adds no extra hit. When the entry hits none of them, it is tried once more after the next physics step (a refused entry spends nothing); SKIP when it still hits none, with the details of each object in the log file, as in `woodcutting`, and when the test axe is not in your right hand and cannot be equipped again |
 | `woodcutting_area_not_from_other_weapons` | A real swing with an added club that hits a test object adds no extra hit |
 | `woodcutting_area_skill_rule_log` | With its stump removed, the log the first swing's felling spawned stands alone in front of you. A real axe swing that hits only that log raises the same skills, by the same amounts, as a hit of the module's entry on it (SKIP, naming the reason, only when the swing hits something else as well, or the entry cannot reach the log from your eyes, also when tried once more after the next physics step; the log file then gives the details, as in `woodcutting`) |
 | `woodcutting_area_skill_rule_tree` | The same with a test tree spawned alone at that spot |
@@ -1596,7 +1605,8 @@ to false and the cap at 1, is judged by the same rules.
 | `woodcutting_area_settings_restored` | Every setting the section changed is back at your value |
 
 An attack that does not start within 1 second, or triggers no melee hit within 3
-seconds, SKIPs the swing's checks and names the reason; so does a swing that hits
+seconds, SKIPs the swing's checks and names the reason; so does a swing whose
+weapon is not in your right hand, which is not started, and a swing that hits
 none of the test objects. At the end the added axe and club are removed from your
 inventory, the items you had equipped are equipped again, and your view pitch,
 skills, stamina and settings are put back. The swings and fellings still count toward your

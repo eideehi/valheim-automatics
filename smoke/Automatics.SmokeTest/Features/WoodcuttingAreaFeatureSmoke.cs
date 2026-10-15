@@ -18,16 +18,23 @@ namespace Automatics.SmokeTest
     // swings. Non-persistent trees of an early species are spawned around the spot in front of
     // the player: the swing's target, a tree a little beyond the swing's reach, and two trees
     // that are felled at once into a log and a stump each, one of them of a second species. More
-    // trees stand for each exclusion: one above the axe's tool tier, one of the second species,
-    // and one just beyond the area radius. The section turns Automatic Mining's passes and
+    // test objects stand for each exclusion: a tree above the axe's tool tier, a tree of the
+    // second species, and a stump of the test species to the side, placed midway between the
+    // area radius and the raised one. The section turns Automatic Mining's passes and
     // enable_automatic_woodcutting off, so area woodcutting runs with the passes off, leaves only
-    // the test species in allow_woodcutting_tree, sets the area radius, and caps the extra hits
-    // below the number of targets that qualify. It then starts real attacks with
-    // Humanoid.StartAttack:
+    // the test species in allow_woodcutting_tree, sets the area radius, caps the extra hits
+    // below the number of targets that qualify, and turns area_woodcutting_same_kind_first off,
+    // so the axe swings before the same-kind checks take the nearest targets whatever their
+    // kind. It then starts real attacks with Humanoid.StartAttack, each only with the weapon in
+    // your right hand:
     //   - the first swing fells its target, whose fresh log must not be chosen, and expands up to
     //     the cap;
+    //   - the radius swing, with the cap raised far above the targets in reach, the axe at full
+    //     durability and the first swing's radius and exclusions, reaches every target that
+    //     qualifies within the radius and not the stump beyond it;
     //   - the second, with the axe worn down to one and a half hits, expands until the axe breaks;
-    //   - the third, with every exclusion lifted, reaches each target the first one left out;
+    //   - the third, with every exclusion lifted and the axe equipped again once the second
+    //     swing has ended, reaches each target the first one left out;
     //   - a club swing and a hit of the module's own entry expand nothing;
     //   - then a log, a tree and a stump stand alone in front of you in turn, and what a real
     //     swing at each raised is compared with what a hit of the module's entry on it raises;
@@ -58,6 +65,9 @@ namespace Automatics.SmokeTest
         private const float SideOffset = 1.7f;
         private const float ClearRadius = 1.2f;
         private const int Cap = 2;
+        // The cap of the radius swing: far above the targets in its reach, so only the radius can
+        // keep one out.
+        private const int RadiusCap = 32;
 
         // Standing trees of the earlier biomes for the second species, in order of preference.
         private static readonly string[] SecondTreePrefabs = { "FirTree", "Pinetree_01", "Birch1", "Birch2", "Oak1" };
@@ -193,6 +203,31 @@ namespace Automatics.SmokeTest
                 fixture.CollectFresh(first);
                 CheckFirstSwing(run, first, fixture, axe);
 
+                // The radius swing: the first swing's radius and exclusions, with the cap raised far
+                // above the targets in reach and the axe at full durability, so neither the cap nor
+                // the axe can stop the expansion before the radius does.
+                steps = EquipAgain(player, axe);
+                while (steps.MoveNext()) yield return steps.Current;
+                var radiusSwing = new SwingResult { Name = "radius" };
+                if (player.RightItem != axe)
+                {
+                    run.Skip("woodcutting_area_outside_radius_untouched",
+                        "the test axe was not in your right hand after the first swing and could not be equipped again");
+                }
+                else if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingMaxTargetsEntry, RadiusCap))
+                {
+                    run.Skip("woodcutting_area_outside_radius_untouched",
+                        $"area_woodcutting_max_targets could not be raised to {RadiusCap} for the check");
+                }
+                else
+                {
+                    axe.m_durability = axe.GetMaxDurability();
+                    steps = Swing(player, axe, fixture.Facing, ViewPitch, state, radiusSwing, spawned);
+                    while (steps.MoveNext()) yield return steps.Current;
+                    swings.Add(radiusSwing);
+                    CheckOutsideRadius(run, radiusSwing, fixture);
+                }
+
                 // The second swing: the axe wears out during the expansion.
                 steps = WaitForAttackEnd(player);
                 while (steps.MoveNext()) yield return steps.Current;
@@ -211,15 +246,20 @@ namespace Automatics.SmokeTest
                     while (steps.MoveNext()) yield return steps.Current;
                     swings.Add(second);
                     axe.m_durability = axe.GetMaxDurability();
-                    if (!player.IsItemEquiped(axe)) player.EquipItem(axe, false);
                     CheckAxeBreaks(run, second, fixture, drain);
                 }
 
-                // The third swing: every exclusion of the first lifted.
-                steps = WaitForAttackEnd(player);
+                // The third swing: every exclusion of the first lifted, with the axe the second
+                // swing wore out in your right hand again.
+                steps = EquipAgain(player, axe);
                 while (steps.MoveNext()) yield return steps.Current;
                 var third = new SwingResult { Name = "third" };
-                if (!fixture.LiftExclusions(run, held, out var liftSkip))
+                if (player.RightItem != axe)
+                {
+                    run.Skip("woodcutting_area_excluded_hittable",
+                        "the test axe was not in your right hand after the second swing and could not be equipped again");
+                }
+                else if (!fixture.LiftExclusions(run, held, out var liftSkip))
                 {
                     run.Skip("woodcutting_area_excluded_hittable", liftSkip);
                 }
@@ -234,7 +274,9 @@ namespace Automatics.SmokeTest
                 CheckKindsExpanded(run, swings);
                 CheckTriggerPoints(run, swings);
 
-                steps = CheckNotFromEntry(run, player, fixture);
+                steps = EquipAgain(player, axe);
+                while (steps.MoveNext()) yield return steps.Current;
+                steps = CheckNotFromEntry(run, player, axe, fixture);
                 while (steps.MoveNext()) yield return steps.Current;
 
                 steps = WaitForAttackEnd(player);
@@ -307,8 +349,10 @@ namespace Automatics.SmokeTest
         // Automatic Mining's passes off, as in the woodcutting section; enable_automatic_woodcutting
         // off, so no pass hits the test objects with the test axe
         // and the swings show area woodcutting working with the passes off; the area radius and
-        // the cap of the first swing; and allow_woodcutting_tree with the test species alone, so
-        // no other species keeps the second species' log or stump allowed.
+        // the cap of the first swing; area_woodcutting_same_kind_first off, so the axe swings
+        // before the same-kind checks take the nearest targets whatever their kind, as their
+        // checks expect; and allow_woodcutting_tree with the test species alone, so no other
+        // species keeps the second species' log or stump allowed.
         private static bool PrepareSettings(FeatureRun run,
             Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held, Fixture fixture, out string refusal)
         {
@@ -323,6 +367,9 @@ namespace Automatics.SmokeTest
                 refusal = $"area_woodcutting_radius could not be set to {fixture.Radius:0.#} for the run";
             else if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingMaxTargetsEntry, Cap))
                 refusal = $"area_woodcutting_max_targets could not be set to {Cap} for the run";
+            else if (!Write(run, held, WoodcuttingConfig.AreaWoodcuttingSameKindFirstEntry, false) ||
+                WoodcuttingConfig.AreaWoodcuttingSameKindFirst)
+                refusal = "area_woodcutting_same_kind_first could not be turned off for the run, and the swings would take the targets of the same kind as the one they hit first";
             else if (!Write(run, held, WoodcuttingConfig.AllowWoodcuttingTreeEntry, allowed))
                 refusal = "allow_woodcutting_tree could not be written for the run";
             return refusal == null;
@@ -365,6 +412,13 @@ namespace Automatics.SmokeTest
             var deadline = Time.time + StartTimeout;
             while (true)
             {
+                // With nothing in the right hand, the attack would be an unarmed one.
+                if (player.RightItem != weapon)
+                {
+                    result.Problem =
+                        $"the {weapon.m_shared.m_name} was not in your right hand, so no attack was started";
+                    yield break;
+                }
                 player.SetLookDir(facing);
                 state.LookDown(pitch);
                 if (player.StartAttack(null, false))
@@ -403,6 +457,19 @@ namespace Automatics.SmokeTest
                 yield return null;
         }
 
+        // The game unequips an item at its next physics step once its durability is not above 0,
+        // and equips nothing during an attack, so an axe a swing wore out is equipped again only
+        // after the attack has ended. The caller checks that it is in the right hand.
+        private static IEnumerator EquipAgain(Player player, ItemDrop.ItemData item)
+        {
+            var steps = WaitForAttackEnd(player);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!player || player.RightItem == item) yield break;
+
+            player.EquipItem(item, false);
+            yield return null;
+        }
+
         // -- Checks ---------------------------------------------------------------------------
 
         private static void CheckFirstSwing(FeatureRun run, SwingResult swing, Fixture fixture, ItemDrop.ItemData axe)
@@ -413,7 +480,7 @@ namespace Automatics.SmokeTest
                 "woodcutting_area_durability_per_target", "woodcutting_area_skill_once",
                 "woodcutting_area_stamina_once", "woodcutting_area_with_passes_off",
                 "woodcutting_area_fresh_log_skipped", "woodcutting_area_tool_tier_skipped",
-                "woodcutting_area_species_skipped", "woodcutting_area_outside_radius_untouched"
+                "woodcutting_area_species_skipped"
             };
             var direct = swing.Records.Where(x => !x.Extra).ToList();
             if (!swing.Completed || direct.Count == 0)
@@ -506,22 +573,88 @@ namespace Automatics.SmokeTest
                 "the tree above the axe's tool tier");
             CheckUntouched(run, names[9], swing, fixture.SecondSpeciesObjects,
                 "the tree, log and stump of the species taken out of allow_woodcutting_tree");
+        }
 
-            if (!centre.HasValue)
+        // With the cap far above the targets in reach and the axe at full durability, the radius
+        // swing reached every target that qualifies within the radius of its first direct hit on
+        // an allowed test object, apart from what it hit itself, landed no extra hit beyond the
+        // radius, and left the stump beyond it alone. Its own hit lands on the log or stump the
+        // first swing's felling left at the spot in front of you, which is not among the targets
+        // that qualify, as in the second swing.
+        private static void CheckOutsideRadius(FeatureRun run, SwingResult swing, Fixture fixture)
+        {
+            const string name = "woodcutting_area_outside_radius_untouched";
+            var direct = swing.Records.Where(x => !x.Extra).ToList();
+            if (!swing.Completed || direct.Count == 0)
             {
-                run.Skip(names[10], noCentre);
+                run.Skip(name,
+                    swing.Completed ? "the swing hit none of the test objects; face open level ground and retry" : swing.Problem);
+                return;
+            }
+            if (!swing.ObservedTrigger.HasValue)
+            {
+                run.Skip(name, "no direct hit on an allowed test object was seen, so there is no point to measure from");
+                return;
+            }
+            if (!fixture.FarStump)
+            {
+                run.Skip(name, "the stump beyond the radius could not be prepared");
+                return;
+            }
+            if (swing.Expanded >= RadiusCap)
+            {
+                run.Skip(name,
+                    $"the swing added {swing.Expanded} extra hits, as many as the cap of {RadiusCap}, so the cap rather than the radius may have stopped it");
                 return;
             }
 
-            // Any collider of the tree counts here, so a doubtful placement skips rather than passes.
-            var colliders = new HashSet<Collider>(fixture.FarTree.GetComponentsInChildren<Collider>());
-            var reached = Physics.OverlapSphere(centre.Value, fixture.Radius, ~0, QueryTriggerInteraction.Collide)
-                .Any(colliders.Contains);
-            if (reached)
-                run.Skip(names[10], $"the tree placed beyond the radius lies within {fixture.Radius:0.##} m of the hit; retry facing another way");
+            // The colliders area woodcutting measures count here. The physics engine's overlap
+            // reports one whose nearest point lies within the radius, and the point area
+            // woodcutting measures is never nearer than that, so a doubtful placement skips
+            // rather than passes.
+            var centre = swing.ObservedTrigger.Value;
+            var colliders = new HashSet<Collider>(HittableColliders(fixture.FarStump));
+            if (Physics.OverlapSphere(centre, fixture.Radius, WoodcuttingComponent.SightMask,
+                    QueryTriggerInteraction.Ignore).Any(colliders.Contains))
+            {
+                run.Skip(name, $"the stump placed beyond the radius lies within {fixture.Radius:0.##} m of the hit; retry facing another way");
+                return;
+            }
+
+            // The targets that qualify and that the swing did not hit itself, within the radius
+            // as area woodcutting measures it. One within a hundredth of a metre of the radius is
+            // left out, as either answer is right for it.
+            var directObjects = new HashSet<GameObject>(direct.Where(x => x.Target).Select(x => x.Target.gameObject));
+            var inReach = fixture.Positives.Where(x =>
+                x && !directObjects.Contains(x) && SurfaceDistance(x, centre) <= fixture.Radius - 0.01f).ToList();
+            if (inReach.Count == 0)
+            {
+                run.Skip(name,
+                    $"no target that qualifies, apart from what the swing hit itself, lies within {fixture.Radius:0.##} m of the hit, so nothing shows the expansion running");
+                return;
+            }
+
+            var extras = swing.Records.Where(x => x.Extra).ToList();
+            var extraObjects = new HashSet<GameObject>(extras.Where(x => x.Target).Select(x => x.Target.gameObject));
+            var missed = inReach.Count(x => !extraObjects.Contains(x));
+            var beyond = extras.Count(x => Vector3.Distance(x.Point, centre) > fixture.Radius + 0.01f);
+            var stumpHits = swing.Records.Count(x => x.Target && x.Target.gameObject == fixture.FarStump);
+            var stumpDamaged = !(WoodcuttingFeatureSmoke.ReadHealth(TargetOf(fixture.FarStump)) >=
+                                 WoodcuttingFeatureSmoke.SeededHealth);
+            if (missed == 0 && beyond == 0 && stumpHits == 0 && !stumpDamaged)
+                run.Pass(name,
+                    $"with room for {RadiusCap - swing.Expanded} more extra hit(s), the swing reached all {inReach.Count} qualifying target(s) within {fixture.Radius:0.##} m of the hit and nothing beyond it; the stump beyond the radius, as the physics engine's own sphere overlap confirms, took no hit and kept its health");
             else
-                CheckUntouched(run, names[10], swing, new[] { fixture.FarTree },
-                    $"the tree beyond {fixture.Radius:0.##} m of the hit, as the physics engine's own sphere overlap confirms");
+                run.Fail(name,
+                    $"{swing.Expanded} extra hit(s) with the cap at {RadiusCap}: {missed} of {inReach.Count} qualifying target(s) within {fixture.Radius:0.##} m not reached, {beyond} extra hit(s) beyond it; the stump beyond the radius took {stumpHits} hit(s){(stumpDamaged ? " and lost health" : "")}");
+        }
+
+        // The enabled, solid colliders under the object on the layers a swing hits, the ones area
+        // woodcutting measures its reach on.
+        private static IEnumerable<Collider> HittableColliders(GameObject go)
+        {
+            return go.GetComponentsInChildren<Collider>().Where(x =>
+                x.enabled && !x.isTrigger && (WoodcuttingComponent.SightMask & (1 << x.gameObject.layer)) != 0);
         }
 
         // The given test objects took no hit in the swing and kept their health.
@@ -583,20 +716,19 @@ namespace Automatics.SmokeTest
                 return;
             }
 
-            // Only the colliders area woodcutting measures count here, so the far tree is expected
-            // only when one of them lies inside the raised radius.
-            var colliders = new HashSet<Collider>(fixture.FarTree.GetComponentsInChildren<Collider>()
-                .Where(x => x.enabled && !x.isTrigger));
+            // Only the colliders area woodcutting measures count here, so the stump beyond the
+            // first radius is expected only when one of them lies inside the raised radius.
+            var colliders = new HashSet<Collider>(HittableColliders(fixture.FarStump));
             var farInside = third.ObservedTrigger.HasValue &&
-                            Physics.OverlapSphere(third.ObservedTrigger.Value, fixture.LiftedRadius, ~0,
-                                    QueryTriggerInteraction.Ignore)
+                            Physics.OverlapSphere(third.ObservedTrigger.Value, fixture.LiftedRadius,
+                                    WoodcuttingComponent.SightMask, QueryTriggerInteraction.Ignore)
                                 .Any(colliders.Contains);
 
             var expected = new List<(string What, GameObject Target)>();
             foreach (var go in fixture.CapExcluded) expected.Add(("a target the cap left out", go));
             expected.Add(("the tree above the axe's tool tier", fixture.TierTree));
             foreach (var go in fixture.SecondSpeciesObjects) expected.Add(("an object of the second species", go));
-            if (farInside) expected.Add(("the tree beyond the first radius", fixture.FarTree));
+            if (farInside) expected.Add(("the stump beyond the first radius", fixture.FarStump));
 
             var hit = new HashSet<GameObject>(third.Records.Where(x => x.Target).Select(x => x.Target.gameObject));
             var missed = expected.Where(x => !x.Target || !hit.Contains(x.Target)).Select(x => x.What).ToList();
@@ -606,7 +738,7 @@ namespace Automatics.SmokeTest
 
             if (missed.Count == 0)
                 run.Pass(name,
-                    $"once lifted, {expected.Count} excluded target(s) took a hit of the third swing{(farInside ? "" : " (the far tree stayed outside the raised radius and is not counted)")}{(fixture.FreshLog ? ", and the fresh log took one of a later swing" : "")}");
+                    $"once lifted, {expected.Count} excluded target(s) took a hit of the third swing{(farInside ? "" : " (the stump beyond the first radius stayed outside the raised radius and is not counted)")}{(fixture.FreshLog ? ", and the fresh log took one of a later swing" : "")}");
             else
                 run.Fail(name, $"not hit once its exclusion was lifted: {string.Join(", ", missed.ToArray())}");
         }
@@ -663,9 +795,16 @@ namespace Automatics.SmokeTest
         }
 
         // A hit of the module's own entry on a test object in front of you expands nothing.
-        private static IEnumerator CheckNotFromEntry(FeatureRun run, Player player, Fixture fixture)
+        private static IEnumerator CheckNotFromEntry(FeatureRun run, Player player, ItemDrop.ItemData axe,
+            Fixture fixture)
         {
             const string name = "woodcutting_area_not_from_automatic_woodcutting";
+            if (player.RightItem != axe)
+            {
+                run.Skip(name, "the test axe was not in your right hand and could not be equipped again");
+                yield break;
+            }
+
             SwingObserver.Reset();
             var expanded = WoodcuttingArea.ExpandedHitCount;
             var chopped = ChopInFront(player, fixture);
@@ -1152,16 +1291,19 @@ namespace Automatics.SmokeTest
         }
 
         // The distance from centre to the nearest surface point of the object's enabled, solid
-        // colliders, found the way area woodcutting finds it: Unity's closest point on a box,
-        // sphere, capsule or convex mesh collider, otherwise where a ray from centre toward the
-        // collider's bounds centre enters it. Infinity when no such point is found.
+        // colliders on the layers a swing hits, found the way area woodcutting finds it: Unity's
+        // closest point on a box, sphere, capsule or convex mesh collider, otherwise where a ray
+        // from centre toward the collider's bounds centre enters it. Infinity when no such point
+        // is found.
         private static float SurfaceDistance(GameObject go, Vector3 centre)
         {
             var nearest = float.PositiveInfinity;
             if (!go) return nearest;
             foreach (var collider in go.GetComponentsInChildren<Collider>(false))
             {
-                if (!collider.enabled || collider.isTrigger) continue;
+                if (!collider.enabled || collider.isTrigger ||
+                    (WoodcuttingComponent.SightMask & (1 << collider.gameObject.layer)) == 0)
+                    continue;
 
                 Vector3 point;
                 if (collider is BoxCollider || collider is SphereCollider || collider is CapsuleCollider ||
@@ -1262,7 +1404,7 @@ namespace Automatics.SmokeTest
             public GameObject TierTree;
             public GameObject SecondFelled;
             public GameObject SecondTree;
-            public GameObject FarTree;
+            public GameObject FarStump;
             public GameObject FreshLog;
             public GameObject FreshStump;
 
@@ -1271,10 +1413,16 @@ namespace Automatics.SmokeTest
             public readonly List<GameObject> CapExcluded = new List<GameObject>();
 
             private string _secondPrefab;
+            private string _stumpPrefab;
             private Vector3 _origin;
             private Vector3 _right;
             private float _ring;
             private int _treeTier;
+
+            // Where the first swing is expected to hit: the middle of its target's trunk at eye
+            // height. The trunk's own thickness lies across the line to the stump beyond the
+            // radius, so it changes the distance to that stump by about a centimetre.
+            private Vector3 _expectedHit;
 
             // Picks the species, the axe and the spots, all from what the loaded world has.
             public static Fixture Plan(Player player, out string skip)
@@ -1317,6 +1465,7 @@ namespace Automatics.SmokeTest
                     skip = $"the {WoodcuttingFeatureSmoke.TreePrefab} prefab has no log or no stump";
                     return null;
                 }
+                fixture._stumpPrefab = tree.m_stubPrefab.name;
 
                 var secondTier = ZNetScene.instance.GetPrefab(fixture._secondPrefab).GetComponent<TreeBase>().m_minToolTier;
                 fixture._treeTier = tree.m_minToolTier;
@@ -1334,6 +1483,8 @@ namespace Automatics.SmokeTest
                 fixture.Radius = Mathf.Min(fixture._ring + 1.5f, 7f);
                 fixture.LiftedRadius = Mathf.Min(fixture.Radius + 3f, 10f);
                 fixture.TriggerSpot = fixture._origin + facing * TriggerDistance;
+                fixture._expectedHit = new Vector3(fixture.TriggerSpot.x, player.m_eye.position.y,
+                    fixture.TriggerSpot.z);
                 return fixture;
             }
 
@@ -1348,10 +1499,10 @@ namespace Automatics.SmokeTest
                 yield return (WoodcuttingFeatureSmoke.TreePrefab, o + f * (_ring - 0.3f) - r * SideOffset);
                 yield return (_secondPrefab, o + f * (_ring + 1.3f) + r * (SideOffset - 0.3f));
                 yield return (_secondPrefab, o + f * (_ring + 1.3f) - r * (SideOffset - 0.3f));
-                // Sideways, a little beyond the radius from the swing's target, and within the
-                // raised radius of the third swing.
-                yield return (WoodcuttingFeatureSmoke.TreePrefab,
-                    o + f * TriggerDistance - r * Mathf.Min(Radius + 1.8f, LiftedRadius - 0.8f));
+                // The stump sideways from the swing's target, midway between the radius and the
+                // raised radius of the third swing; Spawn then moves it so that its nearest point,
+                // not its middle, lies there.
+                yield return (_stumpPrefab, o + f * TriggerDistance - r * ((Radius + LiftedRadius) * 0.5f));
             }
 
             public string FindBlocker(Player player)
@@ -1398,9 +1549,12 @@ namespace Automatics.SmokeTest
                     objects.Add(go);
 
                     var tree = go.GetComponent<TreeBase>();
-                    tree.m_spawnOnDamage = null;
-                    tree.m_dropWhenDestroyed = new DropTable();
-                    if (!WoodcuttingFeatureSmoke.SeedHealth(tree))
+                    if (tree)
+                    {
+                        tree.m_spawnOnDamage = null;
+                        tree.m_dropWhenDestroyed = new DropTable();
+                    }
+                    if (!WoodcuttingFeatureSmoke.SeedHealth(TargetOf(go)))
                     {
                         skip = $"the spawned {prefab} has no health to seed";
                         return false;
@@ -1413,8 +1567,32 @@ namespace Automatics.SmokeTest
                 TierTree = objects[3];
                 SecondFelled = objects[4];
                 SecondTree = objects[5];
-                FarTree = objects[6];
+                FarStump = objects[6];
                 TierTree.GetComponent<TreeBase>().m_minToolTier = AxeTier + 1;
+                Physics.SyncTransforms();
+                return PlaceFarStump(out skip);
+            }
+
+            // Moves the stump beyond the radius sideways, so that the nearest point of its
+            // colliders a swing can hit, measured as area woodcutting measures it, lies midway
+            // between the radius and the raised radius from where the first swing is expected to
+            // hit. The raised radius is 3 m beyond the radius, so each is then 1.5 m away, which
+            // leaves room for a swing that lands elsewhere on the trunk. The stump lies out to the
+            // side of that point, a little below it, so the distance changes by nearly the
+            // distance moved, and one move lands within a few centimetres.
+            private bool PlaceFarStump(out string skip)
+            {
+                skip = null;
+                var distance = SurfaceDistance(FarStump, _expectedHit);
+                if (float.IsInfinity(distance))
+                {
+                    skip = $"the spawned {_stumpPrefab} has no collider a swing could hit";
+                    return false;
+                }
+
+                var position = FarStump.transform.position - _right * ((Radius + LiftedRadius) * 0.5f - distance);
+                position.y = ZoneSystem.instance.GetGroundHeight(position);
+                FarStump.transform.position = position;
                 Physics.SyncTransforms();
                 return true;
             }
@@ -1473,7 +1651,7 @@ namespace Automatics.SmokeTest
             {
                 skip = null;
                 var expected = Positives.Concat(SecondSpeciesObjects)
-                    .Concat(new[] { Trigger, TierTree, FarTree }).ToList();
+                    .Concat(new[] { Trigger, TierTree, FarStump }).ToList();
                 var missing = expected.Count(x =>
                 {
                     var component = x ? x.GetComponent<WoodcuttingComponent>() : null;
