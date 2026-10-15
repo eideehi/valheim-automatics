@@ -21,6 +21,9 @@ namespace Automatics.SmokeTest
     // test objects stand for each exclusion: a tree above the axe's tool tier, a tree of the
     // second species, and a stump of the test species to the side, placed midway between the
     // area radius and the raised one. The section turns Automatic Mining's passes and
+    // Automatic Repair off (it puts a worn item back to full durability once a second, which would
+    // undo the worn-down axe of the second swing, or its wear, between frames; the failures that read
+    // durability also give the axe's durability as the swing's melee call began) and
     // enable_automatic_woodcutting off, so area woodcutting runs with the passes off, leaves only
     // the test species in allow_woodcutting_tree, sets the area radius, caps the extra hits
     // below the number of targets that qualify, and turns area_woodcutting_same_kind_first off,
@@ -346,7 +349,8 @@ namespace Automatics.SmokeTest
             }
         }
 
-        // Automatic Mining's passes off, as in the woodcutting section; enable_automatic_woodcutting
+        // Automatic Mining's passes off, as in the woodcutting section; Automatic Repair off, so its
+        // repair tick cannot restore the axe's durability between frames; enable_automatic_woodcutting
         // off, so no pass hits the test objects with the test axe
         // and the swings show area woodcutting working with the passes off; the area radius and
         // the cap of the first swing; area_woodcutting_same_kind_first off, so the axe swings
@@ -360,6 +364,8 @@ namespace Automatics.SmokeTest
             var allowed = new StringList(new[] { fixture.Species });
             if (!WoodcuttingFeatureSmoke.PauseAutomaticMining(run, held))
                 refusal = "enable_automatic_mining could not be turned off for the run, and Automatic Mining could wear a pickaxe of yours while the section runs";
+            else if (!WoodcuttingFeatureSmoke.PauseAutomaticRepair(run, held))
+                refusal = "Automatic Repair could not be turned off for the run, and its repair tick would restore the axe's durability between frames";
             else if (!Write(run, held, WoodcuttingConfig.EnableAutomaticWoodcuttingEntry, false) ||
                 WoodcuttingConfig.EnableAutomaticWoodcutting)
                 refusal = "enable_automatic_woodcutting could not be turned off for the run, and a pass would hit the test trees";
@@ -542,7 +548,7 @@ namespace Automatics.SmokeTest
             if (Mathf.Abs(delta - expected) <= 0.001f)
                 run.Pass(names[3], $"durability -{delta:0.###} = {drain:0.###} x (1 + {swing.Expanded})");
             else
-                run.Fail(names[3], $"durability -{delta:0.###}, expected {drain:0.###} x (1 + {swing.Expanded}) = {expected:0.###}");
+                run.Fail(names[3], $"durability -{delta:0.###}, expected {drain:0.###} x (1 + {swing.Expanded}) = {expected:0.###} ({AtHit(swing)})");
 
             var bySkill = swing.Raises.GroupBy(x => x.Skill).ToList();
             if (bySkill.Count == 0)
@@ -700,7 +706,17 @@ namespace Automatics.SmokeTest
                     $"with durability for one and a half hits, the swing expanded once of {open} qualifying targets and left the axe at {swing.DurabilityAfter:0.###}");
             else
                 run.Fail(name,
-                    $"durability {swing.DurabilityBefore:0.###} ({drain:0.###} a hit): {swing.Expanded} extra hit(s) of {open} qualifying, durability after {swing.DurabilityAfter:0.###}");
+                    $"durability {swing.DurabilityBefore:0.###} ({drain:0.###} a hit): {swing.Expanded} extra hit(s) of {open} qualifying, durability after {swing.DurabilityAfter:0.###} ({AtHit(swing)})");
+        }
+
+        // The weapon's durability as the swing's melee call began, for the failures that read
+        // durability: it tells a swing that started from another value than the check set (a
+        // write undone between frames) from one whose wear was counted wrongly.
+        private static string AtHit(SwingResult swing)
+        {
+            return swing.DurabilityAtHit.HasValue
+                ? $"durability at the hit {swing.DurabilityAtHit.Value:0.###}"
+                : "no melee call of yours was seen";
         }
 
         // Each target the first swing left out, through the cap, its tool tier, its species or the
@@ -1742,6 +1758,9 @@ namespace Automatics.SmokeTest
             public string Problem = "the swing did not run";
             public float DurabilityBefore;
             public float DurabilityAfter;
+            // The weapon's durability as the swing's melee call began, before its hit; null when
+            // no melee call of yours was seen.
+            public float? DurabilityAtHit;
             public int ExpandedBefore;
             public int Expanded;
             public int SpawnedBefore;
@@ -1758,6 +1777,7 @@ namespace Automatics.SmokeTest
             {
                 Completed = true;
                 DurabilityAfter = weapon.m_durability;
+                DurabilityAtHit = SwingObserver.DurabilityAtHit;
                 Expanded = WoodcuttingArea.ExpandedHitCount - ExpandedBefore;
                 StaminaUses = SwingObserver.StaminaUses;
                 BlockedExtras = SwingObserver.BlockedExtras;
@@ -1802,6 +1822,8 @@ namespace Automatics.SmokeTest
             public static readonly List<(Skills.SkillType Skill, float Value)> Raises =
                 new List<(Skills.SkillType, float)>();
             public static int MeleeCalls { get; private set; }
+            // The attacking weapon's durability as the swing's first melee call began.
+            public static float? DurabilityAtHit { get; private set; }
             public static int StaminaUses { get; private set; }
             public static int BlockedExtras { get; private set; }
             public static int BlockedHits { get; private set; }
@@ -1951,6 +1973,7 @@ namespace Automatics.SmokeTest
                 Records.Clear();
                 Raises.Clear();
                 MeleeCalls = 0;
+                DurabilityAtHit = null;
                 StaminaUses = 0;
                 BlockedExtras = 0;
                 BlockedDirect = 0;
@@ -1977,9 +2000,11 @@ namespace Automatics.SmokeTest
                 return false;
             }
 
-            private static void MeleePrefix(Humanoid ___m_character)
+            private static void MeleePrefix(Humanoid ___m_character, ItemDrop.ItemData ___m_weapon)
             {
                 _inMelee = _player && ___m_character == _player;
+                if (_inMelee && ___m_weapon != null && !DurabilityAtHit.HasValue)
+                    DurabilityAtHit = ___m_weapon.m_durability;
             }
 
             private static void MeleePostfix(Humanoid ___m_character)

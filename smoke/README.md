@@ -1059,11 +1059,15 @@ swing that misses digs nothing.
 | `mining_area_not_from_automatic_mining` | A hit through Automatic Mining's own hit path on a test deposit adds no extra hit |
 | `mining_area_not_from_other_weapons` | A real swing with an added club that hits a test deposit adds no extra hit |
 | `mining_world_guarded` | The section ran to its end under the guard; the note counts the hits on other objects and the terrain operations it dropped |
-| `mining_settings_restored` | Reported only when the section turned `enable_automatic_mining` off: it is back at your value |
+| `mining_settings_restored` | Reported only when the section turned `enable_automatic_mining` or Automatic Repair's `module` setting off: each is back at your value |
 
 When Automatic Mining would mine on its timer, `enable_automatic_mining` is
 turned off for the section, so it cannot mine the test deposits with the test
-pickaxe, and put back at its end. An attack that does not start within 1 second,
+pickaxe, and put back at its end. When Automatic Repair is running, its `module`
+setting is turned off for the section too, and put back at its end: it puts every
+worn item back to full durability once a second, which would undo the pickaxe's
+wear between the frames a swing spans. The section SKIPs and names the setting
+when either cannot be turned off. An attack that does not start within 1 second,
 or triggers no melee hit within 3 seconds, SKIPs the swing's checks and names
 the reason; so does a swing that hits none of the test deposits. At the end
 the added pickaxe and club are removed from your inventory, the items you had
@@ -1533,7 +1537,11 @@ drop:
   middle of its target's trunk at eye height.
 
 It turns Automatic Mining's passes off when they run on an interval, as in
-`woodcutting`, and `enable_automatic_woodcutting` off for the section, so no pass
+`woodcutting`, and Automatic Repair's `module` setting off while that module is
+running, because it puts every worn item back to full durability once a second and
+would undo the worn-down axe of the second swing, or its wear, between frames (the
+section SKIPs and names the setting when it cannot be turned off).
+It turns `enable_automatic_woodcutting` off for the section, so no pass
 hits the test trees and the swings show area woodcutting working with the passes
 off, sets `area_woodcutting_radius` to fit the trees,
 `area_woodcutting_max_targets` to 2, below the three targets that qualify,
@@ -1585,7 +1593,7 @@ to false and the cap at 1, is judged by the same rules.
 | `woodcutting_area_expands` | The first swing hit a test object, and area woodcutting added at least one extra hit, each seen as a damage call on a test object |
 | `woodcutting_area_cap_and_radius` | That swing added exactly `area_woodcutting_max_targets` extra hits while more targets qualified, each within `area_woodcutting_radius` of the swing's first direct hit on an allowed target as the observer saw it, none on an object the swing or an earlier extra hit already hit, and all on the targets that qualify (SKIP when the swing itself hit so many of them that the cap could not be reached, or no direct hit on an allowed test object was seen) |
 | `woodcutting_area_damage_applied` | Every extra target lost health |
-| `woodcutting_area_durability_per_target` | The axe lost the vanilla per-hit drain, scaled by the world durability rate, once for the swing and once per extra target |
+| `woodcutting_area_durability_per_target` | The axe lost the vanilla per-hit drain, scaled by the world durability rate, once for the swing and once per extra target. A FAIL also gives the axe's durability as the swing's melee call began |
 | `woodcutting_area_skill_once` | No skill was raised more than once for the swing (SKIP when none was raised) |
 | `woodcutting_area_stamina_once` | Stamina was used exactly once for the swing |
 | `woodcutting_area_with_passes_off` | `enable_automatic_woodcutting` was off and the swing still expanded |
@@ -1593,7 +1601,7 @@ to false and the cap at 1, is judged by the same rules.
 | `woodcutting_area_tool_tier_skipped` | The tree above the axe's tool tier took no hit |
 | `woodcutting_area_species_skipped` | The tree, log and stump of the species left out of `allow_woodcutting_tree` took no hit |
 | `woodcutting_area_outside_radius_untouched` | A radius swing right after the first, with the first swing's radius and exclusions, `area_woodcutting_max_targets` raised to 32 and the axe at full durability, added fewer extra hits than the cap, so the cap could not have stopped it. Measured from its first direct hit on an allowed test object, usually the log or stump the first swing's felling left in front of you, it reached every target that qualifies within the radius as area woodcutting measures it (one within 0.01 m of the radius is not counted), apart from what it hit itself; no extra hit landed beyond the radius; and the stump that the physics engine's own sphere overlap confirms lies beyond the radius took no hit and kept its health. Only the stump's enabled, solid colliders on the layers a swing hits count, the ones area woodcutting measures its reach on. SKIP when one of them came within the radius, when the swing reached the cap, when no target that qualifies lay within the radius, or when the axe could not be equipped or the cap raised |
-| `woodcutting_area_stops_when_axe_breaks` | A second swing, with the cap raised and the axe worn down to one and a half hits, added exactly one extra hit while at least two targets qualified, and left the axe with no durability. The axe's durability is put back afterwards |
+| `woodcutting_area_stops_when_axe_breaks` | A second swing, with the cap raised and the axe worn down to one and a half hits, added exactly one extra hit while at least two targets qualified, and left the axe with no durability. A FAIL also gives the axe's durability as the swing's melee call began, which shows whether the swing started from the worn-down value the check wrote. The axe's durability is put back afterwards |
 | `woodcutting_area_excluded_hittable` | With the tool tier put back, the second species allowed, the radius raised and the cap lifted, a third swing hit each target the first swing left out: those the cap left out, the tree above the tool tier, the second species' tree, log and stump, and the stump beyond the first radius when the physics engine confirms that one of those same colliders lies within the raised radius. The fresh log took a hit of the second or third swing. SKIP when the axe the second swing wore out could not be equipped again |
 | `woodcutting_area_trigger_point` | In each axe swing that hit an allowed test object itself, area woodcutting centred its expansion on the point of the first such hit the observer saw, and no swing expanded without one |
 | `woodcutting_area_trees_logs_stumps` | Across the axe swings, extra hits landed on at least one standing tree, one log and one stump |

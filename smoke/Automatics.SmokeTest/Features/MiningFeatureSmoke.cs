@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using BepInEx.Configuration;
 using HarmonyLib;
 using ModUtils;
 using UnityEngine;
@@ -18,7 +19,9 @@ namespace Automatics.SmokeTest
     // afterwards, records the melee call, every rock damage call and every Pickaxes skill raise,
     // and drops any player hit on another object and any terrain operation a player hit spawns.
     // The section refuses to start with a building piece or another destructible within reach.
-    // The deposits get a health far above any hit, so no section breaks and nothing drops. Afterwards the added items are removed, the
+    // The deposits get a health far above any hit, so no section breaks and nothing drops. Automatic
+    // Repair is turned off for the section, because it puts a worn item back to full durability once
+    // a second and would hide the pickaxe's wear between the frames a swing spans. Afterwards the added items are removed, the
     // previously equipped items are equipped again, and the view pitch and the Pickaxes skill are
     // put back.
     internal static class MiningFeatureSmoke
@@ -119,7 +122,7 @@ namespace Automatics.SmokeTest
             SmokeSession.TrackHandBack(handBack);
             try
             {
-                if (!TryPauseAutomaticMining(run))
+                if (!TryPauseAutomaticMining(run) || !TryPauseAutomaticRepair(run))
                     yield break;
 
                 var right = Vector3.Cross(Vector3.up, facing);
@@ -252,6 +255,19 @@ namespace Automatics.SmokeTest
 
             run.Skip("mining_section",
                 "enable_automatic_mining could not be turned off for the run, and its timer would mine the test rocks");
+            return false;
+        }
+
+        // Automatic Repair would put the test pickaxe back to full durability between the frames a
+        // swing spans, and so hide its wear. The module is turned off for the section, through the
+        // session, and put back at its end.
+        private static bool TryPauseAutomaticRepair(FeatureRun run)
+        {
+            var held = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
+            if (WoodcuttingFeatureSmoke.PauseAutomaticRepair(run, held)) return true;
+
+            run.Skip("mining_section",
+                "Automatic Repair could not be turned off for the run, and its repair tick would restore the pickaxe's durability between frames");
             return false;
         }
 

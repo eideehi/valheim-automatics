@@ -9,6 +9,8 @@ using HarmonyLib;
 using ModUtils;
 using UnityEngine;
 using MiningConfig = Automatics.AutomaticMining.Config;
+using RepairConfig = Automatics.AutomaticRepair.Config;
+using RepairModule = Automatics.AutomaticRepair.Module;
 using WoodcuttingComponent = Automatics.AutomaticWoodcutting.AutomaticWoodcutting;
 using WoodcuttingConfig = Automatics.AutomaticWoodcutting.Config;
 using WoodcuttingModule = Automatics.AutomaticWoodcutting.Module;
@@ -689,6 +691,20 @@ namespace Automatics.SmokeTest
             if (!MiningConfig.EnableAutomaticMining || MiningConfig.MiningInterval <= 0f) return true;
             return Write(run, held, MiningConfig.EnableAutomaticMiningEntry, false) &&
                    !MiningConfig.EnableAutomaticMining;
+        }
+
+        // Automatic Repair puts every worn item back to full durability once a second, so it would
+        // undo a durability a check writes, or hide the wear of a swing, between two frames. Its
+        // module setting is turned off for the section through the session, which puts it back with
+        // the other settings. The setting's change raises the module's stop request at once, which
+        // makes Running false before the next repair entry, so no wait is needed. Returns false
+        // when the module runs and could not be stopped.
+        internal static bool PauseAutomaticRepair(FeatureRun run,
+            Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held)
+        {
+            if (!RepairModule.Running) return true;
+            return Write(run, held, RepairConfig.ModuleEntry, AutomaticsModule.Disabled) &&
+                   !RepairModule.Running;
         }
 
         // -- Checks ---------------------------------------------------------------------------
