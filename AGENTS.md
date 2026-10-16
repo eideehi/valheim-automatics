@@ -89,10 +89,18 @@ dotnet msbuild Automatics.sln /restore /t:Build /p:Configuration=Release "/p:Pla
 - Release output with `SEVENZIP_PATH`: package archives under `Automatics/bin/Release`
 - Installed mod path: `<Valheim>/BepInEx/plugins/Automatics`
 
-## Debug build auto-deploy
-Debug builds through `scripts/build.sh` or direct MSBuild trigger `DeployModFiles` when `VALHEIM_DIR` points to a valid BepInEx Valheim install.
+## Deploying to the game
+`scripts/deploy.sh` makes a clean build, then empties `<Valheim>/BepInEx/plugins/Automatics` and `AutomaticsSmoke` and copies the new build in, so no file from an earlier build or the other configuration stays behind. Close the game first; the script stops when Valheim is running.
 
-Release builds never deploy, so a Release build alone leaves the game running an older plugin. Before asking anyone to check a change in game (by hand or with a smoke command), close the game, run `scripts/build.sh Debug` and, when smoke checks are involved, `scripts/build.sh smoke Debug deploy`, and confirm that `<Valheim>/BepInEx/plugins/Automatics` (and `AutomaticsSmoke`) now holds that build, for example by its timestamp or by a name the change added.
+```bash
+scripts/deploy.sh                  # Debug build plus the smoke plugin
+scripts/deploy.sh Debug no-smoke   # Debug build only; removes the smoke plugin
+scripts/deploy.sh Release          # Release build; removes the smoke plugin
+```
+
+A Release deploy builds without `SEVENZIP_PATH`, so it makes no release packages; run `scripts/build.sh Release` for those.
+
+Debug builds through `scripts/build.sh` or direct MSBuild also trigger `DeployModFiles` when `VALHEIM_DIR` points to a valid BepInEx Valheim install, but that only copies over the installed files and leaves the smoke plugin as it was. Release builds through `scripts/build.sh` never deploy, so a Release build alone leaves the game running an older plugin. Before asking anyone to check a change in game (by hand or with a smoke command), close the game, run `scripts/deploy.sh` (or `scripts/deploy.sh Release` to check the release build), and confirm that `<Valheim>/BepInEx/plugins/Automatics` (and `AutomaticsSmoke`) now holds that build, for example by its timestamp or by a name the change added.
 
 ## Release repack
 Release builds use `ILRepack.Lib.MSBuild.Task` to merge `LitJSON` and `NDesk.Options` into the output assembly. If the ILRepack build targets are missing, the Release build fails.
