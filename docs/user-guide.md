@@ -209,7 +209,8 @@ Key settings:
 | `Module Toggle Message` | Controls where the toggle message appears. |
 
 Doors must be allowed by the door definition list. You can add extra door
-definitions with `User-defined Door` in the `General` section.
+definitions with `User-defined Door` in the `General` section. Doors inside a
+dungeon are never opened or closed automatically, even when the list allows them.
 
 Automatic closing closes every open allowed door once no player who could open it
 is near, including doors you opened by hand. A player within reach holds the door

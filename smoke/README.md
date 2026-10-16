@@ -167,6 +167,13 @@ are gone by then.
   Wood drops below what you had before.
 - `world_door_open_sets_zdo_state` — `AutomaticDoor.TryOpenNearby` flips the
   spawned door's ZDO `state` to non-zero.
+- `world_door_interior_left_alone` — a door in a dungeon is never closed. It
+  spawns two wood doors, one on your left beyond the reach in which a player holds
+  a door open and one 2 m to your left but 5000 m up, where the game puts dungeon
+  interiors, opens both as a hand does and runs `AutomaticDoor.TryCloseDoors`
+  once. The door at ground level must close, and the one up high must stay open.
+  Like the module's own close pass, this closes any other open allowed door in the
+  loaded area that nobody who could open it is near. It SKIPs when you are indoors.
 - `world_pickup_itemdrop_to_inventory` — the shared pickup gate plus
   `ItemDrop.Pickup` moves a spawned drop into the inventory. Vanilla refuses a
   drop for 0.5 s after it spawns, so the check waits (up to 5 s) until the drop
@@ -192,7 +199,7 @@ not a regression.
 
 The command runs as a coroutine on the smoke plugin and prints its results about
 a second after it is typed. Each check logs a `PASS`/`FAIL`/`SKIP` line plus a
-`[Automatics Smoke] Summary: total=4 ...` line to both the BepInEx log and the
+`[Automatics Smoke] Summary: total=5 ...` line to both the BepInEx log and the
 in-game console (out of scope: Farming, Feeding, Mining). A `PASS` line can carry
 a note, for example when a test item had to be left in the inventory. Checks SKIP
 (never FAIL) when run at the main menu, when a module is disabled, when a

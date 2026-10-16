@@ -151,6 +151,12 @@ namespace Automatics.SmokeTest
                                  .WithName("world_door_open_sets_zdo_state"));
 
                 yield return null;
+                results.Add(SmokeSession.IsCurrent(runId)
+                    ? RunCheck("world_door_interior_left_alone", CheckDoorInteriorLeftAlone)
+                    : CheckResult.Skip("the run was abandoned before this check")
+                                 .WithName("world_door_interior_left_alone"));
+
+                yield return null;
 
                 // The pickup check spans frames, so it is advanced here instead of by
                 // RunCheck. A yield cannot sit inside a try that has a catch, so each step
@@ -581,6 +587,79 @@ namespace Automatics.SmokeTest
                 Expect(after != 0,
                     "door ZDO \"state\" should be non-zero after TryOpenNearby " +
                     "(possible ward/obstacle suppression if still 0)");
+
+                return CheckResult.Pass();
+            }
+        }
+
+        // A door in a dungeon is left alone. Two open doors and no player in reach of either:
+        // the one at ground level is the control that the close pass runs here, and the one
+        // 5000 m up, where the game puts dungeon interiors, has to stay open. The player cannot
+        // be in reach of a door up there, so the close pass is the side this check can drive.
+        private static CheckResult CheckDoorInteriorLeftAlone()
+        {
+            if (ZNetScene.instance == null) return CheckResult.Skip("ZNetScene.instance is null");
+            var player = Player.m_localPlayer;
+            if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
+            if (player.InInterior())
+                return CheckResult.Skip("the player is indoors; run it outdoors");
+
+            if (ModuleRegistry.GetState("automatic-door") != ModuleState.Enabled ||
+                !global::Automatics.AutomaticDoor.Module.Running)
+                return CheckResult.Skip("automatic_door module disabled");
+            if (!global::Automatics.AutomaticDoor.Config.AllowAutomaticDoor.Contains("WoodDoor"))
+                return CheckResult.Skip("WoodDoor not in allow_automatic_door");
+
+            if (!TryFindPrefabByObjectName<Door>(WoodDoorObjectName, out var doorPrefab))
+                return CheckResult.Skip($"{WoodDoorObjectName} prefab not found");
+
+            // Beyond the reach in which a player holds a door open (AutomaticDoor.TryCloseDoors).
+            var holdOpenRange = Mathf.Max(
+                global::Automatics.AutomaticDoor.Config.DistanceForAutomaticClosing,
+                global::Automatics.AutomaticDoor.Config.DistanceForAutomaticOpening);
+            var left = -player.transform.right;
+            var groundPosition = player.transform.position + left * (holdOpenRange + 4f);
+            var interiorPosition = player.transform.position + left * 2f + Vector3.up * 5000f;
+
+            using (var scope = new SpawnScope())
+            {
+                var registeredBefore =
+                    global::Automatics.AutomaticDoor.AutomaticDoor.RegisteredDoorCount;
+                var groundDoor = scope.Spawn(doorPrefab, groundPosition, Quaternion.identity)
+                                      .GetComponent<Door>();
+                var interiorDoor = scope.Spawn(doorPrefab, interiorPosition, Quaternion.identity)
+                                        .GetComponent<Door>();
+                if (groundDoor == null || interiorDoor == null)
+                    return CheckResult.Skip("spawned door lacks Door component");
+                if (!Objects.HasValidOwnership(groundDoor, out var groundNview) ||
+                    groundNview == null ||
+                    !Objects.HasValidOwnership(interiorDoor, out var interiorNview) ||
+                    interiorNview == null)
+                    return CheckResult.Skip("spawned door ZNetView invalid or not owned");
+
+                var registeredAfter =
+                    global::Automatics.AutomaticDoor.AutomaticDoor.RegisteredDoorCount;
+                Expect(registeredAfter == registeredBefore + 2,
+                    "both spawned doors should be registered, the one up high included " +
+                    $"(before={registeredBefore}, after={registeredAfter})");
+
+                // Opened as a hand opens them.
+                groundNview.InvokeRPC("UseDoor", true);
+                interiorNview.InvokeRPC("UseDoor", true);
+                var groundOpened = groundNview.GetZDO().GetInt("state");
+                var interiorOpened = interiorNview.GetZDO().GetInt("state");
+                if (groundOpened == 0 || interiorOpened == 0)
+                    return CheckResult.Skip(
+                        $"the spawned doors did not open (ground={groundOpened}, high={interiorOpened})");
+
+                global::Automatics.AutomaticDoor.AutomaticDoor.TryCloseDoors();
+                var groundAfter = groundNview.GetZDO().GetInt("state");
+                var interiorAfter = interiorNview.GetZDO().GetInt("state");
+
+                Expect(groundAfter == 0,
+                    $"the open door at ground level with nobody near should close (state={groundAfter})");
+                Expect(interiorAfter != 0,
+                    $"the open door at dungeon height should stay open (state={interiorAfter})");
 
                 return CheckResult.Pass();
             }

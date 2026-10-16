@@ -254,7 +254,12 @@ namespace Automatics.AutomaticDoor
         {
             if (!_allowAutomaticDoorDirty) return _allowAutomaticDoor;
 
-            _allowAutomaticDoor = Logics.IsAllowAutomaticDoor(_door);
+            // Doors inside a dungeon are never opened or closed, whatever the list allows. The
+            // game places dungeon interiors 5000 m above their entrance and treats everything
+            // above 3000 m as indoors; a door never moves between the two, so the result is
+            // cached with the list check.
+            _allowAutomaticDoor = !Character.InInterior(_transform.position) &&
+                                  Logics.IsAllowAutomaticDoor(_door);
             _allowAutomaticDoorDirty = false;
             return _allowAutomaticDoor;
         }
