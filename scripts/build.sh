@@ -183,7 +183,9 @@ if [[ "$mode" == "smoke" ]]; then
     fi
 elif [[ "$config" == "Debug" ]]; then
     echo "Debug deploy target: $VALHEIM_DIR/BepInEx/plugins/Automatics"
-elif [[ "$config" == "Release" ]]; then
+elif [[ "$config" == "Release" && -e "${SEVENZIP_PATH:-}" ]]; then
+    # Mirror the csproj's PackageModFiles condition. Without SEVENZIP_PATH no
+    # package is made, and any archive here is left over from an earlier build.
     nexus_package=$(find "$output_dir" -maxdepth 1 -name 'Automatics - *.7z' -print -quit 2>/dev/null || true)
     thunderstore_package=$(find "$output_dir" -maxdepth 1 -name 'Automatics - *.zip' -print -quit 2>/dev/null || true)
     if [[ -n "$nexus_package" ]]; then
