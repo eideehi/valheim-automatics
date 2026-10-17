@@ -24,6 +24,7 @@ namespace Automatics
         private void Awake()
         {
             Automatics.Initialize(this, Logger);
+            ConfigurationGui.Register(this);
         }
 
         private void Update()

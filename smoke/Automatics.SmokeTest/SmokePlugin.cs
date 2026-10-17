@@ -9,6 +9,8 @@ using Automatics.AutomaticMapping;
 using Automatics.AutomaticStorage;
 using Automatics.Valheim;
 using BepInEx;
+using HarmonyLib;
+using ModUtils;
 using UnityEngine;
 
 namespace Automatics.SmokeTest
@@ -95,7 +97,9 @@ namespace Automatics.SmokeTest
                 RunCheck("door_internal_name_resolution", CheckDoorInternalNameResolution),
                 RunCheck("container_resolution_and_allowlist", CheckContainerResolutionAndAllowlist),
                 RunCheck("automatics_translation_keys_loaded", CheckAutomaticsTranslationKeysLoaded),
-                RunCheck("vanilla_label_localizes_via_game", CheckVanillaLabelLocalizesViaGame)
+                RunCheck("vanilla_label_localizes_via_game", CheckVanillaLabelLocalizesViaGame),
+                RunCheck("config_gui_lists_automatics_with_object_editor", CheckConfigGuiListsAutomaticsWithObjectEditor),
+                RunCheck("custom_object_list_edits_keep_other_elements", CheckCustomObjectListEditsKeepOtherElements)
             };
 
             foreach (var result in results)
@@ -491,6 +495,121 @@ namespace Automatics.SmokeTest
             Expect(localized != "[piece_deposit_copper]",
                 "$piece_deposit_copper should point at a real vanilla Localization key");
             return CheckResult.Pass();
+        }
+
+        // -- Custom object lists on the config screens -----------------------------
+
+        private CheckResult CheckConfigGuiListsAutomaticsWithObjectEditor()
+        {
+            var plugin = global::Automatics.Automatics.Plugin;
+            Expect(plugin != null, "the Automatics plugin has not been initialized");
+
+            // Registering a plugin on the in-game config screen patches Settings.Awake under a Harmony
+            // id made from the plugin GUID, so the patch owner shows that Automatics registered.
+            var metadata = plugin.Info.Metadata;
+            var harmonyId = "net.eideehi.modutils.configurationgui." + metadata.GUID;
+            var awake = AccessTools.Method(typeof(Settings), "Awake");
+            Expect(awake != null, "Settings.Awake was not found");
+            var patches = Harmony.GetPatchInfo(awake);
+            Expect(patches != null && patches.Prefixes.Any(x => x.owner == harmonyId),
+                $"Settings.Awake should have a prefix from {harmonyId}, so the Mods tab lists Automatics");
+
+            var entries = plugin.Config
+                .Select(x => x.Value)
+                .Where(x => x.SettingType == typeof(List<ObjectElement>))
+                .ToList();
+            Expect(entries.Count > 0, "the Automatics config should have custom object list entries");
+            foreach (var entry in entries)
+            {
+                var definition = entry.Definition;
+                Expect(ConfigurationGui.TryCreateCustomEditor(entry, metadata.Name, out var editor) &&
+                       editor is ObjectElementListEditor,
+                    $"[{definition.Section}:{definition.Key}] should get the custom object list editor on the config screen");
+            }
+
+            return CheckResult.Pass();
+        }
+
+        private CheckResult CheckCustomObjectListEditsKeepOtherElements()
+        {
+            var empty = new List<ObjectElement>();
+
+            var plain = AddedElement(empty, "test_id", "Test Label", "Boar");
+            Expect(plain.identifier == "test_id" && plain.label == "Test Label" && plain.tags == null,
+                "an added element should take the identifier and label as typed and no tags");
+            ExpectOnlyMatcher(plain, false, "Boar", "a plain pattern");
+            ExpectOnlyMatcher(AddedElement(empty, "test_id", "Test Label", "r/^a$"), true, "^a$",
+                "a pattern with the r/ prefix");
+            ExpectOnlyMatcher(AddedElement(empty, "test_id", "Test Label", "r/"), true, "",
+                "the r/ prefix alone");
+            Expect(AddedElement(empty, "a b", "Test Label", "Boar").identifier == "ab",
+                "whitespace should be removed from the identifier");
+            var spaced = AddedElement(empty, "test_id", " Test  Label ", " Boar ");
+            Expect(spaced.label == " Test  Label ", "the label should be kept as typed, spaces included");
+            ExpectOnlyMatcher(spaced, false, " Boar ", "a plain pattern with spaces");
+
+            Expect(!ObjectElementList.TryCopyWithElement(empty, "", "Test Label", "Boar", out _),
+                "nothing should be added without an identifier");
+            Expect(!ObjectElementList.TryCopyWithElement(empty, "test_id", "", "Boar", out _),
+                "nothing should be added without a label");
+            Expect(!ObjectElementList.TryCopyWithElement(empty, "test_id", "Test Label", "", out _),
+                "nothing should be added without a pattern");
+            Expect(empty.Count == 0, "adding should leave the input list empty");
+
+            var tagged = new ObjectElement
+            {
+                identifier = "Tagged",
+                label = "Tagged",
+                matches = new List<ObjectMatcher>
+                {
+                    new ObjectMatcher { value = "Wood" },
+                    new ObjectMatcher { regex = true, value = "^Wood_\\d+$" }
+                },
+                tags = new List<string> { "test_tag" }
+            };
+            var stored = new List<ObjectElement> { null, tagged };
+            Expect(ObjectElementList.TryCopyWithElement(stored, "test_id", "Test Label", "Boar", out var added),
+                "an element should be added to a list that holds other elements");
+            Expect(!ReferenceEquals(added, stored), "adding should return a new list");
+            Expect(added.Count == 3 && added[0] == null && ReferenceEquals(added[1], tagged) &&
+                   added[2] != null && added[2].identifier == "test_id",
+                "adding should keep the stored null and element as the same instances in order, followed by the new element");
+            Expect(stored.Count == 2 && stored[0] == null && ReferenceEquals(stored[1], tagged),
+                "adding should leave the input list as it was");
+
+            var other = new ObjectElement
+            {
+                identifier = "Other",
+                label = "Other",
+                matches = new List<ObjectMatcher> { new ObjectMatcher { value = "Boar" } }
+            };
+            var before = new List<ObjectElement> { other, tagged, null };
+            var removed = ObjectElementList.CopyWithoutElement(before, tagged);
+            Expect(!ReferenceEquals(removed, before), "removing should return a new list");
+            Expect(removed.Count == 2 && ReferenceEquals(removed[0], other) && removed[1] == null,
+                "removing should drop only the given element and keep the others in order");
+            Expect(before.Count == 3 && ReferenceEquals(before[0], other) && ReferenceEquals(before[1], tagged) &&
+                   before[2] == null,
+                "removing should leave the input list as it was");
+            return CheckResult.Pass();
+        }
+
+        private static ObjectElement AddedElement(List<ObjectElement> elements, string identifier,
+            string label, string pattern)
+        {
+            Expect(ObjectElementList.TryCopyWithElement(elements, identifier, label, pattern, out var copy),
+                $"an element should be added from \"{identifier}\", \"{label}\" and \"{pattern}\"");
+            Expect(copy.Count == elements.Count + 1, "adding should append exactly one element");
+            return copy[copy.Count - 1];
+        }
+
+        private static void ExpectOnlyMatcher(ObjectElement element, bool regex, string value, string input)
+        {
+            Expect(element.matches != null && element.matches.Count == 1,
+                $"{input} should give the added element one matcher");
+            var matcher = element.matches[0];
+            Expect(matcher.regex == regex && matcher.value == value,
+                $"{input} should give a matcher with regex={regex} and value \"{value}\", got regex={matcher.regex} and value \"{matcher.value}\"");
         }
 
         // -- Storage routing helpers (ported from the harness) ---------------------

@@ -187,6 +187,11 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>$(UnityManagedDirectory)\UnityEngine.AssetBundleModule.dll</HintPath>
     </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(ManagedDataDirectory)\Unity.TextMeshPro.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup Label="Valheim">

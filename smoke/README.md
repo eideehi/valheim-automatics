@@ -84,7 +84,7 @@ Launch Valheim after deploying. The plugin waits for `Localization.instance`
 BepInEx log:
 
 ```text
-[Automatics Smoke] Summary: total=17 passed=17 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[Automatics Smoke] Summary: total=19 passed=19 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 The `vanilla_label_localizes_via_game` check (and, when the translation cache is

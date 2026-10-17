@@ -277,6 +277,57 @@ namespace Automatics.Valheim
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Makes a copy of <paramref name="elements"/> with one element added at the end, made from the
+        /// identifier, label and pattern typed into a custom object editor. Whitespace is removed from
+        /// the identifier; the label and the pattern are kept as typed. A pattern that starts with
+        /// <c>r/</c> becomes a regex matcher without that prefix. False when the identifier without
+        /// whitespace, the label or the pattern is empty; the pattern is checked with its prefix, so
+        /// <c>r/</c> alone gives a regex matcher with an empty value. <paramref name="elements"/>
+        /// itself is not changed.
+        /// </summary>
+        internal static bool TryCopyWithElement(List<ObjectElement> elements, string identifier,
+            string label, string pattern, out List<ObjectElement> copy)
+        {
+            copy = null;
+            identifier = string.Concat((identifier ?? "").Where(x => !char.IsWhiteSpace(x)));
+            if (string.IsNullOrEmpty(identifier) || string.IsNullOrEmpty(label) ||
+                string.IsNullOrEmpty(pattern))
+                return false;
+
+            var regex = pattern.StartsWith("r/");
+            copy = new List<ObjectElement>(elements)
+            {
+                new ObjectElement
+                {
+                    identifier = identifier,
+                    label = label,
+                    matches = new List<ObjectMatcher>
+                    {
+                        new ObjectMatcher
+                        {
+                            regex = regex,
+                            value = regex ? pattern.Substring(2) : pattern
+                        }
+                    }
+                }
+            };
+            return true;
+        }
+
+        /// <summary>
+        /// Makes a copy of <paramref name="elements"/> without the first occurrence of
+        /// <paramref name="element"/>, compared by reference. <paramref name="elements"/> itself is not
+        /// changed.
+        /// </summary>
+        internal static List<ObjectElement> CopyWithoutElement(List<ObjectElement> elements,
+            ObjectElement element)
+        {
+            var copy = new List<ObjectElement>(elements);
+            copy.Remove(element);
+            return copy;
+        }
+
         private static Action<ConfigEntryBase> GetCustomDrawer()
         {
             var identifierInput = "";
@@ -323,24 +374,10 @@ namespace Automatics.Valheim
 
                 GUILayout.BeginHorizontal();
                 var clicked = GUILayout.Button(addButtonText, GUILayout.ExpandWidth(true));
-                if (clicked && !string.IsNullOrEmpty(identifierInput) &&
-                    !string.IsNullOrEmpty(labelInput) && !string.IsNullOrEmpty(valueInput))
+                if (clicked && TryCopyWithElement(elements, identifierInput, labelInput, valueInput,
+                        out var added))
                 {
-                    var regex = valueInput.StartsWith("r/");
-                    valueInput = regex ? valueInput.Substring(2) : valueInput;
-                    elements.Add(new ObjectElement
-                    {
-                        identifier = identifierInput,
-                        label = labelInput,
-                        matches = new List<ObjectMatcher>
-                        {
-                            new ObjectMatcher
-                            {
-                                regex = regex,
-                                value = valueInput
-                            }
-                        }
-                    });
+                    elements = added;
                     entry.BoxedValue = elements;
 
                     identifierInput = "";
@@ -375,8 +412,10 @@ namespace Automatics.Valheim
                     var tooltip = Automatics.L10N.LocalizeTextOnly("@config_object_element_preview", label, rawLabel, identifier, pattern);
                     GUILayout.Label(new GUIContent(label, tooltip), GUILayout.ExpandWidth(false));
                     if (GUILayout.Button(removeButtonText, GUILayout.ExpandWidth(false)))
-                        if (elements.Remove(element))
-                            entry.BoxedValue = elements;
+                    {
+                        elements = CopyWithoutElement(elements, element);
+                        entry.BoxedValue = elements;
+                    }
                 }
 
                 GUILayout.EndHorizontal();
@@ -419,6 +458,9 @@ namespace Automatics.Valheim
             ConfigurationCustomDrawer.Register(
                 (type, value) => type == typeof(List<ObjectElement>),
                 GetCustomDrawer);
+            ConfigurationGui.RegisterEditor(
+                (type, _) => type == typeof(List<ObjectElement>),
+                () => new ObjectElementListEditor());
         }
     }
 
