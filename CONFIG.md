@@ -1338,3 +1338,9 @@ Specify the maximum number of extra trees, logs or stumps one swing can hit.
 Specify whether area woodcutting takes the targets of the same kind as the one the swing hit before the others. The same kind means the same form (a standing or small tree, a fallen log, or a stump) and the same kind of tree. Within each group the nearest come first, and Area Woodcutting Max Targets counts both groups together. When off, the nearest targets are taken whatever their kind.
 
 - Default value: true
+
+## [ Settings screen ] / [mod_utils]
+### Show on the Settings screen / [show_on_settings_screen]
+Shows this mod on the Mods tab of the game's Settings screen. When no mod is shown there, the tab is not added. A change applies the next time the Settings screen opens. After turning this off, turn it back on in ConfigurationManager or in this mod's config file.
+
+- Default value: true
