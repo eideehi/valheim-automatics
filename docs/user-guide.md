@@ -366,11 +366,12 @@ as the pin appears, so the creature never shows two pins; while a category or
 unexplored-area filter hides that pin, the marker stays. A pin you saved
 yourself stays a fixed destination.
 
-Navigation ends by itself when you come within 5 m, measured horizontally, of
-the target after having been farther than 5 m away during that navigation. It
-shows the same "Navigation cleared" message as clearing it by hand. If you start
-navigating to something already within 5 m, navigation ends only after you have
-moved away beyond 5 m and come back. This happens whether `Navigation Guide
+Navigation ends by itself when you come within `Navigation Arrival Distance`
+(5 m by default; 0 turns this off), measured horizontally, of the target after
+having been farther away than that during that navigation. It shows the same
+"Navigation cleared" message as clearing it by hand. If you start navigating to
+something already within that distance, navigation ends only after you have
+moved away beyond it and come back. This happens whether `Navigation Guide
 Swarm` is on or off.
 
 While navigation is active and the large map is closed, a loaded non-boss
@@ -394,9 +395,17 @@ including up, down and behind, then turn and stream ahead toward the target a
 little above the ground in a straight line, up to 18 m ahead or to the target
 when it is nearer. After that, new lights do not spread out; they leave you and
 flow straight into the stream. At the target they hover in a small column like a
-swarm of midges. When navigation ends because you arrived, the lights scatter
-like insects and fade out over about a second. The swarm is hidden while the
-large map is open. It is only drawn for you and adds nothing to the world.
+swarm of midges. The column stands on the ground for a buried target and on the
+water surface for an underwater one; a target above the ground keeps its own
+height. It sways slowly, its top swaying most. When navigation ends because you
+arrived or because you cleared it by hand, the lights scatter like insects and
+fade out over about a second. Clearing with the looked-at-object key scatters
+them at once. Clearing with a map click scatters them when you close the map,
+because the large map hides the swarm; if you start another navigation before
+closing the map, they do not scatter. When navigation ends for other reasons,
+such as the target dying or disappearing or its pin going away, the lights are
+removed at once. The swarm is hidden while the large map is open. It is only
+drawn for you and adds nothing to the world.
 Turn it off with `Navigation Guide Swarm`, or change its colour with `Navigation Guide Color`,
 which also colours the navigation target's icon on the compass.
 

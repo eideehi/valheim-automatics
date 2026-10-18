@@ -15,20 +15,31 @@ namespace Automatics.AutomaticMapping
     ///     <para>
     ///         When a navigation starts or switches target, a burst of the stream's lights comes out
     ///         of the player's body and spreads out around the player in every direction - up, down,
-    ///         sideways and behind, the lowest staying above the player's feet - then gathers into a
-    ///         stream that flows from just ahead of the player along the straight line toward the
-    ///         target, a little above the ground, and fades where it ends or flows into the column at
-    ///         the target. Every later light, also once the swarm is shown again after being hidden,
-    ///         leaves the player's body and joins the stream directly, without spreading out. The
-    ///         column's lights hover over the target like a column of midges, each circling the
-    ///         column's axis, bobbing, jittering and flickering. Each light keeps its own direction,
-    ///         speed and phase from its random seed; the code places it and sets its colour and alpha
-    ///         every frame, and the particle systems only age and draw the lights.
+    ///         sideways and behind, the lowest staying above the player's feet and every one above
+    ///         the ground under it - then gathers into a stream that flows from just ahead of the
+    ///         player along the straight line toward the target, a little above the ground, and
+    ///         fades where it ends or flows into the column at the target. Every later light, also
+    ///         once the swarm is shown again after being hidden, leaves the player's body and joins
+    ///         the stream directly, without spreading out. The column stands on the target, or on
+    ///         the ground or the water surface above a target buried or sunk under it, and its
+    ///         lights hover there like a column of midges, each circling the column's axis, bobbing,
+    ///         jittering and flickering, while the column slowly sways, its top the most, and keeps
+    ///         its shape around a target that moves. Each light keeps its own direction, speed and
+    ///         phase from its random seed; the code places it and sets its colour and alpha every
+    ///         frame, and the particle systems only age and draw the lights.
     ///     </para>
     ///     <para>
-    ///         When navigation ends on arrival, a shown swarm is not removed at once: it is handed
-    ///         to <see cref="NavigationGuideScatter" />, and its lights fly off from the column and
-    ///         fade out before the object goes. Every other end removes the swarm at once.
+    ///         While navigation cannot be shown, the swarm is hidden: its lights stop ageing and are
+    ///         not drawn, and its point lights go out, but the object and its lights stay.
+    ///     </para>
+    ///     <para>
+    ///         When navigation ends on arrival or by hand, a shown swarm is not removed at once: it
+    ///         is handed to <see cref="NavigationGuideScatter" />, and its lights fly off and fade
+    ///         out before the object goes - on arrival all of them from the column's axis, by hand
+    ///         the column's from its axis and the stream's from the line they flowed along. A swarm
+    ///         the large map hides when a map click ends navigation is held, hidden, and scatters
+    ///         once navigation could be shown again, unless a navigation starts first or the option
+    ///         or the module is turned off. Every other end removes the swarm at once.
     ///     </para>
     /// </summary>
     internal static class NavigationGuide
@@ -68,7 +79,21 @@ namespace Automatics.AutomaticMapping
         /// <summary>How far a column light jitters along each axis from its path.</summary>
         internal const float JitterAmplitude = 0.15f;
 
-        /// <summary>How long a swarm scatters after an arrival before it is removed.</summary>
+        /// <summary>
+        ///     How fast a column light closes on its place: the gap shrinks as exp(-rate * t).
+        /// </summary>
+        internal const float ColumnFollowRate = 12f;
+
+        /// <summary>How far the column's top sways along each horizontal axis at most.</summary>
+        internal const float SwayAmplitude = 0.35f;
+
+        /// <summary>How long the column's sway along the world's x axis takes for one cycle.</summary>
+        internal const float SwayPeriodX = 5.3f;
+
+        /// <summary>How long the column's sway along the world's z axis takes for one cycle.</summary>
+        internal const float SwayPeriodZ = 7.1f;
+
+        /// <summary>How long a swarm scatters after navigation ends before it is removed.</summary>
         internal const float ScatterTime = 1.2f;
 
         /// <summary>The longest a light waits before it flies off in a scatter.</summary>
@@ -85,7 +110,7 @@ namespace Automatics.AutomaticMapping
 
         /// <summary>
         ///     How far a scattering light's direction turns from straight out from the column's
-        ///     axis. Below 1, so every light still moves outward.
+        ///     axis or the stream's line. Below 1, so every light still moves outward.
         /// </summary>
         internal const float ScatterSpread = 0.6f;
 
@@ -94,6 +119,12 @@ namespace Automatics.AutomaticMapping
 
         /// <summary>The height above the player's feet at which the stream's lights are born.</summary>
         internal const float BodyHeight = 1.1f;
+
+        /// <summary>
+        ///     The least height of a light of the burst above the player's feet, for one heading
+        ///     down, and above the terrain under it, also on a slope.
+        /// </summary>
+        internal const float BurstFloor = 0.2f;
 
         /// <summary>How much white a light's colour is mixed with at most.</summary>
         internal const float MaxWhiteMix = 0.35f;
@@ -113,7 +144,6 @@ namespace Automatics.AutomaticMapping
 
         private const float MinRadiateRadius = 1.2f;
         private const float MaxRadiateRadius = 2f;
-        private const float BurstFloor = 0.2f;
 
         // A burst light heading down sinks only this share of its reach, so even the farthest one
         // stays BurstFloor above the player's feet.
@@ -133,7 +163,6 @@ namespace Automatics.AutomaticMapping
         private const float MaxSize = 0.12f;
 
         private const int ColumnCount = 100;
-        private const float ColumnFollowRate = 12f;
         private const float MinColumnLifetime = 3f;
         private const float MaxColumnLifetime = 6f;
         private const float ColumnFadeTime = 0.6f;
@@ -145,6 +174,9 @@ namespace Automatics.AutomaticMapping
         private const float MaxBobSpeed = 3.5f;
         private const float BobShare = 0.3f;
         private const float JitterFrequency = 3f;
+
+        // The sway along z runs a quarter of its cycle ahead of the sway along x.
+        private const float SwayPhaseZ = Mathf.PI * 0.5f;
 
         private const float ScatterJitter = 0.15f;
         private const float ScatterJitterFrequency = 4f;
@@ -193,6 +225,7 @@ namespace Automatics.AutomaticMapping
         private static Light _targetLight;
         private static Color _appliedColor;
         private static bool _started;
+        private static bool _hidden;
         private static bool _burstPending;
         private static float _pendingStreamLights;
         private static float _lightLevel;
@@ -200,6 +233,20 @@ namespace Automatics.AutomaticMapping
         private static Vector3 _groundDirection;
         private static float _groundLength;
         private static float _nextGroundSampleTime;
+        private static Vector3 _streamStart;
+        private static Vector3 _streamEnd;
+        private static Vector3 _columnBase;
+        private static Vector3 _columnCentre;
+
+        // A swarm let go by hand while it was hidden, kept apart from the live swarm, still
+        // hidden, until it scatters or is dropped.
+        private static GameObject _heldRoot;
+        private static ParticleSystem _heldStream;
+        private static ParticleSystem _heldColumn;
+        private static Light _heldCoreLight;
+        private static Light _heldTargetLight;
+        private static Vector3 _heldCentre;
+        private static Vector3[] _heldSpine;
 
         private static Material _material;
         private static Texture2D _texture;
@@ -217,20 +264,41 @@ namespace Automatics.AutomaticMapping
         internal static ParticleSystem Stream => _stream;
         internal static ParticleSystem Column => _column;
 
+        /// <summary>Whether there is a swarm and it is drawn, not hidden.</summary>
+        internal static bool Shown => _root && !_hidden;
+
+        /// <summary>
+        ///     The swarm held, hidden, after a clear by hand until it scatters or is dropped, or
+        ///     null when none is held.
+        /// </summary>
+        internal static GameObject HeldRoot => _heldRoot;
+
+        /// <summary>The column's centre the swarm was last shown with, on the column's axis.</summary>
+        internal static Vector3 ColumnCentre => _columnCentre;
+
+        /// <summary>
+        ///     The line the stream was last shown along, horizontally from the player toward the
+        ///     target to the stream's end, as a new array of its two ends.
+        /// </summary>
+        internal static Vector3[] StreamLine => new[] { _streamStart, _streamEnd };
+
         /// <summary>
         ///     Shows the swarm for this frame, creating it on the first call of a navigation. A new
         ///     swarm begins with a burst of lights that spread out from the player's body and a full
-        ///     column; one shown again after <see cref="Hide" /> begins with a full column only. Either
-        ///     way the stream's later lights leave the body at a steady rate and join the stream
-        ///     directly.
+        ///     column; one shown again after <see cref="Hide" /> is drawn again and begins with a full
+        ///     column only. Either way the stream's later lights leave the body at a steady rate and
+        ///     join the stream directly.
         /// </summary>
         public static void Update(Player player, Vector3 targetPos)
         {
             if (!player) return;
             if (!EnsureCreated()) return;
 
-            if (!_root.activeSelf)
-                _root.SetActive(true);
+            if (_hidden)
+            {
+                SetDrawn(_stream, _column, _coreLight, _targetLight, true);
+                _hidden = false;
+            }
 
             var playerPos = player.transform.position;
             var offset = targetPos - playerPos;
@@ -243,7 +311,16 @@ namespace Automatics.AutomaticMapping
             // The stream reaches the target when it is near enough, and flows into the column there.
             var end = Mathf.Min(distance, TrailLength);
             var endsAtTarget = distance <= TrailLength;
-            var centre = targetPos + Vector3.up * ColumnCentreHeight;
+            // Kept for a clear by hand, whose scatter flies the stream's lights off from this line.
+            _streamStart = playerPos;
+            _streamEnd = playerPos + direction * end;
+
+            // The column stands on the target, or on the ground or the water surface above a
+            // target buried or sunk under it.
+            var columnBase = new Vector3(targetPos.x, Mathf.Max(targetPos.y, SurfaceHeight(targetPos, targetPos.y)),
+                targetPos.z);
+            var centre = columnBase + Vector3.up * ColumnCentreHeight;
+            _columnCentre = centre;
             var deltaTime = Time.deltaTime;
 
             var burstLights = 0;
@@ -256,6 +333,9 @@ namespace Automatics.AutomaticMapping
                 _pendingStreamLights = 0f;
                 _lightLevel = 0f;
                 _nextGroundSampleTime = 0f;
+                // The column's new lights are placed where the base is now, so its movement
+                // counts from here.
+                _columnBase = columnBase;
 
                 // Only a swarm made for this navigation bursts out; one shown again after it was
                 // hidden goes on with lights that join the stream directly.
@@ -263,6 +343,9 @@ namespace Automatics.AutomaticMapping
                     burstLights = BurstCount;
                 _burstPending = false;
             }
+
+            var carry = columnBase - _columnBase;
+            _columnBase = columnBase;
 
             _pendingStreamLights += StreamRate * deltaTime;
             var flowLights = (int)_pendingStreamLights;
@@ -281,7 +364,7 @@ namespace Automatics.AutomaticMapping
             var color = Config.NavigationGuideColor;
             var time = Time.time;
             MoveStream(playerPos, direction, end, endsAtTarget, centre.y, color, time, deltaTime);
-            MoveColumn(centre, color, time, deltaTime);
+            MoveColumn(centre, carry, color, time, deltaTime);
 
             ApplyColor(color);
             UpdateLights(playerPos, direction, end, centre, deltaTime);
@@ -289,19 +372,24 @@ namespace Automatics.AutomaticMapping
 
         /// <summary>
         ///     Hides the swarm while navigation cannot be shown, such as with the large map open or
-        ///     the game paused. It comes back with a full column and the stream flowing from the
-        ///     player again, without a burst.
+        ///     the game paused: both particle systems pause and are not drawn and both point lights
+        ///     go out, while the object and its lights stay where they are. It comes back with a
+        ///     full column and the stream flowing from the player again, without a burst.
         /// </summary>
         public static void Hide()
         {
-            if (_root && _root.activeSelf)
-                _root.SetActive(false);
+            if (_root && !_hidden)
+            {
+                SetDrawn(_stream, _column, _coreLight, _targetLight, false);
+                _hidden = true;
+            }
             _started = false;
         }
 
         /// <summary>
         ///     Removes the swarm at once when a navigation starts or ends or the option is turned
-        ///     off. The material and texture stay for the next swarm of the session.
+        ///     off. A held swarm is left as it is. The material and texture stay for the next swarm
+        ///     of the session.
         /// </summary>
         public static void Destroy()
         {
@@ -311,29 +399,70 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        ///     Lets a shown swarm go when navigation ends on arrival: it is handed to
-        ///     <see cref="NavigationGuideScatter" />, which scatters and fades its lights and removes
-        ///     it after <see cref="ScatterTime" />, and the next navigation starts a swarm of its own.
-        ///     A hidden or absent swarm is left as it is, for <see cref="Destroy" /> to remove.
+        ///     Lets the swarm go when navigation ends on arrival or by hand. A shown swarm is handed
+        ///     to <see cref="NavigationGuideScatter" /> at once, which flies the column's lights off
+        ///     from the vertical axis through <paramref name="columnCentre" /> and the stream's from
+        ///     their nearest point on <paramref name="streamSpine" />, fades them and removes it after
+        ///     <see cref="ScatterTime" />. With <paramref name="hold" />, a hidden swarm is held as it
+        ///     is until <see cref="ReleaseHeldScatter" /> scatters it or <see cref="DropHeldScatter" />
+        ///     removes it; holding one drops any held before. Without it, a hidden or absent swarm is
+        ///     left as it is, for <see cref="Destroy" /> to remove. Either way the next navigation
+        ///     starts a swarm of its own.
         /// </summary>
-        public static void Scatter(Vector3 targetPos)
+        public static void Scatter(Vector3 columnCentre, Vector3[] streamSpine, bool hold)
         {
-            if (!_root || !_root.activeSelf) return;
+            if (!_root || (_hidden && !hold)) return;
 
-            _root.AddComponent<NavigationGuideScatter>().Initialize(_stream, _column, _coreLight, _targetLight,
-                targetPos + Vector3.up * ColumnCentreHeight);
+            if (_hidden)
+            {
+                DropHeldScatter();
+                _heldRoot = _root;
+                _heldStream = _stream;
+                _heldColumn = _column;
+                _heldCoreLight = _coreLight;
+                _heldTargetLight = _targetLight;
+                _heldCentre = columnCentre;
+                _heldSpine = streamSpine;
+            }
+            else
+                _root.AddComponent<NavigationGuideScatter>().Initialize(_stream, _column, _coreLight, _targetLight,
+                    columnCentre, streamSpine);
             Forget();
         }
 
         /// <summary>
-        ///     Ends the session: the swarm, and the material and texture this class made for it,
-        ///     go. The vanilla material a fallback copied from is never touched. The next swarm
-        ///     resolves its material again and logs it. A swarm still scattering after an arrival
-        ///     is not tracked here; it removes itself within <see cref="ScatterTime" />.
+        ///     Scatters the held swarm, if there is one, now that navigation could be shown again:
+        ///     its lights are drawn and age again from where they were, and it is handed to
+        ///     <see cref="NavigationGuideScatter" />, whose scatter starts now.
+        /// </summary>
+        public static void ReleaseHeldScatter()
+        {
+            if (!_heldRoot) return;
+
+            SetDrawn(_heldStream, _heldColumn, _heldCoreLight, _heldTargetLight, true);
+            _heldRoot.AddComponent<NavigationGuideScatter>().Initialize(_heldStream, _heldColumn, _heldCoreLight,
+                _heldTargetLight, _heldCentre, _heldSpine);
+            ForgetHeld();
+        }
+
+        /// <summary>Removes the held swarm, if there is one, without a scatter.</summary>
+        public static void DropHeldScatter()
+        {
+            if (_heldRoot)
+                Object.Destroy(_heldRoot);
+            ForgetHeld();
+        }
+
+        /// <summary>
+        ///     Ends the session: the swarm, a held one, and the material and texture this class made
+        ///     for them, go. The vanilla material a fallback copied from is never touched. The next
+        ///     swarm resolves its material again and logs it. A swarm still scattering is not tracked
+        ///     here; it removes itself within <see cref="ScatterTime" />.
         /// </summary>
         public static void Dispose()
         {
             Destroy();
+            DropHeldScatter();
 
             if (_material)
                 Object.Destroy(_material);
@@ -348,8 +477,9 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        ///     The height the stream follows at a point: the terrain, or the sea surface where that
-        ///     is higher, and <paramref name="fallback" /> where no ground height is available.
+        ///     The height the stream follows at a point, and the lowest the column stands on: the
+        ///     terrain, or the sea surface where that is higher, and <paramref name="fallback" />
+        ///     where no ground height is available.
         /// </summary>
         internal static float SurfaceHeight(Vector3 point, float fallback)
         {
@@ -361,13 +491,79 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
+        ///     How far the column's sway moves a light horizontally at a moment, as x and z: a slow
+        ///     sine along each axis, from nothing at the column's bottom to
+        ///     <see cref="SwayAmplitude" /> at its top. <paramref name="level01" /> is the light's
+        ///     level in the column, 0 at the bottom and 1 at the top, and <paramref name="time" /> is
+        ///     the game's time.
+        /// </summary>
+        internal static Vector2 SwayAt(float level01, float time)
+        {
+            var reach = SwayAmplitude * level01;
+            return new Vector2(reach * Mathf.Sin(TwoPi * time / SwayPeriodX),
+                reach * Mathf.Sin(TwoPi * time / SwayPeriodZ + SwayPhaseZ));
+        }
+
+        /// <summary>
+        ///     Where a light of the burst heads at an age within the burst: out from the body point
+        ///     along its own direction to its own distance, then into <paramref name="streamGoal" />,
+        ///     its place in the stream, kept above the terrain under it by
+        ///     <see cref="AboveBurstFloor" />.
+        /// </summary>
+        internal static Vector3 BurstGoal(uint seed, float age, Vector3 bodyPoint, Vector3 streamGoal)
+        {
+            // A direction of its own, alike in every direction around the body; one heading down
+            // reaches less far, so it stays above the player's feet.
+            var rise = Hash(seed, 5) * 2f - 1f;
+            var angle = Hash(seed, 0) * TwoPi;
+            var flat = Mathf.Sqrt(1f - rise * rise);
+            var outward = new Vector3(flat * Mathf.Cos(angle), rise < 0f ? rise * BurstDownScale : rise,
+                flat * Mathf.Sin(angle));
+            var radius = Mathf.Lerp(MinRadiateRadius, MaxRadiateRadius, Hash(seed, 1));
+            // Out fast at first, slowing as the light reaches its own distance.
+            var spread = Mathf.Clamp01(age / RadiateTime);
+            var reach = radius * spread * (2f - spread);
+            var radiated = bodyPoint + outward * reach;
+            var gather = Mathf.SmoothStep(0f, 1f, (age - RadiateTime) / GatherTime);
+            return AboveBurstFloor(Vector3.Lerp(radiated, streamGoal, gather));
+        }
+
+        /// <summary>
+        ///     One frame of a light of the burst: its place for its age from <see cref="BurstGoal" />,
+        ///     given out as <paramref name="goal" />, and the light moved from
+        ///     <paramref name="position" /> toward that place by <paramref name="follow" />, the share
+        ///     of the gap it closes this frame. The light trails its place, so on a slope it is kept
+        ///     above the ground itself too, by <see cref="AboveBurstFloor" />.
+        /// </summary>
+        internal static Vector3 BurstStep(uint seed, float age, Vector3 bodyPoint, Vector3 streamGoal,
+            Vector3 position, float follow, out Vector3 goal)
+        {
+            goal = BurstGoal(seed, age, bodyPoint, streamGoal);
+            return AboveBurstFloor(Vector3.Lerp(position, goal, follow));
+        }
+
+        /// <summary>
+        ///     A point of a light of the burst, raised where needed to <see cref="BurstFloor" />
+        ///     above the terrain under it, so a burst on a steep slope does not sink into the ground
+        ///     uphill. A point with no terrain under it is left as it is.
+        /// </summary>
+        internal static Vector3 AboveBurstFloor(Vector3 point)
+        {
+            var zoneSystem = ZoneSystem.instance;
+            if (zoneSystem && zoneSystem.GetGroundHeight(point, out var ground))
+                point.y = Mathf.Max(point.y, ground + BurstFloor);
+            return point;
+        }
+
+        /// <summary>
         ///     Moves the lights of a scattering swarm from one moment of its scatter to the next,
-        ///     both counted from the arrival. Each light waits its own delay, then flies outward from
-        ///     the column's axis, slowing and zigzagging, and its alpha is scaled by
+        ///     both counted from when it began. Each light waits its own delay, then flies outward,
+        ///     horizontally, from its nearest point on <paramref name="spine" /> - a line of points,
+        ///     or one point on the column's axis - slowing and zigzagging, and its alpha is scaled by
         ///     <paramref name="fadeRatio" />. Each is kept alive until the scatter ends, so none goes
         ///     out early at full alpha. No light is added.
         /// </summary>
-        internal static void MoveScatteringLights(ParticleSystem system, Vector3 centre, float from, float to,
+        internal static void MoveScatteringLights(ParticleSystem system, Vector3[] spine, float from, float to,
             float fadeRatio)
         {
             var remaining = ScatterTime - to;
@@ -381,9 +577,9 @@ namespace Automatics.AutomaticMapping
                 var now = Mathf.Max(0f, to - delay);
                 if (now > start)
                 {
-                    // Straight out from the axis, turned by the light's own spread and leaning up;
-                    // a light on the axis takes a direction of its own.
-                    var outward = light.position - centre;
+                    // Straight out from the spine, turned by the light's own spread and leaning up;
+                    // a light on the spine takes a direction of its own.
+                    var outward = light.position - NearestOnSpine(spine, light.position);
                     outward.y = 0f;
                     if (outward.sqrMagnitude > 0.0001f)
                         outward.Normalize();
@@ -449,6 +645,40 @@ namespace Automatics.AutomaticMapping
             _coreLight = null;
             _targetLight = null;
             _started = false;
+            _hidden = false;
+        }
+
+        /// <summary>Drops the references to the held swarm and leaves the object itself as it is.</summary>
+        private static void ForgetHeld()
+        {
+            _heldRoot = null;
+            _heldStream = null;
+            _heldColumn = null;
+            _heldCoreLight = null;
+            _heldTargetLight = null;
+            _heldSpine = null;
+        }
+
+        /// <summary>
+        ///     Lets a swarm's lights age and draws them, with its point lights on, or pauses them,
+        ///     stops drawing them and puts its point lights out. The lights stay where they are.
+        /// </summary>
+        private static void SetDrawn(ParticleSystem stream, ParticleSystem column, Light coreLight,
+            Light targetLight, bool drawn)
+        {
+            SetDrawn(stream, drawn);
+            SetDrawn(column, drawn);
+            coreLight.enabled = drawn;
+            targetLight.enabled = drawn;
+        }
+
+        private static void SetDrawn(ParticleSystem system, bool drawn)
+        {
+            if (drawn)
+                system.Play(true);
+            else
+                system.Pause(true);
+            system.GetComponent<ParticleSystemRenderer>().enabled = drawn;
         }
 
         private static ParticleSystem CreateParticles(string name, int maxParticles, Material material)
@@ -561,7 +791,8 @@ namespace Automatics.AutomaticMapping
         /// <summary>
         ///     Moves each stream light toward its place for its age. A light of the burst flies out
         ///     from the player's body along its own direction to its own distance, then into the
-        ///     stream; any other light leaves the body straight along the line, taking its place
+        ///     stream, its place and the light itself kept above the terrain under them while it
+        ///     does; any other light leaves the body straight along the line, taking its place
         ///     across the stream and its height as it goes. Then each flows along the line toward
         ///     the target at the stream's height, at its own place across the stream. The places
         ///     move with the player, so the stream stays ahead of a running player. A light fades
@@ -596,31 +827,19 @@ namespace Automatics.AutomaticMapping
                          Noise(wobble, 3.5f) * WobbleAmplitude;
 
                 if (burst && age < RadiateTime + GatherTime)
+                    light.position = BurstStep(seed, age, bodyPoint, goal, light.position, follow, out _);
+                else
                 {
-                    // A direction of its own, alike in every direction around the body; one heading
-                    // down reaches less far, so it stays above the player's feet.
-                    var rise = Hash(seed, 5) * 2f - 1f;
-                    var angle = Hash(seed, 0) * TwoPi;
-                    var flat = Mathf.Sqrt(1f - rise * rise);
-                    var outward = new Vector3(flat * Mathf.Cos(angle), rise < 0f ? rise * BurstDownScale : rise,
-                        flat * Mathf.Sin(angle));
-                    var radius = Mathf.Lerp(MinRadiateRadius, MaxRadiateRadius, Hash(seed, 1));
-                    // Out fast at first, slowing as the light reaches its own distance.
-                    var spread = Mathf.Clamp01(age / RadiateTime);
-                    var reach = radius * spread * (2f - spread);
-                    var radiated = bodyPoint + outward * reach;
-                    var gather = Mathf.SmoothStep(0f, 1f, (age - RadiateTime) / GatherTime);
-                    goal = Vector3.Lerp(radiated, goal, gather);
-                }
-                else if (!burst && age < JoinTime)
-                {
-                    // Straight out of the body along the line, its place across the stream and its
-                    // height growing in until it flows with the stream.
-                    var join = Mathf.SmoothStep(0f, 1f, age / JoinTime);
-                    goal = Vector3.Lerp(bodyPoint + direction * along, goal, join);
-                }
+                    if (!burst && age < JoinTime)
+                    {
+                        // Straight out of the body along the line, its place across the stream and
+                        // its height growing in until it flows with the stream.
+                        var join = Mathf.SmoothStep(0f, 1f, age / JoinTime);
+                        goal = Vector3.Lerp(bodyPoint + direction * along, goal, join);
+                    }
 
-                light.position = Vector3.Lerp(light.position, goal, follow);
+                    light.position = Vector3.Lerp(light.position, goal, follow);
+                }
                 var fade = Mathf.Clamp01(age / StreamFadeInTime) * Mathf.Clamp01((end - along) / FadeLength);
                 light.startColor = Tint(color, seed, fade * Flicker(seed, time));
                 LightBuffer[kept++] = light;
@@ -632,10 +851,12 @@ namespace Automatics.AutomaticMapping
 
         /// <summary>
         ///     Moves each column light along its own path around the column's axis - circling at
-        ///     its own radius, speed and direction, bobbing at its own height and jittering - and
-        ///     fades it in and out over its lifetime. The column follows the target as it moves.
+        ///     its own radius, speed and direction, bobbing at its own height and jittering - offset
+        ///     by the column's sway at its height, and fades it in and out over its lifetime. Each
+        ///     light is first carried by <paramref name="carry" />, how far the column's base moved
+        ///     since the last frame, so the column keeps its shape around a target that moves.
         /// </summary>
-        private static void MoveColumn(Vector3 centre, Color color, float time, float deltaTime)
+        private static void MoveColumn(Vector3 centre, Vector3 carry, Color color, float time, float deltaTime)
         {
             var follow = 1f - Mathf.Exp(-ColumnFollowRate * deltaTime);
             var count = _column.GetParticles(LightBuffer);
@@ -652,13 +873,14 @@ namespace Automatics.AutomaticMapping
                 var bob = Mathf.Sin(Hash(seed, 4) * TwoPi +
                                     Mathf.Lerp(MinBobSpeed, MaxBobSpeed, Hash(seed, 5)) * age);
                 var level = (Hash(seed, 6) * 2f - 1f) * (1f - BobShare) + bob * BobShare;
+                var sway = SwayAt((level + 1f) * 0.5f, time);
                 var jitter = Hash(seed, 7) * 64f + time * JitterFrequency;
                 var goal = centre + new Vector3(
-                    Mathf.Cos(angle) * radius + Noise(jitter, 0.5f) * JitterAmplitude,
+                    Mathf.Cos(angle) * radius + sway.x + Noise(jitter, 0.5f) * JitterAmplitude,
                     level * ColumnHalfHeight + Noise(jitter, 3.5f) * JitterAmplitude,
-                    Mathf.Sin(angle) * radius + Noise(jitter, 6.5f) * JitterAmplitude);
+                    Mathf.Sin(angle) * radius + sway.y + Noise(jitter, 6.5f) * JitterAmplitude);
 
-                light.position = Vector3.Lerp(light.position, goal, follow);
+                light.position = Vector3.Lerp(light.position + carry, goal, follow);
                 var fade = Mathf.Clamp01(age / ColumnFadeTime) *
                            Mathf.Clamp01(light.remainingLifetime / ColumnFadeTime);
                 light.startColor = Tint(color, seed, fade * Flicker(seed, time));
@@ -678,7 +900,9 @@ namespace Automatics.AutomaticMapping
             _coreLight.intensity =
                 LightIntensity * _lightLevel * (0.8f + 0.2f * Mathf.PerlinNoise(time * 1.7f, 0.3f));
 
-            _targetLight.transform.position = centre;
+            // The light at the column sways with the column's middle.
+            var sway = SwayAt(0.5f, time);
+            _targetLight.transform.position = centre + new Vector3(sway.x, 0f, sway.y);
             _targetLight.intensity =
                 LightIntensity * _lightLevel * (0.8f + 0.2f * Mathf.PerlinNoise(time * 2.3f, 0.7f));
         }
@@ -714,6 +938,33 @@ namespace Automatics.AutomaticMapping
         {
             var x = Hash(seed, 29) * 64f + time * ScatterJitterFrequency;
             return new Vector3(Noise(x, 0.5f), Noise(x, 3.5f), Noise(x, 6.5f)) * ScatterJitter;
+        }
+
+        /// <summary>
+        ///     The point of a line of points nearest to <paramref name="point" />, measured
+        ///     horizontally; a line of one point gives that point.
+        /// </summary>
+        private static Vector3 NearestOnSpine(Vector3[] spine, Vector3 point)
+        {
+            var nearest = spine[0];
+            var nearestDistance = float.MaxValue;
+            for (var i = 1; i < spine.Length; i++)
+            {
+                var from = spine[i - 1];
+                var span = spine[i] - from;
+                span.y = 0f;
+                var offset = point - from;
+                offset.y = 0f;
+                var length = span.sqrMagnitude;
+                var along = length > 0f ? Mathf.Clamp01(Vector3.Dot(offset, span) / length) : 0f;
+                var distance = (offset - span * along).sqrMagnitude;
+                if (distance >= nearestDistance) continue;
+
+                nearestDistance = distance;
+                nearest = from + span * along;
+            }
+
+            return nearest;
         }
 
         /// <summary>Smooth noise from about -1 to 1, read along one row of Perlin noise.</summary>
@@ -956,11 +1207,13 @@ namespace Automatics.AutomaticMapping
     }
 
     /// <summary>
-    ///     Drives a guide swarm that navigation let go on arrival. Every light out at that moment,
-    ///     in the stream and the column, flies off from the column's axis like dispersing insects -
-    ///     each after its own short delay, slowing and zigzagging - and fades out together with the
-    ///     two point lights; no new light appears. The object destroys itself after
-    ///     <see cref="NavigationGuide.ScatterTime" />, whatever navigation does meanwhile.
+    ///     Drives a guide swarm that navigation let go on arrival or by hand. Every light out when
+    ///     the scatter begins flies off like dispersing insects - the column's from the column's
+    ///     axis, the stream's from their nearest point on the stream's spine, which on arrival is
+    ///     one point on that axis - each after its own short delay, slowing and zigzagging, and
+    ///     fades out together with the two point lights; no new light appears. The object destroys
+    ///     itself after <see cref="NavigationGuide.ScatterTime" />, whatever navigation does
+    ///     meanwhile.
     /// </summary>
     internal sealed class NavigationGuideScatter : MonoBehaviour
     {
@@ -971,11 +1224,19 @@ namespace Automatics.AutomaticMapping
         private float _coreIntensity;
         private float _targetIntensity;
         private Vector3 _centre;
+        private Vector3[] _axis;
+        private Vector3[] _spine;
         private float _startTime;
         private float _elapsed;
 
+        /// <summary>A point on the column's axis, which the column's lights fly off from.</summary>
+        internal Vector3 ColumnCentre => _centre;
+
+        /// <summary>The line of points the stream's lights fly off from.</summary>
+        internal Vector3[] StreamSpine => _spine;
+
         internal void Initialize(ParticleSystem stream, ParticleSystem column, Light coreLight, Light targetLight,
-            Vector3 centre)
+            Vector3 centre, Vector3[] streamSpine)
         {
             _stream = stream;
             _column = column;
@@ -984,6 +1245,8 @@ namespace Automatics.AutomaticMapping
             _coreIntensity = coreLight.intensity;
             _targetIntensity = targetLight.intensity;
             _centre = centre;
+            _axis = new[] { centre };
+            _spine = streamSpine;
             _startTime = Time.time;
         }
 
@@ -997,12 +1260,13 @@ namespace Automatics.AutomaticMapping
                 return;
             }
 
-            // Each light's alpha at the arrival falls linearly to zero over the scatter: scaled by
-            // how far the fade fell since the last frame, so no light's own alpha has to be kept.
+            // Each light's alpha when the scatter began falls linearly to zero over the scatter:
+            // scaled by how far the fade fell since the last frame, so no light's own alpha has to
+            // be kept.
             var fade = 1f - elapsed / NavigationGuide.ScatterTime;
             var fadeRatio = fade / (1f - _elapsed / NavigationGuide.ScatterTime);
-            NavigationGuide.MoveScatteringLights(_stream, _centre, _elapsed, elapsed, fadeRatio);
-            NavigationGuide.MoveScatteringLights(_column, _centre, _elapsed, elapsed, fadeRatio);
+            NavigationGuide.MoveScatteringLights(_stream, _spine, _elapsed, elapsed, fadeRatio);
+            NavigationGuide.MoveScatteringLights(_column, _axis, _elapsed, elapsed, fadeRatio);
             _elapsed = elapsed;
 
             _coreLight.intensity = _coreIntensity * fade;

@@ -46,6 +46,7 @@ namespace Automatics.AutomaticMapping
         private static ConfigEntry<CompassPosition> _compassPosition;
         private static ConfigEntry<bool> _enableCompassLabels;
         private static ConfigEntry<KeyboardShortcut> _navigationStartKey;
+        private static ConfigEntry<float> _navigationArrivalDistance;
         private static ConfigEntry<bool> _enableNavigationGuide;
         private static ConfigEntry<string> _navigationGuideColor;
         private static ConfigEntry<bool> _mappingPerformanceLog;
@@ -113,6 +114,8 @@ namespace Automatics.AutomaticMapping
         public static bool EnableCompassLabels => _enableCompassLabels.Value;
         internal static ConfigEntry<bool> EnableCompassLabelsEntry => _enableCompassLabels;
         public static KeyboardShortcut NavigationStartKey => _navigationStartKey.Value;
+        public static float NavigationArrivalDistance => _navigationArrivalDistance.Value;
+        internal static ConfigEntry<float> NavigationArrivalDistanceEntry => _navigationArrivalDistance;
         public static bool EnableNavigationGuide => _enableNavigationGuide.Value;
         internal static ConfigEntry<bool> EnableNavigationGuideEntry => _enableNavigationGuide;
 
@@ -212,6 +215,7 @@ namespace Automatics.AutomaticMapping
             _enableCompassLabels = config.Bind("enable_compass_labels", true);
             _navigationStartKey = config.Bind("navigation_start_key",
                 new KeyboardShortcut(KeyCode.LeftShift));
+            _navigationArrivalDistance = config.Bind("navigation_arrival_distance", 5f, (0f, 50f));
             _enableNavigationGuide = config.Bind("enable_navigation_guide", true);
             _navigationGuideColor = config.Bind("navigation_guide_color", "#FF30C8");
             _mappingPerformanceLog = config.Bind("mapping_performance_log", false,

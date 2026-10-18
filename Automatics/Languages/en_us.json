@@ -133,6 +133,8 @@
     "@config_automatic_mapping_enable_compass_labels_description": "Specify whether the compass shows the name and horizontal distance of the pin you face and of the navigation target, in the form Name [10m]. The pin you face is the one nearest the centre of the strip within 10 degrees of it; while the navigation target is within those 10 degrees, only the target is named.",
     "@config_automatic_mapping_navigation_start_key_name": "Map Navigation Start Key",
     "@config_automatic_mapping_navigation_start_key_description": "Specify the modifier key used to start navigation by left-clicking a pin on the large map. Left click is fixed.",
+    "@config_automatic_mapping_navigation_arrival_distance_name": "Navigation Arrival Distance",
+    "@config_automatic_mapping_navigation_arrival_distance_description": "Specify the horizontal distance in meters from the navigation target within which navigation ends by itself. It ends only after you have been farther away than this during the navigation. 0 turns this off.",
     "@config_automatic_mapping_enable_navigation_guide_name": "Navigation Guide Swarm",
     "@config_automatic_mapping_enable_navigation_guide_description": "Specify whether a swarm of small glowing lights leads you toward the navigation target. When navigation starts, the lights burst out from you in all directions, then stream toward the target in a straight line a little above the ground and hover over it. They are hidden while the large map is open.",
     "@config_automatic_mapping_navigation_guide_color_name": "Navigation Guide Color",

@@ -316,6 +316,12 @@ Specify the modifier key used to start navigation by left-clicking a pin on the 
 
 - Default value: LeftShift
 
+### Navigation Arrival Distance / [navigation_arrival_distance]
+Specify the horizontal distance in meters from the navigation target within which navigation ends by itself. It ends only after you have been farther away than this during the navigation. 0 turns this off.
+
+- Default value: 5
+- Acceptable value range: From 0 to 50
+
 ### Navigation Guide Swarm / [enable_navigation_guide]
 Specify whether a swarm of small glowing lights leads you toward the navigation target. When navigation starts, the lights burst out from you in all directions, then stream toward the target in a straight line a little above the ground and hover over it. They are hidden while the large map is open.
 

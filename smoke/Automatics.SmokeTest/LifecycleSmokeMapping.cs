@@ -13,6 +13,7 @@ using Object = UnityEngine.Object;
 using AimedObjectBar = Automatics.AutomaticMapping.AimedObjectBar;
 using Compass = Automatics.AutomaticMapping.Compass;
 using Navigation = Automatics.AutomaticMapping.Navigation;
+using NavigationGuide = Automatics.AutomaticMapping.NavigationGuide;
 using MappingMap = Automatics.AutomaticMapping.Map;
 using MapFilter = Automatics.AutomaticMapping.MapFilter;
 using BirdCache = Automatics.AutomaticMapping.BirdCache;
@@ -95,6 +96,7 @@ namespace Automatics.SmokeTest
             private const string OffStopped = "mapping_off_stopped_at_request";
             private const string OffPatches = "mapping_off_patches_removed";
             private const string OffComponents = "mapping_off_components_removed";
+            private const string OffHeldSwarm = "mapping_off_held_swarm_removed";
             private const string OffCompass = "mapping_off_compass_removed";
             private const string OffFilterControls = "mapping_off_filter_controls_removed";
             private const string OffTooltip = "mapping_off_tooltip_removed";
@@ -116,7 +118,7 @@ namespace Automatics.SmokeTest
             // are reported in.
             private static readonly string[] Order =
             {
-                Settled, OffState, OffStopped, OffPatches, OffComponents, OffCompass, OffFilterControls, OffFilterSearch,
+                Settled, OffState, OffStopped, OffPatches, OffComponents, OffHeldSwarm, OffCompass, OffFilterControls, OffFilterSearch,
                 OffTooltip, OffSavedPins, OffUnsavedPins,
                 OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, OnCompassOption,
                 Restored, NoErrors
@@ -165,6 +167,10 @@ namespace Automatics.SmokeTest
             private Func<string, bool> _filterHandBack;
             private SmokeSession.SettingRestoration _compassSetting;
             private string _notReached = "not reached: an earlier step stopped the run";
+
+            // A guide swarm held as a map click that clears navigation holds it, made once in the
+            // run just before a disable request, for that disable to remove too.
+            private bool _heldSwarmTried;
 
             public MappingRun(int runId, string runner)
             {
@@ -321,6 +327,9 @@ namespace Automatics.SmokeTest
                     while (on.MoveNext()) yield return on.Current;
                     if (!_proceed) yield break;
                 }
+
+                Settle(CheckStatus.Skip, OffHeldSwarm,
+                    $"no guide swarm was shown just before any of the {MappingCycles} disable requests (for example enable_navigation_guide is off, or the looked-at label found no object to show for), so no held swarm was made");
             }
 
             // Puts the setting back and waits for the registry to follow, then judges the log.
@@ -376,6 +385,8 @@ namespace Automatics.SmokeTest
                 {
                     if (_settled.ContainsKey(name)) continue;
                     if (PerCycle.Contains(name) && Passes(name) >= _cycle) continue;
+                    // Made once in the run, so a stop elsewhere leaves it not reached.
+                    if (name == OffHeldSwarm) continue;
 
                     var prefix = PerCycle.Contains(name) ? $"cycle {_cycle}: " : "";
                     Settle(CheckStatus.Fail, name, prefix + "the run stopped on " + message);
@@ -427,6 +438,22 @@ namespace Automatics.SmokeTest
 
                 // What the module holds unsaved now is what has to be off the map once it is off.
                 var held = HeldPins().Where(pin => !pin.m_save).ToList();
+
+                // The looked-at label's update above showed the swarm for the temporary target. Once
+                // in the run it is hidden and held through the call a map click that clears
+                // navigation makes, so the disable has a held swarm to remove too.
+                var heldSwarmTried = false;
+                var heldSwarmSet = false;
+                GameObject heldSwarm = null;
+                if (!_heldSwarmTried && NavigationGuide.Shown)
+                {
+                    _heldSwarmTried = heldSwarmTried = true;
+                    var swarm = NavigationGuide.Root;
+                    NavigationGuide.Hide();
+                    NavigationGuide.Scatter(NavigationGuide.ColumnCentre, NavigationGuide.StreamLine, true);
+                    heldSwarmSet = NavigationGuide.HeldRoot && NavigationGuide.HeldRoot == swarm;
+                    if (heldSwarmSet) heldSwarm = swarm;
+                }
 
                 // Read before the write, with no frame in between, so no scan can run between the
                 // two. From the write on, the stop request alone has to hold the scan until the
@@ -517,6 +544,19 @@ namespace Automatics.SmokeTest
                     extraPins == 0 && NavigationDestroyHandlers() == 0,
                     "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode, navigation overlay, aimed label, guide swarm or temporary marker is left after disabling with a marker and aimed label active",
                     $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s), {aimedLabels} aimed label(s), aimed active before={aimedActive}, aimed precondition={aimedPrecondition}, {guides} guide swarm(s), marker active before={markerActive}, marker left={Navigation.TemporaryMarker != null || AllPins().Contains(marker)}, extra unsaved pins={extraPins}, navigation destruction handlers={NavigationDestroyHandlers()}");
+
+                if (heldSwarmTried)
+                {
+                    if (!heldSwarmSet)
+                        Settle(CheckStatus.Fail, OffHeldSwarm,
+                            $"cycle {cycle}: a guide swarm was shown just before the disable request, but hiding it and clearing navigation the way a map click does left no held swarm (the held swarm was not the swarm that was shown)");
+                    else if (guides == 0 && !heldSwarm)
+                        Settle(CheckStatus.Pass, OffHeldSwarm,
+                            $"cycle {cycle}: the guide swarm shown just before the disable request was held the way a map click that clears navigation holds it (the held swarm was that swarm), and no guide object was left after the disable");
+                    else
+                        Settle(CheckStatus.Fail, OffHeldSwarm,
+                            $"cycle {cycle}: a held guide swarm was made just before the disable request, and after the disable {guides} guide object(s) were left, the held swarm {(heldSwarm ? "among them" : "gone")}");
+                }
 
                 var saved = SavedPins(_baseline.VehiclePins);
                 Cycle(OffSavedPins, cycle, saved.SequenceEqual(_baseline.SavedPins),

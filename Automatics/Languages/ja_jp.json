@@ -133,6 +133,8 @@
     "@config_automatic_mapping_enable_compass_labels_description": "コンパスで、正面のピンとナビゲーション先の名前と水平距離を「名前 [10m]」の形式で表示するかどうかを指定します。正面のピンは、帯の中央から 10 度以内で最も中央に近いピンです。ナビゲーション先がその 10 度以内にある間は、ナビゲーション先の名前だけを表示します。",
     "@config_automatic_mapping_navigation_start_key_name": "マップナビ開始キー",
     "@config_automatic_mapping_navigation_start_key_description": "全体マップ上のピンを左クリックしてナビゲーションを開始するための修飾キーを指定します。左クリックは固定です。",
+    "@config_automatic_mapping_navigation_arrival_distance_name": "ナビゲーションの到着距離",
+    "@config_automatic_mapping_navigation_arrival_distance_description": "ナビゲーション先から水平にこの距離（メートル）以内に入ると、ナビゲーションを自動で解除します。ナビゲーション中にいったんこの距離より離れたあとに入ったときだけ解除します。0 にすると自動では解除しません。",
     "@config_automatic_mapping_enable_navigation_guide_name": "ナビゲーションの光の群れ",
     "@config_automatic_mapping_enable_navigation_guide_description": "ナビゲーション先へ導く小さな光の群れを表示するかどうかを指定します。ナビゲーションを開始すると光が自分から全方向に飛び散り、地面の少し上を目標へまっすぐ進んで目標の上に漂います。全体マップを開いている間は非表示になります。",
     "@config_automatic_mapping_navigation_guide_color_name": "ナビゲーションの光の色",

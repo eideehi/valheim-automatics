@@ -14,22 +14,25 @@ namespace Automatics.SmokeTest
 {
     // Navigates to an unsaved test pin about 60 m behind the camera, lets the guide swarm run for
     // real frames and reads its lights back, following each light by its random seed: the burst
-    // that spreads out from your body in every direction, the stream's height over the ground and
-    // its flow toward the target with the later lights leaving you along the line, the column over
-    // the target and how it follows a moved target, the stream ending at a near target, hiding on
-    // the large map and the stream resuming without a burst, the navigation ending within the
-    // arrival distance and the swarm scattering there, a navigation started next to its target,
-    // the runtime option and the teardown when the navigation is cleared. It also logs which
-    // particle material the swarm resolved. Bounds that follow the swarm's look are derived from
-    // its constants.
+    // that spreads out from your body in every direction and stays above the ground, also on a
+    // steep slope, the stream's height over the ground and its flow toward the target with the
+    // later lights leaving you along the line, the column over the target, its sway, how it follows
+    // a moved or moving target and how it stands on the surface over a buried or sunk target, the
+    // stream ending at a near target, hiding on the large map and the stream resuming without a
+    // burst, the swarm scattering when navigation is cleared by hand (also held while the large map
+    // is open), the navigation ending within the arrival distance and the swarm scattering there,
+    // a navigation started next to its target, the arrival distance setting, the runtime option and
+    // the teardown when the navigation is cleared. It also logs which particle material the swarm
+    // resolved. Bounds that follow the swarm's look are derived from its constants.
     //
     // You stand still: the section moves the test pin, and the game's own player update drives the
-    // navigation every frame. After each arrival it waits for the scattering swarm to remove itself
+    // navigation every frame. After each scatter it waits for the scattering swarm to remove itself
     // and starts navigation on the pin at 60 m again, so the later checks have one.
     //
     // The test pin is unsaved, so no map save can keep it, and it is the only pin the section
-    // removes. The navigation target, the map mode and enable_navigation_guide are put back when
-    // the section ends, and by the session hand-back when the run is cut short.
+    // removes. navigation_arrival_distance is set to its default for the section. The navigation
+    // target, the map mode, navigation_arrival_distance and enable_navigation_guide are put back
+    // when the section ends, and by the session hand-back when the run is cut short.
     internal static class GuideFeatureSmoke
     {
         private const float TargetDistance = 60f;
@@ -82,8 +85,13 @@ namespace Automatics.SmokeTest
         private const float MaxFlowReach = NavigationGuide.TrailLength + 1f;
 
         private const float ColumnMargin = 0.2f;
+
+        // The column's top sways by up to SwayAmplitude along each horizontal axis, so a light may
+        // lie that much farther out along a diagonal.
+        private const float Sqrt2 = 1.41421356f;
+        private const float SwayReach = Sqrt2 * NavigationGuide.SwayAmplitude;
         private const float MaxColumnSpread =
-            NavigationGuide.ColumnRadius + NavigationGuide.JitterAmplitude + ColumnMargin;
+            NavigationGuide.ColumnRadius + NavigationGuide.JitterAmplitude + SwayReach + ColumnMargin;
         private const float MinColumnHeight = NavigationGuide.ColumnCentreHeight -
                                               (NavigationGuide.ColumnHalfHeight + NavigationGuide.JitterAmplitude + ColumnMargin);
         private const float MaxColumnHeight = NavigationGuide.ColumnCentreHeight +
@@ -101,14 +109,59 @@ namespace Automatics.SmokeTest
         private const float MaxOvershoot = NavigationGuide.ColumnRadius + 0.5f;
         private const float NearCentreDistance = 2f;
 
-        private const float OutsideArrivalDistance = Navigation.ArrivalDistance + 0.5f;
-        private const float InsideArrivalDistance = Navigation.ArrivalDistance - 0.5f;
+        // Over a time longer than both sway periods, the column's mean offset from its axis follows
+        // the mean of the sway its lights are prescribed at their heights.
+        private const float SwayWatchSeconds = 7.5f;
+        private const float MinSwaySlope = 0.5f;
+        private const float MaxSwaySlope = 1.5f;
+        private const float MinSwaySpan = NavigationGuide.SwayAmplitude * 0.5f;
+
+        // A target moving sideways keeps its column around it: after the first moments the column
+        // lags it by less than half of what following alone would leave.
+        private const float MovingTargetSpeed = 8f;
+        private const float MovingTargetSeconds = 2f;
+        private const float MovingTargetSkipSeconds = 0.3f;
+        private const float MaxFollowLag = 0.5f * MovingTargetSpeed / NavigationGuide.ColumnFollowRate;
+
+        // Where the column stands over a buried, raised or sunk target, searched for on a grid of
+        // the loaded terrain around you, the points kept clear of the arrival distance.
+        private const float BuriedDepth = 2f;
+        private const float RaisedHeight = 3f;
+        private const float SunkDepth = 2f;
+        private const float MinWaterDepth = 1f;
+        private const float SearchRadius = 60f;
+        private const float SearchStep = 2f;
+        private const float PinClearance = 5f;
+
+        // A burst on a steep slope, evaluated through the burst step the stream makes each frame.
+        private const float MinSlopeRise = 1.5f;
+        private const int SlopeSeeds = 300;
+        private const int SlopeAges = 10;
+        private const float SlopeFrameRate = 60f;
+        private const float FloorTolerance = 0.05f;
+        private const float MinBurstFloor = NavigationGuide.BurstFloor - FloorTolerance;
+        private const float BurstAge = NavigationGuide.RadiateTime + NavigationGuide.GatherTime;
+
+        private const float ArrivalMargin = 0.5f;
         private const float ArrivalProbeRise = 3f;
         private const int OutsideFrames = 3;
         private const int ArrivalFrames = 2;
+        private const float WideArrivalDistance = 10f;
+        private const float OffArrivalDistance = 0f;
 
         private const float ScatterWatchSeconds = 0.8f;
         private const float RemovalMargin = 0.5f;
+        private const float MinOutwardShare = 0.75f;
+
+        // A swarm held from a map click keeps its lights while the map stays open, and scatters
+        // within a few frames of the map closing.
+        private const float ReadyTimeoutSeconds = 3f;
+        private const float SpineTolerance = 0.25f;
+        private const float HoldSeconds = 0.5f;
+        private const float HeldPositionTolerance = 0.001f;
+        private const int ReleaseFrames = 2;
+        private const int OptionOffFrames = 2;
+        private const float AbsentWatchSeconds = 0.5f;
 
         private const float StartInsideDistance = 3f;
         private const float RearmDistance = 8f;
@@ -117,6 +170,9 @@ namespace Automatics.SmokeTest
 
         private static readonly FieldInfo TargetPinField = AccessTools.Field(typeof(Navigation), "_targetPin");
         private static readonly MethodInfo SetTargetMethod = AccessTools.Method(typeof(Navigation), "SetTarget");
+
+        // How fast a stream light closes on its place, for the follow step of the slope check.
+        private static readonly FieldInfo FollowRateField = AccessTools.Field(typeof(NavigationGuide), "FollowRate");
 
         public static IEnumerator Run(FeatureRun run)
         {
@@ -163,6 +219,7 @@ namespace Automatics.SmokeTest
 
             Minimap.PinData testPin = null;
             var restoredNavigation = false;
+            var state = new SectionState();
             Func<string, bool> handBack = _ =>
             {
                 if (map && map.m_mode != originalMode) map.SetMapMode(originalMode);
@@ -181,6 +238,14 @@ namespace Automatics.SmokeTest
                 if (testPin == null)
                 {
                     run.Skip("guide_section", "the test pin could not be added");
+                    yield break;
+                }
+
+                // The arrival checks are made at the setting's default distance, whatever yours is;
+                // your value is put back with the section's other setting.
+                if (!TakeArrivalSetting(run, state, out var arrivalRefusal))
+                {
+                    run.Skip("guide_section", "navigation_arrival_distance could not be set for the section: " + arrivalRefusal);
                     yield break;
                 }
                 CheckMapClick(run, map, testPin);
@@ -216,6 +281,21 @@ namespace Automatics.SmokeTest
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
 
+                steps = CheckColumnSways(run);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+
+                steps = CheckColumnFollowsMovingTarget(run, player, testPin);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+
+                // One look at the loaded terrain around you, for the raised column and the slope.
+                var grid = new TerrainGrid(player.transform.position);
+                steps = CheckColumnRaised(run, player, testPin, grid);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+                CheckBurstAboveSlope(run, grid);
+
                 steps = CheckTrailEnd(run, player, testPin);
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
@@ -224,7 +304,14 @@ namespace Automatics.SmokeTest
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
 
-                var state = new SectionState();
+                steps = CheckMapClear(run, map, testPin, farPos, state);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+
+                steps = CheckManualClear(run, testPin, farPos, state);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+
                 steps = CheckArrival(run, player, testPin, state);
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
@@ -236,6 +323,10 @@ namespace Automatics.SmokeTest
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
                 steps = Restart(run, testPin, farPos, true);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+
+                steps = CheckArrivalSetting(run, player, testPin, farPos, state);
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
 
@@ -259,7 +350,15 @@ namespace Automatics.SmokeTest
             {
                 try
                 {
-                    if (handBack("guide feature smoke")) SmokeSession.ReleaseHandBack(handBack);
+                    try
+                    {
+                        // Put back here when the section ended before the option checks did it.
+                        if (!state.SettingsReported) ReportSettingsRestored(run, state);
+                    }
+                    finally
+                    {
+                        if (handBack("guide feature smoke")) SmokeSession.ReleaseHandBack(handBack);
+                    }
                 }
                 finally
                 {
@@ -333,11 +432,13 @@ namespace Automatics.SmokeTest
             var columnLights = ReadLights(column);
             var streamVisible = VisibleShare(streamLights, color);
             var columnVisible = VisibleShare(columnLights, color);
+            var drawing = Drawing.Of(root);
+            var shown = NavigationGuide.Shown && drawing.Drawn;
             var detail =
-                $"{systems} particle system(s) and {lights.Length} light(s), {coloured} of them point lights in navigation_guide_color, {networked} ZNetView, root object={root.transform.parent == null}, active={root.activeInHierarchy}; " +
+                $"{systems} particle system(s) and {lights.Length} light(s), {coloured} of them point lights in navigation_guide_color, {networked} ZNetView, root object={root.transform.parent == null}, shown={shown} ({drawing}); " +
                 $"stream {streamLights.Length} lights, {streamVisible:P0} with alpha above {MinAlpha} in the guide colour; column {columnLights.Length} lights, {columnVisible:P0} (bounds: at least {MinLights} lights and {MinVisibleShare:P0} each); " +
                 $"HUD label {(labelHidden ? "off-screen" : overlay ? "shown" : "missing")}";
-            if (root.activeInHierarchy && root.transform.parent == null && systems == 2 && lights.Length == 2 &&
+            if (shown && root.transform.parent == null && systems == 2 && lights.Length == 2 &&
                 coloured == 2 && networked == 0 && streamLights.Length >= MinLights &&
                 columnLights.Length >= MinLights && streamVisible >= MinVisibleShare &&
                 columnVisible >= MinVisibleShare && labelHidden)
@@ -469,11 +570,287 @@ namespace Automatics.SmokeTest
                 $"over {ColumnMotionSeconds} s: {held.Describe()}; {tracked} lights tracked by seed moved a mean {motion:0.000} m (bound above {MinColumnMotion} m); " +
                 $"with the target moved {ColumnSideStep} m sideways the column's mean was {lastOffset:0.00} m from the new axis {(followedAfter >= 0f ? $"after {followedAfter:0.00} s" : $"at {ColumnFollowSeconds} s")} (bound {ColumnFollowTolerance} m within {ColumnFollowSeconds} s); " +
                 $"after {ColumnResettleSeconds} s: {resettled.Describe()}; " +
-                $"bounds {MaxColumnSpread:0.00} m from the axis (ColumnRadius + JitterAmplitude + {ColumnMargin} m) and {MinColumnHeight:0.00}–{MaxColumnHeight:0.00} m above the target (ColumnCentreHeight ± (ColumnHalfHeight + JitterAmplitude + {ColumnMargin} m))";
+                $"bounds {MaxColumnSpread:0.00} m from the axis (ColumnRadius + JitterAmplitude + √2 × SwayAmplitude + {ColumnMargin} m) and {MinColumnHeight:0.00}–{MaxColumnHeight:0.00} m above the target (ColumnCentreHeight ± (ColumnHalfHeight + JitterAmplitude + {ColumnMargin} m))";
             if (held.Holds && tracked > 0 && motion > MinColumnMotion && followedAfter >= 0f && resettled.Holds)
                 run.Pass("guide_destination_swarm", detail);
             else
                 run.Fail("guide_destination_swarm", detail);
+        }
+
+        // With the pin still, the column bends slowly: at each look, the column's mean horizontal
+        // offset from its axis is set against the mean of the sway each light is prescribed at the
+        // height it is seen at, and over a time longer than both sway periods the one follows the
+        // other with a slope near 1. A still column gives a slope near 0, and the whole column
+        // shifted by the top's sway one near 2.
+        private static IEnumerator CheckColumnSways(FeatureRun run)
+        {
+            // The column was just moved back by the previous check.
+            var settle = Time.time;
+            while (run.IsCurrent && Time.time - settle < ColumnResettleSeconds) yield return null;
+            if (!run.IsCurrent) yield break;
+
+            var prescribed = new List<float>();
+            var observed = new List<float>();
+            var low = new Vector2(float.MaxValue, float.MaxValue);
+            var high = new Vector2(float.MinValue, float.MinValue);
+            var widest = 0f;
+            var frames = 0;
+            var positions = 0;
+            var start = Time.time;
+            while (run.IsCurrent && Time.time - start < SwayWatchSeconds)
+            {
+                yield return null;
+                var column = ReadLights(NavigationGuide.Column);
+                if (column.Length == 0) continue;
+
+                var axis = Navigation.TargetPosition;
+                var centre = NavigationGuide.ColumnCentre;
+                var time = Time.time;
+                var offset = Vector2.zero;
+                var sway = Vector2.zero;
+                foreach (var light in column)
+                {
+                    var flat = new Vector2(light.position.x - axis.x, light.position.z - axis.z);
+                    offset += flat;
+                    sway += PrescribedSway(light, centre, time);
+                    widest = Mathf.Max(widest, flat.magnitude);
+                }
+                offset /= column.Length;
+                sway /= column.Length;
+                prescribed.Add(sway.x);
+                observed.Add(offset.x);
+                prescribed.Add(sway.y);
+                observed.Add(offset.y);
+                low = Vector2.Min(low, sway);
+                high = Vector2.Max(high, sway);
+                frames++;
+                positions += column.Length;
+            }
+            if (!run.IsCurrent) yield break;
+
+            var slope = Slope(prescribed, observed);
+            var span = frames > 0 ? high - low : Vector2.zero;
+            var detail = frames == 0
+                ? $"no column light over {SwayWatchSeconds} s"
+                : $"over {SwayWatchSeconds} s (SwayPeriodX {NavigationGuide.SwayPeriodX} s, SwayPeriodZ {NavigationGuide.SwayPeriodZ} s) and {frames} frames ({positions} light positions): the least-squares slope of the column's mean horizontal offset from the axis on the mean prescribed sway (SwayAt at each light's height level, both axes pooled, with an intercept) was {slope:0.00} (bounds {MinSwaySlope}–{MaxSwaySlope}); " +
+                  $"the prescribed mean spanned {span.x:0.000} m along x and {span.y:0.000} m along z (bound at least {MinSwaySpan:0.000} m each: half SwayAmplitude {NavigationGuide.SwayAmplitude} m); " +
+                  $"the farthest light was {widest:0.00} m from the axis (bound {MaxColumnSpread:0.00} m: ColumnRadius + JitterAmplitude + √2 × SwayAmplitude + {ColumnMargin} m)";
+            if (frames > 0 && slope >= MinSwaySlope && slope <= MaxSwaySlope && span.x >= MinSwaySpan &&
+                span.y >= MinSwaySpan && widest <= MaxColumnSpread)
+                run.Pass("guide_column_sways", detail);
+            else
+                run.Fail("guide_column_sways", detail);
+        }
+
+        // With the pin moving sideways at a steady speed, the column keeps its bounds around the
+        // moving axis and, once its own sway is taken out, lags the target by less than half of
+        // what following alone would leave (speed / ColumnFollowRate). The pin is put back.
+        private static IEnumerator CheckColumnFollowsMovingTarget(FeatureRun run, Player player, Minimap.PinData pin)
+        {
+            var farPos = pin.m_pos;
+            var side = Side(Toward(player.transform.position));
+            var widest = 0f;
+            var lagSum = 0f;
+            var observations = 0;
+            var positions = 0;
+            var travelled = 0f;
+            try
+            {
+                var start = Time.time;
+                while (run.IsCurrent)
+                {
+                    yield return null;
+                    var since = Time.time - start;
+                    // This frame's lights followed the target where it was put a frame ago, which
+                    // is where it still is.
+                    var column = ReadLights(NavigationGuide.Column);
+                    if (since > MovingTargetSkipSeconds && column.Length > 0)
+                    {
+                        var axis = Navigation.TargetPosition;
+                        var centre = NavigationGuide.ColumnCentre;
+                        var time = Time.time;
+                        var along = 0f;
+                        foreach (var light in column)
+                        {
+                            var flat = Flat(light.position - axis);
+                            widest = Mathf.Max(widest, flat.magnitude);
+                            var sway = PrescribedSway(light, centre, time);
+                            along += Vector3.Dot(flat - new Vector3(sway.x, 0f, sway.y), side);
+                        }
+                        lagSum -= along / column.Length;
+                        observations++;
+                        positions += column.Length;
+                    }
+                    if (since >= MovingTargetSeconds) break;
+
+                    travelled = MovingTargetSpeed * since;
+                    Map.MovePin(pin, GroundPoint(farPos + side * travelled, farPos.y));
+                }
+                if (!run.IsCurrent) yield break;
+            }
+            finally
+            {
+                Map.MovePin(pin, farPos);
+            }
+
+            var moved = Time.time;
+            while (run.IsCurrent && Time.time - moved < ColumnResettleSeconds) yield return null;
+            if (!run.IsCurrent) yield break;
+
+            var lag = observations > 0 ? lagSum / observations : float.NaN;
+            var detail = observations == 0
+                ? $"no column light seen after the first {MovingTargetSkipSeconds} s"
+                : $"with the pin moved {travelled:0.0} m sideways at {MovingTargetSpeed} m/s for {MovingTargetSeconds} s, over {observations} looks after the first {MovingTargetSkipSeconds} s ({positions} light positions): the farthest light was {widest:0.00} m from the moving axis (bound {MaxColumnSpread:0.00} m: ColumnRadius + JitterAmplitude + √2 × SwayAmplitude + {ColumnMargin} m); " +
+                  $"the column's mean, its prescribed sway taken out light by light, was on average {lag:0.000} m behind along the motion (bound below {MaxFollowLag:0.000} m: half of {MovingTargetSpeed} m/s / ColumnFollowRate {NavigationGuide.ColumnFollowRate}/s); the pin was put back and the column given {ColumnResettleSeconds} s to settle";
+            if (observations > 0 && widest <= MaxColumnSpread && lag < MaxFollowLag)
+                run.Pass("guide_column_follows_moving_target", detail);
+            else
+                run.Fail("guide_column_follows_moving_target", detail);
+        }
+
+        // The column stands on the surface over a target buried under the ground or sunk under
+        // the water, and on the target itself when it is above the ground. Each case is watched
+        // after the column has settled; the pin is put back.
+        private static IEnumerator CheckColumnRaised(FeatureRun run, Player player, Minimap.PinData pin, TerrainGrid grid)
+        {
+            var farPos = pin.m_pos;
+            var playerPos = player.transform.position;
+            var water = ZoneSystem.instance.m_waterLevel;
+            var clearance = MappingConfig.NavigationArrivalDistance + PinClearance;
+
+            // Land: where the pin is, or the loaded point nearest to it whose terrain is above the
+            // water level. Water: the loaded point nearest to you whose terrain lies deep enough.
+            Vector3 land;
+            var hasLand = Terrain(farPos, out var farGround) && farGround > water;
+            if (hasLand)
+                land = new Vector3(farPos.x, farGround, farPos.z);
+            else
+                hasLand = grid.Nearest(farPos, x => x.y > water && Utils.DistanceXZ(x, playerPos) >= clearance, out land);
+            var hasSea = grid.Nearest(playerPos,
+                x => x.y <= water - MinWaterDepth && Utils.DistanceXZ(x, playerPos) >= clearance, out var sea);
+
+            var cases = new List<RaisedCase>();
+            if (hasLand)
+            {
+                cases.Add(new RaisedCase($"{BuriedDepth} m under the ground", new Vector3(land.x, land.y - BuriedDepth, land.z),
+                    land.y, "the ground"));
+                cases.Add(new RaisedCase($"{RaisedHeight} m above the ground", new Vector3(land.x, land.y + RaisedHeight, land.z),
+                    land.y + RaisedHeight, "the pin"));
+            }
+            if (hasSea)
+                cases.Add(new RaisedCase($"{SunkDepth} m under the water surface", new Vector3(sea.x, water - SunkDepth, sea.z),
+                    water, "the water surface"));
+
+            try
+            {
+                foreach (var raised in cases)
+                {
+                    Map.MovePin(pin, raised.Pin);
+                    var moved = Time.time;
+                    while (run.IsCurrent && Time.time - moved < ColumnResettleSeconds) yield return null;
+                    if (!run.IsCurrent) yield break;
+
+                    var start = Time.time;
+                    while (run.IsCurrent)
+                    {
+                        foreach (var light in ReadLights(NavigationGuide.Column))
+                            raised.Sample(light.position.y - raised.Base);
+                        if (Time.time - start >= ColumnMotionSeconds) break;
+                        yield return null;
+                    }
+                    if (!run.IsCurrent) yield break;
+                    raised.Distance = Utils.DistanceXZ(player.transform.position, raised.Pin);
+                }
+            }
+            finally
+            {
+                Map.MovePin(pin, farPos);
+            }
+
+            var settle = Time.time;
+            while (run.IsCurrent && Time.time - settle < ColumnResettleSeconds) yield return null;
+            if (!run.IsCurrent) yield break;
+
+            var parts = cases.Select(x => x.Describe()).ToList();
+            if (!hasLand)
+                parts.Add($"under and above the ground: SKIPPED, no loaded point within {SearchRadius} m and at least {clearance:0} m from you (the arrival distance + {PinClearance} m) has terrain above the water level");
+            if (!hasSea)
+                parts.Add($"under the water: SKIPPED, no loaded point within {SearchRadius} m and at least {clearance:0} m from you (the arrival distance + {PinClearance} m) has terrain at least {MinWaterDepth} m below the water level ({water:0.0} m); the raised column over water is judged by eye");
+            var detail =
+                $"{string.Join("; ", parts)}; bounds {MinColumnHeight:0.00}–{MaxColumnHeight:0.00} m above the expected base (ColumnCentreHeight ± (ColumnHalfHeight + JitterAmplitude + {ColumnMargin} m)), each case watched for {ColumnMotionSeconds} s after {ColumnResettleSeconds} s to settle; the terrain from {grid.Count} points on a {SearchStep} m grid within {SearchRadius} m; the pin was put back";
+            if (cases.Count == 0)
+                run.Skip("guide_column_raised", detail);
+            else if (cases.All(x => x.Holds))
+                run.Pass("guide_column_raised", detail);
+            else
+                run.Fail("guide_column_raised", detail);
+        }
+
+        // The burst function the stream uses keeps a burst light, its place and the light itself
+        // as it trails that place, above the terrain under it with your feet at a steep point of
+        // the loaded terrain, though nobody stands there: the function is evaluated for many
+        // lights and ages, and the terrain under each point is measured by the check itself.
+        private static void CheckBurstAboveSlope(FeatureRun run, TerrainGrid grid)
+        {
+            if (!grid.Steepest(out var feet, out var uphill, out var rise) || rise < MinSlopeRise)
+            {
+                run.Skip("guide_burst_above_slope",
+                    $"no loaded terrain within {SearchRadius} m rises {MinSlopeRise} m within {SearchStep} m horizontally (steepest {(grid.Count > 0 ? rise.ToString("0.00") : "none")} m over {grid.Count} points on a {SearchStep} m grid); the burst on a slope is judged by eye");
+                return;
+            }
+
+            var followRate = FollowRateField == null
+                ? float.NaN
+                : Convert.ToSingle(FollowRateField.IsLiteral ? FollowRateField.GetRawConstantValue() : FollowRateField.GetValue(null));
+            if (float.IsNaN(followRate))
+            {
+                run.Fail("guide_burst_above_slope", "NavigationGuide's FollowRate could not be read by reflection");
+                return;
+            }
+
+            // A light's step toward its place in one frame at the frame rate below.
+            var follow = 1f - Mathf.Exp(-followRate / SlopeFrameRate);
+            var bodyPoint = feet + Vector3.up * NavigationGuide.BodyHeight;
+            var ahead = feet + uphill * SearchStep;
+            ahead.y = (Terrain(ahead, out var aheadGround) ? aheadGround : feet.y) + NavigationGuide.HoverHeight;
+
+            var lowestGoal = float.MaxValue;
+            var lowestPosition = float.MaxValue;
+            var measured = 0;
+            var unmeasured = 0;
+            for (var i = 0; i < SlopeSeeds; i++)
+            {
+                uint seed;
+                unchecked
+                {
+                    seed = (uint)(i + 1) * 2654435761u;
+                }
+                for (var k = 0; k < SlopeAges; k++)
+                {
+                    var age = (k + 0.5f) / SlopeAges * BurstAge;
+                    // The step the stream makes for a bursting light each frame, from the body point.
+                    var position = NavigationGuide.BurstStep(seed, age, bodyPoint, ahead, bodyPoint, follow,
+                        out var goal);
+                    if (Terrain(goal, out var goalGround) && Terrain(position, out var positionGround))
+                    {
+                        lowestGoal = Mathf.Min(lowestGoal, goal.y - goalGround);
+                        lowestPosition = Mathf.Min(lowestPosition, position.y - positionGround);
+                        measured++;
+                    }
+                    else
+                        unmeasured++;
+                }
+            }
+
+            var degrees = Mathf.Atan2(rise, SearchStep) * Mathf.Rad2Deg;
+            var detail =
+                $"steepest loaded terrain within {SearchRadius} m: rising {rise:0.00} m over {SearchStep} m (about {degrees:0} degrees; bound at least {MinSlopeRise} m) at {Utils.DistanceXZ(feet, Player.m_localPlayer ? Player.m_localPlayer.transform.position : feet):0} m from you, out of {grid.Count} points on a {SearchStep} m grid; " +
+                $"with the feet there, the body point {NavigationGuide.BodyHeight} m above them and the stream's place {NavigationGuide.HoverHeight} m (HoverHeight) over the terrain {SearchStep} m uphill, {SlopeSeeds} seeds × {SlopeAges} ages within {BurstAge:0.0} s (RadiateTime + GatherTime) gave {measured} points measured ({unmeasured} without terrain under them): " +
+                $"the lowest place was {lowestGoal:0.00} m and the lowest light after the stream's own burst step, one frame's follow ({follow:0.000}: 1 - exp(-FollowRate {followRate}/s / {SlopeFrameRate} fps)) from the body point, {lowestPosition:0.00} m above the terrain under it (bound {MinBurstFloor:0.00} m: BurstFloor {NavigationGuide.BurstFloor} m - {FloorTolerance} m)";
+            if (measured > 0 && lowestGoal >= MinBurstFloor && lowestPosition >= MinBurstFloor)
+                run.Pass("guide_burst_above_slope", detail);
+            else
+                run.Fail("guide_burst_above_slope", detail);
         }
 
         // With the target nearer than the trail's length, the stream ends at the target and flows
@@ -538,8 +915,10 @@ namespace Automatics.SmokeTest
             }
 
             var hidden = false;
+            var hiddenDrawing = "";
             var modeSeen = map.m_mode;
             var shownAgain = false;
+            var shownDrawing = "";
             var refilled = 0;
             var stale = 0;
             FlowWatch resumed = null;
@@ -550,14 +929,17 @@ namespace Automatics.SmokeTest
                 yield return null;
                 yield return null;
                 var root = NavigationGuide.Root;
-                hidden = map.m_mode == Minimap.MapMode.Large && root && !root.activeInHierarchy;
+                var drawing = Drawing.Of(root);
+                hidden = map.m_mode == Minimap.MapMode.Large && root && !NavigationGuide.Shown && drawing.Hidden;
+                hiddenDrawing = drawing.ToString();
                 modeSeen = map.m_mode;
                 map.SetMapMode(originalMode == Minimap.MapMode.Large ? Minimap.MapMode.Small : originalMode);
                 var closeTime = Time.time;
                 resumed = new FlowWatch(closeTime, closeTime + ResumeWindowSeconds);
                 yield return null;
-                root = NavigationGuide.Root;
-                shownAgain = root && root.activeInHierarchy;
+                drawing = Drawing.Of(NavigationGuide.Root);
+                shownAgain = NavigationGuide.Shown && drawing.Drawn;
+                shownDrawing = drawing.ToString();
                 var column = ReadLights(NavigationGuide.Column);
                 refilled = column.Length;
                 stale = column.Count(x => before.Contains(x.randomSeed));
@@ -576,7 +958,7 @@ namespace Automatics.SmokeTest
             if (!run.IsCurrent) yield break;
 
             var detail =
-                $"map mode {modeSeen}: swarm {(hidden ? "hidden" : "still shown or gone")}; after closing: {(shownAgain ? "shown" : "not shown")}, column {refilled} lights with {stale} left from before the map opened (bounds: at least {MinLights}, none left); " +
+                $"map mode {modeSeen}: swarm {(hidden ? "hidden" : "still shown or gone")} ({hiddenDrawing}); after closing: {(shownAgain ? "shown" : "not shown")} ({shownDrawing}), column {refilled} lights with {stale} left from before the map opened (bounds: at least {MinLights}, none left); " +
                 (resumed == null
                     ? "the stream was not watched"
                     : $"over {ResumeWatchSeconds} s, {resumed.BurstLights} burst light(s) (start lifetime above {BurstLifetimeSplit:0.00} s; bound none), and the lights born in the first {ResumeWindowSeconds} s: {resumed.Describe()} (bound {MaxBehind} m behind)");
@@ -585,6 +967,219 @@ namespace Automatics.SmokeTest
                 run.Pass("guide_hidden_on_large_map", detail);
             else
                 run.Fail("guide_hidden_on_large_map", detail);
+        }
+
+        // A map click on the target clears navigation while the large map hides the swarm: the
+        // swarm is held, hidden, with its lights where they were, until the map closes, and then
+        // scatters, its stream's lights flying off from the line they flowed along. A navigation
+        // started on the map before it closes, or the option turned off, drops the held swarm
+        // instead. After each case the section waits for the scatter to go and starts navigation
+        // on the pin at 60 m again.
+        private static IEnumerator CheckMapClear(FeatureRun run, Minimap map, Minimap.PinData pin, Vector3 farPos,
+            SectionState state)
+        {
+            const string name = "guide_scatters_after_map_clear";
+            if (Game.m_noMap)
+            {
+                run.Skip(name, "the world has no map, so the large map cannot open");
+                yield break;
+            }
+            if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
+            {
+                run.Skip(name, "navigation_start_key is unbound, so a map click cannot clear navigation");
+                yield break;
+            }
+            if (state.Leftover != null)
+            {
+                run.Skip(name, "a guide object left from an earlier scatter would be counted: " + state.Leftover);
+                yield break;
+            }
+
+            // Navigation cleared by the click; the held swarm scatters once the map closes.
+            var ready = new ReadySwarm();
+            var steps = AwaitReady(run, ready);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            if (!ready.Ready)
+            {
+                run.Skip(name, "the swarm was not ready for the map click: " + ready.Describe());
+                yield break;
+            }
+            var held = new HeldClick();
+            steps = ClickPinAndHold(run, map, pin, held, null);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            var closed = Time.time;
+            var releasedIn = 0;
+            for (var frame = 1; frame <= ReleaseFrames; frame++)
+            {
+                yield return null;
+                if (!run.IsCurrent) yield break;
+                if (!held.Held || !held.Held.GetComponent<NavigationGuideScatter>() || !Drawing.Of(held.Held).Drawn)
+                    continue;
+                releasedIn = frame;
+                break;
+            }
+            var scatter = new ScatterOutcome();
+            if (releasedIn > 0)
+            {
+                steps = WatchOutwardScatter(run, held.Held, held.Stream, held.Column, held.Line, held.Axis, state,
+                    scatter);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+            }
+            var main =
+                $"before the map opened: {ready.Describe()}; {held.Describe()}; after closing: " +
+                (releasedIn > 0
+                    ? $"shown and scattering in {releasedIn} frame(s) (bound {ReleaseFrames}): {scatter.Detail}"
+                    : $"not shown and scattering within {ReleaseFrames} frames ({Drawing.Of(held.Held)}, {(held.Held && held.Held.GetComponent<NavigationGuideScatter>() ? "scattering" : "no scatter driver")}), {Time.time - closed:0.00} s after closing");
+            var mainPassed = held.HeldSwarm && held.Kept && releasedIn > 0 && scatter.Passed;
+            steps = WaitForOthersRemoved(run, state);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            steps = Restart(run, pin, farPos, true);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+
+            // A navigation started on the map before it closes drops the held swarm.
+            ready = new ReadySwarm();
+            steps = AwaitReady(run, ready);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            if (!ready.Ready)
+            {
+                run.Skip(name, $"{main}; the swarm was not ready for the map click before a navigation started on the map: {ready.Describe()}");
+                yield break;
+            }
+            var restarted = new HeldClick();
+            steps = ClickPinAndHold(run, map, pin, restarted, x => StartOnOpenMap(map, pin, x));
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            var restartWatch = new AfterCloseWatch();
+            steps = restartWatch.Watch(run);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            var objects = FindGuideObjects();
+            var onlyNew = objects.Count == 1 && NavigationGuide.Root && objects[0] == NavigationGuide.Root.transform &&
+                          !restarted.Held;
+            var started =
+                $"a navigation started on the map before closing: held swarm {(restarted.HeldSwarm ? "made" : "not made")} by the click, the second click {(restarted.SecondHandled ? "handled" : "not handled")}, navigation {(restarted.Restarted ? "on the test pin again" : "not started")}, held swarm {(restarted.DroppedBeforeClose ? "dropped" : "kept")} before closing; " +
+                $"over {AbsentWatchSeconds} s after closing {restartWatch.Describe()}; then {objects.Count} guide object(s){(onlyNew ? ", the new swarm" : "")}";
+            var startedPassed = restarted.HeldSwarm && restarted.SecondHandled && restarted.Restarted &&
+                                restarted.DroppedBeforeClose && !restartWatch.ScatterSeen && restartWatch.BurstSeen &&
+                                restartWatch.NewSwarmSeen && onlyNew;
+            steps = WaitForOthersRemoved(run, state);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            steps = Restart(run, pin, farPos, true);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+
+            // The option turned off while a swarm is held drops it; nothing scatters on closing.
+            ready = new ReadySwarm();
+            steps = AwaitReady(run, ready);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            if (!ready.Ready)
+            {
+                run.Skip(name, $"{main}; {started}; the swarm was not ready for the map click before the option was turned off: {ready.Describe()}");
+                yield break;
+            }
+            var dropped = new HeldClick();
+            var offWatch = new AfterCloseWatch();
+            try
+            {
+                steps = ClickPinAndHold(run, map, pin, dropped, x => TurnGuideOffWhileHeld(run, state, x));
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+                steps = offWatch.Watch(run);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+            }
+            finally
+            {
+                if (dropped.TurnedOff)
+                    dropped.TurnedOn = SmokeSession.WriteSetting(run.RunId, state.GuideSetting, true, out dropped.Refusal);
+            }
+            var optionOff = dropped.TurnedOff
+                ? $"with enable_navigation_guide turned off while held: held swarm {(dropped.HeldSwarm ? "made" : "not made")} by the click, {(dropped.DroppedBeforeClose ? "no guide object left" : "a guide object left")} {OptionOffFrames} frames later with the map open; over {AbsentWatchSeconds} s after closing {offWatch.Describe()}; the option {(dropped.TurnedOn ? "turned back on" : "not turned back on: " + dropped.Refusal)}"
+                : $"the option-off case could not run: enable_navigation_guide could not be turned off: {dropped.Refusal}";
+            var optionOffPassed = dropped.HeldSwarm && dropped.TurnedOff && dropped.DroppedBeforeClose &&
+                                  !offWatch.ScatterSeen && !offWatch.ObjectSeen && dropped.TurnedOn;
+            steps = WaitForOthersRemoved(run, state);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            steps = Restart(run, pin, farPos, true);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+
+            var detail = $"{main}; {started}; {optionOff}";
+            if (mainPassed && startedPassed && optionOffPassed)
+                run.Pass(name, detail);
+            else if (mainPassed && startedPassed && !dropped.TurnedOff)
+                run.Skip(name, detail);
+            else
+                run.Fail(name, detail);
+        }
+
+        // Clearing navigation by hand with the swarm shown, through the routine the map click and
+        // the looked-at-object key both use, shows the cleared message and scatters the swarm at
+        // once, its stream's lights flying off from the line they flowed along and its column's from
+        // the column's axis. The section then waits for the scatter to go and starts navigation on
+        // the pin at 60 m again.
+        private static IEnumerator CheckManualClear(FeatureRun run, Minimap.PinData pin, Vector3 farPos,
+            SectionState state)
+        {
+            const string name = "guide_scatters_on_manual_clear";
+            if (state.Leftover != null)
+            {
+                run.Skip(name, "a guide object left from an earlier scatter would be counted: " + state.Leftover);
+                yield break;
+            }
+
+            var ready = new ReadySwarm();
+            var steps = AwaitReady(run, ready);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            if (!ready.Ready)
+            {
+                run.Skip(name, "the swarm was not ready for the clear: " + ready.Describe());
+                yield break;
+            }
+
+            var root = NavigationGuide.Root;
+            var stream = NavigationGuide.Stream;
+            var column = NavigationGuide.Column;
+            // Taken by the check itself in the frame of the clear, whatever the scatter is handed.
+            var line = ExpectedStreamLine();
+            var axis = Navigation.TargetPosition;
+            var messages = ClearByHand(out var messageObserved);
+            var expected = global::Automatics.Automatics.L10N.Localize("@message_automatic_mapping_navigation_cleared");
+            var messageShown = messages.Contains(expected);
+            var cleared = Navigation.TargetPin == null;
+            var objects = FindGuideObjects();
+            var single = objects.Count == 1 && root && objects[0] == root.transform && !NavigationGuide.Root;
+            var drawing = Drawing.Of(root);
+            var scattering = root && root.GetComponent<NavigationGuideScatter>();
+
+            var scatter = new ScatterOutcome();
+            steps = WatchOutwardScatter(run, root, stream, column, line, axis, state, scatter);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+
+            var detail =
+                $"navigation {(cleared ? "cleared" : "still on")}, message {(messageShown ? $"'{expected}' shown" : messageObserved ? $"'{expected}' not among [{string.Join(", ", messages)}]" : "not observed (the player's message method was not found)")}; " +
+                $"before the clear: {ready.Describe()}; {objects.Count} guide object(s) at the clear{(single ? ", the swarm that was shown" : "")}, {(drawing.Drawn ? "shown" : "not shown")} ({drawing}), {(scattering ? "scattering" : "no scatter driver")}; {scatter.Detail}";
+            if (cleared && messageShown && single && drawing.Drawn && scattering && scatter.Passed)
+                run.Pass(name, detail);
+            else
+                run.Fail(name, detail);
+
+            steps = WaitForOthersRemoved(run, state);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            steps = Restart(run, pin, farPos, true);
+            while (steps.MoveNext()) yield return steps.Current;
         }
 
         private static void CheckDistanceFormat(FeatureRun run, Player player, Minimap map, Minimap.PinData pin)
@@ -668,16 +1263,8 @@ namespace Automatics.SmokeTest
             }
             if (!run.IsCurrent) yield break;
 
-            // The least a light flies out from the axis by now, leaving last at the lowest speed
-            // and straight out only by the smallest share of its direction; the zigzag around
-            // its path averages out over a system's lights.
             var elapsed = Time.time - clearTime;
-            var share = (1f - NavigationGuide.ScatterSpread) /
-                        (1f + NavigationGuide.ScatterSpread + NavigationGuide.ScatterLift);
-            var flying = Mathf.Max(0f, elapsed - NavigationGuide.ScatterDelay);
-            var travel = NavigationGuide.MinScatterSpeed / NavigationGuide.ScatterDecay *
-                         (1f - Mathf.Exp(-NavigationGuide.ScatterDecay * flying));
-            var bound = 0.5f * share * travel;
+            var bound = ScatterBound(elapsed, out var share, out var travel);
             var streamScattered = stream.Evaluate(bound, out var streamDetail);
             var columnScattered = column.Evaluate(bound, out var columnDetail);
             var dimmed = lights.Length == 2 &&
@@ -701,6 +1288,80 @@ namespace Automatics.SmokeTest
                 run.Pass("guide_scatters_on_arrival", detail);
             else
                 run.Fail("guide_scatters_on_arrival", detail);
+        }
+
+        // The least a scattering light flies out by the given time since the scatter began, leaving
+        // last at the lowest speed and straight out only by the smallest share of its direction;
+        // the zigzag around its path averages out over a system's lights. The bound is half of it.
+        private static float ScatterBound(float elapsed, out float share, out float travel)
+        {
+            share = (1f - NavigationGuide.ScatterSpread) /
+                    (1f + NavigationGuide.ScatterSpread + NavigationGuide.ScatterLift);
+            var flying = Mathf.Max(0f, elapsed - NavigationGuide.ScatterDelay);
+            travel = NavigationGuide.MinScatterSpeed / NavigationGuide.ScatterDecay *
+                     (1f - Mathf.Exp(-NavigationGuide.ScatterDecay * flying));
+            return 0.5f * share * travel;
+        }
+
+        // A swarm let go by hand, watched from its first look after the scatter began: per system,
+        // the lights with alpha above 0.1 then, none added and none lost, at least 75 % of them
+        // moved outward - the stream's from their nearest point on the stream's line, the column's
+        // from the column's axis, both as the check took them itself before the clear and each
+        // light's outward direction taken at that first look - a mean outward move of at least the
+        // arrival scatter's bound, the mean alpha below half, and no guide object left within
+        // ScatterTime + 0.5 s. The line and the axis the scatter was handed lie at the check's own:
+        // the line's two ends within SpineTolerance of the ends of the check's line, the axis
+        // within it of the check's.
+        private static IEnumerator WatchOutwardScatter(FeatureRun run, GameObject root, ParticleSystem streamSystem,
+            ParticleSystem columnSystem, Vector3[] line, Vector3 axis, SectionState state, ScatterOutcome outcome)
+        {
+            var since = Time.time;
+            var driver = root ? root.GetComponent<NavigationGuideScatter>() : null;
+            if (!driver)
+            {
+                outcome.Detail = "no scatter driver on the swarm, so nothing was watched";
+                yield break;
+            }
+
+            var spine = driver.StreamSpine;
+            var startGap = spine != null && spine.Length > 0 ? Utils.DistanceXZ(spine[0], line[0]) : float.MaxValue;
+            var endGap = spine != null && spine.Length > 0
+                ? Utils.DistanceXZ(spine[spine.Length - 1], line[line.Length - 1])
+                : float.MaxValue;
+            var axisGap = Utils.DistanceXZ(driver.ColumnCentre, axis);
+            var handed = startGap <= SpineTolerance && endGap <= SpineTolerance && axisGap <= SpineTolerance;
+            var lineLength = Utils.DistanceXZ(line[0], line[line.Length - 1]);
+
+            var stream = new OutwardCohort("stream", streamSystem, line,
+                $"its nearest point on the stream's line ({lineLength:0.0} m from you toward the target)");
+            var column = new OutwardCohort("column", columnSystem, new[] { axis }, "the column's axis");
+            while (run.IsCurrent)
+            {
+                yield return null;
+                stream.Sample();
+                column.Sample();
+                if (Time.time - since >= ScatterWatchSeconds) break;
+            }
+            if (!run.IsCurrent) yield break;
+
+            var elapsed = Time.time - since;
+            var bound = ScatterBound(elapsed, out var share, out var travel);
+            var streamScattered = stream.Evaluate(bound, out var streamDetail);
+            var columnScattered = column.Evaluate(bound, out var columnDetail);
+
+            var steps = WaitForRemoval(run, since, state);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+            var removed = CountGuideObjects() == 0;
+
+            outcome.Passed = handed && streamScattered && columnScattered && removed;
+            outcome.Detail =
+                $"the scatter was handed a stream line of {(spine == null ? 0 : spine.Length)} point(s) whose ends lie {startGap:0.00} m and {endGap:0.00} m from the ends of the line taken by the check, and an axis {axisGap:0.00} m from the target (bound {SpineTolerance} m each); " +
+                $"by {elapsed:0.00} s: {streamDetail}; {columnDetail}; " +
+                $"outward bound {bound:0.000} m, half of {share * travel:0.000} m (MinScatterSpeed {NavigationGuide.MinScatterSpeed} m/s from ScatterDelay {NavigationGuide.ScatterDelay} s, slowing by ScatterDecay {NavigationGuide.ScatterDecay}/s, outward share (1 - ScatterSpread) / (1 + ScatterSpread + ScatterLift) = {share:0.00}); outward share bound {MinOutwardShare:P0}; " +
+                (removed
+                    ? $"no guide object left {Time.time - since:0.00} s after the scatter began (bound {NavigationGuide.ScatterTime + RemovalMargin:0.0} s: ScatterTime + {RemovalMargin} s)"
+                    : state.Leftover);
         }
 
         // A navigation started on a target already within the arrival distance stays on until you
@@ -747,7 +1408,7 @@ namespace Automatics.SmokeTest
             var clearTime = Time.time;
 
             var detail =
-                $"started {insideDistance:0.0} m away (ArrivalDistance {Navigation.ArrivalDistance} m) from a navigation {(armed ? "on" : "not on")} the test pin: {(freshSwarm ? "a new swarm" : newRoot ? "the same swarm" : "no swarm")} a frame later, navigation {(kept ? "kept" : "ended")} after {KeepSeconds} s; " +
+                $"started {insideDistance:0.0} m away (navigation_arrival_distance {MappingConfig.NavigationArrivalDistance} m) from a navigation {(armed ? "on" : "not on")} the test pin: {(freshSwarm ? "a new swarm" : newRoot ? "the same swarm" : "no swarm")} a frame later, navigation {(kept ? "kept" : "ended")} after {KeepSeconds} s; " +
                 $"{outsideDistance:0.0} m away for {RearmFrames} frames: navigation {(keptOutside ? "kept" : "ended")}; back at {StartInsideDistance} m: {(frames > 0 ? $"ended in {frames} frame(s)" : $"still on after {ArrivalFrames} frames")}";
             if (armed && freshSwarm && kept && keptOutside && frames > 0)
                 run.Pass("navigation_kept_when_started_inside", detail);
@@ -757,6 +1418,88 @@ namespace Automatics.SmokeTest
             if (frames == 0) yield break;
             var steps = WaitForRemoval(run, clearTime, state);
             while (steps.MoveNext()) yield return steps.Current;
+        }
+
+        // navigation_arrival_distance moves where navigation ends: set to 10 m, navigation stays on
+        // just outside it and ends just inside it; set to 0, it never ends on arrival, even with the
+        // pin half a metre away. The setting goes back to the section's distance afterwards, and
+        // navigation is started on the pin at 60 m again.
+        private static IEnumerator CheckArrivalSetting(FeatureRun run, Player player, Minimap.PinData pin,
+            Vector3 farPos, SectionState state)
+        {
+            const string name = "navigation_arrival_distance_setting";
+            var wide = new ArrivalProbe();
+            var off = new ArrivalProbe();
+            var offKept = false;
+            var offFor = 0f;
+            var wideRemoved = false;
+            string refusal = null;
+            var back = false;
+            string backRefusal = null;
+            try
+            {
+                if (!SmokeSession.WriteSetting(run.RunId, state.ArrivalSetting, WideArrivalDistance, out refusal))
+                {
+                    run.Skip(name, $"navigation_arrival_distance could not be set to {WideArrivalDistance} m: {refusal}");
+                    yield break;
+                }
+                var steps = ProbeArrival(run, player, pin, wide, WideArrivalDistance + ArrivalMargin,
+                    WideArrivalDistance - ArrivalMargin);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+                if (wide.Frames > 0)
+                {
+                    steps = WaitForRemoval(run, Time.time, state);
+                    while (steps.MoveNext()) yield return steps.Current;
+                    if (!run.IsCurrent) yield break;
+                    wideRemoved = CountGuideObjects() == 0;
+                }
+
+                steps = Restart(run, pin, farPos, true);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+                if (!SmokeSession.WriteSetting(run.RunId, state.ArrivalSetting, OffArrivalDistance, out refusal))
+                {
+                    run.Skip(name, $"navigation_arrival_distance could not be set to {OffArrivalDistance} m: {refusal}");
+                    yield break;
+                }
+                steps = ProbeArrival(run, player, pin, off, WideArrivalDistance + ArrivalMargin,
+                    OffArrivalDistance + ArrivalMargin);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+                offKept = off.Frames == 0;
+                while (run.IsCurrent && offKept && Time.time - off.InsideAt < KeepSeconds)
+                {
+                    yield return null;
+                    offKept = ReferenceEquals(Navigation.TargetPin, pin);
+                }
+                if (!run.IsCurrent) yield break;
+                offFor = Time.time - off.InsideAt;
+            }
+            finally
+            {
+                back = SmokeSession.WriteSetting(run.RunId, state.ArrivalSetting, state.SectionArrivalDistance,
+                    out backRefusal);
+            }
+
+            if (!offKept)
+            {
+                var steps = WaitForRemoval(run, Time.time, state);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+            }
+            var restart = Restart(run, pin, farPos, true);
+            while (restart.MoveNext()) yield return restart.Current;
+            if (!run.IsCurrent) yield break;
+
+            var detail =
+                $"at {WideArrivalDistance} m: {wide.Describe()}{(wide.Frames > 0 ? $", the scatter {(wideRemoved ? "gone" : "still there")} after the wait" : "")}; " +
+                $"at {OffArrivalDistance} m: {off.OutsideDistance:0.0} m away horizontally: navigation {(off.KeptOutside ? "kept" : "ended")}; {off.InsideDistance:0.0} m away horizontally: navigation {(offKept ? "kept" : "ended")} for {offFor:0.00} s (bound {KeepSeconds} s); " +
+                $"navigation_arrival_distance {(back ? $"back at {state.SectionArrivalDistance} m" : "not put back: " + backRefusal)}";
+            if (wide.KeptOutside && wide.Frames > 0 && off.KeptOutside && offKept && offFor >= KeepSeconds && back)
+                run.Pass(name, detail);
+            else
+                run.Fail(name, detail);
         }
 
         // Turning the option off destroys the swarm, navigation still ends on arrival without it,
@@ -773,8 +1516,8 @@ namespace Automatics.SmokeTest
 
             try
             {
-                if (!SmokeSession.BeginSetting(run.RunId, entry, out var setting, out var refusal) ||
-                    !SmokeSession.WriteSetting(run.RunId, setting, false, out refusal))
+                if (!TakeGuideSetting(run, state, out var refusal) ||
+                    !SmokeSession.WriteSetting(run.RunId, state.GuideSetting, false, out refusal))
                 {
                     run.Skip("guide_option_off_destroys", $"{entry.Definition.Key} could not be turned off: {refusal}");
                     run.Skip("navigation_clears_with_swarm_off", $"{entry.Definition.Key} could not be turned off: {refusal}");
@@ -809,29 +1552,62 @@ namespace Automatics.SmokeTest
             }
             finally
             {
-                var results = SmokeSession.RestoreSettings(run.RunId);
-                if (results.Count > 0)
-                {
-                    var detail = string.Join("; ", results.Select(x => x.Value));
-                    if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
-                        run.Fail("guide_settings_restored", detail);
-                    else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
-                                              x.Key == SmokeSession.ToggleOutcome.NotThisRun))
-                        run.Skip("guide_settings_restored", "restoration skipped: " + detail);
-                    else
-                        run.Pass("guide_settings_restored", detail);
-                }
+                ReportSettingsRestored(run, state);
             }
 
             yield return null;
             yield return null;
-            if (MappingConfig.EnableNavigationGuide && NavigationGuide.Root &&
-                NavigationGuide.Root.activeInHierarchy)
+            if (MappingConfig.EnableNavigationGuide && NavigationGuide.Shown && Drawing.Of(NavigationGuide.Root).Drawn)
                 run.Pass("guide_option_on_recreates");
             else if (!MappingConfig.EnableNavigationGuide)
                 run.Skip("guide_option_on_recreates", "enable_navigation_guide was not turned back on");
             else
                 run.Fail("guide_option_on_recreates", "the swarm did not come back with enable_navigation_guide on");
+        }
+
+        // Every setting the section took on, put back, and reported once.
+        private static void ReportSettingsRestored(FeatureRun run, SectionState state)
+        {
+            state.SettingsReported = true;
+            var results = SmokeSession.RestoreSettings(run.RunId);
+            if (results.Count == 0) return;
+
+            var detail = string.Join("; ", results.Select(x => x.Value));
+            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
+                run.Fail("guide_settings_restored", detail);
+            else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
+                                      x.Key == SmokeSession.ToggleOutcome.NotThisRun))
+                run.Skip("guide_settings_restored", "restoration skipped: " + detail);
+            else
+                run.Pass("guide_settings_restored", detail);
+        }
+
+        // navigation_arrival_distance, taken on for the section and set to its default.
+        private static bool TakeArrivalSetting(FeatureRun run, SectionState state, out string refusal)
+        {
+            var entry = MappingConfig.NavigationArrivalDistanceEntry;
+            if (entry == null)
+            {
+                refusal = "the entry is not bound";
+                return false;
+            }
+            if (!SmokeSession.BeginSetting(run.RunId, entry, out state.ArrivalSetting, out refusal)) return false;
+            state.SectionArrivalDistance = (float)entry.DefaultValue;
+            return SmokeSession.WriteSetting(run.RunId, state.ArrivalSetting, state.SectionArrivalDistance, out refusal);
+        }
+
+        // enable_navigation_guide, taken on once for every check of the section that turns it off.
+        private static bool TakeGuideSetting(FeatureRun run, SectionState state, out string refusal)
+        {
+            refusal = null;
+            if (state.GuideSetting != null) return true;
+            var entry = MappingConfig.EnableNavigationGuideEntry;
+            if (entry == null)
+            {
+                refusal = "the entry is not bound";
+                return false;
+            }
+            return SmokeSession.BeginSetting(run.RunId, entry, out state.GuideSetting, out refusal);
         }
 
         // The pin is moved next to you rather than you to the pin, first just outside and then
@@ -841,6 +1617,14 @@ namespace Automatics.SmokeTest
         private static IEnumerator ProbeArrival(FeatureRun run, Player player, Minimap.PinData pin,
             ArrivalProbe probe)
         {
+            var distance = MappingConfig.NavigationArrivalDistance;
+            return ProbeArrival(run, player, pin, probe, distance + ArrivalMargin, distance - ArrivalMargin);
+        }
+
+        private static IEnumerator ProbeArrival(FeatureRun run, Player player, Minimap.PinData pin,
+            ArrivalProbe probe, float outside, float inside)
+        {
+            probe.ArrivalDistance = MappingConfig.NavigationArrivalDistance;
             var playerPos = player.transform.position;
             var forward = Forward(player);
             Vector3 ProbePoint(float distance)
@@ -850,7 +1634,7 @@ namespace Automatics.SmokeTest
                 return point;
             }
 
-            Map.MovePin(pin, ProbePoint(OutsideArrivalDistance));
+            Map.MovePin(pin, ProbePoint(outside));
             for (var i = 0; i < OutsideFrames; i++) yield return null;
             if (!run.IsCurrent) yield break;
             probe.OutsideDistance = Utils.DistanceXZ(player.transform.position, pin.m_pos);
@@ -858,9 +1642,10 @@ namespace Automatics.SmokeTest
             probe.Root = NavigationGuide.Root;
             probe.Stream = NavigationGuide.Stream;
             probe.Column = NavigationGuide.Column;
-            probe.ShownOutside = probe.Root && probe.Root.activeInHierarchy;
+            probe.ShownOutside = NavigationGuide.Shown && Drawing.Of(probe.Root).Drawn;
 
-            Map.MovePin(pin, ProbePoint(InsideArrivalDistance));
+            Map.MovePin(pin, ProbePoint(inside));
+            probe.InsideAt = Time.time;
             probe.Target = pin.m_pos;
             probe.InsideDistance = Utils.DistanceXZ(player.transform.position, pin.m_pos);
             probe.Rise = pin.m_pos.y - player.transform.position.y;
@@ -887,9 +1672,9 @@ namespace Automatics.SmokeTest
                 yield return null;
         }
 
-        // Waits for a swarm scattering since an arrival to remove itself. When it is still there
-        // after the scatter and a margin, it is named for the later checks that count guide
-        // objects, which then skip.
+        // Waits for a swarm scattering since an arrival or a clear by hand to remove itself. When it
+        // is still there after the scatter and a margin, it is named for the later checks that
+        // count guide objects, which then skip.
         private static IEnumerator WaitForRemoval(FeatureRun run, float since, SectionState state)
         {
             var deadline = since + NavigationGuide.ScatterTime + RemovalMargin;
@@ -899,33 +1684,118 @@ namespace Automatics.SmokeTest
             var names = FindGuideObjects().Select(x =>
                 $"'{x.name}' ({(x.gameObject.activeInHierarchy ? "active" : "inactive")}{(x.GetComponent<NavigationGuideScatter>() ? ", still scattering" : "")}; children {string.Join(", ", x.Cast<Transform>().Select(c => c.name))})");
             state.Leftover =
-                $"{string.Join(", ", names)} still in the scene {Time.time - since:0.0} s after an arrival (bound {NavigationGuide.ScatterTime + RemovalMargin:0.0} s: ScatterTime + {RemovalMargin} s)";
+                $"{string.Join(", ", names)} still in the scene {Time.time - since:0.0} s after the swarm was let go (bound {NavigationGuide.ScatterTime + RemovalMargin:0.0} s: ScatterTime + {RemovalMargin} s)";
         }
 
         private static Vector3 _clickPosition;
         private static int _pressedCalls;
         private static bool _clickPositionObserved;
 
+        // Opens the large map, clicks the pin with navigation_start_key held and puts the map back
+        // as it was, all within the frame.
         internal static bool ClickPin(Minimap map, Minimap.PinData pin, out string detail)
         {
-            var mode = map.m_mode;
-            var image = AccessTools.Field(typeof(Minimap), "m_mapImageLarge").GetValue(map);
-            var uvRectProperty = AccessTools.Property(image.GetType(), "uvRect");
-            var uvRect = uvRectProperty.GetValue(image, null);
-            var shader = (Material)AccessTools.Field(typeof(Minimap), "m_mapLargeShader").GetValue(map);
-            var shaderCenter = shader.GetVector("_mapCenter");
-            var shaderZoom = shader.GetFloat("_zoom");
-            var shaderPixelSize = shader.GetFloat("_pixelSize");
-            var mapState = new[]
-            {
-                "m_mapOffset", "m_dragView", "m_namePin", "m_previousMapCenter",
-                "m_previousLargeZoom", "m_pinUpdateRequired"
-            }.Select(name => AccessTools.Field(typeof(Minimap), name))
-                .ToDictionary(field => field, field => field.GetValue(map));
-            var harmony = new Harmony("AutomaticsSmoke-navigation-click");
+            var view = MapView.Capture(map);
             try
             {
                 map.SetMapMode(Minimap.MapMode.Large);
+                return ClickOpenMap(map, pin, out detail);
+            }
+            finally
+            {
+                view.Restore(map, view.Mode);
+            }
+        }
+
+        // Opens the large map and waits until the swarm is hidden, clicks the pin with the map
+        // left open, then watches the swarm held by that click for HoldSeconds with the map still
+        // open. beforeClose, when given, runs next with the map still open. The map is closed and
+        // its view put back however the steps end; a map you had open is closed to the small map,
+        // so the held swarm can scatter, and the section puts your mode back at its end.
+        private static IEnumerator ClickPinAndHold(FeatureRun run, Minimap map, Minimap.PinData pin, HeldClick click,
+            Func<HeldClick, IEnumerator> beforeClose)
+        {
+            var view = MapView.Capture(map);
+            var closeMode = view.Mode == Minimap.MapMode.Large ? Minimap.MapMode.Small : view.Mode;
+            try
+            {
+                var root = NavigationGuide.Root;
+                var stream = NavigationGuide.Stream;
+                var column = NavigationGuide.Column;
+                // Taken by the check itself in the swarm's last shown frame, whatever the scatter
+                // is handed later.
+                click.Line = ExpectedStreamLine();
+                click.Axis = Navigation.TargetPosition;
+                map.SetMapMode(Minimap.MapMode.Large);
+                var opened = Time.time;
+                do
+                {
+                    yield return null;
+                    click.FramesToHide++;
+                } while (run.IsCurrent && NavigationGuide.Shown && Time.time - opened < StartTimeoutSeconds);
+                if (!run.IsCurrent) yield break;
+
+                var drawing = Drawing.Of(root);
+                click.HiddenAtClick = root && !NavigationGuide.Shown && drawing.Hidden;
+                click.HiddenDrawing = drawing.ToString();
+                click.Handled = ClickOpenMap(map, pin, out click.ClickDetail);
+                click.ClickTime = Time.time;
+                click.Held = NavigationGuide.HeldRoot;
+                click.Stream = stream;
+                click.Column = column;
+                click.HeldSwarm = click.Held && click.Held == root && click.HiddenAtClick && click.Handled &&
+                                  Navigation.TargetPin == null && !NavigationGuide.Root;
+                click.StreamAtClick = Positions(ReadLights(stream));
+                click.ColumnAtClick = Positions(ReadLights(column));
+
+                while (run.IsCurrent)
+                {
+                    yield return null;
+                    click.Sample();
+                    if (Time.time - click.ClickTime >= HoldSeconds) break;
+                }
+                if (!run.IsCurrent) yield break;
+
+                if (beforeClose == null) yield break;
+                var steps = beforeClose(click);
+                while (steps.MoveNext()) yield return steps.Current;
+            }
+            finally
+            {
+                view.Restore(map, closeMode);
+            }
+        }
+
+        // With the map still open and a swarm held, a click on the pin starts navigation on it.
+        private static IEnumerator StartOnOpenMap(Minimap map, Minimap.PinData pin, HeldClick click)
+        {
+            click.SecondHandled = ClickOpenMap(map, pin, out click.SecondDetail);
+            click.Restarted = ReferenceEquals(Navigation.TargetPin, pin);
+            yield return null;
+            click.DroppedBeforeClose = !click.Held && !NavigationGuide.HeldRoot;
+        }
+
+        // With the map still open and a swarm held, enable_navigation_guide is turned off; the
+        // caller turns it back on.
+        private static IEnumerator TurnGuideOffWhileHeld(FeatureRun run, SectionState state, HeldClick click)
+        {
+            if (!TakeGuideSetting(run, state, out click.Refusal) ||
+                !SmokeSession.WriteSetting(run.RunId, state.GuideSetting, false, out click.Refusal))
+                yield break;
+
+            click.TurnedOff = true;
+            for (var i = 0; i < OptionOffFrames; i++) yield return null;
+            click.DroppedBeforeClose = !click.Held && !NavigationGuide.HeldRoot && CountGuideObjects() == 0;
+        }
+
+        // The click itself, on the large map already open: centres the view on the pin and
+        // presses it with navigation_start_key held, in this frame.
+        private static bool ClickOpenMap(Minimap map, Minimap.PinData pin, out string detail)
+        {
+            var image = AccessTools.Field(typeof(Minimap), "m_mapImageLarge").GetValue(map);
+            var harmony = new Harmony("AutomaticsSmoke-navigation-click");
+            try
+            {
                 Map.RefreshPins();
                 var visibleBefore = (bool)AccessTools.Method(typeof(Minimap), "IsPointVisible")
                     .Invoke(map, new[] { (object)pin.m_pos, image });
@@ -962,14 +1832,39 @@ namespace Automatics.SmokeTest
             finally
             {
                 harmony.UnpatchSelf();
-                map.SetMapMode(mode);
-                uvRectProperty.SetValue(image, uvRect, null);
-                shader.SetVector("_mapCenter", shaderCenter);
-                shader.SetFloat("_zoom", shaderZoom);
-                shader.SetFloat("_pixelSize", shaderPixelSize);
-                foreach (var state in mapState) state.Key.SetValue(map, state.Value);
-                Map.RefreshPins();
             }
+        }
+
+        private static readonly List<string> MessagesSeen = new List<string>();
+
+        // Clears navigation by hand through the routine both manual entry points use, the way the
+        // looked-at-object key does, and returns the messages shown to you meanwhile.
+        private static List<string> ClearByHand(out bool observed)
+        {
+            MessagesSeen.Clear();
+            // The player's own message method, or the one it inherits.
+            var method = typeof(Player).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic |
+                                                   BindingFlags.DeclaredOnly).FirstOrDefault(x => x.Name == "Message") ??
+                         typeof(Character).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic |
+                                                      BindingFlags.DeclaredOnly).FirstOrDefault(x => x.Name == "Message");
+            observed = method != null;
+            var harmony = new Harmony("AutomaticsSmoke-navigation-message");
+            try
+            {
+                if (observed)
+                    harmony.Patch(method, prefix: new HarmonyMethod(typeof(GuideFeatureSmoke), nameof(MessageShown)));
+                Navigation.ClearTargetByHand(false);
+            }
+            finally
+            {
+                harmony.UnpatchSelf();
+            }
+            return MessagesSeen.ToList();
+        }
+
+        private static void MessageShown(object[] __args)
+        {
+            if (__args != null && __args.Length > 1 && __args[1] is string text) MessagesSeen.Add(text);
         }
 
         private static bool Pressed(ref bool __result)
@@ -1123,11 +2018,116 @@ namespace Automatics.SmokeTest
             return point;
         }
 
+        // The terrain height under a point, from the terrain collider the burst floor uses too.
+        private static bool Terrain(Vector3 point, out float height)
+        {
+            height = 0f;
+            var zoneSystem = ZoneSystem.instance;
+            return zoneSystem && zoneSystem.GetGroundHeight(point, out height);
+        }
+
+        // Waits up to ReadyTimeoutSeconds for a shown swarm that a clear by hand can be judged on:
+        // its burst over (no burst light younger than RadiateTime + GatherTime) and its stream and
+        // column each holding at least MinLights lights with alpha above MinAlpha.
+        private static IEnumerator AwaitReady(FeatureRun run, ReadySwarm ready)
+        {
+            var start = Time.time;
+            while (run.IsCurrent)
+            {
+                ready.Look(Time.time - start);
+                if (ready.Ready || ready.Waited >= ReadyTimeoutSeconds) yield break;
+                yield return null;
+            }
+        }
+
+        // The stream's line as the check expects it now, measured on its own: from you,
+        // horizontally toward the target, as far as the target or TrailLength, whichever is nearer.
+        private static Vector3[] ExpectedStreamLine()
+        {
+            var playerPos = Player.m_localPlayer.transform.position;
+            var offset = Flat(Navigation.TargetPosition - playerPos);
+            var length = Mathf.Min(offset.magnitude, NavigationGuide.TrailLength);
+            var direction = offset.sqrMagnitude > 1e-6f ? offset.normalized : Vector3.forward;
+            return new[] { playerPos, playerPos + direction * length };
+        }
+
+        // Waits for every guide object but the live swarm to remove itself, up to ScatterTime +
+        // RemovalMargin; one still there is named for the later checks that count guide objects.
+        private static IEnumerator WaitForOthersRemoved(FeatureRun run, SectionState state)
+        {
+            var since = Time.time;
+            var deadline = since + NavigationGuide.ScatterTime + RemovalMargin;
+            while (run.IsCurrent && Time.time < deadline && OtherGuideObjects().Count > 0) yield return null;
+            var others = OtherGuideObjects();
+            if (!run.IsCurrent || others.Count == 0 || state.Leftover != null) yield break;
+
+            var names = others.Select(x =>
+                $"'{x.name}' ({(x.gameObject.activeInHierarchy ? "active" : "inactive")}{(x.GetComponent<NavigationGuideScatter>() ? ", still scattering" : "")}; children {string.Join(", ", x.Cast<Transform>().Select(c => c.name))})");
+            state.Leftover =
+                $"{string.Join(", ", names)} still in the scene {Time.time - since:0.0} s after a clear by hand was checked (bound {NavigationGuide.ScatterTime + RemovalMargin:0.0} s: ScatterTime + {RemovalMargin} s)";
+        }
+
+        private static List<Transform> OtherGuideObjects()
+        {
+            var live = NavigationGuide.Root;
+            return FindGuideObjects().Where(x => !live || x != live.transform).ToList();
+        }
+
+        // The sway a column light is prescribed at the height it is seen at: its level in the
+        // column from the centre's height, 0 at the bottom and 1 at the top, before its jitter.
+        private static Vector2 PrescribedSway(ParticleSystem.Particle light, Vector3 centre, float time)
+        {
+            var level = (light.position.y - centre.y) / NavigationGuide.ColumnHalfHeight;
+            return NavigationGuide.SwayAt(Mathf.Clamp01((level + 1f) * 0.5f), time);
+        }
+
+        // The least-squares slope of y on x, with an intercept; NaN when x does not vary.
+        private static float Slope(List<float> x, List<float> y)
+        {
+            if (x.Count < 2) return float.NaN;
+            var meanX = x.Average();
+            var meanY = y.Average();
+            var sxx = 0.0;
+            var sxy = 0.0;
+            for (var i = 0; i < x.Count; i++)
+            {
+                sxx += (x[i] - meanX) * (x[i] - meanX);
+                sxy += (x[i] - meanX) * (y[i] - meanY);
+            }
+            return sxx > 1e-12 ? (float)(sxy / sxx) : float.NaN;
+        }
+
+        // The point of a line of points nearest to a point, measured horizontally; a line of one
+        // point gives that point.
+        private static Vector3 NearestOnLine(Vector3[] line, Vector3 point)
+        {
+            var nearest = line[0];
+            var nearestDistance = float.MaxValue;
+            for (var i = 1; i < line.Length; i++)
+            {
+                var from = line[i - 1];
+                var span = Flat(line[i] - from);
+                var offset = Flat(point - from);
+                var length = span.sqrMagnitude;
+                var along = length > 0f ? Mathf.Clamp01(Vector3.Dot(offset, span) / length) : 0f;
+                var distance = (offset - span * along).sqrMagnitude;
+                if (distance >= nearestDistance) continue;
+                nearestDistance = distance;
+                nearest = from + span * along;
+            }
+            return nearest;
+        }
+
         // What the section carries from one check to the next: a guide object an arrival left
         // behind, named for the checks that count guide objects.
+        // It also holds the settings the section took on, put back and reported once.
         private sealed class SectionState
         {
             public string Leftover;
+            public SmokeSession.SettingRestoration ArrivalSetting;
+            public float SectionArrivalDistance;
+            public SmokeSession.SettingRestoration GuideSetting;
+            public bool SettingsReported;
         }
 
         // What an arrival probe saw: navigation and the swarm just outside the arrival distance,
@@ -1141,6 +2141,8 @@ namespace Automatics.SmokeTest
             public float InsideDistance;
             public float Rise;
             public float Distance;
+            public float ArrivalDistance;
+            public float InsideAt;
             public int Frames;
             public Vector3 Target;
             public GameObject Root;
@@ -1151,7 +2153,7 @@ namespace Automatics.SmokeTest
             {
                 return
                     $"{OutsideDistance:0.0} m away horizontally: navigation {(KeptOutside ? "kept" : "ended")}, swarm {(ShownOutside ? "shown" : "not shown")}; " +
-                    $"{InsideDistance:0.0} m away horizontally and {Rise:0.0} m above you ({Distance:0.0} m in 3D; ArrivalDistance {Navigation.ArrivalDistance} m): " +
+                    $"{InsideDistance:0.0} m away horizontally and {Rise:0.0} m above you ({Distance:0.0} m in 3D; navigation_arrival_distance {ArrivalDistance} m): " +
                     (Frames > 0 ? $"navigation ended in {Frames} frame(s)" : $"navigation still on after {ArrivalFrames} frames");
             }
         }
@@ -1160,10 +2162,13 @@ namespace Automatics.SmokeTest
         // seen, where it was once it had spread out and how low it went until then, and how far
         // along the line toward the target it was once it travelled with the stream and half a
         // second later.
+        // It also keeps how near the terrain under them they came while they were bursting.
         private sealed class BurstWatch
         {
             private readonly Dictionary<uint, Track> _tracks = new Dictionary<uint, Track>();
             private readonly HashSet<uint> _seen = new HashSet<uint>();
+            private float _floorLowest = float.MaxValue;
+            private int _floorLooks;
 
             // When the swarm started: the birth of its oldest light at the first look.
             public float Start { get; private set; } = float.NaN;
@@ -1209,6 +2214,11 @@ namespace Automatics.SmokeTest
                     var along = Vector3.Dot(offset, toward);
                     if (!track.Spread.HasValue)
                         track.Lowest = Mathf.Min(track.Lowest, light.position.y - ground);
+                    if (age < BurstAge && Terrain(light.position, out var terrain))
+                    {
+                        _floorLowest = Mathf.Min(_floorLowest, light.position.y - terrain);
+                        _floorLooks++;
+                    }
                     if (!track.Spread.HasValue && age >= NavigationGuide.RadiateTime)
                     {
                         track.Spread = new Vector2(along, Vector3.Dot(offset, side));
@@ -1252,10 +2262,14 @@ namespace Automatics.SmokeTest
                     $"{tracks.Count} burst lights (start lifetime above {BurstLifetimeSplit:0.00} s, between FlowLifetime and BurstLifetime) born in the first {BurstWindowSeconds} s started at most {farthestStart:0.00} m from the body point {NavigationGuide.BodyHeight} m above your feet (bound {BodyStartRadius} m); " +
                     $"at age {NavigationGuide.RadiateTime} s (RadiateTime) {spread.Count} of them were a median {median:0.00} m from the body point (bound {MinSpreadDistance} m) in {quadrants} of 4 quadrants around the line to the target (bound {MinQuadrants}), {behindShare:P0} behind you (bound {MinBehindShare:P0}), {aboveShare:P0} more than {MinBurstRise} m above the body point and {belowShare:P0} more than {MinBurstDrop} m below it (bounds {MinVerticalShare:P0} each); " +
                     $"the lowest was {lowest:0.00} m above the ground under you (bound 0); " +
+                    (_floorLooks > 0
+                        ? $"younger than {BurstAge:0.0} s (RadiateTime + GatherTime), the lowest was {_floorLowest:0.00} m above the terrain under it over {_floorLooks} looks (bound {MinBurstFloor:0.00} m: BurstFloor {NavigationGuide.BurstFloor} m - {FloorTolerance} m); "
+                        : $"no look at a light younger than {BurstAge:0.0} s (RadiateTime + GatherTime) over terrain; ") +
                     $"from age {TravelAge:0.0} s (RadiateTime + GatherTime + {TravelMargin} s), {grown} of {growth.Count} moved farther along the line over {TravelWatchSeconds} s (least {least:0.00} m)";
                 return farthestStart <= BodyStartRadius && spread.Count > 0 && median >= MinSpreadDistance &&
                        quadrants >= MinQuadrants && behindShare >= MinBehindShare &&
                        aboveShare >= MinVerticalShare && belowShare >= MinVerticalShare && lowest >= 0f &&
+                       _floorLooks > 0 && _floorLowest >= MinBurstFloor &&
                        growth.Count > 0 && grown == growth.Count;
             }
 
@@ -1422,6 +2436,435 @@ namespace Automatics.SmokeTest
                 detail =
                     $"{_name} {_first.Count} visible of {_held.Count} lights at the clear, {_lost.Count} of them gone, {_added.Count} new; mean {firstSpread:0.00} → {lastSpread:0.00} m from the axis (grew {growth:0.000} m, bound {bound:0.000} m); mean alpha {firstAlpha:0.00} → {lastAlpha:0.00} (bound below {firstAlpha * 0.5f:0.00})";
                 return _lost.Count == 0 && _added.Count == 0 && growth >= bound && lastAlpha < firstAlpha * 0.5f;
+            }
+        }
+
+        // How a guide object is drawn: drawn with both particle renderers and both point lights on
+        // and its particle systems not paused, hidden with all of them off and the systems paused;
+        // the object stays active either way.
+        private sealed class Drawing
+        {
+            private bool _active;
+            private int _renderers;
+            private int _renderersOn;
+            private int _lights;
+            private int _lightsOn;
+            private int _systems;
+            private int _paused;
+
+            public bool Drawn => _active && _renderers == 2 && _renderersOn == 2 && _lights == 2 && _lightsOn == 2 &&
+                                 _systems == 2 && _paused == 0;
+
+            public bool Hidden => _active && _renderers == 2 && _renderersOn == 0 && _lights == 2 && _lightsOn == 0 &&
+                                  _systems == 2 && _paused == 2;
+
+            public static Drawing Of(GameObject root)
+            {
+                var drawing = new Drawing();
+                if (!root) return drawing;
+                drawing._active = root.activeInHierarchy;
+                var renderers = root.GetComponentsInChildren<ParticleSystemRenderer>(true);
+                drawing._renderers = renderers.Length;
+                drawing._renderersOn = renderers.Count(x => x.enabled);
+                var lights = root.GetComponentsInChildren<Light>(true);
+                drawing._lights = lights.Length;
+                drawing._lightsOn = lights.Count(x => x.enabled);
+                var systems = root.GetComponentsInChildren<ParticleSystem>(true);
+                drawing._systems = systems.Length;
+                drawing._paused = systems.Count(x => x.isPaused);
+                return drawing;
+            }
+
+            public override string ToString()
+            {
+                return _renderers == 0 && _lights == 0 && _systems == 0
+                    ? "no guide object"
+                    : $"object {(_active ? "active" : "inactive")}, renderers {_renderersOn}/{_renderers} on, point lights {_lightsOn}/{_lights} on, particle systems {_paused}/{_systems} paused";
+            }
+        }
+
+        // One particle system's lights through a scatter by hand, followed by seed from the first
+        // look after it began: the visible lights then, each one's outward direction from its
+        // nearest point on the line it flies off from, any light that comes later, any visible one
+        // that goes, and how far outward and how bright the visible ones are at the last look.
+        private sealed class OutwardCohort
+        {
+            private readonly string _name;
+            private readonly string _from;
+            private readonly ParticleSystem _system;
+            private readonly HashSet<uint> _held = new HashSet<uint>();
+            private readonly Dictionary<uint, ParticleSystem.Particle> _first =
+                new Dictionary<uint, ParticleSystem.Particle>();
+            private readonly Dictionary<uint, Vector3> _outward = new Dictionary<uint, Vector3>();
+            private readonly HashSet<uint> _added = new HashSet<uint>();
+            private readonly HashSet<uint> _lost = new HashSet<uint>();
+            private Dictionary<uint, ParticleSystem.Particle> _last = new Dictionary<uint, ParticleSystem.Particle>();
+
+            public OutwardCohort(string name, ParticleSystem system, Vector3[] line, string from)
+            {
+                _name = name;
+                _from = from;
+                _system = system;
+                foreach (var light in ReadLights(system))
+                {
+                    _held.Add(light.randomSeed);
+                    if (Alpha(light) <= MinAlpha) continue;
+                    _first[light.randomSeed] = light;
+                    var away = Flat(light.position - NearestOnLine(line, light.position));
+                    _outward[light.randomSeed] = away.sqrMagnitude > 1e-8f ? away.normalized : Vector3.zero;
+                }
+            }
+
+            public void Sample()
+            {
+                _last = new Dictionary<uint, ParticleSystem.Particle>();
+                foreach (var light in ReadLights(_system))
+                {
+                    if (!_held.Contains(light.randomSeed)) _added.Add(light.randomSeed);
+                    if (_first.ContainsKey(light.randomSeed)) _last[light.randomSeed] = light;
+                }
+                foreach (var seed in _first.Keys)
+                    if (!_last.ContainsKey(seed))
+                        _lost.Add(seed);
+            }
+
+            public bool Evaluate(float bound, out string detail)
+            {
+                if (_first.Count == 0)
+                {
+                    detail = $"{_name}: no light visible when the scatter began";
+                    return false;
+                }
+
+                var kept = _first.Keys.Where(_last.ContainsKey).ToList();
+                if (kept.Count == 0)
+                {
+                    detail = $"{_name}: all {_first.Count} visible lights gone, {_added.Count} new light(s)";
+                    return false;
+                }
+
+                var moves = kept.Select(x => Vector3.Dot(Flat(_last[x].position - _first[x].position), _outward[x]))
+                                .ToList();
+                var outward = moves.Count(x => x > 0f);
+                var share = (float)outward / _first.Count;
+                var mean = moves.Average();
+                var firstAlpha = kept.Average(x => Alpha(_first[x]));
+                var lastAlpha = kept.Average(x => Alpha(_last[x]));
+                detail =
+                    $"{_name} {_first.Count} visible of {_held.Count} lights when the scatter began, {_lost.Count} of them gone, {_added.Count} new; {outward} ({share:P0}) moved outward from {_from}, a mean {mean:0.000} m outward (bound {bound:0.000} m); mean alpha {firstAlpha:0.00} → {lastAlpha:0.00} (bound below {firstAlpha * 0.5f:0.00})";
+                return _lost.Count == 0 && _added.Count == 0 && share >= MinOutwardShare && mean >= bound &&
+                       lastAlpha < firstAlpha * 0.5f;
+            }
+        }
+
+        // What the wait for a swarm ready to be cleared by hand saw at its last look.
+        private sealed class ReadySwarm
+        {
+            private bool _shown;
+            private int _streamVisible;
+            private int _columnVisible;
+            private int _bursting;
+
+            public float Waited { get; private set; }
+
+            public bool Ready => _shown && _streamVisible >= MinLights && _columnVisible >= MinLights && _bursting == 0;
+
+            public void Look(float waited)
+            {
+                Waited = waited;
+                _shown = NavigationGuide.Shown;
+                var stream = ReadLights(NavigationGuide.Stream);
+                _streamVisible = stream.Count(x => Alpha(x) > MinAlpha);
+                _columnVisible = ReadLights(NavigationGuide.Column).Count(x => Alpha(x) > MinAlpha);
+                _bursting = stream.Count(x => IsBurstLight(x) && Age(x) < BurstAge);
+            }
+
+            public string Describe()
+            {
+                return
+                    $"swarm {(_shown ? "shown" : "not shown")} with {_streamVisible} stream and {_columnVisible} column lights with alpha above {MinAlpha} (bound at least {MinLights} each) and {_bursting} burst light(s) younger than {BurstAge:0.0} s (RadiateTime + GatherTime; bound none) after {Waited:0.00} s (bound {ReadyTimeoutSeconds} s)";
+            }
+        }
+
+        private sealed class ScatterOutcome
+        {
+            public bool Passed;
+            public string Detail = "";
+        }
+
+        // What a map click with the swarm hidden by the large map did: whether the swarm was hidden
+        // at the click, the swarm the click held and its lights then, and, over the hold with the
+        // map open, whether navigation stayed cleared, the held swarm stayed the only guide object,
+        // hidden, and its lights kept their seeds and positions. The steps before closing record
+        // what they did here too.
+        private sealed class HeldClick
+        {
+            public int FramesToHide;
+            public bool HiddenAtClick;
+            public string HiddenDrawing = "";
+            public bool Handled;
+            public string ClickDetail = "";
+            public float ClickTime;
+            public GameObject Held;
+            public bool HeldSwarm;
+            public ParticleSystem Stream;
+            public ParticleSystem Column;
+            public Vector3[] Line;
+            public Vector3 Axis;
+            public Dictionary<uint, Vector3> StreamAtClick = new Dictionary<uint, Vector3>();
+            public Dictionary<uint, Vector3> ColumnAtClick = new Dictionary<uint, Vector3>();
+
+            public bool SecondHandled;
+            public string SecondDetail = "";
+            public bool Restarted;
+            public bool DroppedBeforeClose;
+            public bool TurnedOff;
+            public bool TurnedOn;
+            public string Refusal = "";
+
+            private readonly HashSet<uint> _missing = new HashSet<uint>();
+            private readonly HashSet<uint> _added = new HashSet<uint>();
+            private int _holdFrames;
+            private float _heldFor;
+            private bool _stayedCleared = true;
+            private bool _stayedSingle = true;
+            private bool _stayedHidden = true;
+            private float _mostMoved;
+
+            public bool Kept => _holdFrames > 0 && _heldFor >= HoldSeconds && _stayedCleared && _stayedSingle &&
+                                _stayedHidden && _missing.Count == 0 && _added.Count == 0 &&
+                                _mostMoved <= HeldPositionTolerance && StreamAtClick.Count >= MinLights;
+
+            public void Sample()
+            {
+                _holdFrames++;
+                _heldFor = Time.time - ClickTime;
+                if (Navigation.TargetPin != null) _stayedCleared = false;
+                var objects = FindGuideObjects();
+                if (!Held || objects.Count != 1 || objects[0] != Held.transform) _stayedSingle = false;
+                if (!Held || !Drawing.Of(Held).Hidden) _stayedHidden = false;
+                Compare(StreamAtClick, Stream);
+                Compare(ColumnAtClick, Column);
+            }
+
+            public string Describe()
+            {
+                return
+                    $"after opening the map the swarm was {(HiddenAtClick ? "hidden" : "not hidden")} in {FramesToHide} frame(s) ({HiddenDrawing}); the map click was {(Handled ? "handled" : "not handled")} ({ClickDetail}) and {(HeldSwarm ? "held that swarm with navigation cleared" : "did not hold the swarm with navigation cleared")}; " +
+                    $"over {_heldFor:0.00} s ({_holdFrames} frames; bound at least {HoldSeconds} s) with the map open: navigation {(_stayedCleared ? "stayed cleared" : "came back")}, {(_stayedSingle ? "one guide object, the held swarm" : "not the held swarm alone")}, {(_stayedHidden ? "hidden throughout" : "not hidden throughout")}; " +
+                    $"of its {StreamAtClick.Count} stream (bound at least {MinLights}) and {ColumnAtClick.Count} column lights at the click {_missing.Count} gone and {_added.Count} new, the farthest moved {_mostMoved:0.0000} m (bound {HeldPositionTolerance} m)";
+            }
+
+            private void Compare(Dictionary<uint, Vector3> atClick, ParticleSystem system)
+            {
+                var now = Positions(ReadLights(system));
+                foreach (var pair in atClick)
+                {
+                    if (now.TryGetValue(pair.Key, out var position))
+                        _mostMoved = Mathf.Max(_mostMoved, Vector3.Distance(position, pair.Value));
+                    else
+                        _missing.Add(pair.Key);
+                }
+                foreach (var seed in now.Keys)
+                    if (!atClick.ContainsKey(seed))
+                        _added.Add(seed);
+            }
+        }
+
+        // What appears once the map closes after a held swarm was dropped: any scattering guide
+        // object, any guide object at all, and a new swarm with its burst.
+        private sealed class AfterCloseWatch
+        {
+            public bool ScatterSeen;
+            public bool ObjectSeen;
+            public bool NewSwarmSeen;
+            public bool BurstSeen;
+            private int _frames;
+
+            public IEnumerator Watch(FeatureRun run)
+            {
+                var start = Time.time;
+                while (run.IsCurrent)
+                {
+                    yield return null;
+                    _frames++;
+                    var objects = FindGuideObjects();
+                    ObjectSeen |= objects.Count > 0;
+                    ScatterSeen |= objects.Any(x => x.GetComponent<NavigationGuideScatter>() != null);
+                    NewSwarmSeen |= NavigationGuide.Shown;
+                    BurstSeen |= ReadLights(NavigationGuide.Stream).Any(IsBurstLight);
+                    if (Time.time - start >= AbsentWatchSeconds) break;
+                }
+            }
+
+            public string Describe()
+            {
+                return
+                    $"over {_frames} frames: {(ScatterSeen ? "a scattering guide object appeared" : "no scattering guide object")}, {(ObjectSeen ? "a guide object" : "no guide object")} seen, {(NewSwarmSeen ? "a new swarm shown" : "no new swarm shown")}, {(BurstSeen ? "with burst lights" : "no burst light")}";
+            }
+        }
+
+        // The large map's view and mode, put back after a simulated click.
+        private sealed class MapView
+        {
+            private object _image;
+            private PropertyInfo _uvRectProperty;
+            private object _uvRect;
+            private Material _shader;
+            private Vector4 _shaderCenter;
+            private float _shaderZoom;
+            private float _shaderPixelSize;
+            private Dictionary<FieldInfo, object> _fields;
+
+            public Minimap.MapMode Mode { get; private set; }
+
+            public static MapView Capture(Minimap map)
+            {
+                var view = new MapView { Mode = map.m_mode };
+                view._image = AccessTools.Field(typeof(Minimap), "m_mapImageLarge").GetValue(map);
+                view._uvRectProperty = AccessTools.Property(view._image.GetType(), "uvRect");
+                view._uvRect = view._uvRectProperty.GetValue(view._image, null);
+                view._shader = (Material)AccessTools.Field(typeof(Minimap), "m_mapLargeShader").GetValue(map);
+                view._shaderCenter = view._shader.GetVector("_mapCenter");
+                view._shaderZoom = view._shader.GetFloat("_zoom");
+                view._shaderPixelSize = view._shader.GetFloat("_pixelSize");
+                view._fields = new[]
+                {
+                    "m_mapOffset", "m_dragView", "m_namePin", "m_previousMapCenter",
+                    "m_previousLargeZoom", "m_pinUpdateRequired"
+                }.Select(name => AccessTools.Field(typeof(Minimap), name))
+                    .ToDictionary(field => field, field => field.GetValue(map));
+                return view;
+            }
+
+            public void Restore(Minimap map, Minimap.MapMode mode)
+            {
+                if (!map) return;
+                map.SetMapMode(mode);
+                _uvRectProperty.SetValue(_image, _uvRect, null);
+                _shader.SetVector("_mapCenter", _shaderCenter);
+                _shader.SetFloat("_zoom", _shaderZoom);
+                _shader.SetFloat("_pixelSize", _shaderPixelSize);
+                foreach (var field in _fields) field.Key.SetValue(map, field.Value);
+                Map.RefreshPins();
+            }
+        }
+
+        // The loaded terrain around a point, looked at once on a grid of SearchStep within
+        // SearchRadius through the terrain collider.
+        private sealed class TerrainGrid
+        {
+            private readonly Dictionary<long, float> _heights = new Dictionary<long, float>();
+            private readonly List<int[]> _cells = new List<int[]>();
+            private readonly Vector3 _centre;
+
+            public TerrainGrid(Vector3 centre)
+            {
+                _centre = centre;
+                var reach = Mathf.FloorToInt(SearchRadius / SearchStep);
+                for (var i = -reach; i <= reach; i++)
+                for (var j = -reach; j <= reach; j++)
+                {
+                    if ((i * i + j * j) * SearchStep * SearchStep > SearchRadius * SearchRadius) continue;
+                    if (!Terrain(Point(i, j, 0f), out var height)) continue;
+                    _heights[Key(i, j)] = height;
+                    _cells.Add(new[] { i, j });
+                }
+            }
+
+            public int Count => _cells.Count;
+
+            // The accepted point nearest to a point, measured horizontally, its height the terrain's.
+            public bool Nearest(Vector3 to, Func<Vector3, bool> accept, out Vector3 point)
+            {
+                point = default;
+                var found = false;
+                var nearest = float.MaxValue;
+                foreach (var cell in _cells)
+                {
+                    var candidate = Point(cell[0], cell[1], _heights[Key(cell[0], cell[1])]);
+                    if (!accept(candidate)) continue;
+                    var distance = Utils.DistanceXZ(candidate, to);
+                    if (distance >= nearest) continue;
+                    nearest = distance;
+                    point = candidate;
+                    found = true;
+                }
+                return found;
+            }
+
+            // The point whose terrain rises most to a neighbour SearchStep away along a grid axis,
+            // the direction of that rise and how much it rises.
+            public bool Steepest(out Vector3 point, out Vector3 uphill, out float rise)
+            {
+                point = default;
+                uphill = Vector3.forward;
+                rise = float.MinValue;
+                var found = false;
+                var steps = new[] { new[] { 1, 0 }, new[] { -1, 0 }, new[] { 0, 1 }, new[] { 0, -1 } };
+                foreach (var cell in _cells)
+                {
+                    var height = _heights[Key(cell[0], cell[1])];
+                    foreach (var step in steps)
+                    {
+                        if (!_heights.TryGetValue(Key(cell[0] + step[0], cell[1] + step[1]), out var next)) continue;
+                        if (next - height <= rise) continue;
+                        rise = next - height;
+                        point = Point(cell[0], cell[1], height);
+                        uphill = new Vector3(step[0], 0f, step[1]);
+                        found = true;
+                    }
+                }
+                return found;
+            }
+
+            private Vector3 Point(int i, int j, float height)
+            {
+                return new Vector3(_centre.x + i * SearchStep, height, _centre.z + j * SearchStep);
+            }
+
+            private static long Key(int i, int j)
+            {
+                return ((long)i << 32) | (uint)j;
+            }
+        }
+
+        // One placement of the pin for the raised column: where the pin is, the height the column
+        // should stand on there, and the lowest and highest column light above it.
+        private sealed class RaisedCase
+        {
+            private readonly string _name;
+            private readonly string _baseName;
+            private float _lowest = float.MaxValue;
+            private float _highest = float.MinValue;
+            private int _samples;
+
+            public RaisedCase(string name, Vector3 pin, float expectedBase, string baseName)
+            {
+                _name = name;
+                Pin = pin;
+                Base = expectedBase;
+                _baseName = baseName;
+            }
+
+            public Vector3 Pin { get; }
+            public float Base { get; }
+            public float Distance;
+
+            public bool Holds => _samples > 0 && _lowest >= MinColumnHeight && _highest <= MaxColumnHeight;
+
+            public void Sample(float aboveBase)
+            {
+                _lowest = Mathf.Min(_lowest, aboveBase);
+                _highest = Mathf.Max(_highest, aboveBase);
+                _samples++;
+            }
+
+            public string Describe()
+            {
+                return _samples == 0
+                    ? $"{_name}, {Distance:0} m from you: no column light"
+                    : $"{_name}, {Distance:0} m from you, expected base {_baseName} at {Base:0.00} m: {_samples} light positions {_lowest:0.00}–{_highest:0.00} m above it";
             }
         }
     }

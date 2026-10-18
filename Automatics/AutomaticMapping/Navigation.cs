@@ -6,12 +6,6 @@ namespace Automatics.AutomaticMapping
 {
     internal static class Navigation
     {
-        /// <summary>
-        ///     Navigation ends once the local player comes within this horizontal distance of the
-        ///     target, after having been farther away during the same navigation.
-        /// </summary>
-        internal const float ArrivalDistance = 5f;
-
         private const float TargetPinValidationInterval = 0.5f;
         private const float UnresolvedTargetHeight = 2f;
         private const float ManualPinMapPlaneHeightEpsilon = 0.01f;
@@ -93,7 +87,7 @@ namespace Automatics.AutomaticMapping
             if (pinData == null) return false;
 
             if (ReferenceEquals(pinData, _targetPin))
-                ClearTarget(true);
+                ClearTargetByHand(true);
             else
                 SetTarget(pinData);
 
@@ -141,7 +135,7 @@ namespace Automatics.AutomaticMapping
                 (_aimedInstance && _aimedInstance == aimed.Instance &&
                  (aimed.Component || Utils.DistanceXZ(aimed.Position, _lastPosition) <= GroundTargetRadius))))
             {
-                ClearTarget(true);
+                ClearTargetByHand(false);
                 return;
             }
 
@@ -274,12 +268,20 @@ namespace Automatics.AutomaticMapping
 
             UpdateArrival(player);
 
-            // Turned off, the swarm goes whether or not navigation is shown this frame.
+            // Turned off, the swarm goes whether or not navigation is shown this frame, and so does
+            // a swarm held from a clear by hand.
             if (!Config.EnableNavigationGuide)
+            {
                 NavigationGuide.Destroy();
+                NavigationGuide.DropHeldScatter();
+            }
 
             if (!ShouldShow(player))
             {
+                // A swarm held from a map click that ended navigation scatters once navigation
+                // could be shown again, normally when the large map closes.
+                if (_targetPin == null && CanShowHud(player))
+                    NavigationGuide.ReleaseHeldScatter();
                 SetVisible(false);
                 NavigationGuide.Hide();
                 return;
@@ -315,24 +317,32 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        ///     Ends navigation when the local player reaches the target, whether or not navigation
-        ///     is shown this frame and whether or not the guide swarm is on. It counts only once the
-        ///     player has been farther than <see cref="ArrivalDistance" />, so a navigation started
-        ///     next to its target stays on. A shown swarm scatters instead of vanishing.
+        ///     Ends navigation when the local player comes within
+        ///     <see cref="Config.NavigationArrivalDistance" /> of the target, measured horizontally,
+        ///     whether or not navigation is shown this frame and whether or not the guide swarm is
+        ///     on. It counts only once the player has been farther than that during the navigation,
+        ///     so a navigation started next to its target stays on, and a distance of 0 never ends
+        ///     it. A shown swarm scatters instead of vanishing, every light flying off from the
+        ///     column's axis.
         /// </summary>
         private static void UpdateArrival(Player player)
         {
             if (_targetPin == null || player != Player.m_localPlayer || !player.IsOwner()) return;
 
+            var arrivalDistance = Config.NavigationArrivalDistance;
+            if (arrivalDistance <= 0f) return;
+
             var targetPos = TargetPosition;
-            if (Utils.DistanceXZ(player.transform.position, targetPos) > ArrivalDistance)
+            if (Utils.DistanceXZ(player.transform.position, targetPos) > arrivalDistance)
             {
                 _arrivalArmed = true;
                 return;
             }
 
             if (!_arrivalArmed) return;
-            NavigationGuide.Scatter(targetPos);
+            // The stream's lights fly off from the column's axis too: a line of one point on it.
+            var centre = targetPos + Vector3.up * NavigationGuide.ColumnCentreHeight;
+            NavigationGuide.Scatter(centre, new[] { centre }, false);
             ClearTarget(true);
         }
 
@@ -431,10 +441,25 @@ namespace Automatics.AutomaticMapping
             EnsureDestructionSubscription();
             _nextTargetPinValidationTime = 0f;
             _arrivalArmed = false;
-            // Each navigation starts its own swarm from the player, at its own target.
+            // Each navigation starts its own swarm from the player, at its own target; a swarm
+            // still held from a clear by hand goes without scattering.
+            NavigationGuide.DropHeldScatter();
             NavigationGuide.Destroy();
             ShowStartMessage(pinData);
             MapFilter.RefreshSearchPins();
+        }
+
+        /// <summary>
+        ///     Ends navigation by hand, from a map click on its pin or the looked-at-object key on its
+        ///     target. A shown swarm scatters at once, its stream's lights flying off from the line
+        ///     they flowed along. With <paramref name="holdHiddenSwarm" />, which a map click passes
+        ///     as the large map hides the swarm, a hidden swarm is held and scatters once navigation
+        ///     could be shown again; without it a hidden swarm is removed at once.
+        /// </summary>
+        internal static void ClearTargetByHand(bool holdHiddenSwarm)
+        {
+            NavigationGuide.Scatter(NavigationGuide.ColumnCentre, NavigationGuide.StreamLine, holdHiddenSwarm);
+            ClearTarget(true);
         }
 
         private static void ClearTarget(bool showMessage)

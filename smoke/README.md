@@ -296,6 +296,7 @@ the handler counts, the component counts and the minimap's icon tables.
 | `mapping_off_stopped_at_request` | Right after the disable request the module is still applied but no longer running, which is what every entry point checks, and the static scan's pass counter does not move until `Disabled`: the stop takes hold at the request, not at the teardown |
 | `mapping_off_patches_removed` | No patch is left under Mapping's Harmony id (SKIP when runtime patch removal is unavailable) |
 | `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode`, `AutomaticsNavigationOverlay` or `AutomaticsNavigationGuide` is left in the scene |
+| `mapping_off_held_swarm_removed` | Once in the run, just before the first disable request at which a guide swarm is shown for the temporary target, that swarm is hidden and held the way a map click that clears navigation holds it. PASS when the held swarm is that swarm and no `AutomaticsNavigationGuide` is left after that disable; FAIL when no held swarm was made from the shown swarm or a guide object is left. Checked once, not per cycle (SKIP, with the reason, when no swarm was shown before any disable, for example with `enable_navigation_guide` off) |
 | `mapping_off_compass_removed` | The compass, seen on the small map before the large map is opened for the filter checks, is gone in the frame of the disable request once the compass update of the player's frame has run there, and no `AutomaticsCompass` is left once the module is `Disabled` |
 | `mapping_off_saved_pins_kept` | The saved pins are the ones there were before the run: type, name, position to 0.1 m, owner and checked flag. A vehicle pin's position is left out, because it follows its vehicle |
 | `mapping_off_unsaved_pins_removed` | None of the unsaved pins the module held just before the disable is on the map (SKIP when it held none) |
@@ -1263,60 +1264,88 @@ a new swarm, at a navigation start or a target switch, lets out a burst of
 lights that spread out from you; every other stream light leaves you along the
 line toward the target. The checks tell burst lights by their start lifetime,
 above the midpoint of `FlowLifetime` and `BurstLifetime` (currently 4.15 s). The
+swarm is shown when both its particle renderers and both its point lights are
+on and its particle systems are not paused, and hidden when all of them are off
+and the systems are paused; the guide object stays active either way. The
 bounds that follow the swarm's look are derived from the constants in
-`NavigationGuide` and `Navigation.ArrivalDistance`; each note gives the values
-it measured and the constants its bounds came from. The motion is random, so
-run the section three times after a change to the swarm.
+`NavigationGuide` and from `navigation_arrival_distance`; each note gives the
+values it measured and the constants its bounds came from. The terrain height a
+check measures is the terrain collider's (`ZoneSystem.GetGroundHeight`), the
+surface the burst is kept above. The motion is random, so run the section three
+times after a change to the swarm.
 
 The section runs in this order and starts navigation again where a later check
 needs one:
 
-1. `guide_map_click_toggle`.
-2. Navigation starts on the test pin 60 m away: `guide_material`,
+1. `navigation_arrival_distance` is set to its default, 5 m.
+2. `guide_map_click_toggle`.
+3. Navigation starts on the test pin 60 m away: `guide_material`,
    `guide_radiates_from_body`, then `guide_swarm_alive`,
    `guide_height_above_ground` and `guide_flows_toward_target`.
-3. `guide_destination_swarm` (the pin moves 3 m sideways and back), then
-   `guide_trail_ends_at_target` (the pin moves to 12 m and back to 60 m).
-4. `guide_hidden_on_large_map`.
-5. `navigation_clears_on_arrival` and `guide_scatters_on_arrival` from the same
-   arrival. Navigation is then started on the pin at 60 m again.
-6. `navigation_kept_when_started_inside`. After its arrival the section waits up
-   to `ScatterTime` + 0.5 s (currently 1.7 s) for the scattering swarm to
-   remove itself, then starts navigation on the pin at 60 m again.
-7. `guide_distance_format`.
-8. With `enable_navigation_guide` off: `guide_option_off_destroys` and
-   `navigation_clears_with_swarm_off`; navigation is started on the pin at 60 m
-   again before the option goes back on for `guide_settings_restored` and
-   `guide_option_on_recreates`.
-9. `guide_destroyed_on_clear`, then `guide_navigation_restored`.
+4. `guide_destination_swarm` (the pin moves 3 m sideways and back).
+5. `guide_column_sways` (the pin stays still for 7.5 s).
+6. `guide_column_follows_moving_target` (the pin moves sideways at 8 m/s for
+   2 s and back).
+7. `guide_column_raised` (the pin goes under the ground, above it and under
+   the water, then back).
+8. `guide_burst_above_slope` (nothing moves).
+9. `guide_trail_ends_at_target` (the pin moves to 12 m and back to 60 m), then
+   `guide_hidden_on_large_map`.
+10. `guide_scatters_after_map_clear`; after each of its three cases the section
+    waits for the scatter to go and starts navigation on the pin at 60 m again.
+11. `guide_scatters_on_manual_clear`, then navigation on the pin at 60 m again.
+12. `navigation_clears_on_arrival` and `guide_scatters_on_arrival` from the same
+    arrival. Navigation is then started on the pin at 60 m again.
+13. `navigation_kept_when_started_inside`. After its arrival the section waits up
+    to `ScatterTime` + 0.5 s (currently 1.7 s) for the scattering swarm to
+    remove itself, then starts navigation on the pin at 60 m again.
+14. `navigation_arrival_distance_setting`; after its arrival at 10 m it waits for
+    the scatter to go, and at the end it starts navigation on the pin at 60 m
+    again.
+15. `guide_distance_format`.
+16. With `enable_navigation_guide` off: `guide_option_off_destroys` and
+    `navigation_clears_with_swarm_off`; navigation is started on the pin at 60 m
+    again before both settings go back for `guide_settings_restored` and
+    `guide_option_on_recreates`.
+17. `guide_destroyed_on_clear`, then `guide_navigation_restored`.
 
-When a scattering swarm is still in the scene after either wait (the one in
-`guide_scatters_on_arrival` or the one after
-`navigation_kept_when_started_inside`), `guide_option_off_destroys` and
-`guide_destroyed_on_clear`, which count guide objects, SKIP and name the object
-that was left. The section changes one setting: `enable_navigation_guide` is
-turned off for step 8 and put back before `guide_settings_restored`.
+When a scattering swarm is still in the scene after any of these waits, the
+checks that count guide objects (`guide_scatters_after_map_clear`,
+`guide_scatters_on_manual_clear`, `guide_option_off_destroys` and
+`guide_destroyed_on_clear`) SKIP and name the object that was left. The section
+changes two settings: `navigation_arrival_distance` is set to 5 m at its start
+(and to 10 m and 0 within `navigation_arrival_distance_setting`), and
+`enable_navigation_guide` is turned off within `guide_scatters_after_map_clear`
+and for the option-off checks. Both are put back before
+`guide_settings_restored`, or when the section ends early.
 
 | Check | Asserts |
 |---|---|
 | `guide_map_click_toggle` | With the large map open, clicking the test pin with `navigation_start_key` held starts navigation to it, and clicking it again clears navigation. The note gives what the simulated click saw (SKIP when `navigation_start_key` is unbound) |
 | `guide_material` | Both particle systems, the stream and the column, draw with a resolved particle material whose shader the GPU supports and which blends additively: a fixed additive shader, or blend factors that add onto the background. The note names the source (a built-in additive shader, or a copy of a campfire or torch effect material) and each renderer's shader and blend factors. The mod also logs the source once a session |
-| `guide_radiates_from_body` | On the section's first swarm, the burst lights born in its first 0.1 s start within 0.3 m of your body point (`BodyHeight` above your feet). At age `RadiateTime` their median 3D distance from the body point is at least 0.8 m; they lie in at least 3 of the 4 horizontal quadrants around you taken against the direction to the target; at least 10 % of them are behind you (direction to the light · direction to the target below -0.3); at least 15 % are more than 0.4 m above the body point and at least 15 % more than 0.2 m below it; and none has gone below the ground under you by then. Once they are travel lights, each one's distance along the line to the target grows over the next 0.5 s. A cloud that stays at your body, spreads only forward or spreads in a flat ring fails it |
-| `guide_swarm_alive` | The guide object is an active root object with exactly two particle systems, two point lights in `navigation_guide_color` and no `ZNetView`; the stream and the column each hold at least 30 lights, at least half of each with alpha above 0.1 in a colour between `navigation_guide_color` and its mix with `MaxWhiteMix` white (currently 35 %); and the HUD label is hidden because the target is off-screen |
+| `guide_radiates_from_body` | On the section's first swarm, the burst lights born in its first 0.1 s start within 0.3 m of your body point (`BodyHeight` above your feet). At age `RadiateTime` their median 3D distance from the body point is at least 0.8 m; they lie in at least 3 of the 4 horizontal quadrants around you taken against the direction to the target; at least 10 % of them are behind you (direction to the light · direction to the target below -0.3); at least 15 % are more than 0.4 m above the body point and at least 15 % more than 0.2 m below it; and none has gone below the ground under you by then. While younger than `RadiateTime` + `GatherTime` (currently 0.9 s), none is lower than the terrain under it plus `BurstFloor` - 0.05 m (currently 0.15 m). Once they are travel lights, each one's distance along the line to the target grows over the next 0.5 s. A cloud that stays at your body, spreads only forward or spreads in a flat ring fails it |
+| `guide_swarm_alive` | The guide object is a shown root object with exactly two particle systems, two point lights in `navigation_guide_color` and no `ZNetView`; the stream and the column each hold at least 30 lights, at least half of each with alpha above 0.1 in a colour between `navigation_guide_color` and its mix with `MaxWhiteMix` white (currently 35 %); and the HUD label is hidden because the target is off-screen |
 | `guide_height_above_ground` | The travel lights' mean height above the terrain (or the sea surface where that is higher) under them, measured by the check itself, is within `HoverHeight` ± (`StreamHalfHeight` + 0.4 m) (currently 0.8–2.2 m), and at least 80 % of them are within it; the note gives the mean, minimum, median and maximum |
 | `guide_flows_toward_target` | Over 3 s with the target 60 m away, some travel lights reach at least 12 m along the straight line to the target, none is farther along than `TrailLength` + 1 m (currently 19 m), and none is farther to the side of the line than `StreamHalfWidth` + `WobbleAmplitude` + 0.5 m (currently 1.2 m). Over the same 3 s, every light born 1 s or more after the swarm started is, at every look, no more than 0.3 m behind you along the line and no farther to its side than that same bound. A stream that keeps spreading out around you fails it |
-| `guide_destination_swarm` | Over 0.5 s every column light stays within `ColumnRadius` + `JitterAmplitude` + 0.2 m (currently 1.15 m) horizontally of the vertical axis through the target and within `ColumnCentreHeight` ± (`ColumnHalfHeight` + `JitterAmplitude` + 0.2 m) (currently 0.15–2.85 m) above it, and the same lights move a mean of more than 0.05 m. After the pin moves 3 m sideways, the column's mean position comes within 0.5 m of the new axis within 1 s, and 1.5 s after the move every light is within the bounds again. The pin is put back |
+| `guide_destination_swarm` | Over 0.5 s every column light stays within `ColumnRadius` + `JitterAmplitude` + √2 × `SwayAmplitude` + 0.2 m (currently about 1.64 m) horizontally of the vertical axis through the target and within `ColumnCentreHeight` ± (`ColumnHalfHeight` + `JitterAmplitude` + 0.2 m) (currently 0.15–2.85 m) above it, and the same lights move a mean of more than 0.05 m. After the pin moves 3 m sideways, the column's mean position comes within 0.5 m of the new axis within 1 s, and 1.5 s after the move every light is within the bounds again. The pin is put back |
+| `guide_column_sways` | After 1.5 s to settle, over 7.5 s (longer than `SwayPeriodX` and `SwayPeriodZ`, so both axes go through a cycle), at each look the column's mean horizontal offset from the axis is set against the mean sway its lights are prescribed (`SwayAt` at each light's height level in the column, 0 at its bottom and 1 at its top). The least-squares slope of the first on the second, both axes pooled with one intercept, is between 0.5 and 1.5; the prescribed mean spans at least half `SwayAmplitude` (currently 0.175 m) along each axis; and every column light stays within the bound of `guide_destination_swarm` from the axis. A still column gives a slope near 0, and the whole column shifted by the top's sway one near 2. Whether the column bends rather than drifts is judged by eye |
+| `guide_column_follows_moving_target` | The pin moves sideways, across the line from you, at 8 m/s for 2 s. At every look after the first 0.3 s every column light is within the bound of `guide_destination_swarm` from the moving axis, and the column's mean offset along the motion, each light's prescribed sway taken out, averaged over the looks, is behind by less than half of 8 m/s / `ColumnFollowRate` (currently 0.33 m), what following alone would leave. The pin is put back and the column given 1.5 s to settle |
+| `guide_column_raised` | Each case is watched for 0.5 s after 1.5 s to settle, and every column light is within `ColumnCentreHeight` ± (`ColumnHalfHeight` + `JitterAmplitude` + 0.2 m) (currently 0.15–2.85 m) of the base the column should stand on: with the pin 2 m under the terrain at a point whose terrain is above the water level, the terrain there; with the pin 3 m above that terrain, the pin; and with the pin 2 m under the water surface at a loaded point within 60 m whose terrain is at least 1 m below the water level, the water level. The points are taken from one look at the loaded terrain on a 2 m grid within 60 m, at least the arrival distance + 5 m from you. A case with no such point is named as skipped in the note (SKIP when none could be placed), and the raised column over water is then judged by eye. The pin is put back |
+| `guide_burst_above_slope` | The steepest point of the loaded terrain within 60 m, on a 2 m grid, where the terrain rises at least 1.5 m within 2 m along a grid axis, is used as the place of your feet. The step the stream makes for a bursting light each frame (its place, the move toward it and the floor under both) is called there for 300 seeds × 10 ages within `RadiateTime` + `GatherTime`, toward a place in the stream `HoverHeight` over the terrain 2 m uphill, with each light one frame at 60 fps from the body point (`FollowRate` read from the mod). No place and no light is lower than `BurstFloor` - 0.05 m (currently 0.15 m) above the terrain under it, measured by the check itself. The note gives the slope found (SKIP when no such point exists; the burst on a slope is then judged by eye) |
 | `guide_trail_ends_at_target` | With the pin moved to 12 m and 1.5 s to settle, over the next 2 s no stream light is farther along the line than the target plus `ColumnRadius` + 0.5 m (currently 1.3 m), and some come within 2 m horizontally of the column's centre. The pin is put back at 60 m. A stream that runs on past the target fails it |
-| `guide_hidden_on_large_map` | With the large map open the swarm is hidden. Once the map closes it is shown again; the column holds at least 30 lights and none of those it had before the map opened; and over the next 1 s no burst light appears, while the lights born in the first 0.5 s after the close are, at every look, no more than 0.3 m behind you along the line. The map mode is put back (SKIP in a world without a map) |
-| `navigation_clears_on_arrival` | The test pin is moved in front of you and raised 3 m above your own height. At `ArrivalDistance` + 0.5 m (currently 5.5 m) horizontally navigation stays on and the swarm is shown; at `ArrivalDistance` - 0.5 m (currently 4.5 m, about 5.4 m in 3D, so a 3D measurement would not end it) navigation ends within 2 frames, the HUD label is gone, there is no live swarm, and the test pin is still on the map. The note gives both distances and the height above you |
+| `guide_hidden_on_large_map` | With the large map open the swarm is hidden: its particle renderers and point lights off and its particle systems paused. Once the map closes it is shown again; the column holds at least 30 lights and none of those it had before the map opened; and over the next 1 s no burst light appears, while the lights born in the first 0.5 s after the close are, at every look, no more than 0.3 m behind you along the line. The map mode is put back (SKIP in a world without a map) |
+| `guide_scatters_after_map_clear` | Before each case the section waits up to 3 s for the swarm to be ready: shown, its burst over (no burst light younger than `RadiateTime` + `GatherTime`), and at least 30 stream and 30 column lights with alpha above 0.1. With the swarm ready, the stream's line and the column's axis are taken as in `guide_scatters_on_manual_clear`, the large map is opened and, once the swarm is hidden, the test pin is clicked with `navigation_start_key` held and the map left open. The click holds the swarm: for at least 0.5 s navigation stays cleared, the held swarm is the only guide object and stays hidden, and its lights keep the seeds and positions they had at the click (within 0.001 m; at least 30 stream lights). Within 2 frames of the map closing it is shown and scatters as in `guide_scatters_on_manual_clear`, and within `ScatterTime` + 0.5 s no guide object is left. Two more cases, each with a held swarm: a navigation started on the map before it closes drops the held swarm, and over 0.5 s after closing no scattering object appears, a new swarm is shown with burst lights, and it is then the only guide object; turning `enable_navigation_guide` off drops it within 2 frames with the map open, and over 0.5 s after closing no guide object appears. The option is turned back on. After each case, whatever happened, the section waits up to `ScatterTime` + 0.5 s for every guide object but the live swarm to go before it starts navigation again; one left is named for the later checks that count guide objects. The map's view and mode are put back after each click; a large map you had open is closed to the small map until the section ends (SKIP in a world without a map, when `navigation_start_key` is unbound, when the option could not be turned off, or, naming the case, when the swarm was not ready in time) |
+| `guide_scatters_on_manual_clear` | With the swarm ready as in `guide_scatters_after_map_clear` and the pin 60 m away, the check takes the stream's line itself - from you, horizontally toward the target, as far as the target or `TrailLength`, whichever is nearer - and the column's axis at the target. Then the routine both manual clears use (map click and looked-at-object key) clears navigation with the "Navigation cleared" message, and exactly one guide object is left, the swarm that was shown, shown and scattering. Following the stream and the column separately for 0.8 s, from the lights each held with alpha above 0.1 at the first look after the scatter began: no light with a new seed appears, every one of those lights is still there, at least 75 % of the stream's lights moved outward from their nearest point on the line the check took and at least 75 % of the column's outward from the axis it took (each light's outward direction taken at the first look), each system's mean outward move is at least the bound of `guide_scatters_on_arrival`, and their mean alpha falls below half its first value. The line the scatter was handed ends within 0.25 m of the ends of the check's line, and its axis lies within 0.25 m of the target, so a line of one point at the column fails. Within `ScatterTime` + 0.5 s no guide object is left, and the section waits up to that long for every guide object but the live swarm to go before it starts navigation again. A stream flying off from the column's axis instead moves only about half its lights outward (SKIP when the swarm was not ready in time) |
+| `navigation_clears_on_arrival` | The test pin is moved in front of you and raised 3 m above your own height. At `navigation_arrival_distance` + 0.5 m (5.5 m at the section's 5 m) horizontally navigation stays on and the swarm is shown; at `navigation_arrival_distance` - 0.5 m (4.5 m, about 5.4 m in 3D, so a 3D measurement would not end it) navigation ends within 2 frames, the HUD label is gone, there is no live swarm, and the test pin is still on the map. The note gives both distances and the height above you |
 | `guide_scatters_on_arrival` | At that arrival exactly one guide object is left, the swarm that was shown. Following the stream and the column separately for 0.8 s, from the lights each held with alpha above 0.1 at the first look after the arrival: no light with a new seed appears, every one of those lights is still there, their mean horizontal distance from the column's axis grows by at least half the outward distance the slowest light covers by then (from `ScatterDelay`, `MinScatterSpeed`, `ScatterDecay` and the smallest outward share of a direction, (1 - `ScatterSpread`) / (1 + `ScatterSpread` + `ScatterLift`); currently about 0.05 m at 0.8 s), and their mean alpha falls below half its first value. Both point lights are dimmer than at the arrival, and within `ScatterTime` + 0.5 s no guide object is left (SKIP when navigation did not end on arrival) |
 | `navigation_kept_when_started_inside` | From a navigation on the test pin 60 m away, the pin is moved to 3 m and navigation is started on it in the same frame: a frame later the swarm is a new object, and navigation is still on after 1 s. With the pin at 8 m for two frames and then back at 3 m, navigation ends within 2 frames |
+| `navigation_arrival_distance_setting` | With `navigation_arrival_distance` at 10 m, the steps of `navigation_clears_on_arrival` at 10.5 m and 9.5 m: navigation stays on at 10.5 m and ends within 2 frames at 9.5 m. With it at 0, after the pin at 10.5 m, the pin at 0.5 m keeps navigation on for 1 s. The setting goes back to 5 m |
 | `guide_distance_format` | With the pin 20 m in front of the camera, the navigation label reads the pin's name followed by the rounded horizontal distance in brackets |
 | `guide_option_off_destroys` | With `enable_navigation_guide` off, no guide object is left in the scene |
 | `navigation_clears_with_swarm_off` | With `enable_navigation_guide` off, the steps of `navigation_clears_on_arrival` still end navigation: it stays on at 5.5 m and ends within 2 frames at 4.5 m |
-| `guide_settings_restored` | `enable_navigation_guide` is back at your value |
+| `guide_settings_restored` | `enable_navigation_guide` and `navigation_arrival_distance` are back at your values |
 | `guide_option_on_recreates` | With the option back on, the swarm is shown again for the navigation started at 60 m |
-| `guide_destroyed_on_clear` | A frame after the navigation is cleared by hand, no guide object is left |
+| `guide_destroyed_on_clear` | A frame after navigation is cleared without a scatter, the way it ends when the map's pins are cleared (`Navigation.ClearTarget`), no guide object is left |
 | `guide_navigation_restored` | The navigation you had before the section is set again, or none is left when you had none (FAIL when your target pin is no longer on the map; navigation is then restored through a temporary marker) |
 
 The section removes only its own test pin and puts back the map mode and your
