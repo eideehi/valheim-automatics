@@ -317,7 +317,7 @@ Specify the modifier key used to start navigation by left-clicking a pin on the 
 - Default value: LeftShift
 
 ### Navigation Guide Swarm / [enable_navigation_guide]
-Specify whether a swarm of small glowing lights leads you toward the navigation target. It follows the ground in a straight line, stops spawning within 5 m of the target and is hidden while the large map is open.
+Specify whether a swarm of small glowing lights leads you toward the navigation target. When navigation starts, the lights burst out from you in all directions, then stream toward the target in a straight line a little above the ground and hover over it. They are hidden while the large map is open.
 
 - Default value: true
 

@@ -134,7 +134,7 @@
     "@config_automatic_mapping_navigation_start_key_name": "マップナビ開始キー",
     "@config_automatic_mapping_navigation_start_key_description": "全体マップ上のピンを左クリックしてナビゲーションを開始するための修飾キーを指定します。左クリックは固定です。",
     "@config_automatic_mapping_enable_navigation_guide_name": "ナビゲーションの光の群れ",
-    "@config_automatic_mapping_enable_navigation_guide_description": "ナビゲーション先へ導く小さな光の群れを表示するかどうかを指定します。光は地面に沿って目標へまっすぐ進み、目標から 5m 以内では新たに現れず、全体マップを開いている間は非表示になります。",
+    "@config_automatic_mapping_enable_navigation_guide_description": "ナビゲーション先へ導く小さな光の群れを表示するかどうかを指定します。ナビゲーションを開始すると光が自分から全方向に飛び散り、地面の少し上を目標へまっすぐ進んで目標の上に漂います。全体マップを開いている間は非表示になります。",
     "@config_automatic_mapping_navigation_guide_color_name": "ナビゲーションの光の色",
     "@config_automatic_mapping_navigation_guide_color_description": "ナビゲーションの光の群れと、コンパス上のナビゲーション先のアイコンの色を HTML カラーコードで指定します。例: #FF30C8, #FF30C8FF",
     "@config_automatic_mapping_mapping_performance_log_name": "マッピングパフォーマンスログ",

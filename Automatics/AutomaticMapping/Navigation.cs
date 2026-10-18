@@ -6,6 +6,12 @@ namespace Automatics.AutomaticMapping
 {
     internal static class Navigation
     {
+        /// <summary>
+        ///     Navigation ends once the local player comes within this horizontal distance of the
+        ///     target, after having been farther away during the same navigation.
+        /// </summary>
+        internal const float ArrivalDistance = 5f;
+
         private const float TargetPinValidationInterval = 0.5f;
         private const float UnresolvedTargetHeight = 2f;
         private const float ManualPinMapPlaneHeightEpsilon = 0.01f;
@@ -24,6 +30,7 @@ namespace Automatics.AutomaticMapping
         private static float _nextTargetPinValidationTime;
         private static float _nextGuideAttemptTime;
         private static bool _guideErrorLogged;
+        private static bool _arrivalArmed;
 
         internal static GameObject Label => Overlay.Root;
         internal static Minimap.PinData TemporaryMarker => _temporaryMarker;
@@ -44,6 +51,7 @@ namespace Automatics.AutomaticMapping
             _nextTargetPinValidationTime = 0f;
             _nextGuideAttemptTime = 0f;
             _guideErrorLogged = false;
+            _arrivalArmed = false;
             DestroyOverlay();
             AimedObjectBar.Cleanup();
             Compass.Cleanup();
@@ -264,6 +272,8 @@ namespace Automatics.AutomaticMapping
             if (_creatureId != ZDOID.None && targetInstance)
                 _lastPosition = targetInstance.transform.position;
 
+            UpdateArrival(player);
+
             // Turned off, the swarm goes whether or not navigation is shown this frame.
             if (!Config.EnableNavigationGuide)
                 NavigationGuide.Destroy();
@@ -302,6 +312,28 @@ namespace Automatics.AutomaticMapping
             Overlay.Show(_targetPin.m_name, Utils.DistanceXZ(player.transform.position, targetPos),
                 screenPoint, MappingOverlay.GetHealth(targetInstance ? targetInstance : _aimedInstance));
             SetVisible(true);
+        }
+
+        /// <summary>
+        ///     Ends navigation when the local player reaches the target, whether or not navigation
+        ///     is shown this frame and whether or not the guide swarm is on. It counts only once the
+        ///     player has been farther than <see cref="ArrivalDistance" />, so a navigation started
+        ///     next to its target stays on. A shown swarm scatters instead of vanishing.
+        /// </summary>
+        private static void UpdateArrival(Player player)
+        {
+            if (_targetPin == null || player != Player.m_localPlayer || !player.IsOwner()) return;
+
+            var targetPos = TargetPosition;
+            if (Utils.DistanceXZ(player.transform.position, targetPos) > ArrivalDistance)
+            {
+                _arrivalArmed = true;
+                return;
+            }
+
+            if (!_arrivalArmed) return;
+            NavigationGuide.Scatter(targetPos);
+            ClearTarget(true);
         }
 
         /// <summary>
@@ -398,6 +430,9 @@ namespace Automatics.AutomaticMapping
             _aimedId = ZDOID.None;
             EnsureDestructionSubscription();
             _nextTargetPinValidationTime = 0f;
+            _arrivalArmed = false;
+            // Each navigation starts its own swarm from the player, at its own target.
+            NavigationGuide.Destroy();
             ShowStartMessage(pinData);
             MapFilter.RefreshSearchPins();
         }
@@ -411,6 +446,7 @@ namespace Automatics.AutomaticMapping
             _aimedInstance = null;
             _aimedId = ZDOID.None;
             _nextTargetPinValidationTime = 0f;
+            _arrivalArmed = false;
             DestroyOverlay();
             NavigationGuide.Destroy();
             MapFilter.RefreshSearchPins();

@@ -366,6 +366,13 @@ as the pin appears, so the creature never shows two pins; while a category or
 unexplored-area filter hides that pin, the marker stays. A pin you saved
 yourself stays a fixed destination.
 
+Navigation ends by itself when you come within 5 m, measured horizontally, of
+the target after having been farther than 5 m away during that navigation. It
+shows the same "Navigation cleared" message as clearing it by hand. If you start
+navigating to something already within 5 m, navigation ends only after you have
+moved away beyond 5 m and come back. This happens whether `Navigation Guide
+Swarm` is on or off.
+
 While navigation is active and the large map is closed, a loaded non-boss
 creature target shows Valheim's health and awareness HUD with the horizontal
 distance added to its name in brackets, such as `Boar [10m]`, even from farther
@@ -381,11 +388,16 @@ position. Navigation labels are hidden while the game is paused or the HUD is
 hidden.
 
 A swarm of small glowing lights also leads you toward the target while you
-navigate, whether the target is on screen or not. It gathers around you and
-streams ahead in a straight line about 1.5 m above the ground, stops appearing
-within 5 m of the target, and is hidden while the large map is open. It is only
-drawn for you and adds nothing to the world. Turn it off with
-`Navigation Guide Swarm`, or change its colour with `Navigation Guide Color`,
+navigate, whether the target is on screen or not. When a navigation starts or
+switches to a new target, the lights burst out from you in all directions,
+including up, down and behind, then turn and stream ahead toward the target a
+little above the ground in a straight line, up to 18 m ahead or to the target
+when it is nearer. After that, new lights do not spread out; they leave you and
+flow straight into the stream. At the target they hover in a small column like a
+swarm of midges. When navigation ends because you arrived, the lights scatter
+like insects and fade out over about a second. The swarm is hidden while the
+large map is open. It is only drawn for you and adds nothing to the world.
+Turn it off with `Navigation Guide Swarm`, or change its colour with `Navigation Guide Color`,
 which also colours the navigation target's icon on the compass.
 
 ### Looked-at object bar
