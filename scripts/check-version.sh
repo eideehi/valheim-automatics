@@ -95,7 +95,7 @@ plugin_version="$(read_single_match "$plugin_file" 's/^[[:space:]]*private const
 manifest_version="$(read_single_match "$manifest_file" 's/^[[:space:]]*"version_number":[[:space:]]*"([^"]+)".*$/\1/p' 'Thunderstore manifest version')"
 assembly_version="$(read_single_match "$assembly_info" 's/^\[assembly: AssemblyVersion\("([^"]+)"\)\]$/\1/p' 'assembly version')"
 file_version="$(read_single_match "$assembly_info" 's/^\[assembly: AssemblyFileVersion\("([^"]+)"\)\]$/\1/p' 'assembly file version')"
-changelog_version="$(read_single_match "$changelog_file" '1s/^#### v([^[:space:]]+) \[.*$/\1/p' 'latest changelog version')"
+changelog_version="$(read_single_match "$changelog_file" '/^#### v/{s/^#### v([^[:space:]]+) \[.*$/\1/p;q;}' 'latest changelog version')"
 
 expected_assembly_version="$project_version.0"
 latest_release_tag="$(read_latest_release_tag)"

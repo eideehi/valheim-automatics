@@ -73,6 +73,19 @@ git -C "$fixture" tag 1.6.0
 
 "$fixture/scripts/check-version.sh" >/dev/null
 
+cat >"$fixture/CHANGELOG.md" <<'EOF'
+#### Unreleased
+- Pending changes.
+
+#### v1.6.0 [2026-05-17]
+- Release notes.
+
+#### v1.5.1 [2023-10-15]
+- Older release notes.
+EOF
+
+"$fixture/scripts/check-version.sh" >/dev/null
+
 write_versions "1.6.1" "1.6.1.0"
 if "$fixture/scripts/check-version.sh" >"$tmp_dir/stale-changelog.out" 2>"$tmp_dir/stale-changelog.err"; then
     echo "error: check-version passed with package metadata ahead of changelog and latest tag" >&2
@@ -86,8 +99,14 @@ if ! grep -Fq 'project version 1.6.1 does not match latest changelog version 1.6
 fi
 
 cat >"$fixture/CHANGELOG.md" <<'EOF'
+#### Unreleased
+- Pending changes.
+
 #### v1.6.1 [2026-05-18]
 - Release notes.
+
+#### v1.6.0 [2026-05-17]
+- Older release notes.
 EOF
 
 if "$fixture/scripts/check-version.sh" >"$tmp_dir/ahead-tag.out" 2>"$tmp_dir/ahead-tag.err"; then
@@ -98,6 +117,46 @@ fi
 if ! grep -Fq 'project version 1.6.1 does not match latest release tag 1.6.0' "$tmp_dir/ahead-tag.err"; then
     echo "error: check-version failed for the wrong latest-tag reason" >&2
     cat "$tmp_dir/ahead-tag.err" >&2
+    exit 1
+fi
+
+write_versions "1.6.0" "1.6.0.0"
+
+cat >"$fixture/CHANGELOG.md" <<'EOF'
+#### Unreleased
+- Pending changes.
+EOF
+
+if "$fixture/scripts/check-version.sh" >"$tmp_dir/no-release.out" 2>"$tmp_dir/no-release.err"; then
+    echo "error: check-version passed without a numbered release" >&2
+    exit 1
+fi
+
+if ! grep -Fq 'could not read latest changelog version from CHANGELOG.md' "$tmp_dir/no-release.err"; then
+    echo "error: check-version failed for the wrong missing-release reason" >&2
+    cat "$tmp_dir/no-release.err" >&2
+    exit 1
+fi
+
+cat >"$fixture/CHANGELOG.md" <<'EOF'
+#### Unreleased
+- Pending changes.
+
+#### v1.6.1
+- Malformed release heading.
+
+#### v1.6.0 [2026-05-17]
+- Older release notes.
+EOF
+
+if "$fixture/scripts/check-version.sh" >"$tmp_dir/malformed-release.out" 2>"$tmp_dir/malformed-release.err"; then
+    echo "error: check-version skipped a malformed first numbered release" >&2
+    exit 1
+fi
+
+if ! grep -Fq 'could not read latest changelog version from CHANGELOG.md' "$tmp_dir/malformed-release.err"; then
+    echo "error: check-version failed for the wrong malformed-release reason" >&2
+    cat "$tmp_dir/malformed-release.err" >&2
     exit 1
 fi
 
