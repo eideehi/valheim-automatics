@@ -81,7 +81,8 @@ fi
 # Packaging (when SEVENZIP_PATH is set) moves the built files out of
 # bin/Release into the archives, so build without it. scripts/build.sh Release
 # still makes the release packages.
-env -u SEVENZIP_PATH "$script_dir/build.sh" "$config" clean
+# Keep the installed files intact until both builds have succeeded.
+env -u SEVENZIP_PATH DeployMod=false "$script_dir/build.sh" "$config" clean
 if [[ "$smoke" == "yes" ]]; then
     "$script_dir/build.sh" smoke "$config" clean no-deploy
 fi

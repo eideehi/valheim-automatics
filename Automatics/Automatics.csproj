@@ -268,7 +268,7 @@
     <Error Condition="!Exists('$(ILRepackTargetsPath)')" Text="ILRepack targets were not found. Run restore before building Release." />
   </Target>
 
-  <Target Name="DeployModFiles" AfterTargets="Build" Condition="Exists('$(BepInExDirectory)') And '$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
+  <Target Name="DeployModFiles" AfterTargets="Build" Condition="'$(DeployMod)' != 'false' And Exists('$(BepInExDirectory)') And '$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
     <ItemGroup>
       <ModFiles Include="$(TargetPath)" />
       <ModFiles Include="$(PkgLitJson)\lib\net45\LitJSON.dll" />

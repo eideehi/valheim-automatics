@@ -135,7 +135,7 @@ if [[ "$mode" == "smoke" ]]; then
     if [[ "$deploy_arg" == "/p:DeploySmoke=true" || ( -z "$deploy_arg" && "$config" == "Debug" ) ]]; then
         echo "Smoke deploy path: $VALHEIM_DIR/BepInEx/plugins/AutomaticsSmoke"
     fi
-elif [[ "$config" == "Debug" ]]; then
+elif [[ "$config" == "Debug" && "${DeployMod:-}" != [Ff][Aa][Ll][Ss][Ee] ]]; then
     echo "Debug deploy target: $VALHEIM_DIR/BepInEx/plugins/Automatics"
 elif [[ "$config" == "Release" && -e "${SEVENZIP_PATH:-}" ]]; then
     # Mirror the csproj's PackageModFiles condition. Without SEVENZIP_PATH no
