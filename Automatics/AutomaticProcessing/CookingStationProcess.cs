@@ -113,6 +113,7 @@ namespace Automatics.AutomaticProcessing
                 .Select(x => (x.container, Logics.ReadInventory(x.container))).ToList();
             var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
+            Container askable = null;
             foreach (var conversion in cookingStation.m_conversion)
             {
                 var materialContainers = new List<Container>();
@@ -145,8 +146,9 @@ namespace Automatics.AutomaticProcessing
                     // Walks the candidates in distance order, skipping any that holds no
                     // eligible item without claiming it.
                     if (!Logics.TryTakeMaterial(materialContainers, materialData.m_name,
-                            minMaterialCount, conversion.m_from.gameObject.name,
-                            out var materialContainer, out var prefabName, out var cheated))
+                            minMaterialCount, conversion.m_from.gameObject.name, origin,
+                            ref askable, out var materialContainer, out var prefabName,
+                            out var cheated))
                         continue;
                     // CookingStation registers Register<string, bool>("RPC_AddItem", RPC_AddItem).
                     zNetView.InvokeRPC("RPC_AddItem", prefabName, cheated);
@@ -156,9 +158,11 @@ namespace Automatics.AutomaticProcessing
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position, stationName,
                         origin, productData.m_name);
-                    break;
+                    return;
                 }
             }
+
+            Logics.AskFor(askable);
         }
 
         private static bool CanRefuelFromContainers(CookingStation cookingStation, string stationName)
@@ -197,11 +201,12 @@ namespace Automatics.AutomaticProcessing
             var origin = transform.position;
             var fuelName = cookingStation.m_fuelItem.m_itemData.m_shared.m_name;
 
+            Container askable = null;
             foreach (var (container, _) in Logics.GetNearbyContainers(stationName, origin))
             {
                 var inventory = container.GetInventory();
                 if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 if (!Logics.TryRemoveItem(inventory, fuelName, minFuelCount, out _)) continue;
                 // CookingStation registers Register("RPC_AddFuel", RPC_AddFuel), which adds one
@@ -210,8 +215,10 @@ namespace Automatics.AutomaticProcessing
 
                 Logics.RefuelLog(fuelName, 1, stationName, origin, container.m_name,
                     container.transform.position);
-                break;
+                return;
             }
+
+            Logics.AskFor(askable);
         }
 
         [UsedImplicitly]
@@ -228,10 +235,11 @@ namespace Automatics.AutomaticProcessing
             var itemName = item.m_itemData.m_shared.m_name;
 
             var origin = cookingStation.transform.position;
+            Container askable = null;
             foreach (var (container, _) in Logics.GetNearbyContainers(stationName, origin))
             {
                 if (!Logics.CanStore(stationName, container, item.gameObject, itemName)) continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
                 var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(stationName, inventory, itemName)) continue;
                 var storedItemCount =
@@ -265,6 +273,7 @@ namespace Automatics.AutomaticProcessing
                 return true;
             }
 
+            Logics.AskFor(askable);
             return false;
         }
     }

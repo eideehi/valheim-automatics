@@ -31,6 +31,7 @@ namespace Automatics.AutomaticProcessing
             // again after the gate, which can reload the container about to be written.
             int Capacity() => Logics.GetProductCapacity(inventories, honeyName,
                 honeyData.m_maxStackSize, maxProductStacks);
+            Container askable = null;
             foreach (var container in containers)
             {
                 if (honeyRemaining <= 0) break;
@@ -38,7 +39,7 @@ namespace Automatics.AutomaticProcessing
 
                 if (!Logics.CanStore(beehiveName, container, honeyItem.gameObject, honeyName))
                     continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 var amount = Mathf.Min(Capacity(), honeyRemaining);
                 if (amount <= 0) break;
@@ -54,6 +55,7 @@ namespace Automatics.AutomaticProcessing
                 honeyRemaining -= storedHoneyCount;
             }
 
+            if (honeyRemaining > 0 && Capacity() > 0) Logics.AskFor(askable);
             zNetView.GetZDO().Set("level", Mathf.Clamp(honeyRemaining, 0, beehive.m_maxHoney));
             return true;
         }

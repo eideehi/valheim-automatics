@@ -179,6 +179,7 @@ namespace Automatics
             Hooks.OnInitTerminal += Commands.Register;
 
             harmony.PatchAll(typeof(Patches));
+            harmony.PatchAll(typeof(ContainerRequestPatches));
         }
 
         public static void InitializeRuntime(string language)

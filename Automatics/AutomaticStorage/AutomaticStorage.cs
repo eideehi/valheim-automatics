@@ -15,6 +15,9 @@ namespace Automatics.AutomaticStorage
             public int Index { get; set; }
             public Container Container { get; set; }
             public Inventory Inventory { get; set; }
+
+            // Another game owns the container: it is planned from what it holds now.
+            public bool OwnedElsewhere { get; set; }
         }
 
         internal sealed class Result
@@ -50,6 +53,7 @@ namespace Automatics.AutomaticStorage
                 if (!CanStoreItem(player, item, exclusions)) continue;
 
                 var remaining = item.m_stack;
+                ContainerTarget askable = null;
                 while (remaining > 0)
                 {
                     var routes = GetRoutes(item, containers);
@@ -64,6 +68,12 @@ namespace Automatics.AutomaticStorage
                             continue;
 
                         var target = containers[route.ContainerIndex];
+                        if (target.OwnedElsewhere)
+                        {
+                            askable = askable ?? target;
+                            continue;
+                        }
+
                         if (!ContainerAccess.CanWriteContainer(player, target.Container))
                             continue;
 
@@ -83,6 +93,10 @@ namespace Automatics.AutomaticStorage
 
                     if (movedInPass == 0) break;
                 }
+
+                // What the containers this game may write could not take is routed to one
+                // another game owns: that container is asked for now and used on a later press.
+                if (remaining > 0 && askable != null) ContainerAccess.AskFor(askable.Container);
             }
 
             if (Config.SortContainersAfterStoring)
@@ -149,20 +163,29 @@ namespace Automatics.AutomaticStorage
                          })
                          .Where(x => x.Distance <= range)
                          .Where(x => ContainerAccess.IsAllowed(x.Container, Config.AllowContainer))
-                         .Where(x => ContainerAccess.CanWriteContainer(player, x.Container))
+                         .Select(x => new
+                         {
+                             x.Container, x.Distance,
+                             Step = ContainerAccess.GetWriteStep(player, x.Container)
+                         })
+                         .Where(x => x.Step != ContainerWriteStep.Skip)
                          .OrderBy(x => x.Distance)
                          .Take(limit > 0 ? limit : int.MaxValue))
             {
                 // Routes are planned from what each container holds, so the gate loads it
-                // before the plan reads it.
-                if (!ContainerAccess.TryPrepareContainerMutation(player, container.Container))
+                // before the plan reads it; one another game owns is read as it is now.
+                var ownedElsewhere = container.Step == ContainerWriteStep.Request;
+                if (ownedElsewhere)
+                    ContainerAccess.LoadSavedContents(container.Container);
+                else if (!ContainerAccess.TryPrepareContainerMutation(player, container.Container))
                     continue;
 
                 yield return new ContainerTarget
                 {
                     Index = index++,
                     Container = container.Container,
-                    Inventory = container.Container.GetInventory()
+                    Inventory = container.Container.GetInventory(),
+                    OwnedElsewhere = ownedElsewhere
                 };
             }
         }

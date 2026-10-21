@@ -93,11 +93,12 @@ namespace Automatics.AutomaticProcessing
 
             var minAmmoCount = Config.NumberOfItemsToStopCharge(turretName);
             var origin = turret.transform.position;
+            Container askable = null;
             foreach (var (container, _) in Logics.GetNearbyContainers(turretName, origin))
             {
                 var inventory = container.GetInventory();
                 if (FindChargeItem(turret, inventory, minAmmoCount) == null) continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 // The gate can reload the container, which replaces every item in it, so the
                 // ammunition is looked up again in what the container holds now.
@@ -108,8 +109,10 @@ namespace Automatics.AutomaticProcessing
 
                 Logics.ChargeLog(item.m_shared.m_name, 1, turretName, origin, container.m_name,
                     container.transform.position);
-                break;
+                return;
             }
+
+            Logics.AskFor(askable);
         }
 
         // The ammunition to charge from the inventory, while more than minAmmoCount of it stays

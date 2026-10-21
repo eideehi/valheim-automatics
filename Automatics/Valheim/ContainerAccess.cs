@@ -21,6 +21,10 @@ namespace Automatics.Valheim
         // below is used instead.
         private static readonly Func<Container, long, bool> CheckAccessInvoker;
 
+        // The requests sent to other games for the containers they own (see AskFor).
+        private static readonly ContainerRequests<ZDOID> Requests =
+            new ContainerRequests<ZDOID>(() => Time.time);
+
         static ContainerAccess()
         {
             try
@@ -144,10 +148,22 @@ namespace Automatics.Valheim
         // player is the context without a local player, as in the server-aware gate.
         public static bool CanWriteContainer(Player player, Container container)
         {
+            return IsWritable(GetWriteStep(player, container));
+        }
+
+        // What the gate below would do with the container, without claiming or loading it.
+        public static ContainerWriteStep GetWriteStep(Player player, Container container)
+        {
             return CanUseContainerServerAware(player, container) &&
-                   Objects.GetZNetView(container, out var nview) &&
-                   ContainerWritePolicy.Decide(ReadWriteState(player, container, nview, false)) !=
-                   ContainerWriteStep.Skip;
+                   Objects.GetZNetView(container, out var nview)
+                ? ContainerWritePolicy.Decide(ReadWriteState(player, container, nview, false))
+                : ContainerWriteStep.Skip;
+        }
+
+        public static bool IsWritable(ContainerWriteStep step)
+        {
+            return step == ContainerWriteStep.Claim || step == ContainerWriteStep.Load ||
+                   step == ContainerWriteStep.Write;
         }
 
         // The gate before every container write: the player-aware access checks, then the
@@ -157,7 +173,16 @@ namespace Automatics.Valheim
         // this returns true. A store or a take checks the container with the probe above first.
         public static bool TryPrepareContainerMutation(Player player, Container container)
         {
-            return CanUseContainer(player, container) && TryAcquire(player, container);
+            return TryPrepareContainerMutation(player, container, out _);
+        }
+
+        // ownedElsewhere: the gate stopped because another game owns the container (AskFor).
+        public static bool TryPrepareContainerMutation(Player player, Container container,
+            out bool ownedElsewhere)
+        {
+            ownedElsewhere = false;
+            return CanUseContainer(player, container) &&
+                   TryAcquire(player, container, out ownedElsewhere);
         }
 
         // Contexts without a local player have no player permission model to evaluate, so the
@@ -167,7 +192,48 @@ namespace Automatics.Valheim
         public static bool TryPrepareContainerMutationServerAware(Player player,
             Container container)
         {
-            return CanUseContainerServerAware(player, container) && TryAcquire(player, container);
+            return TryPrepareContainerMutationServerAware(player, container, out _);
+        }
+
+        public static bool TryPrepareContainerMutationServerAware(Player player,
+            Container container, out bool ownedElsewhere)
+        {
+            ownedElsewhere = false;
+            return CanUseContainerServerAware(player, container) &&
+                   TryAcquire(player, container, out ownedElsewhere);
+        }
+
+        // Asks the owner for a container the gate or GetWriteStep found owned by another game in
+        // this frame, as Container.Interact does when a player opens it (see ContainerRequests).
+        public static void AskFor(Container container)
+        {
+            if (ZNet.IsSinglePlayer || !Game.instance) return;
+            if (!Objects.GetZNetView(container, out var nview) || !IsValid(nview)) return;
+
+            var zdo = nview.GetZDO();
+            if (Requests.TryRequest(zdo.m_uid, zdo.OwnerRevision))
+                nview.InvokeRPC("RPC_RequestOpen", Game.instance.GetPlayerProfile().GetPlayerID());
+        }
+
+        public static bool TakeRequestReply(ZNetView nview, bool granted)
+        {
+            return IsValid(nview) && Requests.TakeReply(nview.GetZDO().m_uid, granted);
+        }
+
+        public static void ForgetRequest(ZNetView nview)
+        {
+            if (IsValid(nview)) Requests.Forget(nview.GetZDO().m_uid);
+        }
+
+        public static void NoteHandedOver(ZNetView nview)
+        {
+            if (IsValid(nview))
+                Requests.HandedOver(nview.GetZDO().m_uid, nview.GetZDO().OwnerRevision);
+        }
+
+        public static void ClearRequests()
+        {
+            Requests.Clear();
         }
 
         // Container.CheckAccess is private, but it is the vanilla ownership
@@ -217,10 +283,18 @@ namespace Automatics.Valheim
         }
 
         // Callers have checked the ZNetView is valid (IsIdle).
-        private static bool TryAcquire(Player player, Container container)
+        private static bool TryAcquire(Player player, Container container, out bool ownedElsewhere)
         {
-            return Objects.GetZNetView(container, out var nview) &&
-                   ContainerWritePolicy.TryAcquire(new WriteTarget(player, container, nview));
+            var step = Objects.GetZNetView(container, out var nview)
+                ? ContainerWritePolicy.TryAcquire(new WriteTarget(player, container, nview))
+                : ContainerWriteStep.Skip;
+            ownedElsewhere = step == ContainerWriteStep.Request;
+            return step == ContainerWriteStep.Write;
+        }
+
+        private static bool IsValid(ZNetView nview)
+        {
+            return nview != null && nview.IsValid() && nview.GetZDO() != null;
         }
 
         private static ContainerWriteState ReadWriteState(Player player, Container container,

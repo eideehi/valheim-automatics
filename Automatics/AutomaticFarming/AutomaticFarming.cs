@@ -159,7 +159,7 @@ namespace Automatics.AutomaticFarming
 
         private static void FarmAroundContainers(Player player)
         {
-            var containers = FarmingContainers.Resolve(player, prepareMutation: true);
+            var containers = FarmingContainers.Resolve(player, forPass: true);
             if (!containers.HasAnchors) return;
 
             HarvestAndReplantNearContainers(player, containers);
@@ -171,13 +171,9 @@ namespace Automatics.AutomaticFarming
         private static void HarvestAndReplantNearContainers(Player player,
             FarmingContainers containers)
         {
-            // With no mutable container of any role, every harvested yield would have
-            // nowhere to go and every crop would be left standing, so skip the whole
-            // crop search rather than testing each one.
-            if (containers.OwnedStorage.Count == 0 &&
-                containers.OwnedCultivation.Count == 0 &&
-                containers.OwnedSeedHarvest.Count == 0)
-                return;
+            // With no container of any role to mutate or ask for, every harvested yield
+            // would have nowhere to go, so skip the whole crop search.
+            if (!containers.HasUsableBoxes) return;
 
             var range = Config.FarmingRange;
             var boxRange = Config.ContainerSearchRange;
@@ -231,18 +227,16 @@ namespace Automatics.AutomaticFarming
 
             // Replant input comes only from the matching-role boxes near the spot.
             var seedPool = SeedPool.FromContainers(player, matchingPlanting);
-            HarvestAndReplant(player, pickable, identifier, seedPool, depositTargets);
+            HarvestAndReplant(player, pickable, identifier, seedPool, depositTargets,
+                containers.OwnedElsewhereDepositNear(isSeed, position, boxRange));
         }
 
         // ---- Player + Containers mode (player-centred, role containers) ---------
 
         private static void FarmAroundPlayerWithContainers(Player player)
         {
-            var containers = FarmingContainers.Resolve(player, prepareMutation: true);
-            if (containers.OwnedStorage.Count == 0 &&
-                containers.OwnedCultivation.Count == 0 &&
-                containers.OwnedSeedHarvest.Count == 0)
-                return;
+            var containers = FarmingContainers.Resolve(player, forPass: true);
+            if (!containers.HasUsableBoxes) return;
 
             var origin = player.transform.position;
             var range = Config.FarmingRange;
@@ -287,10 +281,25 @@ namespace Automatics.AutomaticFarming
                 var pool = plantSeedProducing
                     ? containers.SeedHarvestNear(origin, boxRange)
                     : containers.CultivationNear(origin, boxRange);
-                if (pool.Count == 0) continue;
-
                 var seedPool = SeedPool.FromContainers(player, pool);
-                if (!CropPlanting.CanAffordPlanting(seedPool, sapling, reserve)) continue;
+                if (pool.Count == 0 || !CropPlanting.CanAffordPlanting(seedPool, sapling, reserve))
+                {
+                    // Your boxes nearby cannot pay for it: ask for the nearest one another peer
+                    // owns that can.
+                    if (!containers.HasOwnedElsewhere) continue;
+                    var askable = containers.OwnedElsewhere(plantSeedProducing
+                        ? ContainerRole.SeedHarvest
+                        : ContainerRole.Cultivation);
+                    foreach (var box in FarmingContainers.Near(askable, origin, boxRange))
+                    {
+                        var boxPool = SeedPool.FromContainers(player, new List<Container> { box });
+                        if (!CropPlanting.CanAffordPlanting(boxPool, sapling, reserve)) continue;
+                        ContainerAccess.AskFor(box);
+                        break;
+                    }
+
+                    continue;
+                }
 
                 // Only where a box near the spot can take the grown crop's yield, so farming can
                 // harvest what it sows instead of leaving it to pickup.
@@ -319,6 +328,14 @@ namespace Automatics.AutomaticFarming
                 pos => containers.CultivationNear(pos, boxRange));
             SowFromBoxes(player, containers.OwnedSeedHarvest, plantSeedProducing: true,
                 pos => containers.SeedHarvestNear(pos, boxRange));
+
+            // A planting box another peer owns is asked for when it would sow this pass.
+            foreach (var box in containers.OwnedElsewhere(ContainerRole.Cultivation))
+                if (WouldSow(player, box, plantSeedProducing: false))
+                    ContainerAccess.AskFor(box.Container);
+            foreach (var box in containers.OwnedElsewhere(ContainerRole.SeedHarvest))
+                if (WouldSow(player, box, plantSeedProducing: true))
+                    ContainerAccess.AskFor(box.Container);
         }
 
         private static void SowFromBoxes(Player player, List<DesignatedContainer> boxes,
@@ -370,7 +387,8 @@ namespace Automatics.AutomaticFarming
         // the field-local deposit targets (storage first, then the matching planting
         // box) and the crop is left standing when none has room.
         private static void HarvestAndReplant(Player player, Pickable pickable, string identifier,
-            SeedPool seedPool, IReadOnlyList<Container> depositTargets)
+            SeedPool seedPool, IReadOnlyList<Container> depositTargets,
+            IReadOnlyList<Container> ownedElsewhere = null)
         {
             if (!Objects.GetZNetView(pickable, out var zNetView) || !zNetView.IsValid()) return;
 
@@ -385,7 +403,8 @@ namespace Automatics.AutomaticFarming
 
             var outcome = depositTargets == null
                 ? PickableHarvester.Harvest(player, pickable, zNetView)
-                : PickableHarvester.HarvestToContainers(player, pickable, zNetView, depositTargets);
+                : PickableHarvester.HarvestToContainers(player, pickable, zNetView, depositTargets,
+                    ownedElsewhere);
 
             if (outcome != PickableHarvester.HarvestOutcome.PickedByOwner)
             {
@@ -440,7 +459,8 @@ namespace Automatics.AutomaticFarming
         // when the budget would be exceeded the sown radius is shrunk rather than
         // skipping the crop, so sowing still works in the area nearest the origin.
         private static int SowGrid(Player player, Piece sapling, Plant plant, SeedPool seedPool,
-            Vector3 origin, int reserve, System.Func<Vector3, bool> cellAllowed = null)
+            Vector3 origin, int reserve, System.Func<Vector3, bool> cellAllowed = null,
+            bool probe = false)
         {
             var step = plant.m_growRadius * Config.SowingSpacingFactor;
             if (step < 0.1f) return 0;
@@ -488,12 +508,43 @@ namespace Automatics.AutomaticFarming
                 if (cellAllowed != null && !cellAllowed(pos)) continue;
                 if (!CropPlanting.CanAffordPlanting(seedPool, sapling, reserve)) return sown;
 
+                // A probe plants nothing; it reports the first cell the sapling can grow on.
+                if (probe)
+                {
+                    if (PrivateArea.CheckAccess(pos, 0f, false) &&
+                        CropPlanting.CanPlantAt(plant, pos, out _))
+                        return 1;
+                    continue;
+                }
+
                 if (CropPlanting.TryPlant(player, sapling, plant, seedPool, pos, lattice,
                         reserve, out _))
                     sown++;
             }
 
             return sown;
+        }
+
+        // Whether a planting box would sow this pass as SowFromBoxes does: it holds the input of
+        // an allowed sapling of its role above the seed reserve, and the ground around it has a
+        // cell that sapling can grow on.
+        private static bool WouldSow(Player player, DesignatedContainer box, bool plantSeedProducing)
+        {
+            var reserve = Config.SeedReserve;
+            var seedPool = SeedPool.FromContainers(player, new List<Container> { box.Container });
+            foreach (var identifier in Config.AllowFarmingCrops)
+            {
+                if (ValheimObject.Flora.HasTag(identifier, "seed") != plantSeedProducing) continue;
+                if (!CropPlanting.TryResolveSapling(identifier, out var sapling)) continue;
+
+                var plant = sapling.GetComponent<Plant>();
+                if (plant == null || plant.m_attachDistance > 0f) continue;
+                if (!CropPlanting.CanAffordPlanting(seedPool, sapling, reserve)) continue;
+                if (SowGrid(player, sapling, plant, seedPool, box.Position, reserve, probe: true) > 0)
+                    return true;
+            }
+
+            return false;
         }
 
         // True when the container inventory holds every seed type the sapling

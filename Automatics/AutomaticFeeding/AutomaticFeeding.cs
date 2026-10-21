@@ -278,6 +278,8 @@ namespace Automatics.AutomaticFeeding
             var needGetClose = Config.NeedGetCloseToEatTheFeed;
             var origin = _baseAI.transform.position;
             var closest = float.MaxValue;
+            Container askable = null;
+            var askDistance = float.MaxValue;
 
             ContainerCache.Fill(_feedBoxBuffer);
             for (var i = 0; i < _feedBoxBuffer.Count; i++)
@@ -291,10 +293,6 @@ namespace Automatics.AutomaticFeeding
                 if (distance > range || distance >= closest) continue;
                 if (ContainerAccess.IsGrave(container)) continue;
                 if (needGetClose && !HavePath(position)) continue;
-                // Only a box this game may write: a nearer one another game owns
-                // would be chosen on every search and never give food.
-                if (!ContainerAccess.CanWriteContainer(Player.m_localPlayer, container))
-                    continue;
 
                 var inventory = container.GetInventory();
                 if (inventory == null) continue;
@@ -302,10 +300,27 @@ namespace Automatics.AutomaticFeeding
                 var item = FindConsumable(inventory);
                 if (item == null) continue;
 
+                // Only a box this game may write: a nearer one another game owns
+                // would be chosen on every search and never give food.
+                var step = ContainerAccess.GetWriteStep(Player.m_localPlayer, container);
+                if (!ContainerAccess.IsWritable(step))
+                {
+                    if (step == ContainerWriteStep.Request && distance < askDistance)
+                    {
+                        askable = container;
+                        askDistance = distance;
+                    }
+
+                    continue;
+                }
+
                 closest = distance;
                 _closestFeedBox = container;
                 _consumeTargetItem = item;
             }
+
+            // With no box this game may write, ask for the nearest one another game owns.
+            if (!_closestFeedBox) ContainerAccess.AskFor(askable);
         }
 
         private void FindFeeder(float searchRange)

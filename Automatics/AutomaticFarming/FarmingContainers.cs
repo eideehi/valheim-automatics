@@ -39,19 +39,25 @@ namespace Automatics.AutomaticFarming
     /// the server may claim them; a box another peer owns is left out). Counting an
     /// input the peer could never consume — or a slot it could never fill — would
     /// let a gate pass and the mutation fall short, so the sourcing and deposit
-    /// pools are restricted to owned containers up front.
+    /// pools are restricted to owned containers up front. A box another peer
+    /// owns (<see cref="OwnedElsewhere"/>) is asked for only where this peer's
+    /// own boxes leave a need unmet, and used on a later pass.
     /// </para>
     /// </remarks>
     internal sealed class FarmingContainers
     {
+        // By role, Cultivation first; filled for a farming pass only.
+        private readonly List<DesignatedContainer>[] _ownedElsewhere;
+
         private FarmingContainers(List<DesignatedContainer> ownedCultivation,
             List<DesignatedContainer> ownedSeedHarvest, List<DesignatedContainer> ownedStorage,
-            List<Vector3> anchors)
+            List<Vector3> anchors, List<DesignatedContainer>[] ownedElsewhere)
         {
             OwnedCultivation = ownedCultivation;
             OwnedSeedHarvest = ownedSeedHarvest;
             OwnedStorage = ownedStorage;
             Anchors = anchors;
+            _ownedElsewhere = ownedElsewhere;
         }
 
         /// <summary>Cultivation-role containers this peer can mutate (grow crops from seeds).</summary>
@@ -68,12 +74,31 @@ namespace Automatics.AutomaticFarming
 
         public bool HasAnchors => Anchors.Count > 0;
 
-        public static FarmingContainers Resolve(Player player, bool prepareMutation = false)
+        public bool HasOwnedElsewhere => _ownedElsewhere[0].Count > 0 ||
+                                         _ownedElsewhere[1].Count > 0 ||
+                                         _ownedElsewhere[2].Count > 0;
+
+        /// <summary>Whether the pass has a box to mutate, or one to ask another peer for.</summary>
+        public bool HasUsableBoxes => OwnedStorage.Count > 0 || OwnedCultivation.Count > 0 ||
+                                      OwnedSeedHarvest.Count > 0 || HasOwnedElsewhere;
+
+        /// <summary>Containers of <paramref name="role"/> another peer owns, which may be asked for.</summary>
+        public List<DesignatedContainer> OwnedElsewhere(ContainerRole role)
+        {
+            return _ownedElsewhere[(int)role - 1];
+        }
+
+        public static FarmingContainers Resolve(Player player, bool forPass = false)
         {
             var ownedCultivation = new List<DesignatedContainer>();
             var ownedSeedHarvest = new List<DesignatedContainer>();
             var ownedStorage = new List<DesignatedContainer>();
             var anchors = new List<Vector3>();
+            var ownedElsewhere = new[]
+            {
+                new List<DesignatedContainer>(), new List<DesignatedContainer>(),
+                new List<DesignatedContainer>()
+            };
 
             foreach (var container in ContainerCache.GetAllInstance())
             {
@@ -85,13 +110,17 @@ namespace Automatics.AutomaticFarming
                 var position = container.transform.position;
                 anchors.Add(position);
 
-                // Preparing loads each box, so what the pass counts in them is current.
-                var canMutate = prepareMutation
-                    ? ContainerAccess.TryPrepareContainerMutation(player, container)
-                    : ContainerAccess.CanWriteContainer(player, container);
-                if (!canMutate) continue;
-
+                // The gate at the deposit and the input take claims a box; a pass only loads it.
                 var designated = new DesignatedContainer(container, position);
+                var step = ContainerAccess.GetWriteStep(player, container);
+                if (!ContainerAccess.IsWritable(step))
+                {
+                    if (forPass && step == ContainerWriteStep.Request)
+                        ownedElsewhere[(int)role - 1].Add(designated);
+                    continue;
+                }
+
+                if (forPass) ContainerAccess.LoadSavedContents(container);
                 switch (role)
                 {
                     case ContainerRole.Cultivation:
@@ -106,7 +135,23 @@ namespace Automatics.AutomaticFarming
                 }
             }
 
-            return new FarmingContainers(ownedCultivation, ownedSeedHarvest, ownedStorage, anchors);
+            return new FarmingContainers(ownedCultivation, ownedSeedHarvest, ownedStorage, anchors,
+                ownedElsewhere);
+        }
+
+        /// <summary>
+        /// The deposit targets of a yield another peer owns (storage boxes, then the matching
+        /// planting boxes) within <paramref name="range"/> of <paramref name="position"/>,
+        /// nearest-first; null when no box is owned elsewhere.
+        /// </summary>
+        public List<Container> OwnedElsewhereDepositNear(bool isSeed, Vector3 position, float range)
+        {
+            if (!HasOwnedElsewhere) return null;
+
+            var targets = Near(OwnedElsewhere(ContainerRole.Storage), position, range);
+            targets.AddRange(Near(OwnedElsewhere(isSeed ? ContainerRole.SeedHarvest
+                : ContainerRole.Cultivation), position, range));
+            return targets;
         }
 
         /// <summary>
@@ -154,7 +199,7 @@ namespace Automatics.AutomaticFarming
         // Called several times per crop per farming pass, so this stays LINQ-free:
         // the query chain allocated an anonymous-type object per container plus
         // enumerators and sort buffers for every call.
-        private static List<Container> Near(List<DesignatedContainer> source, Vector3 position,
+        public static List<Container> Near(List<DesignatedContainer> source, Vector3 position,
             float range)
         {
             var rangeSqr = range * range;

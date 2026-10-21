@@ -31,6 +31,7 @@ namespace Automatics.AutomaticProcessing
             // again after the gate, which can reload the container about to be written.
             int Capacity() => Logics.GetProductCapacity(inventories, sapName,
                 sapData.m_maxStackSize, maxProductStacks);
+            Container askable = null;
             foreach (var container in containers)
             {
                 if (sapRemaining <= 0) break;
@@ -38,7 +39,7 @@ namespace Automatics.AutomaticProcessing
 
                 if (!Logics.CanStore(sapCollectorName, container, sapItem.gameObject, sapName))
                     continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 var amount = Mathf.Min(Capacity(), sapRemaining);
                 if (amount <= 0) break;
@@ -54,6 +55,7 @@ namespace Automatics.AutomaticProcessing
                 sapRemaining -= storedSapCount;
             }
 
+            if (sapRemaining > 0 && Capacity() > 0) Logics.AskFor(askable);
             zNetView.GetZDO().Set("level", Mathf.Clamp(sapRemaining, 0, sapCollector.m_maxLevel));
             return true;
         }

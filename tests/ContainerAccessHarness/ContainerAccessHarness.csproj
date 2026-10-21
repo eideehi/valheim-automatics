@@ -8,5 +8,6 @@
 
   <ItemGroup>
     <Compile Include="../../Automatics/Valheim/ContainerWritePolicy.cs" Link="ContainerWritePolicy.cs" />
+    <Compile Include="../../Automatics/Valheim/ContainerRequests.cs" Link="ContainerRequests.cs" />
   </ItemGroup>
 </Project>

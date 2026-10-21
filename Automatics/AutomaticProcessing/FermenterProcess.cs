@@ -41,6 +41,7 @@ namespace Automatics.AutomaticProcessing
                 .Select(x => (x.container, Logics.ReadInventory(x.container))).ToList();
             var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
+            Container askable = null;
             foreach (var conversion in fermenter.m_conversion)
             {
                 var materialContainers = new List<Container>();
@@ -71,8 +72,9 @@ namespace Automatics.AutomaticProcessing
                     // Walks the candidates in distance order, skipping any that holds no
                     // eligible item without claiming it.
                     if (!Logics.TryTakeMaterial(materialContainers, materialData.m_name,
-                            minMaterialCount, conversion.m_from.gameObject.name,
-                            out var materialContainer, out var prefabName, out var cheated))
+                            minMaterialCount, conversion.m_from.gameObject.name, origin,
+                            ref askable, out var materialContainer, out var prefabName,
+                            out var cheated))
                         continue;
                     // Fermenter registers Register<int, bool>("RPC_AddItem", RPC_AddItem) and
                     // Fermenter.AddItem sends item.m_dropPrefab.name.GetStableHashCode().
@@ -81,9 +83,11 @@ namespace Automatics.AutomaticProcessing
                     Logics.CraftingLog(materialData.m_name, 1,
                         materialContainer.m_name, materialContainer.transform.position,
                         fermenterName, origin, productData.m_name);
-                    break;
+                    return;
                 }
             }
+
+            Logics.AskFor(askable);
         }
 
         public static void Store(Fermenter fermenter, ZNetView zNetView)
@@ -112,12 +116,13 @@ namespace Automatics.AutomaticProcessing
             var itemName = itemData.m_name;
 
             var productRemaining = conversion.m_producedItems;
+            Container askable = null;
             foreach (var (container, _) in Logics.GetNearbyContainers(fermenterName, origin))
             {
                 if (productRemaining <= 0) break;
 
                 if (!Logics.CanStore(fermenterName, container, item.gameObject, itemName)) continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
                 var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(fermenterName, inventory, itemName)) continue;
 
@@ -130,6 +135,7 @@ namespace Automatics.AutomaticProcessing
                 productRemaining -= storedItemCount;
             }
 
+            if (productRemaining > 0) Logics.AskFor(askable);
             if (productRemaining == conversion.m_producedItems) return;
 
             // Fermenter.RPC_Tap/DropAllItems empty the barrel with Set(s_content, 0);

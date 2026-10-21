@@ -24,19 +24,22 @@ namespace Automatics.AutomaticProcessing
             var origin = fire.transform.position;
             var fuelName = fire.m_fuelItem.m_itemData.m_shared.m_name;
 
+            Container askable = null;
             foreach (var (container, _) in Logics.GetNearbyContainers(fireplaceName, origin))
             {
                 var inventory = container.GetInventory();
                 if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 if (!Logics.TryRemoveItem(inventory, fuelName, minFuelCount, out _)) continue;
                 zNetView.InvokeRPC("RPC_AddFuel");
 
                 Logics.RefuelLog(fuelName, 1, fireplaceName, origin, container.m_name,
                     container.transform.position);
-                break;
+                return;
             }
+
+            Logics.AskFor(askable);
         }
     }
 }

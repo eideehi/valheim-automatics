@@ -115,6 +115,7 @@ namespace Automatics.AutomaticProcessing
             CountHeldProduct(smelter, zNetView.GetZDO(), productCounts);
 
             var oreAdded = false;
+            Container askable = null;
             foreach (var conversion in smelter.m_conversion)
             {
                 var materialContainers = new List<Container>();
@@ -147,8 +148,9 @@ namespace Automatics.AutomaticProcessing
                     // Walks the candidates in distance order, skipping any that holds no
                     // eligible item without claiming it.
                     if (!Logics.TryTakeMaterial(materialContainers, materialData.m_name,
-                            minMaterialCount, conversion.m_from.gameObject.name,
-                            out var materialContainer, out var prefabName, out var cheated))
+                            minMaterialCount, conversion.m_from.gameObject.name, origin,
+                            ref askable, out var materialContainer, out var prefabName,
+                            out var cheated))
                         continue;
 
                     // Smelter.QueueOre(string name, bool cheated): `cheated` records whether
@@ -166,6 +168,7 @@ namespace Automatics.AutomaticProcessing
 
             if (!oreAdded)
             {
+                Logics.AskFor(askable);
                 SkipQuickCraft.Add(uid);
                 return ore;
             }
@@ -228,6 +231,7 @@ namespace Automatics.AutomaticProcessing
             var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
             var oreAdded = false;
+            Container askable = null;
             foreach (var conversion in conversions)
             {
                 var materialContainers = new List<Container>();
@@ -260,8 +264,9 @@ namespace Automatics.AutomaticProcessing
                     // Walks the candidates in distance order, skipping any that holds no
                     // eligible item without claiming it.
                     if (!Logics.TryTakeMaterial(materialContainers, materialData.m_name,
-                            minMaterialCount, conversion.m_from.gameObject.name,
-                            out var materialContainer, out var prefabName, out var cheated))
+                            minMaterialCount, conversion.m_from.gameObject.name, origin,
+                            ref askable, out var materialContainer, out var prefabName,
+                            out var cheated))
                         continue;
                     // Smelter registers Register<string, bool>("RPC_AddOre", RPC_AddOre).
                     zNetView.InvokeRPC("RPC_AddOre", prefabName, cheated);
@@ -275,7 +280,10 @@ namespace Automatics.AutomaticProcessing
                 }
             }
 
-            if (!oreAdded) SkipCraft.Add(uid);
+            if (oreAdded) return;
+
+            Logics.AskFor(askable);
+            SkipCraft.Add(uid);
         }
 
         [UsedImplicitly]
@@ -310,11 +318,12 @@ namespace Automatics.AutomaticProcessing
             var fuelName = smelter.m_fuelItem.m_itemData.m_shared.m_name;
 
             var fuelAdded = false;
+            Container askable = null;
             foreach (var (container, _) in Logics.GetNearbyContainers(smelterName, origin))
             {
                 var inventory = container.GetInventory();
                 if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 if (!Logics.TryRemoveItem(inventory, fuelName, minFuelCount, out _)) continue;
                 zNetView.InvokeRPC("RPC_AddFuel");
@@ -328,6 +337,7 @@ namespace Automatics.AutomaticProcessing
 
             if (!fuelAdded)
             {
+                Logics.AskFor(askable);
                 SkipQuickRefuel.Add(uid);
                 return fuel;
             }
@@ -373,11 +383,12 @@ namespace Automatics.AutomaticProcessing
             var fuelName = smelter.m_fuelItem.m_itemData.m_shared.m_name;
 
             var fuelAdded = false;
+            Container askable = null;
             foreach (var (container, _) in Logics.GetNearbyContainers(smelterName, origin))
             {
                 var inventory = container.GetInventory();
                 if (!Inventories.HaveItem(inventory, fuelName, 0, WorldLevelMatchMode.Ignore, minFuelCount + 1)) continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 if (!Logics.TryRemoveItem(inventory, fuelName, minFuelCount, out _)) continue;
                 zNetView.InvokeRPC("RPC_AddFuel");
@@ -389,7 +400,10 @@ namespace Automatics.AutomaticProcessing
                 break;
             }
 
-            if (!fuelAdded) SkipRefuel.Add(uid);
+            if (fuelAdded) return;
+
+            Logics.AskFor(askable);
+            SkipRefuel.Add(uid);
         }
 
         public static bool Store(Smelter smelter, string ore, int stack)
@@ -409,12 +423,13 @@ namespace Automatics.AutomaticProcessing
             var itemName = itemData.m_name;
 
             var productRemaining = stack;
+            Container askable = null;
             foreach (var (container, _) in Logics.GetNearbyContainers(smelterName, origin))
             {
                 if (productRemaining <= 0) break;
 
                 if (!Logics.CanStore(smelterName, container, item.gameObject, itemName)) continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
                 var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(smelterName, inventory, itemName)) continue;
 
@@ -427,6 +442,7 @@ namespace Automatics.AutomaticProcessing
                 productRemaining -= storedItemCount;
             }
 
+            if (productRemaining > 0) Logics.AskFor(askable);
             if (productRemaining == stack) return false;
 
             smelter.m_produceEffects.Create(origin, smelter.transform.rotation);

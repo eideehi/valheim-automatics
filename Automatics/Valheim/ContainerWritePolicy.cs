@@ -13,7 +13,10 @@ namespace Automatics.Valheim
         Load,
 
         /// <summary>The container may be written now.</summary>
-        Write
+        Write,
+
+        /// <summary>Ask the game that owns the container for it, and write it later.</summary>
+        Request
     }
 
     /// <summary>
@@ -67,9 +70,11 @@ namespace Automatics.Valheim
     ///     because the game saves the whole inventory on every change and would otherwise save a
     ///     stale or empty copy over what is stored. Only the server takes ownership of a container
     ///     nobody owns; a client waits for the server to assign it. A container owned by another
-    ///     game is left to that game, and a cart's or ship's container is never taken. Without a
-    ///     local player only the server writes; which containers it may use then (privacy) is
-    ///     decided by the access checks before the gate.
+    ///     game is asked for (its owner checks use and access and hands it over, as when a player
+    ///     opens it) and written on a later pass once this game owns it; a cart's or ship's
+    ///     container is never taken or asked for. Without a local player only the server writes
+    ///     and nothing is asked for; which containers it may use then (privacy) is decided by the
+    ///     access checks before the gate.
     /// </summary>
     internal static class ContainerWritePolicy
     {
@@ -86,8 +91,11 @@ namespace Automatics.Valheim
 
             if (!state.Owned)
             {
-                if (state.HasOwner) return ContainerWriteStep.Skip;
                 if (state.BorrowedView) return ContainerWriteStep.Skip;
+                // Without a player the server would get it only to give it straight back: the
+                // server hands a container near a player's character to that player's game.
+                if (state.HasOwner)
+                    return state.LocalPlayer ? ContainerWriteStep.Request : ContainerWriteStep.Skip;
                 return state.IsServer ? ContainerWriteStep.Claim : ContainerWriteStep.Skip;
             }
 
@@ -96,10 +104,12 @@ namespace Automatics.Valheim
 
         /// <summary>
         ///     Claims and loads <paramref name="target" /> as <see cref="Decide" /> says, each at
-        ///     most once, reading the state again after each step. True when the last decision,
-        ///     made right after the load, allows the write.
+        ///     most once, reading the state again after each step. Write when the last decision,
+        ///     made right after the load, allows the write; Request when another game owns the
+        ///     container and the caller may ask for it; Skip otherwise.
         /// </summary>
-        public static bool TryAcquire<TTarget>(TTarget target) where TTarget : IContainerWriteTarget
+        public static ContainerWriteStep TryAcquire<TTarget>(TTarget target)
+            where TTarget : IContainerWriteTarget
         {
             var claimed = false;
             var loaded = false;
@@ -107,17 +117,19 @@ namespace Automatics.Valheim
                 switch (Decide(target.Read(loaded)))
                 {
                     case ContainerWriteStep.Write:
-                        return true;
+                        return ContainerWriteStep.Write;
+                    case ContainerWriteStep.Request:
+                        return ContainerWriteStep.Request;
                     case ContainerWriteStep.Claim when !claimed:
                         claimed = true;
                         target.Claim();
                         break;
                     case ContainerWriteStep.Load when !loaded:
-                        if (!target.Load()) return false;
+                        if (!target.Load()) return ContainerWriteStep.Skip;
                         loaded = true;
                         break;
                     default:
-                        return false;
+                        return ContainerWriteStep.Skip;
                 }
         }
     }

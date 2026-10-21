@@ -1251,7 +1251,7 @@ Specify a shortcut key that attempts farming once each time it is pressed, whate
 - Default value:
 
 ### Designate Container Role Key / [designate_container_key]
-Specify a shortcut key that cycles the role of the container you are looking at between none, cultivation, seed harvest, and storage. In the Player With Containers and Nearby Containers farming modes, a cultivation box grows crops from the seeds it holds, a seed-harvest box grows seeds from the crops it holds, and harvested yield is deposited into nearby storage boxes first, otherwise back into the matching planting box. Changing a role claims ownership of the chest, so it only works on containers you can access.
+Specify a shortcut key that cycles the role of the container you are looking at between none, cultivation, seed harvest, and storage. In the Player With Containers and Nearby Containers farming modes, a cultivation box grows crops from the seeds it holds, a seed-harvest box grows seeds from the crops it holds, and harvested yield is deposited into nearby storage boxes first, otherwise back into the matching planting box. A role change needs your game to own the chest: on a chest another player's game owns, one press asks for it and a later press changes the role. It only works on containers you can access.
 
 - Default value:
 

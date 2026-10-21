@@ -5,15 +5,16 @@ using Automatics.Valheim;
 namespace Automatics
 {
     /// <summary>
-    ///     Offline checks for the rules that decide when a module may write a container. The
-    ///     project compiles <c>Automatics/Valheim/ContainerWritePolicy.cs</c> directly and
-    ///     references nothing but the base class library, so the decision and the claim and load
-    ///     steps are executed here rather than read from the game code.
+    ///     Offline checks for the rules that decide when a module may write a container, and for
+    ///     the requests it sends to the game that owns one. The project compiles the product files
+    ///     directly and references nothing but the base class library, so the decision, the claim
+    ///     and load steps and the request timing (on a clock the cases set) are executed here
+    ///     rather than read from the game code.
     ///     The named cases cover each rule; the exhaustive cases walk every combination of the
     ///     inputs and hold the decision to the whole rule set, so a rule that is dropped or turned
     ///     around fails both.
     /// </summary>
-    internal static class Program
+    internal static partial class Program
     {
         private static int _failures;
 
@@ -27,8 +28,11 @@ namespace Automatics
             Run("a container on a cart in use is not claimed or written", CartInUseBlocksEverything);
             Run("the server claims an idle container nobody owns", ServerClaimsUnownedContainer);
             Run("a client never claims a container nobody owns", ClientNeverClaims);
-            Run("a container another game owns is left to that game", ForeignContainerIsLeftAlone);
+            Run("a container another game owns is asked for, never claimed or written", ForeignContainerIsAskedFor);
+            Run("without a local player a container another game owns is not asked for", NoRequestWithoutPlayer);
+            Run("a container another game has open, or on a cart in use, is not asked for", NoRequestWhileInUse);
             Run("a cart's or ship's container is never claimed", BorrowedViewIsNeverClaimed);
+            Run("a cart's or ship's container another game owns is not asked for", BorrowedViewIsNeverAskedFor);
             Run("a cart's or ship's container the game owns is loaded, then written", OwnedBorrowedViewIsWritten);
             Run("a client without a local player writes nothing", ClientWithoutPlayerWritesNothing);
             Run("single-player without a local player writes its own idle container after loading it", SinglePlayerWithoutPlayerWrites);
@@ -38,14 +42,17 @@ namespace Automatics
             Run("every state: a write needs an owned, idle, loaded container and a player or the server", WriteNeedsEveryRule);
             Run("every state: a claim needs the server, nobody's idle container and its own view", ClaimNeedsEveryRule);
             Run("every state: a container the game may write is loaded before the write", LoadComesBeforeWrite);
+            Run("every state: a request needs a local player and another game's idle container on its own view", RequestNeedsEveryRule);
 
             Run("the server claims an unowned container, loads it, then writes it", ClaimLoadWriteSequence);
             Run("a never-loaded container the game owns is loaded right before the write", LoadRightBeforeWrite);
             Run("a claim that does not take ends without a write", ClaimThatDoesNotTake);
             Run("a container found in use after the claim is neither loaded nor written", InUseAfterClaim);
             Run("a load that cannot run refuses the write", LoadThatCannotRun);
-            Run("a container another game owns is neither claimed nor loaded", ForeignContainerIsNotTouched);
+            Run("the gate stops at a container another game owns, reporting it can be asked for, without a claim or load", ForeignContainerIsNotTouched);
             Run("a client leaves a container nobody owns to the server", ClientLeavesUnownedContainer);
+
+            RunRequestCases();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -183,12 +190,32 @@ namespace Automatics
             AssertStep(ContainerWriteStep.Skip, OnClient(Loaded(Unowned())), "Loading does not let a client claim.");
         }
 
-        private static void ForeignContainerIsLeftAlone()
+        private static void ForeignContainerIsAskedFor()
         {
-            AssertStep(ContainerWriteStep.Skip, OwnedElsewhere(), "The server leaves another game's container alone.");
-            AssertStep(ContainerWriteStep.Skip, OnClient(OwnedElsewhere()), "A client leaves another game's container alone.");
+            AssertStep(ContainerWriteStep.Request, OwnedElsewhere(), "The server asks the owner for it.");
+            AssertStep(ContainerWriteStep.Request, OnClient(OwnedElsewhere()), "A client asks the owner for it.");
+            AssertStep(ContainerWriteStep.Request, Loaded(OwnedElsewhere()), "Loading does not make it writable.");
+        }
+
+        // A server without a player would hand the container straight back: the server gives a
+        // container near a player's character to that player's game.
+        private static void NoRequestWithoutPlayer()
+        {
             AssertStep(ContainerWriteStep.Skip, OnServerWithoutPlayer(OwnedElsewhere()),
                 "The server without a player leaves another game's container alone.");
+            AssertStep(ContainerWriteStep.Skip, WithoutPlayer(OnClient(OwnedElsewhere())),
+                "A client without a player leaves another game's container alone.");
+        }
+
+        private static void NoRequestWhileInUse()
+        {
+            var open = OwnedElsewhere();
+            open.InUseReplicated = true;
+            AssertStep(ContainerWriteStep.Skip, open, "A container open in another game is not asked for.");
+
+            var cart = OwnedElsewhere();
+            cart.CartInUse = true;
+            AssertStep(ContainerWriteStep.Skip, cart, "A container on a cart in use is not asked for.");
         }
 
         private static void BorrowedViewIsNeverClaimed()
@@ -198,6 +225,14 @@ namespace Automatics
             AssertStep(ContainerWriteStep.Skip, state, "A cart's or ship's container is never claimed.");
             AssertStep(ContainerWriteStep.Skip, OnServerWithoutPlayer(state),
                 "The server without a player never claims a cart's or ship's container either.");
+        }
+
+        private static void BorrowedViewIsNeverAskedFor()
+        {
+            var state = OwnedElsewhere();
+            state.BorrowedView = true;
+            AssertStep(ContainerWriteStep.Skip, state, "A cart's or ship's container is never asked for.");
+            AssertStep(ContainerWriteStep.Skip, OnClient(state), "Not by a client either.");
         }
 
         private static void OwnedBorrowedViewIsWritten()
@@ -285,6 +320,17 @@ namespace Automatics
             }
         }
 
+        private static void RequestNeedsEveryRule()
+        {
+            foreach (var state in AllStates())
+            {
+                var expected = state.LocalPlayer && !state.Owned && state.HasOwner &&
+                               !state.BorrowedView && !state.InUseReplicated && !state.CartInUse;
+                AssertTrue((ContainerWritePolicy.Decide(state) == ContainerWriteStep.Request) == expected,
+                    $"Request expected {expected} for {Describe(state)}.");
+            }
+        }
+
         private static IEnumerable<ContainerWriteState> AllStates()
         {
             for (var bits = 0; bits < 1 << 9; bits++)
@@ -307,49 +353,50 @@ namespace Automatics
         private static void ClaimLoadWriteSequence()
         {
             var container = new FakeContainer(Unowned());
-            AssertTrue(ContainerWritePolicy.TryAcquire(container), "The server should get to write.");
+            AssertGate(ContainerWriteStep.Write, container, "The server should get to write.");
             AssertSequence(container.Calls, "read", "claim", "read", "load", "read");
         }
 
         private static void LoadRightBeforeWrite()
         {
             var container = new FakeContainer(OwnedHere());
-            AssertTrue(ContainerWritePolicy.TryAcquire(container), "The owner should get to write.");
+            AssertGate(ContainerWriteStep.Write, container, "The owner should get to write.");
             AssertSequence(container.Calls, "read", "load", "read");
         }
 
         private static void ClaimThatDoesNotTake()
         {
             var container = new FakeContainer(Unowned()) { ClaimTakes = false };
-            AssertFalse(ContainerWritePolicy.TryAcquire(container), "Without ownership there is no write.");
+            AssertGate(ContainerWriteStep.Skip, container, "Without ownership there is no write.");
             AssertSequence(container.Calls, "read", "claim", "read");
         }
 
         private static void InUseAfterClaim()
         {
             var container = new FakeContainer(Unowned()) { InUseAfterClaim = true };
-            AssertFalse(ContainerWritePolicy.TryAcquire(container), "A container in use is not written.");
+            AssertGate(ContainerWriteStep.Skip, container, "A container in use is not written.");
             AssertSequence(container.Calls, "read", "claim", "read");
         }
 
         private static void LoadThatCannotRun()
         {
             var container = new FakeContainer(OwnedHere()) { LoadRuns = false };
-            AssertFalse(ContainerWritePolicy.TryAcquire(container), "Without a load there is no write.");
+            AssertGate(ContainerWriteStep.Skip, container, "Without a load there is no write.");
             AssertSequence(container.Calls, "read", "load");
         }
 
         private static void ForeignContainerIsNotTouched()
         {
             var container = new FakeContainer(OwnedElsewhere());
-            AssertFalse(ContainerWritePolicy.TryAcquire(container), "Another game's container is not written.");
+            AssertGate(ContainerWriteStep.Request, container,
+                "Another game's container is not written; the gate stops where it would be asked for.");
             AssertSequence(container.Calls, "read");
         }
 
         private static void ClientLeavesUnownedContainer()
         {
             var container = new FakeContainer(OnClient(Unowned()));
-            AssertFalse(ContainerWritePolicy.TryAcquire(container), "A client does not write a container nobody owns.");
+            AssertGate(ContainerWriteStep.Skip, container, "A client does not write a container nobody owns.");
             AssertSequence(container.Calls, "read");
         }
 
@@ -410,6 +457,12 @@ namespace Automatics
             var actual = ContainerWritePolicy.Decide(state);
             if (actual != expected)
                 throw new Exception($"{message} Expected {expected}, got {actual} for {Describe(state)}.");
+        }
+
+        private static void AssertGate(ContainerWriteStep expected, FakeContainer container, string message)
+        {
+            var actual = ContainerWritePolicy.TryAcquire(container);
+            if (actual != expected) throw new Exception($"{message} Expected {expected}, got {actual}.");
         }
 
         private static void AssertSequence(IReadOnlyList<string> actual, params string[] expected)

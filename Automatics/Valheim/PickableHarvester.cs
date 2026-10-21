@@ -86,7 +86,8 @@ namespace Automatics.Valheim
         /// Pickup's behaviour is byte-stable.
         /// </summary>
         public static HarvestOutcome HarvestToContainers(Player player, Pickable pickable,
-            ZNetView zNetView, IReadOnlyList<Container> cropContainers)
+            ZNetView zNetView, IReadOnlyList<Container> cropContainers,
+            IReadOnlyList<Container> ownedElsewhere = null)
         {
             if (pickable.GetPicked() || pickable.GetEnabled == 0) return HarvestOutcome.NotPicked;
 
@@ -99,7 +100,8 @@ namespace Automatics.Valheim
             // No destination: leave the crop standing before rolling the bonus, so a
             // field with no crop container in range never grants skill for a harvest
             // that cannot happen.
-            if (cropContainers == null || cropContainers.Count == 0)
+            if (cropContainers == null ||
+                cropContainers.Count == 0 && (ownedElsewhere == null || ownedElsewhere.Count == 0))
                 return HarvestOutcome.NotPicked;
 
             var amount = GetPickableAmount(pickable);
@@ -135,7 +137,20 @@ namespace Automatics.Valheim
             // rather than picking it for no yield.
             if (yields.Count == 0) return HarvestOutcome.NotPicked;
 
-            if (!TryDepositYield(player, cropContainers, yields)) return HarvestOutcome.NotPicked;
+            if (!TryDepositYield(player, cropContainers, yields))
+            {
+                // The first box another game owns, in deposit order, that takes the whole yield
+                // is asked for, and a later pass deposits into it.
+                if (ownedElsewhere != null)
+                    foreach (var container in ownedElsewhere)
+                    {
+                        if (!YieldFits(new[] { container }, yields)) continue;
+                        ContainerAccess.AskFor(container);
+                        break;
+                    }
+
+                return HarvestOutcome.NotPicked;
+            }
 
             // Harvest finalized: grant the pick skill that the bonus roll above
             // withheld until the deposit committed, so a full-container failure never

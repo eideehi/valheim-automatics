@@ -35,13 +35,14 @@ namespace Automatics.AutomaticProcessing
             // again after the gate, which can reload the container about to be written.
             int Capacity() => Logics.GetProductCapacity(inventories, wispName,
                 wispData.m_maxStackSize, maxProductStacks);
+            Container askable = null;
             foreach (var container in containers)
             {
                 if (Capacity() <= 0) break;
 
                 if (!Logics.CanStore(wispSpawnerName, container, wispItem.gameObject, wispName))
                     continue;
-                if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 if (Capacity() <= 0) break;
                 var inventory = container.GetInventory();
@@ -56,6 +57,7 @@ namespace Automatics.AutomaticProcessing
                 return true;
             }
 
+            if (Capacity() > 0) Logics.AskFor(askable);
             return false;
         }
     }

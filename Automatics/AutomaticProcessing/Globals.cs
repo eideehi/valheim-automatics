@@ -85,11 +85,23 @@ namespace Automatics.AutomaticProcessing
         // there is no local player, so the gate is server-aware: with a local
         // player it enforces the full player access rules (ward, private/group,
         // in-use, wagon); without one only the server writes, idle containers,
-        // and in multiplayer only public ones.
-        public static bool TryClaimContainer(Container container)
+        // and in multiplayer only public ones. The first container another game
+        // owns that a loop passes over (the nearest, as loops go nearest first)
+        // is kept in askable; the loop asks for it (AskFor) only when it ends
+        // with its need unmet.
+        public static bool TryClaimContainer(Container container, ref Container askable)
         {
-            return ContainerAccess.TryPrepareContainerMutationServerAware(
-                Player.m_localPlayer, container);
+            if (ContainerAccess.TryPrepareContainerMutationServerAware(Player.m_localPlayer,
+                    container, out var ownedElsewhere))
+                return true;
+
+            if (ownedElsewhere && !askable) askable = container;
+            return false;
+        }
+
+        public static void AskFor(Container askable)
+        {
+            ContainerAccess.AskFor(askable);
         }
 
         public static bool TryRemoveItem(Inventory inventory, string itemName, int minCount,
@@ -173,17 +185,20 @@ namespace Automatics.AutomaticProcessing
         /// owner-revision bump) and nothing here can hand ownership back, while the gate
         /// reloads the container after the probe and a removal can still fail then.
         /// Ownership can therefore change on a container this ends up not taking from; the
-        /// gate claims only a container nobody owns, and only on the server.
+        /// gate claims only a container nobody owns, and only on the server. When nothing is
+        /// taken, askable becomes the nearer to origin of itself and the nearest candidate
+        /// another game owns, for the crafting loop to ask for once all its recipes failed.
         /// </remarks>
         public static bool TryTakeMaterial(IEnumerable<Container> candidates, string itemName,
-            int minCount, string requiredPrefabName, out Container source, out string prefabName,
-            out bool cheated)
+            int minCount, string requiredPrefabName, Vector3 origin, ref Container askable,
+            out Container source, out string prefabName, out bool cheated)
         {
             source = null;
             prefabName = null;
             cheated = false;
             if (candidates == null) return false;
 
+            Container found = null;
             foreach (var container in candidates)
             {
                 if (!container) continue;
@@ -192,7 +207,7 @@ namespace Automatics.AutomaticProcessing
                 if (FindRemovableItem(inventory, itemName, minCount, requiredPrefabName) == null)
                     continue;
 
-                if (!TryClaimContainer(container)) continue;
+                if (!TryClaimContainer(container, ref found)) continue;
                 // Removal goes back through the filtered by-name path on purpose: the
                 // drop-prefab guard that keeps a would-be-rejected item from being destroyed
                 // stays on the removal itself, not only on the pre-claim probe, and the
@@ -205,6 +220,9 @@ namespace Automatics.AutomaticProcessing
                 return true;
             }
 
+            if (found && (!askable || (found.transform.position - origin).sqrMagnitude <
+                    (askable.transform.position - origin).sqrMagnitude))
+                askable = found;
             prefabName = null;
             cheated = false;
             return false;

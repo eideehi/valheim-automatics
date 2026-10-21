@@ -196,11 +196,23 @@ be set to `None`, `Center`, or `TopLeft`.
 
 In multiplayer, the modules that move items in and out of containers (storage,
 supply, processing, feeding and farming, including farming's container roles)
-use only the containers your game owns. The game gives each container to one
-player's game at a time: the player who last opened it, or a player near it. A
-container another player's game owns is skipped for now, so at a shared base
-some chests can go unused until your game owns them. A container someone has
-open is never used.
+put items into and take them out of only the containers your game owns. The
+game gives each container to one player's game at a time: the player who last
+opened it, or a player near it. When processing, feeding or farming cannot do
+what it needs with the containers your game owns and a container another
+player's game owns would do, your game asks that game for it, the way opening
+it by hand does, and uses it on a later pass once your game owns it; the
+answer opens no window and shows no message. `Store Items Key` asks on one
+press for a container another player's game owns that it would store into,
+and stores into it on a later press; such a container counts toward
+`Container Reference Limit` on the press that asks for it. `Designate Container
+Role Key` asks on one press and changes the role on a later press. Automatic
+supply uses only the containers your game already owns and never asks. A
+container someone has open is never used or asked for, and a container that
+has just changed hands is left alone for a moment. Rarely, a player who has
+just opened a chest may still see its contents close and need to open it
+again; no items are affected. Each request writes a line to the owner's game
+log, as opening a chest does.
 
 ## Automatic door
 
@@ -980,7 +992,9 @@ In this mode each pass:
 
 A grave cannot be given a role. Designating, sourcing, and depositing only touch
 containers this client owns and can open, so a chest behind a ward you lack access
-to, or one another player is using, is read for its role but never modified. Roles
+to, or one another player is using, is read for its role but never modified. A box
+another player's game owns is asked for when farming would use it (see
+[Containers in multiplayer](#containers-in-multiplayer)). Roles
 persist with the save and are visible to other players. Because the game can only
 act on loaded objects, the area around the designated boxes must be loaded (you
 nearby, or the field otherwise kept loaded); unloaded or remote fields are not

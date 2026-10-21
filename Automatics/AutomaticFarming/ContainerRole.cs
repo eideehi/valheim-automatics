@@ -62,9 +62,9 @@ namespace Automatics.AutomaticFarming
         /// <see cref="ContainerRole.None"/>) and persists it, returning the new role
         /// in <paramref name="role"/>. Returns
         /// false without writing when <paramref name="player"/> cannot access the
-        /// container (ward/in-use) or the local game may not write it (another
-        /// game owns it), so a chest a peer or a dedicated server holds is never
-        /// silently modified.
+        /// container (ward/in-use) or the local game may not write it yet (another
+        /// game owns it and is asked for it), so a chest a peer or a dedicated
+        /// server holds is never silently modified.
         /// </summary>
         public static bool TryCycleRole(Player player, Container container, out ContainerRole role)
         {
@@ -73,8 +73,14 @@ namespace Automatics.AutomaticFarming
 
             // Same gate used before any container mutation: usable (not in use by a
             // peer), within build access, and owned by this game or, on the server,
-            // owned by nobody and claimed now.
-            if (!ContainerAccess.TryPrepareContainerMutation(player, container)) return false;
+            // owned by nobody and claimed now; owned by another game, asked for.
+            if (!ContainerAccess.TryPrepareContainerMutation(player, container,
+                    out var ownedElsewhere))
+            {
+                if (ownedElsewhere) ContainerAccess.AskFor(container);
+                return false;
+            }
+
             if (!Objects.GetZNetView(container, out var nview)) return false;
             if (nview == null || !nview.IsValid() || nview.GetZDO() == null) return false;
             if (!nview.IsOwner()) return false;
