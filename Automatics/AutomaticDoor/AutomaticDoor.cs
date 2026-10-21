@@ -290,21 +290,20 @@ namespace Automatics.AutomaticDoor
             var areas = Reflections.GetStaticField<PrivateArea, List<PrivateArea>>(PrivateAreaAllAreasField);
             if (areas == null) return false;
 
-            // Match vanilla PrivateArea.CheckAccess: deny on the first enabled,
-            // in-range ward the player lacks access to. The previous
-            // "allowed || !foundBlockedArea" rule let permission in one
-            // overlapping ward override a block from another, auto-opening a
-            // guard-stoned door where vanilla rules forbid interaction.
-            // IsInside (a cheap XZ distance test) runs before IsEnabled (a
-            // reflective field read + ZDO lookup) so the reflection is skipped
-            // for out-of-range wards.
+            // Same rule as vanilla PrivateArea.CheckAccess without its ward check: the player may
+            // use the door when any enabled ward covering it grants access, or when none covers
+            // it. A permitted player is therefore not blocked by an overlapping ward they have no
+            // access to. IsInside (a cheap XZ distance test) runs before IsEnabled (a reflective
+            // field read and ZDO lookup) so the reflection is skipped for out-of-range wards.
+            var covered = false;
             foreach (var area in areas)
             {
                 if (!area || !IsInside(area, point, 0f) || !IsEnabled(area)) continue;
-                if (!HasPlayerAccess(area, player)) return false;
+                if (HasPlayerAccess(area, player)) return true;
+                covered = true;
             }
 
-            return true;
+            return !covered;
         }
 
         private static bool IsEnabled(PrivateArea area)

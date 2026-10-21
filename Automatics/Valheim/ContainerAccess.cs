@@ -366,13 +366,19 @@ namespace Automatics.Valheim
                 Reflections.GetStaticField<PrivateArea, List<PrivateArea>>(PrivateAreaAllAreasField);
             if (areas == null) return false;
 
+            // Same rule as vanilla PrivateArea.CheckAccess without its ward check: the player may
+            // use the point when any enabled ward covering it grants access, or when none covers
+            // it. IsInside (a cheap XZ distance test) runs before IsEnabled (a reflective field
+            // read and ZDO lookup) so the reflection is skipped for out-of-range wards.
+            var covered = false;
             foreach (var area in areas)
             {
                 if (!area || !IsInside(area, point, 0f) || !IsEnabled(area)) continue;
-                if (!HasPlayerAccess(area, player)) return false;
+                if (HasPlayerAccess(area, player)) return true;
+                covered = true;
             }
 
-            return true;
+            return !covered;
         }
 
         private static bool IsEnabled(PrivateArea area)
