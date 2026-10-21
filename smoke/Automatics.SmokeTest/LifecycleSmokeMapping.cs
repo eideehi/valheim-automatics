@@ -23,6 +23,7 @@ using FloraNode = Automatics.AutomaticMapping.FloraNode;
 using MappingConfig = Automatics.AutomaticMapping.Config;
 using MappingModule = Automatics.AutomaticMapping.Module;
 using MappingPatches = Automatics.AutomaticMapping.Patches;
+using MappingScans = Automatics.AutomaticMapping.AutomaticMapping;
 using MineRock5CacheBinding = Automatics.AutomaticMapping.MineRock5CacheBinding;
 using ShipCache = Automatics.AutomaticMapping.ShipCache;
 using StaticObjectMapping = Automatics.AutomaticMapping.StaticObjectMapping;
@@ -558,9 +559,9 @@ namespace Automatics.SmokeTest
                 Cycle(OffComponents, cycle, kinds.Sum(x => x.Total) == 0 && overlays == 0 && guides == 0 && aimedLabels == 0 &&
                     aimedActive && !AimedObjectBar.Label && !AimedObjectBar.GetHudTarget() &&
                     markerActive && Navigation.TemporaryMarker == null && !AllPins().Contains(marker) &&
-                    extraPins == 0 && NavigationDestroyHandlers() == 0,
-                    "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode, navigation overlay, aimed label, guide swarm or temporary marker is left after disabling with a marker and aimed label active",
-                    $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s), {aimedLabels} aimed label(s), aimed active before={aimedActive}, aimed precondition={aimedPrecondition}, {guides} guide swarm(s), marker active before={markerActive}, marker left={Navigation.TemporaryMarker != null || AllPins().Contains(marker)}, extra unsaved pins={extraPins}, navigation destruction handlers={NavigationDestroyHandlers()}");
+                    extraPins == 0 && NavigationDestroyHandlers() == 0 && DestroyedObjectPinHandlers() == 0,
+                    "no FishCache, BirdCache, ShipCache, MineRock5CacheBinding, FloraNode, navigation overlay, aimed label, guide swarm, temporary marker or destruction handler is left after disabling with a marker and aimed label active",
+                    $"left in the scene: {string.Join(", ", kinds.Select(x => $"{x.Total} {x.Name}"))}, {overlays} navigation overlay(s), {aimedLabels} aimed label(s), aimed active before={aimedActive}, aimed precondition={aimedPrecondition}, {guides} guide swarm(s), marker active before={markerActive}, marker left={Navigation.TemporaryMarker != null || AllPins().Contains(marker)}, extra unsaved pins={extraPins}, navigation destruction handlers={NavigationDestroyHandlers()}, destroyed-object pin handlers={DestroyedObjectPinHandlers()}");
 
                 if (heldSwarmTried)
                 {
@@ -1043,6 +1044,14 @@ namespace Automatics.SmokeTest
                     .Count(handler => handler.Method.DeclaringType == typeof(Navigation)) ?? 0;
             }
 
+            // The handlers through which the scans remove the pins of destroyed objects, on the
+            // current world's ZDOMan.
+            private static int DestroyedObjectPinHandlers()
+            {
+                return ZDOMan.instance?.m_onZDODestroyed?.GetInvocationList()
+                    .Count(handler => handler.Method.DeclaringType == typeof(MappingScans)) ?? 0;
+            }
+
             private static Dictionary<string, int> HandlerCounts()
             {
                 return new Dictionary<string, int>(StringComparer.Ordinal)
@@ -1051,6 +1060,7 @@ namespace Automatics.SmokeTest
                     ["Hooks.OnLocalPlayerAwake"] = Invocations(Hooks.OnLocalPlayerAwake),
                     ["Hooks.OnPlayerUpdate"] = Invocations(Hooks.OnPlayerUpdate),
                     ["Navigation destruction handlers"] = NavigationDestroyHandlers(),
+                    ["Destroyed-object pin handlers"] = DestroyedObjectPinHandlers(),
                     ["Hooks.OnPlayerFixedUpdate"] = Invocations(Hooks.OnPlayerFixedUpdate),
                     ["PickableCache.OnCacheAdded"] = Invocations(PickableCache.OnCacheAdded),
                     ["ShipCache.OnCacheAdded"] = Invocations(ShipCache.OnCacheAdded),

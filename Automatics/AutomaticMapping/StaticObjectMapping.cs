@@ -261,6 +261,28 @@ namespace Automatics.AutomaticMapping
             }
         }
 
+        /// <summary>
+        ///     Reached for every world object whose ZDO is destroyed, in every game that holds it
+        ///     (see <see cref="AutomaticMapping" />), after the game has let go of the object's
+        ///     instance, so the pin is found by the ZDOID alone. The rules are those of
+        ///     <see cref="OnObjectDestroy" />: the option and the kind's allowlist. A pin this
+        ///     module no longer holds - removed already, or never cached - is left alone, and so
+        ///     is a flora patch's pin: which plants hold it is known only from the cache keys of
+        ///     the last pass, which lag the patch, so it goes only through the destroying game's
+        ///     own callback, as in <see cref="OnObjectDestroy" />.
+        /// </summary>
+        internal static void OnZdoDestroyed(ZDOID uniqueId)
+        {
+            if (!Config.RemovePinsOfDestroyedObject) return;
+
+            var identify = new MapPinIdentify(uniqueId);
+            if (!PinDataCache.TryGetValue(identify, out var entry) || entry?.PinData == null) return;
+            if (entry.Kind == PinKind.Flora) return;
+            if (!IsAllowedForKind(entry.Kind, entry.Identifier)) return;
+
+            RemoveOwnedPin(identify);
+        }
+
         public static void Cleanup()
         {
             StaticObjectCache.Clear();

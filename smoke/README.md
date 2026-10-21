@@ -333,7 +333,7 @@ counts and the minimap's icon tables.
 | `mapping_off_stopped_at_request` | Right after the disable request the module is still applied but no longer running, which is what every entry point checks, and the static scan's pass counter does not move until `Disabled`: the stop takes hold at the request, not at the teardown |
 | `mapping_off_patches_removed` | No patch is left under Mapping's Harmony id (SKIP when runtime patch removal is unavailable) |
 | `mapping_off_player_awake_handlers_none` | The same after the disable: Mapping declares no handler on either player-awake hook |
-| `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode`, `AutomaticsNavigationOverlay` or `AutomaticsNavigationGuide` is left in the scene |
+| `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode`, `AutomaticsNavigationOverlay` or `AutomaticsNavigationGuide` is left in the scene, and no handler of Navigation or of the destroyed-object pin removal is left on the current world's `ZDOMan.m_onZDODestroyed` (each counted by the type that declares it) |
 | `mapping_off_held_swarm_removed` | Once in the run, just before the first disable request at which a guide swarm is shown for the temporary target, that swarm is hidden and held the way a map click that clears navigation holds it. PASS when the held swarm is that swarm and no `AutomaticsNavigationGuide` is left after that disable; FAIL when no held swarm was made from the shown swarm or a guide object is left. Checked once, not per cycle (SKIP, with the reason, when no swarm was shown before any disable, for example with `enable_navigation_guide` off) |
 | `mapping_off_compass_removed` | The compass, seen on the small map before the large map is opened for the filter checks, is gone in the frame of the disable request once the compass update of the player's frame has run there, and no `AutomaticsCompass` is left once the module is `Disabled` |
 | `mapping_off_saved_pins_kept` | The saved pins are the ones there were before the run: type, name, position to 0.1 m, owner and checked flag. A vehicle pin's position is left out, because it follows its vehicle |
@@ -342,7 +342,7 @@ counts and the minimap's icon tables.
 | `mapping_on_patches_applied` | The patches under Mapping's Harmony id are exactly the (target, patch method) pairs its three patch classes declare |
 | `mapping_on_player_awake_handlers_none` | The same with the module running again |
 | `mapping_on_components_attached` | Every fish, bird, ship and `MineRock5` with a ZDO, and every pickable that is a configured flora, carries its component from the running generation, and there is no other (SKIP, inconclusive, when the scene has none of them) |
-| `mapping_on_counts_at_baseline` | The handler counts of the hooks, caches and registries Mapping subscribes to, the component counts, and the lengths of `Minimap.m_icons` and `m_visibleIconTypes` are what they were before the run |
+| `mapping_on_counts_at_baseline` | The handler counts of the hooks, caches and registries Mapping subscribes to, the component counts, and the lengths of `Minimap.m_icons` and `m_visibleIconTypes` are what they were before the run. The counts include the `ZDOMan.m_onZDODestroyed` handlers of Navigation and of the destroyed-object pin removal, which the running module subscribes again on its own, without being enabled for it |
 | `mapping_on_scans_resumed` | Within 10 s the static scan has run again and, if it held pins before the run, it holds one again (SKIP when a setting keeps the static scan from running on its own, such as `static_object_mapping_key`) |
 | `mapping_on_saved_pins_kept` | 4 s after the enable, once the flora pins are placed again, the saved pins are still the ones there were before the run |
 | `mapping_on_saved_automatic_pins_recognized` | As soon as the registry reports `Enabled`, every saved pin that was recognized as automatic before the run and is still on the map is recognized as automatic again (SKIP when no saved pin was recognized before the run, or none of them is on the map) |
@@ -1145,9 +1145,34 @@ the console is open.
 | `pin_shared_not_recognized` | The same kind of pin with your author but an owner, as a shared pin is stored, is not recognized as automatic |
 | `pin_saved_automatic_uncached_duplicate` | A ray to a spawned non-persistent Stone drop that has a recognized saved automatic pin at its position, under its stored name, and no static cache entry adds nothing: the action reports the duplicate, and the object's pin lookup (which the navigation key shares) returns that saved pin |
 | `pin_static_loading_area_kept` | A non-persistent copper deposit spawned 2 m past the zone border nearest to you, within `static_object_mapping_range`, gets its pin from a static pass that starts with a fresh scan of the area. A second static pass, run while the game reports that zone, and only that zone, as still loading, asks whether the zone has loaded and keeps the deposit's pin on the map and in the static cache (SKIP when `enable_automatic_mapping` is off, the static interval or range is 0, copper deposits are not in `allow_pinning_mineral`, this Harmony build cannot remove patches at runtime, no point across a zone border is in range, a pin is within 8 m of the spot, the static scan is incomplete there, a pass does not run, or the first pass adds no pin, for example because the mineral category or unexplored automatic pins are hidden, or your simulation distance does not reach the zones around the deposit) |
+| `pin_destroyed_deposit_removed` | Three non-persistent tin deposits, spawned 4 m apart on the ground 6 m in front of you, get their pins from a static pass that starts with a fresh scan of the area. The first goes as a used-up deposit removes itself: its owner destroys it through `ZNetView.Destroy`, and the destruction the game sends on its next update is sent at once (`ZDOMan.SendDestroyed`), with the deposit's ZDO marked persistent for that moment, as a world object's is. Its pin leaves the map and the static cache. A tin deposit has no destroy callback of its own, so only the destruction of its ZDO can remove the pin |
+| `pin_destroyed_manual_and_shared_kept` | A pin you placed (no author) and a shared pin (with an owner), both added within 1 m of the first deposit's pin before it goes, are still on the map afterwards |
+| `pin_destroyed_by_other_game_removed` | The second deposit's destruction arrives as another game's does, through the game's handler of the routed `DestroyZDO` call (`ZDOMan.RPC_DestroyZDO`): the game removes the deposit here, and the deposit's pin leaves the map and the static cache, although no callback of the game that destroyed it ran here |
+| `pin_unloaded_deposit_kept` | The third deposit is unloaded with the steps the game takes when an object's zone leaves the active area (`ZNetScene.RemoveObjects`), and the destruction they lead to is sent at once: its instance goes, and its ZDO, which is not persistent, is destroyed by its owner, so the game raises its destruction as for any destroyed object. A world object's persistent ZDO would stay instead. The deposit's pin stays on the map and in the static cache: unloading is not destruction. A ZDO the steps leave is destroyed right after, before the game could spawn the deposit from it again |
 | `pin_cleanup` | Every pin created by the section has been removed |
 
 Location checks read loaded locations without modifying them and remove only their own pins and objects. They SKIP with a reason when no suitable location ray without an existing manual pin is available; stand near a dungeon entrance or tar pit and retry. No location prefab is spawned because its initialization can generate terrain or entities. Vanilla `Piece.SetCreator` writes only while the creator is 0, so the creator-0 piece is its own spawn and never gets a creator. Test pieces, trees, deposits and creatures are non-persistent, placed only where the camera ray's first hit is the object at a point that exactly one loaded location area contains (strictly inside, as `Location.IsInside` tests), and deactivated and removed before the next check; the `pin_piece_name` piece gets its position back. Checks SKIP with a reason when no such spot, unobstructed ray or duplicate-free position is available, and `pin_location_ground` SKIPs when every terrain point it finds lies inside more than one area. The action gives world-generated pieces, terrain and unnamed hits the nearest containing loaded location; when that location is unrecognized, the usual object or ground pin applies. Player-built pieces, creatures, deposits, trees, loose items and non-piece networked parts of a location such as destructibles or interactables keep their own pins; the game spawns those parts as scene roots, not under the location.
+
+The four destroyed-object checks run first. Their deposits are spawned before
+any test pin exists, and the section waits one frame for them, because a tin
+deposit reads its hit areas in `Start`; everything after that frame runs in one.
+The deposits' colliders stay off during that frame and are turned on right
+before the section's own static pass, so the game's own scans cannot pin them
+meanwhile, and no save can keep such a pin.
+A deposit's ZDO is marked persistent only within that frame, for the call that
+destroys it, so no save can keep it. The checks need the destruction
+subscription Automatic Mapping makes for the world you are in: run the section
+once in a world you entered with `automatic_mapping / module` already `Enabled`
+when the game started, before turning the module off and on there, and once
+more after going back to the main menu and entering a world again. They SKIP
+when `enable_automatic_mapping` is off, the static interval or range is 0,
+`remove_pins_of_destroyed_object` is off, tin deposits are not in
+`allow_pinning_mineral`, a game method they use is missing, the static scan is
+incomplete there, a test spot is outside the static range or within 3 m of a
+pin, the static pass does not run, or it adds no pin for a deposit (for example
+because the mineral category or unexplored automatic pins are hidden). A real
+unloading, which needs you to move away, and a destruction by another player
+are not produced; the checks reproduce the game's own steps for both.
 
 Obstructed object rays, unavailable bare ground, existing duplicate pins, and
 no empty direction within range cause the affected checks to SKIP. Move to an
@@ -1162,7 +1187,7 @@ through a temporary patch of `ZNetScene.IsAreaReady` that acts only during the
 second pass and is removed right after it; it SKIPs when this Harmony build cannot
 remove patches at runtime. If the removal fails, the check's detail says so, and
 the patch, left inactive, answers as the game does until restart. The check removes
-its deposit and the deposit's pin before the next check. The test drops, the test piece and the deposit use the
+its deposit and the deposit's pin before the next check. The test drops, the test piece and the deposits use the
 shared session cleanup, and the drops never enter the inventory. Cleanup failures stay registered with
 the session for retry. Physical hotkey input, save/reload persistence, and a
 module off/on with the saved pin remain in-game verification steps outside this

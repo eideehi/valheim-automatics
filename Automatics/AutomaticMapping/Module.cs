@@ -352,6 +352,13 @@ namespace Automatics.AutomaticMapping
         ///         which the next disable destroys - and routes through a static entry point, so a
         ///         callback added by an earlier activation reaches the current one.
         ///     </para>
+        ///     <para>
+        ///         A callback runs only in the game that destroys the object. Every game, that one
+        ///         included, also sees the object's ZDO destroyed, and the scans remove the same
+        ///         pins from there (<see cref="AutomaticMapping" />), for objects without a
+        ///         callback too; a pin a callback removed first is no longer held there. A flora
+        ///         patch's pin is the exception: only the game that destroys a plant removes it.
+        ///     </para>
         /// </summary>
         private static void HookDestroyOnce(Component owner, Action onDestroyed)
         {

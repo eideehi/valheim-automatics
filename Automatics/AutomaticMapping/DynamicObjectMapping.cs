@@ -255,11 +255,24 @@ namespace Automatics.AutomaticMapping
             if (component.GetComponent<Ship>() || component.GetComponent<Vagon>())
             {
                 if (!Objects.GetZdoid(component, out var uniqueId)) return;
-                if (!VehiclePinCache.TryGetValue(uniqueId, out var pin)) return;
-                RemoveVehiclePinFromCache(uniqueId);
-                if (!Config.EnableAutomaticMapping) return;
-                Map.RemovePin(pin);
+                RemoveVehiclePin(uniqueId);
             }
+        }
+
+        // Reached for every world object whose ZDO is destroyed, in every game that holds it (see
+        // AutomaticMapping). Only vehicles are keyed in the vehicle pin cache, and a vehicle whose
+        // own destroy callback ran here first has no entry left.
+        internal static void OnZdoDestroyed(ZDOID uniqueId)
+        {
+            RemoveVehiclePin(uniqueId);
+        }
+
+        private static void RemoveVehiclePin(ZDOID uniqueId)
+        {
+            if (!VehiclePinCache.TryGetValue(uniqueId, out var pin)) return;
+            RemoveVehiclePinFromCache(uniqueId);
+            if (!Config.EnableAutomaticMapping) return;
+            Map.RemovePin(pin);
         }
 
         public static bool RemoveCachedPins(ISet<ZDOID> excludes = null)

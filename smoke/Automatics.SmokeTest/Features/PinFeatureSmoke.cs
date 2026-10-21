@@ -13,8 +13,10 @@ using MappingModule = Automatics.AutomaticMapping.Module;
 
 namespace Automatics.SmokeTest
 {
-    // Runs synchronously: no map save, item update or player input can occur between
-    // adding a test pin and removing it. The drop also has the session's usual cleanup.
+    // Runs synchronously once its first frame has passed: no map save, item update or player
+    // input can occur between adding a test pin and removing it. The section waits that one
+    // frame only after spawning the deposits of the destroyed-object checks, before any test pin
+    // exists. The drop also has the session's usual cleanup.
     internal static class PinFeatureSmoke
     {
         public static IEnumerator Run(FeatureRun run)
@@ -35,8 +37,11 @@ namespace Automatics.SmokeTest
             }
 
             var created = new List<Minimap.PinData>();
+            var deposits = new List<TestDeposit>();
             Func<string, bool> cleanup = _ =>
             {
+                // The deposits' pins join the list as the deposits go.
+                if (deposits.Count > 0) RemoveDeposits(deposits, created);
                 foreach (var pin in created)
                     if (map) map.RemovePin(pin);
                 return true;
@@ -46,6 +51,26 @@ namespace Automatics.SmokeTest
             GameObject piece = null;
             try
             {
+                if (SpawnDestroyedObjectDeposits(run, player, deposits))
+                {
+                    // A tin deposit reads its hit areas in Start, which runs before its first
+                    // frame. No test pin exists yet, and the deposits' colliders stay off until the
+                    // section's own pass, so no scan of the game's pins them meanwhile and no save
+                    // can keep such a pin.
+                    yield return null;
+                    if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
+                        !MappingModule.Running)
+                    {
+                        const string gone =
+                            "the world, the camera or Automatic Mapping went away while the deposits settled";
+                        SkipDestroyedObjectChecks(run, gone);
+                        run.Skip("pin_section", gone);
+                        yield break;
+                    }
+                    CheckDestroyedObjectPins(run, player, map, deposits, created);
+                    RemoveDeposits(deposits, created);
+                }
+
                 Minimap.PinData objectPin = null;
                 var camera = GameCamera.instance.transform;
                 var prefab = ZNetScene.instance.GetPrefab("Wood");
@@ -93,7 +118,8 @@ namespace Automatics.SmokeTest
             }
             finally
             {
-                // Only pins added during our synchronous action calls are in this list.
+                // Only pins added during our synchronous action calls, and the deposits' pins, are
+                // in this list.
                 try
                 {
                     if (cleanup("pin feature smoke")) SmokeSession.ReleaseHandBack(cleanup);
@@ -1224,6 +1250,300 @@ namespace Automatics.SmokeTest
             _loadingQueries++;
             __result = false;
             return false;
+        }
+
+        private const string DestroyedDepositCheck = "pin_destroyed_deposit_removed";
+        private const string DestroyedKeepsOthersCheck = "pin_destroyed_manual_and_shared_kept";
+        private const string DestroyedElsewhereCheck = "pin_destroyed_by_other_game_removed";
+        private const string UnloadedDepositCheck = "pin_unloaded_deposit_kept";
+
+        // What the game does with a destroyed object's ZDO on its next update (ZDOMan.SendDestroyed,
+        // which also hands it to its own game), what it does when another game's destruction
+        // arrives (ZDOMan.RPC_DestroyZDO), and the instances ZNetScene drops when it unloads objects.
+        private static readonly System.Reflection.MethodInfo SendDestroyedMethod =
+            AccessTools.Method(typeof(ZDOMan), "SendDestroyed");
+
+        private static readonly System.Reflection.MethodInfo ReceiveDestroyedMethod =
+            AccessTools.Method(typeof(ZDOMan), "RPC_DestroyZDO");
+
+        private static readonly System.Reflection.FieldInfo SceneInstancesField =
+            AccessTools.Field(typeof(ZNetScene), "m_instances");
+
+        private static void SkipDestroyedObjectChecks(FeatureRun run, string reason)
+        {
+            run.Skip(DestroyedDepositCheck, reason);
+            run.Skip(DestroyedKeepsOthersCheck, reason);
+            run.Skip(DestroyedElsewhereCheck, reason);
+            run.Skip(UnloadedDepositCheck, reason);
+        }
+
+        // A deposit with the ZDOID it was spawned with, which still finds its pin after the game
+        // has reset the deposit's view, and the colliders it was spawned with, turned off until
+        // the section's own pass. A disabled collider is still one of the deposit's hit areas.
+        private sealed class TestDeposit
+        {
+            public GameObject Go;
+            public ZDOID Id;
+            public Collider[] Colliders;
+        }
+
+        // Three non-persistent tin deposits, 4 m apart on the ground 6 m in front of you, for the
+        // destroyed-object checks. A tin deposit is a used-up deposit's simplest case: no destroy
+        // callback of its own, only its ZDO going. False, with every check skipped for the reason,
+        // when they cannot be set up; whatever was spawned is in spawned for the caller to remove.
+        private static bool SpawnDestroyedObjectDeposits(FeatureRun run, Player player,
+            List<TestDeposit> spawned)
+        {
+            var range = MappingConfig.StaticObjectMappingRange;
+            string reason = null;
+            if (!MappingConfig.EnableAutomaticMapping || MappingConfig.StaticObjectMappingInterval <= 0f || range <= 0)
+                reason = "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, so no periodic static pass runs";
+            else if (!MappingConfig.RemovePinsOfDestroyedObject)
+                reason = "remove_pins_of_destroyed_object is off";
+            else if (!MappingConfig.AllowPinningMineral.Contains("TinDeposit"))
+                reason = "tin deposits are not in allow_pinning_mineral";
+            else if (SendDestroyedMethod == null || ReceiveDestroyedMethod == null || SceneInstancesField == null)
+                reason = "ZDOMan.SendDestroyed, ZDOMan.RPC_DestroyZDO or ZNetScene.m_instances was not found in this game version";
+            else if ((bool)AccessTools.Field(typeof(StaticObjectMapping), "_cacheIncomplete").GetValue(null))
+                reason = "the static scan here is incomplete, so it prunes no pin; move away from dense builds and retry";
+            if (reason != null)
+            {
+                SkipDestroyedObjectChecks(run, reason);
+                return false;
+            }
+
+            var forward = Vector3.ProjectOnPlane(GameCamera.instance.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
+            forward.Normalize();
+            var right = Vector3.Cross(Vector3.up, forward);
+            var origin = player.transform.position;
+            for (var i = 0; i < 3; i++)
+            {
+                var spot = origin + forward * 6f + right * (4f * (i - 1));
+                spot.y = ZoneSystem.instance.GetGroundHeight(spot);
+                if (Vector3.Distance(origin, spot) > range - 1f)
+                    reason = $"the test spots 6 m in front of you are outside static_object_mapping_range ({range} m)";
+                else if (Map.GetClosestPin(spot, 3f, includeInactive: true) != null)
+                    reason = "a pin is within 3 m of a test spot 6 m in front of you; turn or move and retry";
+                else
+                {
+                    var go = SpawnTestObject(new[] { "MineRock_Tin" }, spot, Quaternion.identity, out var skip,
+                        prefab => prefab.GetComponent<MineRock>());
+                    if (go)
+                    {
+                        Objects.GetZdoid(go.transform, out var id);
+                        var colliders = go.GetComponentsInChildren<Collider>();
+                        foreach (var collider in colliders) collider.enabled = false;
+                        spawned.Add(new TestDeposit { Go = go, Id = id, Colliders = colliders });
+                        continue;
+                    }
+                    reason = skip;
+                }
+
+                SkipDestroyedObjectChecks(run, reason);
+                return false;
+            }
+
+            Physics.SyncTransforms();
+            return true;
+        }
+
+        // The deposits' pins, whichever pass added them, are removed with the section's own pins.
+        private static void RemoveDeposits(List<TestDeposit> deposits, List<Minimap.PinData> created)
+        {
+            foreach (var deposit in deposits)
+            {
+                if (StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(deposit.Id), out var pin) &&
+                    !created.Contains(pin))
+                    created.Add(pin);
+                RemoveTestObject(deposit.Go);
+            }
+            deposits.Clear();
+        }
+
+        // Once the deposits' colliders are on, a static pass that starts with a fresh scan of the
+        // area pins the three deposits, through the entry point the minimap update calls, as
+        // pin_static_loading_area_kept pins its deposit. Each deposit then leaves in its own way. The pass maps the real objects around
+        // you as any pass does.
+        private static void CheckDestroyedObjectPins(FeatureRun run, Player player, Minimap map,
+            List<TestDeposit> deposits, List<Minimap.PinData> created)
+        {
+            foreach (var deposit in deposits)
+            foreach (var collider in deposit.Colliders)
+                if (collider)
+                    collider.enabled = true;
+            Physics.SyncTransforms();
+
+            var lastScan = AccessTools.Field(typeof(StaticObjectMapping), "_lastCacheUpdateTime");
+            var passId = AccessTools.Field(typeof(StaticObjectMapping), "_currentPassId");
+            lastScan.SetValue(null, 0f);
+            var before = (int)passId.GetValue(null);
+            global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player,
+                MappingConfig.StaticObjectMappingInterval, false);
+            if ((int)passId.GetValue(null) == before)
+            {
+                SkipDestroyedObjectChecks(run,
+                    "the static pass did not run (the game is paused or the area around you is still loading); retry");
+                return;
+            }
+
+            var pins = new Minimap.PinData[deposits.Count];
+            for (var i = 0; i < deposits.Count; i++)
+            {
+                if (!StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(deposits[i].Id),
+                        out pins[i]))
+                {
+                    SkipDestroyedObjectChecks(run,
+                        "the static pass added no pin for a test deposit; the mineral category or unexplored automatic pins may be hidden, or your simulation distance does not reach the zones around it");
+                    return;
+                }
+                created.Add(pins[i]);
+            }
+
+            CheckUsedUpDeposit(run, map, deposits[0].Go, deposits[0].Id, pins[0], created);
+            CheckDestroyedByOtherGame(run, deposits[1].Go, deposits[1].Id, pins[1]);
+            CheckUnloadedDeposit(run, deposits[2].Go, deposits[2].Id, pins[2]);
+        }
+
+        // The deposit goes as a used-up deposit removes itself: its owner destroys it through
+        // ZNetView.Destroy, and the game sends the destruction on its next update. Here it is sent
+        // at once, so the deposit's ZDO, persistent for this moment as a world object's is, is
+        // gone before any save could see it. A pin you placed and a shared pin, both within 1 m
+        // of the deposit's pin, stay.
+        private static void CheckUsedUpDeposit(FeatureRun run, Minimap map, GameObject deposit, ZDOID id,
+            Minimap.PinData pin, List<Minimap.PinData> created)
+        {
+            var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+            Minimap.PinData manual, shared;
+            try
+            {
+                var side = Vector3.Cross(Vector3.up, deposit.transform.position - GameCamera.instance.transform.position);
+                side = side.sqrMagnitude < 0.01f ? Vector3.right : side.normalized;
+                manual = map.AddPin(pin.m_pos + side * 0.5f, Minimap.PinType.Icon3,
+                    "Automatics smoke manual pin", true, false, 0L, PlatformUserID.None);
+                shared = map.AddPin(pin.m_pos - side * 0.5f, Minimap.PinType.Icon3,
+                    "Automatics smoke shared pin", true, false, long.MinValue, PlatformUserID.None);
+            }
+            finally
+            {
+                // Include the pins even if an AddPin postfix throws after adding them.
+                created.AddRange(Map.GetAllPins().Where(x => !before.Contains(x)));
+            }
+
+            var nview = deposit.GetComponent<ZNetView>();
+            try
+            {
+                nview.GetZDO().Persistent = true;
+                nview.Destroy();
+                SendDestroyedMethod.Invoke(ZDOMan.instance, null);
+            }
+            finally
+            {
+                var left = ZDOMan.instance.GetZDO(id);
+                if (left != null) left.Persistent = false;
+            }
+
+            var identify = new StaticObjectMapping.MapPinIdentify(id);
+            if (ZDOMan.instance.GetZDO(id) != null)
+                run.Skip(DestroyedDepositCheck, "the deposit's ZDO was not destroyed, so this game did not own it");
+            else if (!Map.GetAllPins().Contains(pin) && !StaticObjectMapping.TryGetCachedPin(identify, out _))
+                run.Pass(DestroyedDepositCheck,
+                    "the deposit's pin left the map and the static cache when the deposit's ZDO was destroyed");
+            else
+                run.Fail(DestroyedDepositCheck,
+                    "the deposit's ZDO was destroyed, and its pin is still on the map or in the static cache");
+
+            var pins = Map.GetAllPins();
+            var gone = new List<string>();
+            if (!pins.Contains(manual)) gone.Add("the pin you placed");
+            if (!pins.Contains(shared)) gone.Add("the shared pin");
+            if (gone.Count == 0)
+                run.Pass(DestroyedKeepsOthersCheck,
+                    "a pin you placed and a shared pin, within 1 m of the deposit's pin, are still on the map");
+            else
+                run.Fail(DestroyedKeepsOthersCheck,
+                    $"the deposit's destruction removed {string.Join(" and ", gone)}");
+        }
+
+        // The deposit goes as one another game destroyed: its destruction arrives through the
+        // game's handler of the routed DestroyZDO call, which removes the instance here. No
+        // callback of the game that destroyed it runs in this game.
+        private static void CheckDestroyedByOtherGame(FeatureRun run, GameObject deposit, ZDOID id,
+            Minimap.PinData pin)
+        {
+            var package = new ZPackage();
+            package.Write(1);
+            package.Write(id);
+            package.SetPos(0);
+            var nview = deposit.GetComponent<ZNetView>();
+            try
+            {
+                nview.GetZDO().Persistent = true;
+                // The sender is not read; any other game's id does.
+                ReceiveDestroyedMethod.Invoke(ZDOMan.instance, new object[] { long.MaxValue, package });
+            }
+            finally
+            {
+                var left = ZDOMan.instance.GetZDO(id);
+                if (left != null) left.Persistent = false;
+            }
+
+            if (ZDOMan.instance.GetZDO(id) != null || nview.GetZDO() != null)
+                run.Fail(DestroyedElsewhereCheck,
+                    "the game did not destroy the deposit when its destruction arrived from another game");
+            else if (!Map.GetAllPins().Contains(pin) &&
+                     !StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(id), out _))
+                run.Pass(DestroyedElsewhereCheck,
+                    "the deposit's pin left the map and the static cache when its destruction arrived from another game");
+            else
+                run.Fail(DestroyedElsewhereCheck,
+                    "the deposit's destruction arrived from another game, and its pin is still on the map or in the static cache");
+        }
+
+        // The deposit goes as the game unloads an object whose zone leaves the active area
+        // (ZNetScene.RemoveObjects), and the destruction that unloading leads to is sent at once:
+        // the instance goes, and the deposit's ZDO, which is not persistent, is destroyed by its
+        // owner, so the game raises its destruction as for any destroyed object. A world object's
+        // persistent ZDO would stay instead. Unloading is not destruction, so the pin stays. The
+        // finally destroys a ZDO the steps left, before the game could spawn the deposit from it
+        // again.
+        private static void CheckUnloadedDeposit(FeatureRun run, GameObject deposit, ZDOID id,
+            Minimap.PinData pin)
+        {
+            var nview = deposit.GetComponent<ZNetView>();
+            var zdo = nview.GetZDO();
+            try
+            {
+                var instances = (Dictionary<ZDO, ZNetView>)SceneInstancesField.GetValue(ZNetScene.instance);
+                nview.ResetZDO();
+                deposit.SetActive(false);
+                UnityEngine.Object.Destroy(deposit);
+                if (!zdo.Persistent && zdo.IsOwner())
+                    ZDOMan.instance.DestroyZDO(zdo);
+                instances.Remove(zdo);
+                SendDestroyedMethod.Invoke(ZDOMan.instance, null);
+
+                var identify = new StaticObjectMapping.MapPinIdentify(id);
+                if (ZDOMan.instance.GetZDO(id) != null)
+                    run.Skip(UnloadedDepositCheck,
+                        "the unloaded deposit's ZDO was not destroyed, so this game did not own it");
+                else if (Map.GetAllPins().Contains(pin) &&
+                         StaticObjectMapping.TryGetCachedPin(identify, out var cached) && ReferenceEquals(cached, pin))
+                    run.Pass(UnloadedDepositCheck,
+                        "the deposit's pin stayed on the map and in the static cache when the deposit was unloaded and the destruction of its non-persistent ZDO was raised");
+                else
+                    run.Fail(UnloadedDepositCheck, "unloading the deposit removed its pin");
+            }
+            finally
+            {
+                var left = ZDOMan.instance.GetZDO(id);
+                if (left != null)
+                {
+                    if (!left.IsOwner()) left.SetOwner(ZDOMan.GetSessionID());
+                    ZDOMan.instance.DestroyZDO(left);
+                    SendDestroyedMethod.Invoke(ZDOMan.instance, null);
+                }
+            }
         }
 
         private static bool FirstHit(Player player, Ray ray, out RaycastHit hit)

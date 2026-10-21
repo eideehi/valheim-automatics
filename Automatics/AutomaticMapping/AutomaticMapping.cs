@@ -29,6 +29,7 @@ namespace Automatics.AutomaticMapping
 
         private static float _dynamicScanAccumulator;
         private static float _lastAnimateTime;
+        private static ZDOMan _zdoMan;
 
         private static void RemoveCachedPins()
         {
@@ -49,6 +50,8 @@ namespace Automatics.AutomaticMapping
 
         public static void Cleanup()
         {
+            if (_zdoMan != null) _zdoMan.m_onZDODestroyed -= OnZDODestroyed;
+            _zdoMan = null;
             Navigation.Cleanup();
             DynamicObjectMapping.Cleanup();
             StaticObjectMapping.Cleanup();
@@ -64,6 +67,7 @@ namespace Automatics.AutomaticMapping
         {
             if (!Module.Running) return;
 
+            EnsureDestructionSubscription();
             MappingProfiler.FlushIfDue();
 
             if (!CanRun(player)) return;
@@ -97,6 +101,7 @@ namespace Automatics.AutomaticMapping
         public static void Mapping(Player player, float delta, bool takeInput)
         {
             if (!Module.Running) return;
+            EnsureDestructionSubscription();
             if (!CanRun(player)) return;
             if (!Config.EnableAutomaticMapping)
             {
@@ -106,6 +111,34 @@ namespace Automatics.AutomaticMapping
 
             // The static pass asks about area readiness itself, once its interval or key lets it run.
             StaticObjectMapping.Mapping(delta, takeInput);
+        }
+
+        // A destroyed object's pin is removed where every game sees the destruction: each game
+        // that holds the object's ZDO raises ZDOMan.m_onZDODestroyed, whichever game destroyed it,
+        // also for an object with no destroy callback, such as a used-up MineRock deposit. Where the
+        // destroying game has a callback or transpiled call for the object (Module.HookDestroyOnce,
+        // Patches), that has already removed the pin, and nothing is left for this. A flora
+        // patch's pin is left to that callback alone (StaticObjectMapping.OnZdoDestroyed). The
+        // ZDOMan is created with each world, so the scan entry points follow the current one, and
+        // the session's cleanup releases it.
+        private static void EnsureDestructionSubscription()
+        {
+            if (_zdoMan == ZDOMan.instance) return;
+            if (_zdoMan != null) _zdoMan.m_onZDODestroyed -= OnZDODestroyed;
+            _zdoMan = ZDOMan.instance;
+            if (_zdoMan != null) _zdoMan.m_onZDODestroyed += OnZDODestroyed;
+        }
+
+        // Only a persistent ZDO counts: unloading never destroys one, while a non-persistent
+        // object's ZDO is destroyed when the object unloads as well.
+        private static void OnZDODestroyed(ZDO zdo)
+        {
+            if (!Module.Running) return;
+            if (!Config.EnableAutomaticMapping) return;
+            if (!zdo.Persistent) return;
+
+            DynamicObjectMapping.OnZdoDestroyed(zdo.m_uid);
+            StaticObjectMapping.OnZdoDestroyed(zdo.m_uid);
         }
 
         public static void OnRemovePin(Minimap.PinData pinData)
