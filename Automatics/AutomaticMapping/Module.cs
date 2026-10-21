@@ -232,8 +232,9 @@ namespace Automatics.AutomaticMapping
         /// <summary>
         ///     Everything the scans keep between calls: the dynamic and static pin caches, the
         ///     static object cache and its tiles, the navigation target with its overlay and guide
-        ///     swarm, the compass, the scan timers and the profiler. A disable and a new world
-        ///     session both start again from here (R6.1 / R6.2).
+        ///     swarm, the compass, the scan timers and the profiler. A disable and the
+        ///     unloading of the world (<c>Minimap.OnDestroy</c>) both start again from here (R6.1);
+        ///     a respawn does not, so navigation survives it.
         /// </summary>
         internal static void ResetSession()
         {

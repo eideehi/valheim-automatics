@@ -503,7 +503,12 @@ namespace Automatics.AutomaticMapping
             Navigation.ClearTarget();
         }
 
-        // Clears PinIndex on world unload. Without this, the index keeps
+        // Ends the session on world unload: the pin caches, the static object
+        // cache and tiles, the scan timers and the navigation state go with the
+        // world, so the next world starts empty. A respawn does not destroy the
+        // minimap, so navigation survives it.
+        //
+        // Also clears PinIndex. Without this, the index keeps
         // PinData refs from the destroyed minimap until the next
         // Minimap.Start rebuild, and Map.ContainsPin (no UI-active filter)
         // could answer queries during the load window from stale state.
@@ -531,7 +536,7 @@ namespace Automatics.AutomaticMapping
             private static void Postfix()
             {
                 Map.ClearAutomaticPins();
-                Navigation.Cleanup();
+                Module.ResetSession();
                 PinIndex.Clear();
                 MineRock5Cache.Clear();
             }
