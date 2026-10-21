@@ -192,6 +192,16 @@ placement (AltPlace) is held (turn `Grid Planting` off or set
 `Grid Planting Size` to 1 to stop grid planting). Message settings can usually
 be set to `None`, `Center`, or `TopLeft`.
 
+### Containers in multiplayer
+
+In multiplayer, the modules that move items in and out of containers (storage,
+supply, processing, feeding and farming, including farming's container roles)
+use only the containers your game owns. The game gives each container to one
+player's game at a time: the player who last opened it, or a player near it. A
+container another player's game owns is skipped for now, so at a shared base
+some chests can go unused until your game owns them. A container someone has
+open is never used.
+
 ## Automatic door
 
 Automatic door opens and closes allowed doors near players.

@@ -107,7 +107,7 @@ namespace Automatics.AutomaticProcessing
             var transform = smelter.transform;
             var origin = transform.position;
             var containersWithInventory = Logics.GetNearbyContainers(smelterName, origin)
-                .Select(x => (x.container, x.container.GetInventory()))
+                .Select(x => (x.container, Logics.ReadInventory(x.container)))
                 .ToList();
             var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
@@ -223,7 +223,7 @@ namespace Automatics.AutomaticProcessing
 
             var origin = smelter.transform.position;
             var containersWithInventory = Logics.GetNearbyContainers(smelterName, origin)
-                .Select(x => (x.container, x.container.GetInventory()))
+                .Select(x => (x.container, Logics.ReadInventory(x.container)))
                 .ToList();
             var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
@@ -414,9 +414,9 @@ namespace Automatics.AutomaticProcessing
                 if (productRemaining <= 0) break;
 
                 var inventory = container.GetInventory();
-                if (Config.StoreOnlyIfProductExists(smelterName) &&
-                    !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.AcceptsProduct(smelterName, inventory, itemName)) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.AcceptsProduct(smelterName, inventory, itemName)) continue;
 
                 var storedItemCount = Logics.AddItemAndGetCountDelta(inventory, item.gameObject,
                     itemName, productRemaining);

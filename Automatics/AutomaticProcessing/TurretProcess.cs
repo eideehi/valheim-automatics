@@ -96,21 +96,13 @@ namespace Automatics.AutomaticProcessing
             foreach (var (container, _) in Logics.GetNearbyContainers(turretName, origin))
             {
                 var inventory = container.GetInventory();
-                var item = FindAmmoItem(turret, inventory, true);
-                if (item == null && turret.GetAmmo() == 0)
-                {
-                    foreach (var ammo in turret.m_allowedAmmo)
-                    {
-                        item = inventory.GetAmmoItem(ammo.m_ammo.m_itemData.m_shared.m_name);
-                        if (item != null) break;
-                    }
-                }
-
-                if (item == null) continue;
-                if (!Inventories.HaveItem(inventory, item.m_shared.m_name, 0, WorldLevelMatchMode.Ignore, minAmmoCount + 1))
-                    continue;
+                if (FindChargeItem(turret, inventory, minAmmoCount) == null) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
 
+                // The gate can reload the container, which replaces every item in it, so the
+                // ammunition is looked up again in what the container holds now.
+                var item = FindChargeItem(turret, inventory, minAmmoCount);
+                if (item == null) continue;
                 if (!Logics.TryRemoveItem(inventory, item, out var prefabName)) continue;
                 zNetView.InvokeRPC("RPC_AddAmmo", prefabName);
 
@@ -118,6 +110,54 @@ namespace Automatics.AutomaticProcessing
                     container.transform.position);
                 break;
             }
+        }
+
+        // The ammunition to charge from the inventory, while more than minAmmoCount of it stays
+        // there, or null. Turret.FindAmmoItem returns the first item of the turret's ammunition
+        // type, which can be one RPC_AddAmmo refuses (it takes only m_allowedAmmo and discards
+        // the rest) or one at its reserve. An empty turret then takes the first accepted item in
+        // the inventory that is above its reserve; a loaded one takes only more of its kind,
+        // which FindAmmoItem already returned.
+        private static ItemDrop.ItemData FindChargeItem(Turret turret, Inventory inventory,
+            int minAmmoCount)
+        {
+            var item = FindAmmoItem(turret, inventory, true);
+            if (item == null && turret.GetAmmo() == 0)
+            {
+                foreach (var ammo in turret.m_allowedAmmo)
+                {
+                    item = inventory.GetAmmoItem(ammo.m_ammo.m_itemData.m_shared.m_name);
+                    if (item != null) break;
+                }
+            }
+
+            if (item == null) return null;
+            if (IsAccepted(turret, item) && IsAboveReserve(inventory, item, minAmmoCount))
+                return item;
+            if (turret.GetAmmo() > 0) return null;
+
+            foreach (var candidate in inventory.GetAllItems())
+                if (IsAccepted(turret, candidate) &&
+                    IsAboveReserve(inventory, candidate, minAmmoCount))
+                    return candidate;
+            return null;
+        }
+
+        private static bool IsAboveReserve(Inventory inventory, ItemDrop.ItemData item,
+            int minAmmoCount)
+        {
+            return Inventories.HaveItem(inventory, item.m_shared.m_name, 0,
+                WorldLevelMatchMode.Ignore, minAmmoCount + 1);
+        }
+
+        // Turret.IsItemAllowed, by the item's drop prefab name.
+        private static bool IsAccepted(Turret turret, ItemDrop.ItemData item)
+        {
+            if (item?.m_dropPrefab == null) return false;
+            foreach (var ammo in turret.m_allowedAmmo)
+                if (ammo.m_ammo && ammo.m_ammo.name == item.m_dropPrefab.name)
+                    return true;
+            return false;
         }
 
         public static void ClearTimer(Turret turret)

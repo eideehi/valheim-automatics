@@ -35,10 +35,11 @@ namespace Automatics.AutomaticFarming
     /// <para>
     /// <see cref="OwnedCultivation"/>, <see cref="OwnedSeedHarvest"/>, and
     /// <see cref="OwnedStorage"/> are the subsets farming may actually mutate:
-    /// containers of that role this peer can mutate right now. Counting an input the
-    /// peer could never consume — or a slot it could never fill — would let a gate
-    /// pass and the mutation fall short, so the sourcing and deposit pools are
-    /// restricted to owned containers up front.
+    /// containers of that role this peer can mutate right now (it owns them, or as
+    /// the server may claim them; a box another peer owns is left out). Counting an
+    /// input the peer could never consume — or a slot it could never fill — would
+    /// let a gate pass and the mutation fall short, so the sourcing and deposit
+    /// pools are restricted to owned containers up front.
     /// </para>
     /// </remarks>
     internal sealed class FarmingContainers
@@ -84,9 +85,10 @@ namespace Automatics.AutomaticFarming
                 var position = container.transform.position;
                 anchors.Add(position);
 
+                // Preparing loads each box, so what the pass counts in them is current.
                 var canMutate = prepareMutation
                     ? ContainerAccess.TryPrepareContainerMutation(player, container)
-                    : ContainerAccess.CanUseContainer(player, container);
+                    : ContainerAccess.CanWriteContainer(player, container);
                 if (!canMutate) continue;
 
                 var designated = new DesignatedContainer(container, position);

@@ -15,6 +15,7 @@ namespace Automatics.SmokeTest
     // Storage / Door / Pickup / Processing against freshly spawned objects, asserts
     // observable results, cleans everything up, and logs PASS/FAIL/SKIP plus a
     // one-line Summary (mirroring SmokePlugin.cs). Out of scope: Farming/Feeding/Mining.
+    // Two checks drive the container gate through Processing's store path.
     //
     // Registration: subscribe Hooks.OnInitTerminal += BuildCommand exactly once,
     // early (EnsureRegistered is called at the top of SmokePlugin's Start coroutine,
@@ -25,7 +26,7 @@ namespace Automatics.SmokeTest
     //
     // The pickup check has to wait for vanilla to accept a fresh drop, so the command
     // runs as a coroutine on the smoke plugin rather than in the console call. The other
-    // three checks still run synchronously, each within a single frame, so nothing they
+    // checks still run synchronously, each within a single frame, so nothing they
     // spawn lives long enough to be updated or saved. Only one smoke command runs at a
     // time, and what a run owes the game if it is cut short is held by SmokeSession.
     //
@@ -34,7 +35,10 @@ namespace Automatics.SmokeTest
     //
     // Each check starts in a frame of its own and spawns in a spot of its own, relative to the
     // player, so nothing an earlier check placed is in its way: the storage chest 1.5 m ahead,
-    // the door 2 m to the left, the pickup drop 1.5 m to the right, and the smelter 3.5 m ahead
+    // the door 2 m to the left, the pickup drop 1.5 m to the right, the smelter 3.5 m ahead
+    // with its chest 1.5 m to the right of it, for the container checks a smelter 3.5 m
+    // behind (the second one also 3.5 m to the left), each with its chest 1.5 m to the right
+    // of it, and for the charging check the charging piece 3.5 m ahead and 3.5 m to the left
     // with its chest 1.5 m to the right of it.
     internal static class WorldSmokeCommand
     {
@@ -193,6 +197,27 @@ namespace Automatics.SmokeTest
                     ? RunCheck("world_processing_smelter_refuel", CheckProcessingSmelterRefuel)
                     : CheckResult.Skip("the run was abandoned before this check")
                                  .WithName("world_processing_smelter_refuel"));
+
+                yield return null;
+                results.Add(SmokeSession.IsCurrent(runId)
+                    ? RunCheck("world_container_store_after_spawn_keeps_stored_items",
+                        CheckStoreAfterSpawnKeepsStoredItems)
+                    : CheckResult.Skip("the run was abandoned before this check")
+                                 .WithName("world_container_store_after_spawn_keeps_stored_items"));
+
+                yield return null;
+                results.Add(SmokeSession.IsCurrent(runId)
+                    ? RunCheck("world_container_store_after_close_keeps_saved_changes",
+                        CheckStoreAfterCloseKeepsSavedChanges)
+                    : CheckResult.Skip("the run was abandoned before this check")
+                                 .WithName("world_container_store_after_close_keeps_saved_changes"));
+
+                yield return null;
+                results.Add(SmokeSession.IsCurrent(runId)
+                    ? RunCheck("world_processing_charge_takes_accepted_ammunition",
+                        CheckChargeTakesAcceptedAmmunition)
+                    : CheckResult.Skip("the run was abandoned before this check")
+                                 .WithName("world_processing_charge_takes_accepted_ammunition"));
 
                 Report(context, results);
             }
@@ -455,7 +480,7 @@ namespace Automatics.SmokeTest
         }
 
         // The selection AutomaticStorage.Store makes - range, allow_container, and whether the
-        // player may mutate the container - applied to every container except the test chest.
+        // player may write the container - applied to every container except the test chest.
         private static int CountOtherStorageTargets(Player player, Container testChest)
         {
             var origin = player.transform.position;
@@ -467,7 +492,7 @@ namespace Automatics.SmokeTest
                 container != testChest &&
                 Vector3.Distance(origin, container.transform.position) <= range &&
                 ContainerAccess.IsAllowed(container, allowed) &&
-                ContainerAccess.CanDirectlyMutateContainer(player, container));
+                ContainerAccess.CanWriteContainer(player, container));
         }
 
         // The chest is already kept when this runs. Everything in it goes back to the player,
@@ -1008,6 +1033,367 @@ namespace Automatics.SmokeTest
             // Best-effort cache reset after the run so a second invocation re-reads fresh state.
         }
 
+        // -- 4.5 Container gate ----------------------------------------------------
+
+        // A chest whose saved data holds items its inventory has not loaded yet, as when it has
+        // just spawned with stored items, keeps them when a module writes it: the write builds
+        // on the saved contents, not on the empty inventory.
+        private static CheckResult CheckStoreAfterSpawnKeepsStoredItems()
+        {
+            var player = Player.m_localPlayer;
+            if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
+            if (global::Automatics.AutomaticProcessing.Config.StoreOnlyIfProductExists(Smelter))
+                return CheckResult.Skip(
+                    "store_only_if_product_exists is on for the smelter, so it never stores into a chest whose inventory is still empty");
+
+            using (var scope = new SpawnScope())
+            {
+                var transform = player.transform;
+                var skip = SetUpStoreFixture(scope, transform.position - transform.forward * 3.5f,
+                    out var fixture);
+                if (skip != null) return skip;
+
+                const int stored = 3;
+                scope.AllowContents(fixture.ChestGo, fixture.ProductName, stored + 1);
+                WriteSavedContents(fixture, stored);
+                if (fixture.ChestInventory.NrOfItems() != 0)
+                    return CheckResult.Skip(
+                        "the chest loaded its saved items before the check could write it");
+
+                var accepted = global::Automatics.AutomaticProcessing.SmelterProcess.Store(
+                    fixture.Smelter, fixture.Ore, 1);
+                var held = fixture.ChestInventory.CountItems(fixture.ProductName);
+                var saved = CountSavedContents(fixture);
+
+                Expect(accepted, "SmelterProcess.Store should store the product in the chest");
+                Expect(held == stored + 1 && saved == stored + 1,
+                    $"the chest should keep its {stored} stored items and gain 1: its inventory holds {held}, its saved data {saved}");
+                return CheckResult.Pass();
+            }
+        }
+
+        // While another game owns the chest, open there or closed, a store writes nothing to it
+        // and does not take it. Once the chest is this game's again, a store in the same second
+        // keeps what the other game saved instead of saving this game's older copy over it.
+        private static CheckResult CheckStoreAfterCloseKeepsSavedChanges()
+        {
+            var player = Player.m_localPlayer;
+            if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
+
+            using (var scope = new SpawnScope())
+            {
+                var transform = player.transform;
+                var skip = SetUpStoreFixture(scope,
+                    transform.position - transform.forward * 3.5f - transform.right * 3.5f,
+                    out var fixture);
+                if (skip != null) return skip;
+
+                const int seeded = 2;
+                const int changed = 5;
+                scope.AllowContents(fixture.ChestGo, fixture.ProductName, changed + 1);
+                if (AddItemsLooped(fixture.ChestInventory, fixture.Product, seeded) != seeded)
+                    return CheckResult.Skip("could not seed the chest");
+
+                var view = fixture.ChestView;
+                var zdo = view.GetZDO();
+                try
+                {
+                    // Another player's game opens the chest: it becomes the owner and marks the
+                    // chest in use.
+                    zdo.SetOwner(ZDOMan.GetSessionID() + 1);
+                    zdo.Set(ZDOVars.s_inUse, 1);
+                    var storedWhileOpen = global::Automatics.AutomaticProcessing.SmelterProcess.Store(
+                        fixture.Smelter, fixture.Ore, 1);
+
+                    // It saves a change and closes the chest, and still owns it.
+                    WriteSavedContents(fixture, changed);
+                    zdo.Set(ZDOVars.s_inUse, 0);
+                    var storedAfterClose = global::Automatics.AutomaticProcessing.SmelterProcess.Store(
+                        fixture.Smelter, fixture.Ore, 1);
+                    var taken = view.IsOwner();
+                    Expect(!storedWhileOpen && !storedAfterClose && !taken,
+                        $"nothing should be stored in a chest another game owns, nor the chest taken: stored while open {storedWhileOpen}, after close {storedAfterClose}, taken {taken}");
+
+                    // The chest is this game's again, and a store follows within the second.
+                    view.ClaimOwnership();
+                    var accepted = global::Automatics.AutomaticProcessing.SmelterProcess.Store(
+                        fixture.Smelter, fixture.Ore, 1);
+                    var held = fixture.ChestInventory.CountItems(fixture.ProductName);
+                    var saved = CountSavedContents(fixture);
+
+                    Expect(accepted, "SmelterProcess.Store should store the product once the chest is this game's");
+                    Expect(held == changed + 1 && saved == changed + 1,
+                        $"the chest should hold the other game's {changed} plus 1: its inventory holds {held}, its saved data {saved}");
+                }
+                finally
+                {
+                    // Only the owner removes the chest's saved data with it, so it is this game's
+                    // again however the check ended.
+                    if (view && view.IsValid())
+                    {
+                        if (!view.IsOwner()) view.ClaimOwnership();
+                        zdo.Set(ZDOVars.s_inUse, 0);
+                    }
+                }
+
+                return CheckResult.Pass();
+            }
+        }
+
+        // A smelter and a chest 1.5 m to the right of it, the chest the only container in the
+        // smelter's range. SmelterProcess.Store, the write both container checks drive, puts
+        // the smelter's product into the nearest container in range through the container gate.
+        private sealed class StoreFixture
+        {
+            public global::Smelter Smelter { get; set; }
+            public string Ore { get; set; }
+            public GameObject Product { get; set; }
+            public string ProductName { get; set; }
+            public GameObject ChestGo { get; set; }
+            public Container Chest { get; set; }
+            public ZNetView ChestView { get; set; }
+            public Inventory ChestInventory { get; set; }
+        }
+
+        private static CheckResult SetUpStoreFixture(SpawnScope scope, Vector3 smelterPosition,
+            out StoreFixture fixture)
+        {
+            fixture = null;
+            if (ZNetScene.instance == null) return CheckResult.Skip("ZNetScene.instance is null");
+            var player = Player.m_localPlayer;
+            if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
+
+            // The applied state, not the setting: SmelterProcess.Store stores nothing while the
+            // module is not running.
+            if (ModuleRegistry.GetState(global::Automatics.AutomaticProcessing.Module.Instance.Name) !=
+                ModuleState.Enabled || !global::Automatics.AutomaticProcessing.Module.Running)
+                return CheckResult.Skip("automatic_processing module is not running");
+            if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(Smelter, Process.Store))
+                return CheckResult.Skip("Store not allowed for smelter in config");
+
+            if (!TryFindPrefabByObjectName<global::Smelter>(Smelter, out var smelterPrefab))
+                return CheckResult.Skip($"{Smelter} prefab not found");
+            if (!TryFindPrefabByObjectName<Container>(ChestWood, out var chestPrefab))
+                return CheckResult.Skip($"{ChestWood} prefab not found");
+
+            var smelterGo = scope.Spawn(smelterPrefab, smelterPosition, Quaternion.identity);
+            var smelter = smelterGo.GetComponent<global::Smelter>();
+            if (smelter == null) return CheckResult.Skip("spawned smelter lacks Smelter component");
+            if (!Objects.HasValidOwnership(smelter))
+                return CheckResult.Skip("spawned smelter not owned after claim");
+            var conversion = smelter.m_conversion.FirstOrDefault(x => x != null && x.m_from && x.m_to);
+            if (conversion == null) return CheckResult.Skip("smelter has no conversion");
+
+            var smelterPos = smelter.transform.position;
+            var chestGo = scope.Spawn(chestPrefab, smelterPos + player.transform.right * 1.5f,
+                Quaternion.identity);
+            var chest = chestGo.GetComponent<Container>();
+            if (chest == null) return CheckResult.Skip("spawned chest lacks Container");
+            if (!Objects.GetZNetView(chest, out var chestView) || chestView == null ||
+                !chestView.IsValid() || chestView.GetZDO() == null)
+                return CheckResult.Skip("spawned chest ZNetView invalid");
+            if (!chestView.IsOwner())
+                return CheckResult.Skip("spawned chest not owned after claim");
+            if (!ContainerAccess.IsAllowed(chest,
+                    global::Automatics.AutomaticProcessing.Config.AllowContainer))
+                return CheckResult.Skip("spawned chest not in allow_container");
+            var chestInventory = chest.GetInventory();
+            if (chestInventory == null) return CheckResult.Skip("spawned chest inventory is null");
+            if (chestInventory.NrOfItems() != 0)
+            {
+                scope.Keep(chestGo);
+                return CheckResult.Skip(
+                    $"the spawned chest was not empty, so {ChestLocation(chestGo)} was left in the world holding: {ListItems(chestInventory.GetAllItems())}");
+            }
+
+            // Reset the per-second container cache before reading it.
+            global::Automatics.AutomaticProcessing.Logics.Cleanup();
+            var sources = global::Automatics.AutomaticProcessing.Logics
+                .GetNearbyContainers(Smelter, smelterPos)
+                .Select(x => x.container)
+                .ToList();
+            if (!sources.Contains(chest))
+                return CheckResult.Skip("the spawned chest is not within the smelter's container range");
+            // Store puts the product into the nearest container in range, so the check only
+            // runs where no container of yours could receive it.
+            if (sources.Count > 1)
+                return CheckResult.Skip(
+                    $"{sources.Count - 1} other container(s) within the smelter's container range could receive the product; run it away from other containers");
+
+            fixture = new StoreFixture
+            {
+                Smelter = smelter,
+                Ore = conversion.m_from.gameObject.name,
+                Product = conversion.m_to.gameObject,
+                ProductName = conversion.m_to.m_itemData.m_shared.m_name,
+                ChestGo = chestGo,
+                Chest = chest,
+                ChestView = chestView,
+                ChestInventory = chestInventory
+            };
+            return null;
+        }
+
+        // Replaces the chest's saved data with amount of the product without loading it into the
+        // chest's inventory, as a save by another game, or a chest streaming in, leaves it.
+        private static void WriteSavedContents(StoreFixture fixture, int amount)
+        {
+            var saved = new Inventory("smoke", null, fixture.Chest.m_width, fixture.Chest.m_height);
+            AddItemsLooped(saved, fixture.Product, amount);
+            var package = new ZPackage();
+            saved.Save(package);
+            fixture.ChestView.GetZDO().Set(ZDOVars.s_items, package.GetArray());
+        }
+
+        // The product units in the chest's saved data, which is what the world keeps.
+        private static int CountSavedContents(StoreFixture fixture)
+        {
+            var data = fixture.ChestView.GetZDO().GetByteArray(ZDOVars.s_items);
+            if (data == null) return 0;
+            var saved = new Inventory("smoke", null, fixture.Chest.m_width, fixture.Chest.m_height);
+            saved.Load(new ZPackage(data));
+            return saved.CountItems(fixture.ProductName);
+        }
+
+        // -- 4.6 Charging ----------------------------------------------------------
+
+        // Charging takes only ammunition the piece accepts, and keeps each kind's reserve. Ahead
+        // of the accepted kind above its reserve sit an item of the piece's ammunition type that
+        // the piece refuses and an accepted kind at its reserve; both stay where they are, and
+        // the piece gains one of the accepted kind above its reserve.
+        private static CheckResult CheckChargeTakesAcceptedAmmunition()
+        {
+            if (ZNetScene.instance == null) return CheckResult.Skip("ZNetScene.instance is null");
+            var player = Player.m_localPlayer;
+            if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
+
+            // The applied state, not the setting: TurretProcess.Charge does nothing while the
+            // module is not running.
+            if (ModuleRegistry.GetState(global::Automatics.AutomaticProcessing.Module.Instance.Name) !=
+                ModuleState.Enabled || !global::Automatics.AutomaticProcessing.Module.Running)
+                return CheckResult.Skip("automatic_processing module is not running");
+
+            var prefab = ZNetScene.instance.m_prefabs.FirstOrDefault(x =>
+                x && x.GetComponent<Turret>() && ChargeKinds(x.GetComponent<Turret>()).Count >= 3);
+            if (!prefab)
+                return CheckResult.Skip("no piece that charges with three kinds of ammunition was found");
+            var pieceName = prefab.GetComponent<Turret>().m_name;
+            if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(pieceName, Process.Charge))
+                return CheckResult.Skip("Charge not allowed for the piece in config");
+            var reserve = global::Automatics.AutomaticProcessing.Config.NumberOfItemsToStopCharge(pieceName);
+            if (reserve < 1)
+                return CheckResult.Skip(
+                    "number_of_items_to_stop_charge is 0 for the piece, so no ammunition can sit at its reserve");
+            if (!TryFindPrefabByObjectName<Container>(ChestWood, out var chestPrefab))
+                return CheckResult.Skip($"{ChestWood} prefab not found");
+
+            using (var scope = new SpawnScope())
+            {
+                var transform = player.transform;
+                var pieceGo = scope.Spawn(prefab,
+                    transform.position + transform.forward * 3.5f - transform.right * 3.5f,
+                    Quaternion.identity);
+                var piece = pieceGo.GetComponent<Turret>();
+                if (piece == null) return CheckResult.Skip("the spawned piece lacks its charging component");
+                if (!Objects.GetZNetView(piece, out var pieceView) || pieceView == null ||
+                    !pieceView.IsValid() || !pieceView.IsOwner())
+                    return CheckResult.Skip("the spawned piece is not owned after claim");
+                if (piece.GetAmmo() != 0) return CheckResult.Skip("the spawned piece came charged");
+
+                // The accepted list belongs to this spawned piece only. One kind leaves it, so the
+                // chest can hold an item of the right type that the piece refuses.
+                var kinds = ChargeKinds(piece);
+                var refused = kinds[0];
+                var atReserve = kinds[1];
+                var aboveReserve = kinds[2];
+                piece.m_allowedAmmo.RemoveAll(x => x.m_ammo == refused);
+
+                var chestGo = scope.Spawn(chestPrefab,
+                    piece.transform.position + transform.right * 1.5f, Quaternion.identity);
+                var chest = chestGo.GetComponent<Container>();
+                if (chest == null) return CheckResult.Skip("spawned chest lacks Container");
+                if (!Objects.GetZNetView(chest, out var chestView) || chestView == null ||
+                    !chestView.IsValid() || !chestView.IsOwner())
+                    return CheckResult.Skip("spawned chest not owned after claim");
+                if (!ContainerAccess.IsAllowed(chest,
+                        global::Automatics.AutomaticProcessing.Config.AllowContainer))
+                    return CheckResult.Skip("spawned chest not in allow_container");
+                var chestInventory = chest.GetInventory();
+                if (chestInventory == null) return CheckResult.Skip("spawned chest inventory is null");
+                if (chestInventory.NrOfItems() != 0)
+                {
+                    scope.Keep(chestGo);
+                    return CheckResult.Skip(
+                        $"the spawned chest was not empty, so {ChestLocation(chestGo)} was left in the world holding: {ListItems(chestInventory.GetAllItems())}");
+                }
+
+                // The refused kind is above the reserve too, so taking it would not be held back
+                // by the reserve.
+                var seeds = new[]
+                {
+                    (kind: refused, amount: reserve + 2),
+                    (kind: atReserve, amount: reserve),
+                    (kind: aboveReserve, amount: reserve + 2)
+                };
+                foreach (var (kind, amount) in seeds)
+                {
+                    var name = kind.m_itemData.m_shared.m_name;
+                    scope.AllowContents(chestGo, name, amount);
+                    if (AddItemsLooped(chestInventory, kind.gameObject, amount) != amount)
+                        return CheckResult.Skip("could not seed the chest");
+                }
+
+                // The game's lookup returns the lowest slot of the type, and the fallback walks
+                // the items in order, so the order has to be the one described above.
+                var items = chestInventory.GetAllItems();
+                int Slot(ItemDrop kind) =>
+                    items.Where(x => x.m_dropPrefab == kind.gameObject)
+                         .Min(x => x.m_gridPos.y * chest.m_width + x.m_gridPos.x);
+                int Order(ItemDrop kind) => items.FindIndex(x => x.m_dropPrefab == kind.gameObject);
+                if (Slot(refused) > Slot(atReserve) || Slot(refused) > Slot(aboveReserve) ||
+                    Order(atReserve) > Order(aboveReserve))
+                    return CheckResult.Skip("the chest did not keep the seeded order");
+
+                // Reset the per-second container cache before reading it.
+                global::Automatics.AutomaticProcessing.Logics.Cleanup();
+                var sources = global::Automatics.AutomaticProcessing.Logics
+                    .GetNearbyContainers(pieceName, piece.transform.position)
+                    .Select(x => x.container)
+                    .ToList();
+                if (!sources.Contains(chest))
+                    return CheckResult.Skip("the spawned chest is not within the piece's container range");
+                if (sources.Count > 1)
+                    return CheckResult.Skip(
+                        $"{sources.Count - 1} other container(s) within the piece's container range could give ammunition; run it away from other containers");
+
+                // A delta of a full second passes the charge interval at once.
+                global::Automatics.AutomaticProcessing.TurretProcess.Charge(piece, pieceView, 1f);
+
+                int Held(ItemDrop kind) => chestInventory.CountItems(kind.m_itemData.m_shared.m_name);
+                var charged = piece.GetAmmo();
+                var chargedKind = piece.GetAmmoType();
+                Expect(charged == 1 && chargedKind == aboveReserve.gameObject.name,
+                    $"the piece should hold one of the accepted kind above its reserve: it holds {charged}, of the expected kind {chargedKind == aboveReserve.gameObject.name}");
+                Expect(Held(refused) == reserve + 2 && Held(atReserve) == reserve &&
+                       Held(aboveReserve) == reserve + 1,
+                    $"the chest should still hold the refused item ({Held(refused)}/{reserve + 2}) and the kind at its reserve ({Held(atReserve)}/{reserve}), and one less of the other ({Held(aboveReserve)}/{reserve + 1})");
+                return CheckResult.Pass();
+            }
+        }
+
+        // The kinds of ammunition the piece accepts that carry its ammunition type, so the
+        // game's own lookup by type finds them, each with a name of its own.
+        private static List<ItemDrop> ChargeKinds(Turret piece)
+        {
+            return piece.m_allowedAmmo
+                .Where(x => x.m_ammo &&
+                            x.m_ammo.m_itemData.m_shared.m_ammoType == piece.m_ammoType)
+                .Select(x => x.m_ammo)
+                .GroupBy(x => x.m_itemData.m_shared.m_name)
+                .Select(x => x.First())
+                .ToList();
+        }
+
         // -- Spawn / prefab helpers ------------------------------------------------
 
         // A spawned container is destroyed only while it is empty, or holds nothing but what
@@ -1018,8 +1404,8 @@ namespace Automatics.SmokeTest
         {
             private readonly List<GameObject> _spawned = new List<GameObject>();
 
-            private readonly Dictionary<GameObject, KeyValuePair<string, int>> _allowedContents =
-                new Dictionary<GameObject, KeyValuePair<string, int>>();
+            private readonly Dictionary<GameObject, Dictionary<string, int>> _allowedContents =
+                new Dictionary<GameObject, Dictionary<string, int>>();
 
             // Spawn a networked prefab and claim ownership so IsOwner() is true for the
             // synchronous mutation checks on a single-player host.
@@ -1047,10 +1433,12 @@ namespace Automatics.SmokeTest
             }
 
             // Items the check put into a spawned container itself: up to amount of itemName may
-            // still be in it when it is destroyed.
+            // still be in it when it is destroyed. A check may register several items.
             public void AllowContents(GameObject go, string itemName, int amount)
             {
-                _allowedContents[go] = new KeyValuePair<string, int>(itemName, amount);
+                if (!_allowedContents.TryGetValue(go, out var allowed))
+                    _allowedContents[go] = allowed = new Dictionary<string, int>();
+                allowed[itemName] = amount;
             }
 
             // Null when the object may be destroyed; otherwise why it has to stay.
@@ -1063,8 +1451,9 @@ namespace Automatics.SmokeTest
                 if (items.Count == 0) return null;
 
                 if (_allowedContents.TryGetValue(go, out var allowed) &&
-                    items.All(item => item.m_shared.m_name == allowed.Key) &&
-                    items.Sum(item => item.m_stack) <= allowed.Value)
+                    items.GroupBy(item => item.m_shared.m_name).All(group =>
+                        allowed.TryGetValue(group.Key, out var amount) &&
+                        group.Sum(item => item.m_stack) <= amount))
                     return null;
 
                 return $"{ChestLocation(go)} was left in the world because it holds items the check did not put there: {ListItems(items)}";

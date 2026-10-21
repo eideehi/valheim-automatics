@@ -138,10 +138,9 @@ namespace Automatics.AutomaticFeeding
             if (container == null || ContainerAccess.IsGrave(container)) return false;
             // Owner-side feeding also runs on dedicated servers where there is no
             // local player, so only enforce the player access model when a local
-            // player exists; otherwise fall through to the owner-only mutation
-            // gate at consume time.
-            var localPlayer = Player.m_localPlayer;
-            if (localPlayer != null && !ContainerAccess.CanUseContainer(localPlayer, container))
+            // player exists; otherwise the box must be idle and, in multiplayer,
+            // public.
+            if (!ContainerAccess.CanUseContainerServerAware(Player.m_localPlayer, container))
                 return false;
 
             var inventory = container.GetInventory();
@@ -209,27 +208,33 @@ namespace Automatics.AutomaticFeeding
 
             if (canEating)
             {
-                // Owner-only removal: claim ownership, then bail unless this peer
-                // can mutate the feed box right now, so an item is never removed
-                // from a chest a player has open or another peer/server owns
-                // (which would desync the container). Mirrors
-                // SeedPool.RemoveFromContainer. Player feeders are pre-filtered to
-                // the local player in FindFeeder, so their inventory is always
-                // authoritative and needs no extra guard.
+                // Owner-only removal: bail unless this peer can mutate the feed box
+                // right now, so an item is never removed from a chest a player has
+                // open or another peer/server owns (which would desync the
+                // container). Mirrors SeedPool.RemoveFromContainer. Player feeders
+                // are pre-filtered to the local player in FindFeeder, so their
+                // inventory is always authoritative and needs no extra guard.
                 if (feedBoxFound)
                 {
                     if (!ContainerAccess.TryPrepareContainerMutationServerAware(
                             Player.m_localPlayer, _closestFeedBox))
-                        return true;
-                    // Re-fetch the inventory after taking ownership so the
-                    // post-ownership (possibly ZDO-reloaded) instance is mutated.
+                    {
+                        // The game's own AI carries on, and the next search looks for
+                        // food again.
+                        _closestFeedBox = null;
+                        _consumeTargetItem = null;
+                        return false;
+                    }
+
+                    // Re-fetch the inventory after the gate so the instance it loaded
+                    // is mutated.
                     inventory = _closestFeedBox.GetInventory();
                     if (inventory == null) return true;
                 }
 
-                // Re-resolve the live item by name: the target captured before the
-                // ownership claim can be a stale ItemData that RemoveOneItem would
-                // silently no-op on.
+                // Re-resolve the live item by name: the gate reloads the box, which
+                // replaces its items, so the target captured before it can be a stale
+                // ItemData that RemoveOneItem would silently no-op on.
                 var item = inventory.GetItem(_consumeTargetItem.m_shared.m_name);
                 if (item != null && inventory.RemoveOneItem(item))
                 {
@@ -286,8 +291,9 @@ namespace Automatics.AutomaticFeeding
                 if (distance > range || distance >= closest) continue;
                 if (ContainerAccess.IsGrave(container)) continue;
                 if (needGetClose && !HavePath(position)) continue;
-                var localPlayer = Player.m_localPlayer;
-                if (localPlayer != null && !ContainerAccess.CanUseContainer(localPlayer, container))
+                // Only a box this game may write: a nearer one another game owns
+                // would be chosen on every search and never give food.
+                if (!ContainerAccess.CanWriteContainer(Player.m_localPlayer, container))
                     continue;
 
                 var inventory = container.GetInventory();

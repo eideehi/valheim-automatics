@@ -26,26 +26,27 @@ namespace Automatics.AutomaticProcessing
             var honeyRemaining = honeyCount;
             var containers = Logics.GetNearbyContainers(beehiveName, origin)
                 .Select(x => x.container).ToList();
-            // The product stack limit covers every container in range together.
-            var capacity = Logics.GetProductCapacity(containers.Select(x => x.GetInventory()),
-                honeyName, honeyData.m_maxStackSize, maxProductStacks);
+            var inventories = containers.Select(Logics.ReadInventory).ToList();
+            // The product stack limit covers every container in range together. It is read
+            // again after the gate, which can reload the container about to be written.
+            int Capacity() => Logics.GetProductCapacity(inventories, honeyName,
+                honeyData.m_maxStackSize, maxProductStacks);
             foreach (var container in containers)
             {
                 if (honeyRemaining <= 0) break;
+                if (Capacity() <= 0) break;
 
                 var inventory = container.GetInventory();
-
-                var amount = Mathf.Min(capacity, honeyRemaining);
-                if (amount <= 0) break;
-
-                if (Config.StoreOnlyIfProductExists(beehiveName) &&
-                    !Inventories.HaveItem(inventory, honeyName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.AcceptsProduct(beehiveName, inventory, honeyName)) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
+
+                var amount = Mathf.Min(Capacity(), honeyRemaining);
+                if (amount <= 0) break;
+                if (!Logics.AcceptsProduct(beehiveName, inventory, honeyName)) continue;
 
                 var storedHoneyCount = Logics.AddItemAndGetCountDelta(inventory,
                     honeyItem.gameObject, honeyName, amount);
                 if (storedHoneyCount <= 0) continue;
-                capacity -= storedHoneyCount;
 
                 Logics.StoreLog(honeyName, storedHoneyCount, container.m_name,
                     container.transform.position, beehiveName, origin);

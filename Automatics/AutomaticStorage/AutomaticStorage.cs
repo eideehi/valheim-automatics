@@ -64,7 +64,7 @@ namespace Automatics.AutomaticStorage
                             continue;
 
                         var target = containers[route.ContainerIndex];
-                        if (!ContainerAccess.CanDirectlyMutateContainer(player, target.Container))
+                        if (!ContainerAccess.CanWriteContainer(player, target.Container))
                             continue;
 
                         var moved = route.Kind == StorageRouteKind.ExactStack
@@ -90,7 +90,7 @@ namespace Automatics.AutomaticStorage
                 foreach (var index in touchedContainers)
                 {
                     var target = containers[index];
-                    if (!ContainerAccess.CanDirectlyMutateContainer(player, target.Container))
+                    if (!ContainerAccess.TryPrepareContainerMutation(player, target.Container))
                         continue;
 
                     ContainerSorter.Sort(target.Inventory);
@@ -149,10 +149,15 @@ namespace Automatics.AutomaticStorage
                          })
                          .Where(x => x.Distance <= range)
                          .Where(x => ContainerAccess.IsAllowed(x.Container, Config.AllowContainer))
-                         .Where(x => ContainerAccess.CanDirectlyMutateContainer(player, x.Container))
+                         .Where(x => ContainerAccess.CanWriteContainer(player, x.Container))
                          .OrderBy(x => x.Distance)
                          .Take(limit > 0 ? limit : int.MaxValue))
             {
+                // Routes are planned from what each container holds, so the gate loads it
+                // before the plan reads it.
+                if (!ContainerAccess.TryPrepareContainerMutation(player, container.Container))
+                    continue;
+
                 yield return new ContainerTarget
                 {
                     Index = index++,
@@ -213,8 +218,7 @@ namespace Automatics.AutomaticStorage
                 return 0;
             if (amount <= 0 || sourceRemaining <= 0) return 0;
             if (!playerInventory.GetAllItems().Contains(sourceItem)) return 0;
-            if (!ContainerAccess.CanDirectlyMutateContainer(player, target.Container)) return 0;
-            if (!ContainerAccess.TryPrepareOwnedContainerMutation(target.Container)) return 0;
+            if (!ContainerAccess.TryPrepareContainerMutation(player, target.Container)) return 0;
 
             var amountToMove = Mathf.Min(amount, sourceRemaining, sourceItem.m_stack);
             if (amountToMove <= 0) return 0;

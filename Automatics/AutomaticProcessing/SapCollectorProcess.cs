@@ -26,26 +26,27 @@ namespace Automatics.AutomaticProcessing
             var sapRemaining = sapCount;
             var containers = Logics.GetNearbyContainers(sapCollectorName, origin)
                 .Select(x => x.container).ToList();
-            // The product stack limit covers every container in range together.
-            var capacity = Logics.GetProductCapacity(containers.Select(x => x.GetInventory()),
-                sapName, sapData.m_maxStackSize, maxProductStacks);
+            var inventories = containers.Select(Logics.ReadInventory).ToList();
+            // The product stack limit covers every container in range together. It is read
+            // again after the gate, which can reload the container about to be written.
+            int Capacity() => Logics.GetProductCapacity(inventories, sapName,
+                sapData.m_maxStackSize, maxProductStacks);
             foreach (var container in containers)
             {
                 if (sapRemaining <= 0) break;
+                if (Capacity() <= 0) break;
 
                 var inventory = container.GetInventory();
-
-                var amount = Mathf.Min(capacity, sapRemaining);
-                if (amount <= 0) break;
-
-                if (Config.StoreOnlyIfProductExists(sapCollectorName) &&
-                    !Inventories.HaveItem(inventory, sapName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.AcceptsProduct(sapCollectorName, inventory, sapName)) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
+
+                var amount = Mathf.Min(Capacity(), sapRemaining);
+                if (amount <= 0) break;
+                if (!Logics.AcceptsProduct(sapCollectorName, inventory, sapName)) continue;
 
                 var storedSapCount = Logics.AddItemAndGetCountDelta(inventory,
                     sapItem.gameObject, sapName, amount);
                 if (storedSapCount <= 0) continue;
-                capacity -= storedSapCount;
 
                 Logics.StoreLog(sapName, storedSapCount, container.m_name,
                     container.transform.position, sapCollectorName, origin);

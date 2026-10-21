@@ -38,7 +38,7 @@ namespace Automatics.AutomaticProcessing
             var origin = fermenter.transform.position;
             var containersWithInventory = Logics
                 .GetNearbyContainers(fermenterName, origin)
-                .Select(x => (x.container, x.container.GetInventory())).ToList();
+                .Select(x => (x.container, Logics.ReadInventory(x.container))).ToList();
             var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
             foreach (var conversion in fermenter.m_conversion)
@@ -117,9 +117,9 @@ namespace Automatics.AutomaticProcessing
                 if (productRemaining <= 0) break;
 
                 var inventory = container.GetInventory();
-                if (Config.StoreOnlyIfProductExists(fermenterName) &&
-                    !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.AcceptsProduct(fermenterName, inventory, itemName)) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.AcceptsProduct(fermenterName, inventory, itemName)) continue;
 
                 var storedItemCount = Logics.AddItemAndGetCountDelta(inventory, item.gameObject,
                     itemName, productRemaining);

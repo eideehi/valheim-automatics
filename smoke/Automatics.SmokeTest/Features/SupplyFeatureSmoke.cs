@@ -235,6 +235,7 @@ namespace Automatics.SmokeTest
 
                 CheckBlockedChest(run, state, false);
                 CheckBlockedChest(run, state, true);
+                CheckOtherGamesChest(run, state);
             }
             finally
             {
@@ -854,6 +855,49 @@ namespace Automatics.SmokeTest
             {
                 if (warded) state.LowerWard();
                 else if (state.Chest) state.Chest.SetInUse(false);
+                SupplyContainers.Invalidate();
+                state.ClearTestItems();
+            }
+        }
+
+        // A chest another player's game owns offers no stock: Supply neither counts it nor takes
+        // from it, and does not take the chest over.
+        private static void CheckOtherGamesChest(FeatureRun run, SectionState state)
+        {
+            const string name = "supply_other_games_chest_untouched";
+            var fireplace = state.Fireplace;
+            if (!fireplace)
+            {
+                run.Skip(name, "no test fireplace to drive");
+                return;
+            }
+            if (!Objects.GetZNetView(state.Chest, out var view) || !view || !view.IsValid())
+            {
+                run.Skip(name, "the test chest has no network view");
+                return;
+            }
+
+            var shared = fireplace.m_fuelItem.m_itemData.m_shared;
+            try
+            {
+                state.ClearTestItems();
+                state.FillChest(new Dictionary<GameObject, int> { { fireplace.m_fuelItem.gameObject, 2 } });
+                // As when the server has given the chest to another player's game.
+                view.GetZDO().SetOwner(ZDOMan.GetSessionID() + 1);
+
+                SupplyContainers.Invalidate();
+                var eligible = SupplyContainers.Eligible(state.Player).Contains(state.Chest);
+                var counted = SupplyContainers.Count(state.Player, shared.m_name, -1, false);
+                var accepted = fireplace.Interact(state.Player, false, false);
+                var taken = view.IsOwner();
+                Check(run, name, !eligible && counted == 0 && !accepted && !taken &&
+                                 Count(state.ChestInventory, shared.m_name, -1) == 2 && Count(state.Inventory, shared.m_name, -1) == 0,
+                    $"eligible={eligible}, counted={counted}, accepted={accepted}, taken={taken}, chest={Count(state.ChestInventory, shared.m_name, -1)}/2, inventory={Count(state.Inventory, shared.m_name, -1)}");
+            }
+            finally
+            {
+                // Only the owner removes the chest's saved data with it.
+                if (view && view.IsValid() && !view.IsOwner()) view.ClaimOwnership();
                 SupplyContainers.Invalidate();
                 state.ClearTestItems();
             }

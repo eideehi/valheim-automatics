@@ -110,7 +110,7 @@ namespace Automatics.AutomaticProcessing
             var origin = cookingStation.transform.position;
             var containersWithInventory = Logics
                 .GetNearbyContainers(stationName, origin)
-                .Select(x => (x.container, x.container.GetInventory())).ToList();
+                .Select(x => (x.container, Logics.ReadInventory(x.container))).ToList();
             var inventories = containersWithInventory.Select(x => x.Item2).ToList();
 
             foreach (var conversion in cookingStation.m_conversion)
@@ -231,9 +231,9 @@ namespace Automatics.AutomaticProcessing
             foreach (var (container, _) in Logics.GetNearbyContainers(stationName, origin))
             {
                 var inventory = container.GetInventory();
-                if (Config.StoreOnlyIfProductExists(stationName) &&
-                    !Inventories.HaveItem(inventory, itemName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.AcceptsProduct(stationName, inventory, itemName)) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
+                if (!Logics.AcceptsProduct(stationName, inventory, itemName)) continue;
                 var storedItemCount =
                     Logics.AddItemAndGetCountDelta(inventory, item.gameObject, itemName, 1);
                 if (storedItemCount <= 0) continue;

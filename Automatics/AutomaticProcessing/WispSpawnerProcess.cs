@@ -30,23 +30,24 @@ namespace Automatics.AutomaticProcessing
             var origin = wispSpawner.transform.position;
             var containers = Logics.GetNearbyContainers(wispSpawnerName, origin)
                 .Select(x => x.container).ToList();
-            // The product stack limit covers every container in range together.
-            var capacity = Logics.GetProductCapacity(containers.Select(x => x.GetInventory()),
-                wispName, wispData.m_maxStackSize, maxProductStacks);
+            var inventories = containers.Select(Logics.ReadInventory).ToList();
+            // The product stack limit covers every container in range together. It is read
+            // again after the gate, which can reload the container about to be written.
+            int Capacity() => Logics.GetProductCapacity(inventories, wispName,
+                wispData.m_maxStackSize, maxProductStacks);
             foreach (var container in containers)
             {
+                if (Capacity() <= 0) break;
+
                 var inventory = container.GetInventory();
-
-                var amount = Mathf.Min(capacity, 1);
-                if (amount <= 0) break;
-
-                if (Config.StoreOnlyIfProductExists(wispSpawnerName) &&
-                    !Inventories.HaveItem(inventory, wispName, 0, WorldLevelMatchMode.Ignore, 1)) continue;
+                if (!Logics.AcceptsProduct(wispSpawnerName, inventory, wispName)) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
+
+                if (Capacity() <= 0) break;
+                if (!Logics.AcceptsProduct(wispSpawnerName, inventory, wispName)) continue;
                 var storedItemCount =
                     Logics.AddItemAndGetCountDelta(inventory, wispItem.gameObject, wispName, 1);
                 if (storedItemCount <= 0) continue;
-                capacity -= storedItemCount;
 
                 zNetView.GetZDO().Set("LastSpawn", ZNet.instance.GetTime().Ticks);
                 Logics.StoreLog(wispName, storedItemCount, container.m_name,

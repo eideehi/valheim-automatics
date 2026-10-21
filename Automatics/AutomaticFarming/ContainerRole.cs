@@ -30,8 +30,8 @@ namespace Automatics.AutomaticFarming
     /// the container's ZDO under a stable custom key, so it persists with the save
     /// and replicates to peers the same way Automatic Processing stores its custom
     /// per-object state. Reads work for any loaded container (replicated ZDO);
-    /// writes are owner-side and gated by the same access rules as any container
-    /// mutation, claiming ownership only on explicit designation.
+    /// writes are owner-side and pass the same gate as any container mutation,
+    /// on explicit designation only.
     /// </summary>
     internal static class ContainerRoles
     {
@@ -62,8 +62,9 @@ namespace Automatics.AutomaticFarming
         /// <see cref="ContainerRole.None"/>) and persists it, returning the new role
         /// in <paramref name="role"/>. Returns
         /// false without writing when <paramref name="player"/> cannot access the
-        /// container (ward/in-use) or ownership cannot be claimed, so a chest a peer
-        /// or a dedicated server holds is never silently modified.
+        /// container (ward/in-use) or the local game may not write it (another
+        /// game owns it), so a chest a peer or a dedicated server holds is never
+        /// silently modified.
         /// </summary>
         public static bool TryCycleRole(Player player, Container container, out ContainerRole role)
         {
@@ -71,10 +72,9 @@ namespace Automatics.AutomaticFarming
             if (player == null || container == null) return false;
 
             // Same gate used before any container mutation: usable (not in use by a
-            // peer) and within build access. Claiming ownership for the write is
-            // only acceptable once the player has proven access here.
-            if (!ContainerAccess.CanUseContainer(player, container)) return false;
-            if (!ContainerAccess.TryClaimContainer(container)) return false;
+            // peer), within build access, and owned by this game or, on the server,
+            // owned by nobody and claimed now.
+            if (!ContainerAccess.TryPrepareContainerMutation(player, container)) return false;
             if (!Objects.GetZNetView(container, out var nview)) return false;
             if (nview == null || !nview.IsValid() || nview.GetZDO() == null) return false;
             if (!nview.IsOwner()) return false;

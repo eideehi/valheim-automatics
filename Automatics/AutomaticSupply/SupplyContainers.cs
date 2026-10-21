@@ -7,9 +7,10 @@ namespace Automatics.AutomaticSupply
 {
     /// <summary>
     ///     The containers Automatic Supply may use and what they hold. A container counts when it is
-    ///     within <see cref="Config.SupplyRange" /> of the player and passes the player-aware access
-    ///     check: no ward the player lacks access to, not private or group-restricted, not in use,
-    ///     not on a wagon in use. Graves are left alone.
+    ///     within <see cref="Config.SupplyRange" /> of the player, passes the player-aware access
+    ///     check (no ward the player lacks access to, not private or group-restricted, not in use,
+    ///     not on a wagon in use) and is one the local game may write: in multiplayer, a container
+    ///     another player's game owns is neither counted nor taken from. Graves are left alone.
     /// </summary>
     internal static class SupplyContainers
     {
@@ -37,7 +38,7 @@ namespace Automatics.AutomaticSupply
                 .Where(x => x)
                 .Select(x => new { Container = x, Distance = Vector3.Distance(origin, x.transform.position) })
                 .Where(x => x.Distance <= range)
-                .Where(x => ContainerAccess.CanUseContainer(player, x.Container))
+                .Where(x => ContainerAccess.CanWriteContainer(player, x.Container))
                 .OrderBy(x => x.Distance)
                 .Select(x => x.Container)
                 .ToList();
@@ -89,6 +90,9 @@ namespace Automatics.AutomaticSupply
             var hash = 0;
             foreach (var container in Eligible(player))
             {
+                // The stock offered is what the container holds now, not a copy older than its
+                // saved contents.
+                ContainerAccess.LoadSavedContents(container);
                 var inventory = container.GetInventory();
                 if (inventory == null) continue;
                 foreach (var item in inventory.GetAllItems())

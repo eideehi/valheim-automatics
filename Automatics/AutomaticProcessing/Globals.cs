@@ -76,12 +76,16 @@ namespace Automatics.AutomaticProcessing
         }
 
         // Container.OnContainerChanged only saves to the ZDO when the local
-        // peer owns the ZNetView, so claim ownership immediately before mutating.
+        // peer owns the ZNetView, so a container is written only through the
+        // container gate, immediately before the write: it claims a container
+        // only where the rules allow it (the server, nobody owning it), skips
+        // one another game owns, and loads the saved contents, which replaces
+        // every item in the inventory; callers read the inventory after it.
         // Processing runs owner-side, which includes dedicated servers where
-        // there is no local player, so the mutation gate is server-aware: with a
-        // local player it enforces the full player access rules (ward,
-        // private/group, in-use, wagon), and without one it falls back to the
-        // owner-only claim path so server-side processing keeps working.
+        // there is no local player, so the gate is server-aware: with a local
+        // player it enforces the full player access rules (ward, private/group,
+        // in-use, wagon); without one only the server writes, idle containers,
+        // and in multiplayer only public ones.
         public static bool TryClaimContainer(Container container)
         {
             return ContainerAccess.TryPrepareContainerMutationServerAware(
@@ -166,11 +170,10 @@ namespace Automatics.AutomaticProcessing
         /// <see cref="TryClaimContainer" /> is called, so a container holding no eligible
         /// item is skipped without being claimed. That is the whole guarantee: claiming
         /// takes ZDO ownership (ZNetView.ClaimOwnership -> ZDO.SetOwner plus an
-        /// owner-revision bump) and nothing here can hand ownership back, while
-        /// ContainerAccess claims before its post-claim access checks and a removal can
-        /// still fail after a successful probe. Ownership can therefore change on a
-        /// container this ends up not taking from; that matches the pre-existing behaviour
-        /// and is not something the caller can undo.
+        /// owner-revision bump) and nothing here can hand ownership back, while the gate
+        /// reloads the container after the probe and a removal can still fail then.
+        /// Ownership can therefore change on a container this ends up not taking from; the
+        /// gate claims only a container nobody owns, and only on the server.
         /// </remarks>
         public static bool TryTakeMaterial(IEnumerable<Container> candidates, string itemName,
             int minCount, string requiredPrefabName, out Container source, out string prefabName,
@@ -192,7 +195,8 @@ namespace Automatics.AutomaticProcessing
                 if (!TryClaimContainer(container)) continue;
                 // Removal goes back through the filtered by-name path on purpose: the
                 // drop-prefab guard that keeps a would-be-rejected item from being destroyed
-                // stays on the removal itself, not only on the pre-claim probe.
+                // stays on the removal itself, not only on the pre-claim probe, and the
+                // removal reads the contents the gate just loaded.
                 if (!TryRemoveItem(inventory, itemName, minCount, out prefabName, out cheated,
                         requiredPrefabName))
                     continue;
@@ -232,6 +236,23 @@ namespace Automatics.AutomaticProcessing
             var itemCountBefore = inventory.CountItems(itemName);
             inventory.AddItem(prefab, amount);
             return Mathf.Max(0, inventory.CountItems(itemName) - itemCountBefore);
+        }
+
+        // Store Only If Product Exists: a container takes a product only when it already
+        // holds some. Checked before the gate, and again after it on the loaded contents.
+        public static bool AcceptsProduct(string target, Inventory inventory, string productName)
+        {
+            return !Config.StoreOnlyIfProductExists(target) ||
+                   Inventories.HaveItem(inventory, productName, 0, WorldLevelMatchMode.Ignore, 1);
+        }
+
+        // The inventory of a container counted toward the product stack limit, its saved contents
+        // loaded first so the total is what every container holds now. Loading needs no
+        // ownership, so containers another game owns still count.
+        public static Inventory ReadInventory(Container container)
+        {
+            ContainerAccess.LoadSavedContents(container);
+            return container.GetInventory();
         }
 
         // The product stack limit counts the product in every container a station uses, plus
@@ -283,7 +304,7 @@ namespace Automatics.AutomaticProcessing
                     let distance = Vector3.Distance(origin, x.transform.position)
                     where distance <= range &&
                           IsAllowContainer(x) &&
-                          (player == null || ContainerAccess.CanUseContainer(player, x))
+                          ContainerAccess.CanUseContainerServerAware(player, x)
                     orderby distance
                     select (x, distance)).Take(limit > 0 ? limit : int.MaxValue));
 

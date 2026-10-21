@@ -147,9 +147,12 @@ in-game console while a single-player world is loaded. It spawns real objects
 Automatics entry points for Storage, Door, Pickup, and Processing, then asserts
 the observable result of each. Each check spawns in a spot of its own: the
 storage chest 1.5 m ahead, the door 2 m to your left, the item drop 1.5 m to your
-right, and the smelter 3.5 m ahead with its chest 1.5 m to the right of it. Each
-check also starts in a frame of its own, so the objects the previous check removed
-are gone by then.
+right, the smelter 3.5 m ahead with its chest 1.5 m to the right of it, for the
+two container checks a smelter 3.5 m behind you (the second one also 3.5 m to
+your left), each with its chest 1.5 m to the right of it, and for the charging
+check the piece that takes ammunition 3.5 m ahead and 3.5 m to your left, with
+its chest 1.5 m to the right of it. Each check also starts in a frame of its
+own, so the objects the previous check removed are gone by then.
 
 - `world_storage_store_moves_items` — opt-in: it runs only as
   `automatics_smoke_world storage`, and a plain `automatics_smoke_world` SKIPs it
@@ -189,17 +192,49 @@ are gone by then.
   where. A wait during which the game was paused SKIPs as inconclusive.
 - `world_processing_smelter_refuel` — `SmelterProcess.QuickRefuel` raises the
   smelter's ZDO `fuel` by one and consumes fuel from a nearby chest.
+- `world_container_store_after_spawn_keeps_stored_items` — a chest whose saved
+  data holds items its inventory has not loaded yet, as when it has just spawned
+  with stored items, keeps them when a module writes it. The check writes three
+  of the smelter's product into the spawned chest's saved data (`ZDO` `items`)
+  without loading them, then `SmelterProcess.Store` stores one more: the chest's
+  inventory and its saved data must both hold four. It SKIPs when
+  `store_only_if_product_exists` is on for the smelter.
+- `world_container_store_after_close_keeps_saved_changes` — a chest another
+  game owns is left to it, and a chest that comes back keeps that game's changes.
+  The check seeds the spawned chest with two of the smelter's product, then plays
+  another player's game: it becomes the chest's owner (a made-up session id),
+  marks it in use, writes five into its saved data without loading them, and
+  clears the in-use mark again. `SmelterProcess.Store` must store nothing while
+  the chest is open there and nothing after it is closed there, and must not take
+  the chest. Then the chest is this game's again (`ClaimOwnership`, as the
+  server's reassignment would leave it), and a store in the same frame must leave
+  six in both the inventory and the saved data, not this game's older copy plus
+  one. However the check ends, the chest is this game's again before it is
+  removed, because only the owner removes its saved data with it.
+- `world_processing_charge_takes_accepted_ammunition` — automatic charging takes
+  only ammunition the piece accepts and keeps each kind's reserve
+  (`number_of_items_to_stop_charge`). It spawns the first piece that charges with
+  three kinds of ammunition of its own ammunition type and takes one kind off
+  that spawned piece's accepted list, so the chest can hold an item of the right
+  type that the piece refuses. The chest holds, in this order, the refused kind
+  (reserve + 2), an accepted kind at its reserve, and another accepted kind at
+  reserve + 2; one `TurretProcess.Charge` call must leave the piece holding one
+  of the last kind, and the chest with the refused kind and the kind at its
+  reserve untouched. It SKIPs when no such piece exists, when the reserve is 0 or
+  when charging is not allowed for the piece. The log names none of the items.
 
 Run it away from your own containers. The storage check SKIPs when any other
-container is within `storage_search_range`, and the refuel check SKIPs when any
-other container is within the smelter's container search range (both 8 m by
-default). Otherwise the storage check would move your items into your own
-chests, and the refuel check could burn your fuel and fail for a reason that is
-not a regression.
+container is within `storage_search_range`, and the refuel and container checks
+SKIP when any other container is within the smelter's container search range,
+and the charging check when any is within the piece's (all 8 m by default).
+Otherwise the storage check would move your items into your own chests, the
+refuel check could burn your fuel and fail for a reason that is not a
+regression, the container checks would store the product in your chests, and
+the charging check could take your ammunition.
 
 The command runs as a coroutine on the smoke plugin and prints its results about
 a second after it is typed. Each check logs a `PASS`/`FAIL`/`SKIP` line plus a
-`[Automatics Smoke] Summary: total=5 ...` line to both the BepInEx log and the
+`[Automatics Smoke] Summary: total=8 ...` line to both the BepInEx log and the
 in-game console (out of scope: Farming, Feeding, Mining). A `PASS` line can carry
 a note, for example when a test item had to be left in the inventory. Checks SKIP
 (never FAIL) when run at the main menu, when a module is disabled, when a
@@ -1494,6 +1529,7 @@ them. A check whose station or material cannot be found SKIPs and says why.
 | `supply_cooking_intake` | With the test fire lit, the cooking station takes one accepted item from the chest into a free slot (SKIP when the fire does not light the station within 240 frames) |
 | `supply_in_use_chest_untouched` | With the chest marked in use, the fireplace takes nothing from it |
 | `supply_warded_chest_untouched` | Inside a switched-on ward no player has access to, the fireplace takes nothing from the chest |
+| `supply_other_games_chest_untouched` | With the chest owned by another player's game (a made-up session id), Supply does not list or count it, the fireplace takes nothing from it, and the chest stays that game's; it is this game's again afterwards |
 | `supply_settings_restored` | Every setting the section changed is back at your value |
 
 The crafting checks run in one frame, because the player drops a station it is
