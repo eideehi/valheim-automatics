@@ -15,7 +15,22 @@ namespace Automatics.AutomaticFeeding
         // item. The guarded bind falls back to reflection if Valheim renames it.
         private static readonly Func<MonsterAI, ItemDrop.ItemData, bool> ConsumeCheck;
 
+        // The BaseAI calls made while searching for food and walking to it, bound the same way.
+        private static readonly Func<BaseAI, Vector3, bool> PathCheck;
+        private static readonly Func<BaseAI, float, Vector3, float, bool, bool> MoveToInvoker;
+        private static readonly Action<BaseAI, Vector3> LookAtInvoker;
+        private static readonly Func<BaseAI, Vector3, float, bool, bool> LookingAtCheck;
+
+        // List.Sort is not stable, so the buffer index breaks ties between equally near boxes.
+        private static readonly Comparison<FeedBoxCandidate> NearestFirst = (a, b) =>
+        {
+            var byDistance = a.Distance.CompareTo(b.Distance);
+            return byDistance != 0 ? byDistance : a.Index.CompareTo(b.Index);
+        };
+
         private readonly List<Container> _feedBoxBuffer = new List<Container>();
+        private readonly List<FeedBoxCandidate> _writableCandidates = new List<FeedBoxCandidate>();
+        private readonly List<FeedBoxCandidate> _askableCandidates = new List<FeedBoxCandidate>();
         private Tameable _tamable;
         private Character _character;
         private MonsterAI _monsterAI;
@@ -30,6 +45,33 @@ namespace Automatics.AutomaticFeeding
         static AutomaticFeeding()
         {
             ConsumeCheck = BindConsumeCheck();
+            PathCheck = BindBaseAIMethod<Func<BaseAI, Vector3, bool>>("HavePath",
+                new[] { typeof(Vector3) });
+            MoveToInvoker = BindBaseAIMethod<Func<BaseAI, float, Vector3, float, bool, bool>>(
+                "MoveTo", new[] { typeof(float), typeof(Vector3), typeof(float), typeof(bool) });
+            LookAtInvoker = BindBaseAIMethod<Action<BaseAI, Vector3>>("LookAt",
+                new[] { typeof(Vector3) });
+            LookingAtCheck = BindBaseAIMethod<Func<BaseAI, Vector3, float, bool, bool>>(
+                "IsLookingAt", new[] { typeof(Vector3), typeof(float), typeof(bool) });
+        }
+
+        private static TDelegate BindBaseAIMethod<TDelegate>(string name, Type[] parameters)
+            where TDelegate : Delegate
+        {
+            try
+            {
+                var method = AccessTools.Method(typeof(BaseAI), name, parameters);
+                if (method != null) return AccessTools.MethodDelegate<TDelegate>(method);
+                Automatics.Logger.Warning(() =>
+                    $"BaseAI.{name} not found; falling back to reflection.");
+            }
+            catch (Exception e)
+            {
+                Automatics.Logger.Warning(() =>
+                    $"Failed to bind BaseAI.{name} delegate; falling back to reflection: {e.Message}");
+            }
+
+            return null;
         }
 
         private static Func<MonsterAI, ItemDrop.ItemData, bool> BindConsumeCheck()
@@ -277,10 +319,14 @@ namespace Automatics.AutomaticFeeding
         {
             var needGetClose = Config.NeedGetCloseToEatTheFeed;
             var origin = _baseAI.transform.position;
-            var closest = float.MaxValue;
-            Container askable = null;
-            var askDistance = float.MaxValue;
 
+            _writableCandidates.Clear();
+            _askableCandidates.Clear();
+
+            // The cheap checks come first. The path query runs last, and only for the nearest
+            // candidates that can still be chosen. Without it the nearest writable box found so
+            // far is the choice, so a box at or beyond it is skipped before its inventory is read.
+            var closest = float.MaxValue;
             ContainerCache.Fill(_feedBoxBuffer);
             for (var i = 0; i < _feedBoxBuffer.Count; i++)
             {
@@ -292,7 +338,6 @@ namespace Automatics.AutomaticFeeding
 
                 if (distance > range || distance >= closest) continue;
                 if (ContainerAccess.IsGrave(container)) continue;
-                if (needGetClose && !HavePath(position)) continue;
 
                 var inventory = container.GetInventory();
                 if (inventory == null) continue;
@@ -303,24 +348,55 @@ namespace Automatics.AutomaticFeeding
                 // Only a box this game may write: a nearer one another game owns
                 // would be chosen on every search and never give food.
                 var step = ContainerAccess.GetWriteStep(Player.m_localPlayer, container);
-                if (!ContainerAccess.IsWritable(step))
+                if (ContainerAccess.IsWritable(step))
                 {
-                    if (step == ContainerWriteStep.Request && distance < askDistance)
-                    {
-                        askable = container;
-                        askDistance = distance;
-                    }
-
-                    continue;
+                    _writableCandidates.Add(new FeedBoxCandidate(container, item, distance, i));
+                    if (!needGetClose) closest = distance;
                 }
-
-                closest = distance;
-                _closestFeedBox = container;
-                _consumeTargetItem = item;
+                else if (step == ContainerWriteStep.Request)
+                {
+                    _askableCandidates.Add(new FeedBoxCandidate(container, item, distance, i));
+                }
             }
 
+            if (TakeNearestReachable(_writableCandidates, needGetClose, out var feedBox,
+                    out var consumable))
+            {
+                _closestFeedBox = feedBox;
+                _consumeTargetItem = consumable;
+            }
             // With no box this game may write, ask for the nearest one another game owns.
-            if (!_closestFeedBox) ContainerAccess.AskFor(askable);
+            else if (TakeNearestReachable(_askableCandidates, needGetClose, out var askable, out _))
+            {
+                ContainerAccess.AskFor(askable);
+            }
+
+            _writableCandidates.Clear();
+            _askableCandidates.Clear();
+        }
+
+        // Takes the nearest candidate (the first in the container buffer among equally near
+        // ones) that the animal can walk to, or the nearest one when it need not walk. The
+        // candidates are ordered once and a candidate with no path is passed over, so the path
+        // query stops at the first reachable one.
+        private bool TakeNearestReachable(List<FeedBoxCandidate> candidates, bool needGetClose,
+            out Container container, out ItemDrop.ItemData item)
+        {
+            candidates.Sort(NearestFirst);
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                var candidate = candidates[i];
+                if (needGetClose && !HavePath(candidate.Container.transform.position))
+                    continue;
+
+                container = candidate.Container;
+                item = candidate.Item;
+                return true;
+            }
+
+            container = null;
+            item = null;
+            return false;
         }
 
         private void FindFeeder(float searchRange)
@@ -337,10 +413,10 @@ namespace Automatics.AutomaticFeeding
             var position = localPlayer.transform.position;
             var distance = Vector3.Distance(position, origin);
             if (distance > searchRange) return;
-            if (needGetClose && !HavePath(position)) return;
 
             var item = FindConsumable(localPlayer.GetInventory());
             if (item == null) return;
+            if (needGetClose && !HavePath(position)) return;
 
             _closestFeeder = localPlayer;
             _consumeTargetItem = item;
@@ -367,27 +443,53 @@ namespace Automatics.AutomaticFeeding
 
         private bool HavePath(Vector3 target)
         {
-            return Reflections.InvokeMethod<bool>(_baseAI, "HavePath", target);
+            return PathCheck != null
+                ? PathCheck(_baseAI, target)
+                : Reflections.InvokeMethod<bool>(_baseAI, "HavePath", target);
         }
 
         private bool MoveTo(float dt, Vector3 point, float dist, bool run)
         {
-            return Reflections.InvokeMethod<bool>(_baseAI, "MoveTo", dt, point, dist, run);
+            return MoveToInvoker != null
+                ? MoveToInvoker(_baseAI, dt, point, dist, run)
+                : Reflections.InvokeMethod<bool>(_baseAI, "MoveTo", dt, point, dist, run);
         }
 
         private void LookAt(Vector3 point)
         {
-            Reflections.InvokeMethod(_baseAI, "LookAt", point);
+            if (LookAtInvoker != null)
+                LookAtInvoker(_baseAI, point);
+            else
+                Reflections.InvokeMethod(_baseAI, "LookAt", point);
         }
 
         private bool IsLookingAt(Vector3 point, float minAngle)
         {
-            // BaseAI.IsLookingAt(Vector3 point, float minAngle, bool inverted = false): Traverse
-            // resolves the method from the runtime types of the arguments passed, and a defaulted
-            // parameter is never filled in for us, so the arity must match or resolution fails and
-            // the call throws. false is the vanilla default.
-            return Reflections.InvokeMethod<bool>(_baseAI, "IsLookingAt", point, minAngle,
-                false);
+            // BaseAI.IsLookingAt(Vector3 point, float minAngle, bool inverted = false): the
+            // delegate and Traverse both need the full arity, because a defaulted parameter is
+            // never filled in for us (Traverse resolves the method from the runtime types of the
+            // arguments passed, so a missing one makes the call throw). false is the vanilla
+            // default.
+            return LookingAtCheck != null
+                ? LookingAtCheck(_baseAI, point, minAngle, false)
+                : Reflections.InvokeMethod<bool>(_baseAI, "IsLookingAt", point, minAngle, false);
+        }
+
+        private readonly struct FeedBoxCandidate
+        {
+            public readonly Container Container;
+            public readonly ItemDrop.ItemData Item;
+            public readonly float Distance;
+            public readonly int Index;
+
+            public FeedBoxCandidate(Container container, ItemDrop.ItemData item, float distance,
+                int index)
+            {
+                Container = container;
+                Item = item;
+                Distance = distance;
+                Index = index;
+            }
         }
     }
 }
