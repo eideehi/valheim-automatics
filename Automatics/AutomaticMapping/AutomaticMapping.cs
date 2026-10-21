@@ -38,12 +38,13 @@ namespace Automatics.AutomaticMapping
             if (removed) Map.RefreshPins();
         }
 
+        // Whether the area around the player has loaded is not asked here: the scans ask it only
+        // when one is due, after their own cadence gates.
         private static bool CanRun(Player player)
         {
             return !Game.IsPaused() &&
                    player == Player.m_localPlayer &&
-                   player.IsOwner() &&
-                   ZNetScene.instance.IsAreaReady(player.transform.position);
+                   player.IsOwner();
         }
 
         public static void Cleanup()
@@ -85,6 +86,10 @@ namespace Automatics.AutomaticMapping
             else if (_dynamicScanAccumulator > DynamicScanInterval)
                 _dynamicScanAccumulator = DynamicScanInterval;
 
+            // No scan runs while the area around the player is still loading. The due scan is
+            // skipped, not postponed, so while the area loads readiness is asked once per interval.
+            if (!ZNetScene.instance.IsAreaReady(player.transform.position)) return;
+
             DynamicObjectMapping.Mapping(delta);
             Map.RefreshPins();
         }
@@ -99,6 +104,7 @@ namespace Automatics.AutomaticMapping
                 return;
             }
 
+            // The static pass asks about area readiness itself, once its interval or key lets it run.
             StaticObjectMapping.Mapping(delta, takeInput);
         }
 

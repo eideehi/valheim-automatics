@@ -89,6 +89,7 @@ namespace Automatics.SmokeTest
                 CheckMiss(run, player, created);
                 CheckSavedPinRecognition(run, player, map, created);
                 CheckUncachedAutomaticPin(run, player, map, created);
+                CheckLoadingAreaKeepsPin(run, player, map, created);
             }
             finally
             {
@@ -1063,6 +1064,166 @@ namespace Automatics.SmokeTest
             {
                 FeaturesSmokeCommand.RemoveTestDrop(drop, "pin feature smoke");
             }
+        }
+
+        // The static scan leaves an object whose area is still loading to a later pass, and the
+        // pin the object already has must survive that pass: pruning it would take it off the map
+        // while the area loads. A copper deposit is spawned just across the zone border nearest to
+        // the player, inside the static range, and a static pass that starts with a fresh scan of
+        // the area pins it. A second pass then runs while the game reports that zone, and only
+        // that zone, as still loading. Both passes go through the entry point the minimap update
+        // calls.
+        private static void CheckLoadingAreaKeepsPin(FeatureRun run, Player player, Minimap map,
+            List<Minimap.PinData> created)
+        {
+            const string check = "pin_static_loading_area_kept";
+            var interval = MappingConfig.StaticObjectMappingInterval;
+            var range = MappingConfig.StaticObjectMappingRange;
+            if (!MappingConfig.EnableAutomaticMapping || interval <= 0f || range <= 0)
+            {
+                run.Skip(check, "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, so no periodic static pass runs");
+                return;
+            }
+            if (!MappingConfig.AllowPinningMineral.Contains("CopperDeposit"))
+            {
+                run.Skip(check, "copper deposits are not in allow_pinning_mineral");
+                return;
+            }
+            if (!ModuleRegistry.RuntimeToggleSupported)
+            {
+                run.Skip(check, "this Harmony build cannot remove patches at runtime, so the zone readiness patch is not added");
+                return;
+            }
+            var cacheIncomplete = AccessTools.Field(typeof(StaticObjectMapping), "_cacheIncomplete");
+            var lastScan = AccessTools.Field(typeof(StaticObjectMapping), "_lastCacheUpdateTime");
+            var passId = AccessTools.Field(typeof(StaticObjectMapping), "_currentPassId");
+            if ((bool)cacheIncomplete.GetValue(null))
+            {
+                run.Skip(check, "the static scan here is incomplete, so it prunes no pin; move away from dense builds and retry");
+                return;
+            }
+
+            // 2 m past the zone border nearest to the player, on the ground.
+            var origin = player.transform.position;
+            var zone = ZoneSystem.GetZone(origin);
+            var center = ZoneSystem.GetZonePos(zone);
+            const float half = ZoneSystem.c_ZoneSizeHalf;
+            var toBorder = new[]
+            {
+                new Vector3(center.x + half - origin.x, 0f, 0f), new Vector3(center.x - half - origin.x, 0f, 0f),
+                new Vector3(0f, 0f, center.z + half - origin.z), new Vector3(0f, 0f, center.z - half - origin.z)
+            }.OrderBy(x => x.magnitude).First();
+            var spot = origin + toBorder + toBorder.normalized * 2f;
+            spot.y = ZoneSystem.instance.GetGroundHeight(spot);
+            var loadingZone = ZoneSystem.GetZone(spot);
+            if (loadingZone == zone || Vector3.Distance(origin, spot) > range - 1f)
+            {
+                run.Skip(check, $"no point across a zone border is within static_object_mapping_range ({range} m); move a few metres and retry");
+                return;
+            }
+            if (Map.GetClosestPin(spot, 8f, includeInactive: true) != null)
+            {
+                run.Skip(check, "a pin is within 8 m of the test spot across the nearest zone border; move and retry");
+                return;
+            }
+
+            var go = SpawnTestObject(new[] { "rock4_copper" }, spot, Quaternion.identity, out var skip,
+                prefab => prefab.GetComponent<MineRock5>());
+            Minimap.PinData pin = null;
+            try
+            {
+                if (!go)
+                {
+                    run.Skip(check, skip);
+                    return;
+                }
+                Physics.SyncTransforms();
+                var deposit = go.GetComponent<MineRock5>();
+                if (!Objects.GetZdoid(deposit, out var id) ||
+                    ZoneSystem.GetZone(deposit.transform.position) != loadingZone)
+                {
+                    run.Skip(check, "the spawned deposit has no ZDO or did not land across the zone border");
+                    return;
+                }
+                var identify = new StaticObjectMapping.MapPinIdentify(id);
+
+                // A cleared scan time makes the first pass scan the area again, as a classifier change does.
+                lastScan.SetValue(null, 0f);
+                var before = (int)passId.GetValue(null);
+                global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player, interval, false);
+                if ((int)passId.GetValue(null) == before)
+                {
+                    run.Skip(check, "the first static pass did not run (the game is paused or the area around you is still loading); retry");
+                    return;
+                }
+                if (!StaticObjectMapping.TryGetCachedPin(identify, out pin))
+                {
+                    run.Skip(check, "the first static pass added no pin for the deposit; the mineral category or unexplored automatic pins may be hidden, or your simulation distance does not reach the zones around it");
+                    return;
+                }
+                created.Add(pin);
+
+                _loadingZone = loadingZone;
+                _loadingQueries = 0;
+                var patcher = new Harmony("automatics.smoke.pin.loading." + run.RunId);
+                var removal = "";
+                int after;
+                try
+                {
+                    patcher.Patch(AccessTools.Method(typeof(ZNetScene), nameof(ZNetScene.IsAreaReady)),
+                        prefix: new HarmonyMethod(typeof(PinFeatureSmoke), nameof(ReportZoneLoading)));
+                    before = (int)passId.GetValue(null);
+                    _loadingActive = true;
+                    global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player, interval, false);
+                    _loadingActive = false;
+                    after = (int)passId.GetValue(null);
+                }
+                finally
+                {
+                    // Off before the removal, so a patch that stays answers as the game does.
+                    _loadingActive = false;
+                    try
+                    {
+                        patcher.UnpatchSelf();
+                        if (Harmony.HasAnyPatches(patcher.Id))
+                            removal = "; the test patch of ZNetScene.IsAreaReady could not be removed and stays inactive until restart";
+                    }
+                    catch (Exception e)
+                    {
+                        removal = "; removing the test patch of ZNetScene.IsAreaReady failed and it stays inactive until restart: " + e.Message;
+                    }
+                }
+
+                var kept = Map.GetAllPins().Contains(pin) &&
+                           StaticObjectMapping.TryGetCachedPin(identify, out var cached) && ReferenceEquals(cached, pin);
+                if (after == before)
+                    run.Skip(check, "the second static pass did not run (the game is paused or the area around you is still loading); retry" + removal);
+                else if (_loadingQueries == 0)
+                    run.Fail(check, "the static pass did not ask whether the deposit's zone had loaded" + removal);
+                else if (kept)
+                    run.Pass(check, "the deposit's pin stayed on the map and in the static cache through a pass that left its loading zone for later" + removal);
+                else
+                    run.Fail(check, "a static pass that left the deposit's loading zone for later removed the deposit's pin" + removal);
+            }
+            finally
+            {
+                if (pin != null && map) map.RemovePin(pin);
+                RemoveTestObject(go);
+            }
+        }
+
+        private static Vector2s _loadingZone;
+        private static int _loadingQueries;
+        private static bool _loadingActive;
+
+        // Reports the test zone as still loading during the check's second pass only. Every other
+        // call, including any after the check if the patch could not be removed, goes to the game.
+        private static bool ReportZoneLoading(Vector3 point, ref bool __result)
+        {
+            if (!_loadingActive || ZoneSystem.GetZone(point) != _loadingZone) return true;
+            _loadingQueries++;
+            __result = false;
+            return false;
         }
 
         private static bool FirstHit(Player player, Ray ray, out RaycastHit hit)

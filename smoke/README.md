@@ -1084,6 +1084,7 @@ the console is open.
 | `pin_saved_manual_not_recognized` | The same kind of pin without an author, as a pin you placed or saved by clicking is stored, is not recognized as automatic |
 | `pin_shared_not_recognized` | The same kind of pin with your author but an owner, as a shared pin is stored, is not recognized as automatic |
 | `pin_saved_automatic_uncached_duplicate` | A ray to a spawned non-persistent Stone drop that has a recognized saved automatic pin at its position, under its stored name, and no static cache entry adds nothing: the action reports the duplicate, and the object's pin lookup (which the navigation key shares) returns that saved pin |
+| `pin_static_loading_area_kept` | A non-persistent copper deposit spawned 2 m past the zone border nearest to you, within `static_object_mapping_range`, gets its pin from a static pass that starts with a fresh scan of the area. A second static pass, run while the game reports that zone, and only that zone, as still loading, asks whether the zone has loaded and keeps the deposit's pin on the map and in the static cache (SKIP when `enable_automatic_mapping` is off, the static interval or range is 0, copper deposits are not in `allow_pinning_mineral`, this Harmony build cannot remove patches at runtime, no point across a zone border is in range, a pin is within 8 m of the spot, the static scan is incomplete there, a pass does not run, or the first pass adds no pin, for example because the mineral category or unexplored automatic pins are hidden, or your simulation distance does not reach the zones around the deposit) |
 | `pin_cleanup` | Every pin created by the section has been removed |
 
 Location checks read loaded locations without modifying them and remove only their own pins and objects. They SKIP with a reason when no suitable location ray without an existing manual pin is available; stand near a dungeon entrance or tar pit and retry. No location prefab is spawned because its initialization can generate terrain or entities. Vanilla `Piece.SetCreator` writes only while the creator is 0, so the creator-0 piece is its own spawn and never gets a creator. Test pieces, trees, deposits and creatures are non-persistent, placed only where the camera ray's first hit is the object at a point that exactly one loaded location area contains (strictly inside, as `Location.IsInside` tests), and deactivated and removed before the next check; the `pin_piece_name` piece gets its position back. Checks SKIP with a reason when no such spot, unobstructed ray or duplicate-free position is available, and `pin_location_ground` SKIPs when every terrain point it finds lies inside more than one area. The action gives world-generated pieces, terrain and unnamed hits the nearest containing loaded location; when that location is unrecognized, the usual object or ground pin applies. Player-built pieces, creatures, deposits, trees, loose items and non-piece networked parts of a location such as destructibles or interactables keep their own pins; the game spawns those parts as scene roots, not under the location.
@@ -1094,7 +1095,14 @@ open area and retry. Pin creation and removal finish in the same frame, before
 another map save or player input. Only pins added by the section's calls are
 removed; existing pins are untouched. The saved-pin checks add their pins one at
 a time through `Minimap.AddPin` next to you; they never load, replace or clear
-the map data. The test drops and the test piece use the
+the map data. `pin_static_loading_area_kept` runs two static passes itself
+through the entry point the minimap update calls, so they also map the real
+objects around you as any pass does. It reports its one test zone as still loading
+through a temporary patch of `ZNetScene.IsAreaReady` that acts only during the
+second pass and is removed right after it; it SKIPs when this Harmony build cannot
+remove patches at runtime. If the removal fails, the check's detail says so, and
+the patch, left inactive, answers as the game does until restart. The check removes
+its deposit and the deposit's pin before the next check. The test drops, the test piece and the deposit use the
 shared session cleanup, and the drops never enter the inventory. Cleanup failures stay registered with
 the session for retry. Physical hotkey input, save/reload persistence, and a
 module off/on with the saved pin remain in-game verification steps outside this

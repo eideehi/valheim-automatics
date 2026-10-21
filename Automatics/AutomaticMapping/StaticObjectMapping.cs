@@ -35,6 +35,11 @@ namespace Automatics.AutomaticMapping
         private static readonly HashSet<Minimap.PinData> OwnedFloraPinsScratch;
         private static readonly HashSet<Minimap.PinData> StaleRemovalScratch;
 
+        // Whether each zone a pass asked about had loaded (ZNetScene.IsAreaReady, which depends
+        // only on the zone of the point). Cleared when a pass starts and never carried into the
+        // next one, so a zone that finishes loading is mapped by the next pass.
+        private static readonly Dictionary<Vector2s, bool> AreaReadinessThisPass;
+
         private static float _lastCacheUpdateTime;
         private static float _mappingTimer;
 
@@ -141,6 +146,7 @@ namespace Automatics.AutomaticMapping
             SeenNetworksThisPass = new HashSet<FloraNetwork>();
             OwnedFloraPinsScratch = new HashSet<Minimap.PinData>();
             StaleRemovalScratch = new HashSet<Minimap.PinData>();
+            AreaReadinessThisPass = new Dictionary<Vector2s, bool>();
         }
 
         private static bool CanMapping(float delta, bool takeInput)
@@ -264,6 +270,7 @@ namespace Automatics.AutomaticMapping
             SeenNetworksThisPass.Clear();
             OwnedFloraPinsScratch.Clear();
             StaleRemovalScratch.Clear();
+            AreaReadinessThisPass.Clear();
             PendingTiles.Clear();
             _tileFallbackSawTruncation = false;
             _pendingScanSnapshot = null;
@@ -325,7 +332,12 @@ namespace Automatics.AutomaticMapping
 
                 if (!CanMapping(delta, takeInput)) return;
 
+                AreaReadinessThisPass.Clear();
+
                 var origin = Player.m_localPlayer.transform.position;
+
+                // No pass runs while the area around the player is still loading.
+                if (!IsAreaReady(origin)) return;
 
                 // Order matters: prune pins whose classification / allowlist
                 // just moved so CacheStaticObjects' forced rescan rebuilds
@@ -355,7 +367,18 @@ namespace Automatics.AutomaticMapping
                     // transform every pass. Honor that contract here.
                     var pos = component.transform.position;
                     if ((origin - pos).sqrMagnitude > staticRangeSq) continue;
-                    if (!ZNetScene.instance.IsAreaReady(pos)) continue;
+
+                    // Kinds the player does not pin are dropped before any readiness work.
+                    if (!IsAllowedForKind(classification.Kind, classification.Identifier)) continue;
+
+                    // An object whose area is still loading is left to a later pass. Its pin
+                    // counts as seen, so EndPassAndPruneStale keeps it through this pass.
+                    if (!IsAreaReady(pos))
+                    {
+                        if (Objects.GetZdoid(component, out var uniqueId))
+                            MarkSeen(new MapPinIdentify(uniqueId));
+                        continue;
+                    }
 
                     // Classification already knows which kind this collider is,
                     // so the remaining work is just dispatching to the right
@@ -491,6 +514,19 @@ namespace Automatics.AutomaticMapping
         {
             if (PinDataCache.TryGetValue(identify, out var entry))
                 entry.LastSeenSweep = _currentSweepId;
+        }
+
+        // ZNetScene.IsAreaReady (the point's zone has loaded, and every object in it and in the
+        // eight zones around it has spawned), asked at most once per zone in a pass.
+        private static bool IsAreaReady(Vector3 position)
+        {
+            var zone = ZoneSystem.GetZone(position);
+            if (!AreaReadinessThisPass.TryGetValue(zone, out var ready))
+            {
+                ready = ZNetScene.instance.IsAreaReady(position);
+                AreaReadinessThisPass[zone] = ready;
+            }
+            return ready;
         }
 
         /// <summary>
