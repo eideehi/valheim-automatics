@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using BepInEx.Logging;
+using HarmonyLib;
 using ModUtils;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -42,7 +43,8 @@ namespace Automatics.SmokeTest
     // toggle and config are in ProcessingSmokeToggle.cs: one round trip of
     // automatic_processing/module through its real setting, and a read-only look at the
     // automatic_processing section of the live .cfg. skill is in ProcessingSmokeSkill.cs: who
-    // gains the skill and bonus food for what Processing does at a cooking station.
+    // gains the skill and bonus food for what Processing does at a cooking station. store, below
+    // rpc: a product is stored only where it fits.
     //
     // Safety follows the asymmetric rule of the other smoke commands (smoke/README.md): only
     // objects this command spawned are changed, test items go only into its own chest, and
@@ -76,7 +78,8 @@ namespace Automatics.SmokeTest
                 { "rpc", RunRpc },
                 { "toggle", RunToggle },
                 { "config", RunConfig },
-                { "skill", RunSkill }
+                { "skill", RunSkill },
+                { "store", RunStore }
             };
 
         private static MonoBehaviour _host;
@@ -140,6 +143,13 @@ namespace Automatics.SmokeTest
         private static IEnumerator RunRpc(Terminal context, int runId, string runner)
         {
             return RunBench(context, runner, () => new RpcRun(runId, runner,
+                line => Emit(context, LogLevel.Info, line),
+                line => Emit(context, LogLevel.Warning, line)));
+        }
+
+        private static IEnumerator RunStore(Terminal context, int runId, string runner)
+        {
+            return RunBench(context, runner, () => new StoreRun(runId, runner,
                 line => Emit(context, LogLevel.Info, line),
                 line => Emit(context, LogLevel.Warning, line)));
         }
@@ -808,6 +818,249 @@ namespace Automatics.SmokeTest
             }
         }
 
+        // -- The store subcommand ----------------------------------------------------------
+
+        // store: Processing stores a product only where it fits. The run places a chest and a
+        // smelter as rpc does, fills the chest with the smelter's product and calls the smelter's
+        // Store entry, as the game's Smelter.Spawn does, while a ContainerWriteObserver counts
+        // every add to the chest's inventory and every save of the chest and records every
+        // warning Unity logs. With the chest full, Store adds nothing, saves nothing, logs no
+        // warning and returns false. With room for one of three, it puts one in, again without a
+        // warning, and drops the other two at the smelter as it always has; the check removes
+        // that drop at once. The filler and the stored product are taken out of the chest before
+        // the run ends, so the chest and the smelter go through the rpc hand-back with their
+        // ledger balanced. Everything happens in the frame of the spawn; no setting is changed.
+        private sealed class StoreRun : BenchRun
+        {
+            private const string Setup = "processing_store_setup";
+            private const string FullChest = "processing_store_full_chest_untouched";
+            private const string PartialFit = "processing_store_stores_what_fits";
+            private const string ProbeMarker = "AUTOMATICS_SMOKE_PROCESSING_STORE_PROBE";
+
+            // The units Store is asked to store: more than one, so a store into room for one
+            // leaves a rest.
+            private const int Offered = 3;
+
+            private static readonly string[] Order = { FullChest, PartialFit };
+
+            private readonly Dictionary<string, CheckResult> _checks =
+                new Dictionary<string, CheckResult>(StringComparer.Ordinal);
+
+            private readonly SmelterBench _smelter;
+            private string _notReached = "not reached: an earlier step stopped the run";
+
+            public StoreRun(int runId, string runner, Action<string> info, Action<string> warn)
+                : this(runId, runner, info, warn, new SmelterBench(Setup))
+            {
+            }
+
+            private StoreRun(int runId, string runner, Action<string> info, Action<string> warn,
+                SmelterBench smelter) : base(runId, runner, info, warn,
+                new List<StationBench> { smelter })
+            {
+                _smelter = smelter;
+            }
+
+            public override IReadOnlyList<CheckResult> Results
+            {
+                get
+                {
+                    // A run stopped before the first check reports why under the setup check.
+                    if (_checks.Count == 0)
+                        return new[]
+                        {
+                            _smelter.Result ?? CheckResult.Fail(Setup,
+                                "the run ended before this check reached a result")
+                        };
+
+                    return Order.Select(name => _checks.TryGetValue(name, out var result)
+                        ? result
+                        : CheckResult.Skip(name, _notReached)).ToList();
+                }
+            }
+
+            public override IEnumerator Execute()
+            {
+                _info(
+                    $"[Automatics Smoke] {_runner} started: it places a chest and a smelter ahead of you, fills the chest with the smelter's product, calls the smelter's Store entry with the chest full and with room for one, and removes them; no setting is changed");
+
+                var player = Player.m_localPlayer;
+                if (!CheckEnvironment(player)) yield break;
+                if (!FindChestPrefab(out var chestPrefab)) yield break;
+
+                ResolveStations();
+                if (Active.Count > 0 &&
+                    !ProcessingLogics.IsAllowProcessing(_smelter.ObjectName, Process.Store))
+                    SkipRemaining(
+                        $"allow_processing_by_{_smelter.ObjectName.Substring(1)} does not include Store");
+                ChooseItems();
+                if (Active.Count == 0) yield break;
+
+                if (!PlanLayout(player, out var chestPosition, out var distance)) yield break;
+                if (!CheckSurroundings(chestPosition, distance)) yield break;
+                if (!PlaceBenches(chestPrefab, chestPosition, distance)) yield break;
+
+                // Everything from here to the end happens in the frame of the spawn.
+                if (!CheckSources()) yield break;
+
+                var chest = _benches.ChestInventory;
+                var productName = _smelter.ProductName;
+                try
+                {
+                    if (!Fill(chest, out var problem))
+                    {
+                        SkipRemaining(problem);
+                        yield break;
+                    }
+
+                    _checks[FullChest] = Judge(FullChest, Store(2),
+                        x => !x.Stored && x.Delivered == 0 && x.Dropped == 0 &&
+                             x.Observer.Adds == 0 && x.Observer.Saves == 0,
+                        $"with the chest full of {DisplayName(productName)}, Store returned false and the chest got no add, no save and no warning");
+
+                    if (!LeaveRoomForOne(chest, out problem))
+                    {
+                        _checks[PartialFit] = CheckResult.NotRun(PartialFit, problem);
+                        yield break;
+                    }
+
+                    _checks[PartialFit] = Judge(PartialFit, Store(Offered),
+                        x => x.Stored && x.Delivered == 1 && x.Dropped == Offered - 1 &&
+                             x.Observer.Adds == 1,
+                        $"with room for one {DisplayName(productName)}, Store put one of {Offered} into the chest with one add and no warning, and dropped the other {Offered - 1} at the smelter, which the check removed");
+                }
+                finally
+                {
+                    // The chest held none of the product before the run; whatever the run put in,
+                    // filler or stored, goes, so the ledger balances.
+                    var left = chest.CountItems(productName, -1, false);
+                    if (left > 0) chest.RemoveItem(productName, left, -1, false);
+                }
+            }
+
+            public override void Stopped(Exception e)
+            {
+                var message = $"the run stopped on {e.GetType().Name}: {e.Message}";
+                var running = Order.FirstOrDefault(x => !_checks.ContainsKey(x));
+                if (_checks.Count == 0) _smelter.Fail(message);
+                else if (running != null) _checks[running] = CheckResult.Fail(running, message);
+                _notReached = "not reached: " + message;
+            }
+
+            private sealed class StoreOutcome
+            {
+                public string Problem;
+                public bool Stored;
+                public int Delivered;
+                public int Dropped;
+                public ContainerWriteObserver Observer;
+            }
+
+            // Calls the smelter's Store entry for offered units of its product, observed. What it
+            // drops at the smelter is the run's own and is removed at once.
+            private StoreOutcome Store(int offered)
+            {
+                var outcome = new StoreOutcome();
+                var chest = _benches.ChestInventory;
+                var productName = _smelter.ProductName;
+                var known = new HashSet<int>(FindDrops(productName).Select(x => x.GetInstanceID()));
+                var before = chest.CountItems(productName, -1, false);
+
+                var observer = new ContainerWriteObserver(ProbeMarker, _runner);
+                if (!observer.Start(_benches.Chest, out outcome.Problem)) return outcome;
+                try
+                {
+                    outcome.Stored = SmelterProcess.Store(_smelter.Station,
+                        _smelter.Chosen.From.gameObject.name, offered);
+                }
+                finally
+                {
+                    observer.Stop();
+                }
+
+                outcome.Observer = observer;
+                outcome.Delivered = chest.CountItems(productName, -1, false) - before;
+                foreach (var drop in FindDrops(productName).Where(x => !known.Contains(x.GetInstanceID())))
+                {
+                    outcome.Dropped += drop.m_itemData.m_stack;
+                    SmokeSession.DestroyTestObject(drop.gameObject, 0, _runner);
+                }
+
+                return outcome;
+            }
+
+            // Every check also needs no warning while Store ran, and the warning listener's own
+            // probe received, without which an empty list would prove nothing.
+            private static CheckResult Judge(string check, StoreOutcome outcome,
+                Func<StoreOutcome, bool> expected, string pass)
+            {
+                if (outcome.Problem != null) return CheckResult.NotRun(check, outcome.Problem);
+
+                var observer = outcome.Observer;
+                var seen =
+                    $"Store returned {outcome.Stored}, the chest got {outcome.Delivered}, {outcome.Dropped} dropped at the smelter; {observer.Describe()}";
+                if (!observer.ProbeSeen)
+                    return CheckResult.Fail(check,
+                        $"the warning listener did not receive its own probe, so a warning could have gone unseen; {seen}");
+                return expected(outcome) && observer.Warnings.Count == 0
+                    ? CheckResult.Pass(check, pass)
+                    : CheckResult.Fail(check, seen);
+            }
+
+            private static IEnumerable<ItemDrop> FindDrops(string name)
+            {
+                return Object.FindObjectsByType<ItemDrop>(FindObjectsInactive.Exclude,
+                        FindObjectsSortMode.None)
+                    .Where(x => x && x.m_itemData?.m_shared != null &&
+                                x.m_itemData.m_shared.m_name == name);
+            }
+
+            // Fills every slot of the chest with full stacks of the product, never adding more
+            // than an empty slot takes, so filling it logs nothing.
+            private bool Fill(Inventory chest, out string problem)
+            {
+                problem = null;
+                var product = _smelter.Chosen.To;
+                var productName = _smelter.ProductName;
+                var maxStack = Mathf.Max(1, product.m_itemData.m_shared.m_maxStackSize);
+                for (var call = 0; call < 1000 && chest.GetEmptySlots() > 0; call++)
+                {
+                    var count = chest.CountItems(productName, -1, false);
+                    chest.AddItem(product.gameObject, maxStack);
+                    if (chest.CountItems(productName, -1, false) <= count) break;
+                }
+
+                if (chest.GetEmptySlots() > 0 || Room(chest) != 0)
+                    problem =
+                        $"the test chest could not be filled with {DisplayName(productName)} (stack size {maxStack}, {chest.GetEmptySlots()} empty slot(s), room for {Room(chest)})";
+                return problem == null;
+            }
+
+            // Takes one product out of the full chest, so it has room for exactly one.
+            private bool LeaveRoomForOne(Inventory chest, out string problem)
+            {
+                problem = null;
+                var productName = _smelter.ProductName;
+                var stack = chest.GetAllItems().FirstOrDefault(x => x.m_shared.m_name == productName);
+                if (stack != null) chest.RemoveItem(stack, 1);
+                if (Room(chest) != 1)
+                    problem =
+                        $"the test chest could not be left with room for exactly one {DisplayName(productName)} (room for {Room(chest)})";
+                return problem == null;
+            }
+
+            // Room for the product counted here, apart from the code under test: the space left
+            // in its stacks plus whole empty slots.
+            private int Room(Inventory chest)
+            {
+                var productName = _smelter.ProductName;
+                var maxStack = Mathf.Max(1, _smelter.Chosen.To.m_itemData.m_shared.m_maxStackSize);
+                return chest.GetEmptySlots() * maxStack + chest.GetAllItems()
+                    .Where(x => x.m_shared.m_name == productName)
+                    .Sum(x => Mathf.Max(0, x.m_shared.m_maxStackSize - x.m_stack));
+            }
+        }
+
         // -- Test objects -----------------------------------------------------------------
 
         // The chest and the stations one run spawned, and their hand-back. A station is removed
@@ -1432,9 +1685,15 @@ namespace Automatics.SmokeTest
             private Smelter _prefab;
             private Smelter _station;
 
-            public SmelterBench() : base("processing_rpc_smelter_add_ore", "$piece_smelter", "smelter")
+            public SmelterBench() : this("processing_rpc_smelter_add_ore")
             {
             }
+
+            public SmelterBench(string checkName) : base(checkName, "$piece_smelter", "smelter")
+            {
+            }
+
+            public Smelter Station => _station;
 
             protected override Type ComponentType => typeof(Smelter);
 
@@ -1882,6 +2141,121 @@ namespace Automatics.SmokeTest
             {
                 return new CheckResult(CheckStatus.NotRun, name, message);
             }
+        }
+    }
+
+    // Watches one container while a check calls the code under test: every call that adds to
+    // its inventory (Inventory.AddItem(ItemDrop.ItemData), which the adds by prefab go through),
+    // every save of its contents (Container.Save, which the inventory's change callback runs),
+    // and every warning or error Unity logs meanwhile. Its Harmony prefixes are applied by Start
+    // and removed by Stop, so nothing stays patched outside the check. Start logs a deliberate
+    // warning that names the command; receiving it shows that the listener sees what Unity
+    // logs, without which an empty list would prove nothing. The processing store check and the
+    // farming deposit checks share it.
+    internal sealed class ContainerWriteObserver
+    {
+        private const string HarmonyId = "net.eidee.valheim.automatics.smoke.container-writes";
+
+        private static readonly MethodInfo AddMethod = AccessTools.Method(typeof(Inventory),
+            nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData) });
+
+        private static readonly MethodInfo SaveMethod = AccessTools.Method(typeof(Container), "Save");
+
+        private static ContainerWriteObserver _active;
+
+        private readonly string _probeMarker;
+        private readonly string _command;
+        private readonly List<string> _warnings = new List<string>();
+        private Harmony _harmony;
+        private Container _container;
+        private Inventory _inventory;
+
+        public ContainerWriteObserver(string probeMarker, string command)
+        {
+            _probeMarker = probeMarker;
+            _command = command;
+        }
+
+        public int Adds { get; private set; }
+        public int Saves { get; private set; }
+        public bool ProbeSeen { get; private set; }
+        public IReadOnlyList<string> Warnings => _warnings;
+
+        // False, with the reason, when there is nothing to watch, a method to patch is missing,
+        // or another observer is still watching.
+        public bool Start(Container container, out string problem)
+        {
+            problem = null;
+            if (!container || container.GetInventory() == null)
+                problem = "the container to watch has no inventory";
+            else if (AddMethod == null || SaveMethod == null)
+                problem = "Inventory.AddItem(ItemDrop.ItemData) or Container.Save was not found in this game build";
+            else if (_active != null)
+                problem = "another container observer is still watching";
+            if (problem != null) return false;
+
+            _container = container;
+            _inventory = container.GetInventory();
+            _active = this;
+            try
+            {
+                _harmony = new Harmony(HarmonyId);
+                _harmony.Patch(AddMethod,
+                    new HarmonyMethod(typeof(ContainerWriteObserver), nameof(AddPrefix)));
+                _harmony.Patch(SaveMethod,
+                    new HarmonyMethod(typeof(ContainerWriteObserver), nameof(SavePrefix)));
+            }
+            catch (Exception e)
+            {
+                Stop();
+                problem = $"the container observer could not patch the game ({e.GetType().Name}: {e.Message})";
+                return false;
+            }
+
+            Application.logMessageReceived += OnLog;
+            UnityEngine.Debug.LogWarning(
+                $"{_probeMarker}: a deliberate test warning of {_command}, logged to show the check sees the warnings Unity logs; it is not a problem");
+            return true;
+        }
+
+        public void Stop()
+        {
+            Application.logMessageReceived -= OnLog;
+            if (ReferenceEquals(_active, this)) _active = null;
+            if (_harmony == null) return;
+            var harmony = _harmony;
+            _harmony = null;
+            harmony.UnpatchSelf();
+        }
+
+        public string Describe()
+        {
+            return $"adds {Adds}, saves {Saves}, warnings {_warnings.Count}" +
+                   (_warnings.Count == 0 ? "" : $" ({string.Join(" | ", _warnings)})");
+        }
+
+        private static void AddPrefix(Inventory __instance)
+        {
+            var active = _active;
+            if (active != null && ReferenceEquals(__instance, active._inventory)) active.Adds++;
+        }
+
+        private static void SavePrefix(Container __instance)
+        {
+            var active = _active;
+            if (active != null && ReferenceEquals(__instance, active._container)) active.Saves++;
+        }
+
+        private void OnLog(string condition, string stackTrace, LogType type)
+        {
+            if (type == LogType.Log) return;
+            if (condition != null && condition.Contains(_probeMarker))
+            {
+                ProbeSeen = true;
+                return;
+            }
+
+            _warnings.Add($"[{type}] {condition?.Trim()}");
         }
     }
 }

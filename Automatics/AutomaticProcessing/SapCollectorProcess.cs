@@ -36,12 +36,13 @@ namespace Automatics.AutomaticProcessing
                 if (sapRemaining <= 0) break;
                 if (Capacity() <= 0) break;
 
-                var inventory = container.GetInventory();
-                if (!Logics.AcceptsProduct(sapCollectorName, inventory, sapName)) continue;
+                if (!Logics.CanStore(sapCollectorName, container, sapItem.gameObject, sapName))
+                    continue;
                 if (!Logics.TryClaimContainer(container)) continue;
 
                 var amount = Mathf.Min(Capacity(), sapRemaining);
                 if (amount <= 0) break;
+                var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(sapCollectorName, inventory, sapName)) continue;
 
                 var storedSapCount = Logics.AddItemAndGetCountDelta(inventory,

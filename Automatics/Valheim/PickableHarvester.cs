@@ -158,9 +158,15 @@ namespace Automatics.Valheim
         // everything it added so the crop can be left standing and retried. Mirrors
         // Automatic Storage's count-delta add and rollback, so a deposit never
         // leaves a partial yield in a container while the crop stays unharvested.
+        // The whole yield is first reserved in the containers (YieldFits), so a
+        // crop whose yield cannot fit is left standing without any container being
+        // written; the rollback remains for a shortfall the reservation cannot
+        // foresee (a container the gate then refuses).
         private static bool TryDepositYield(Player player, IReadOnlyList<Container> containers,
             IReadOnlyList<KeyValuePair<GameObject, int>> yields)
         {
+            if (!YieldFits(containers, yields)) return false;
+
             var deposited = new List<KeyValuePair<Container, KeyValuePair<GameObject, int>>>();
             var complete = true;
 
@@ -207,13 +213,76 @@ namespace Automatics.Valheim
             return false;
         }
 
+        // Whether every yield fits the containers together. It reserves room in the
+        // order the deposit adds (each yield in turn, nearest container first), as
+        // Inventory.AddItem fills it: the space left in stacks of the same item
+        // first, then whole empty slots, a slot's unused part becoming that item's
+        // stack space. What one yield reserves is gone for the next, so yields that
+        // compete for the same slot or stack are not both counted. Each container's
+        // saved contents are loaded first; nothing is claimed or written.
+        private static bool YieldFits(IReadOnlyList<Container> containers,
+            IReadOnlyList<KeyValuePair<GameObject, int>> yields)
+        {
+            var emptySlots = new Dictionary<Container, int>();
+            var stackSpace = new Dictionary<(Container, string, int), int>();
+            foreach (var yield in yields)
+            {
+                var item = CreatePickupItemData(yield.Key, 1);
+                if (item == null) return false;
+
+                var maxStackSize = Mathf.Max(1, item.m_shared.m_maxStackSize);
+                var remaining = yield.Value;
+                foreach (var container in containers)
+                {
+                    if (remaining <= 0) break;
+
+                    if (!emptySlots.TryGetValue(container, out var slots))
+                    {
+                        ContainerAccess.LoadSavedContents(container);
+                        var contents = container ? container.GetInventory() : null;
+                        slots = contents == null ? 0 : Mathf.Max(0, contents.GetEmptySlots());
+                        emptySlots[container] = slots;
+                    }
+
+                    // Every yield is at the current world level, so name and quality
+                    // tell which stacks it can fill.
+                    var kind = (container, item.m_shared.m_name, item.m_quality);
+                    if (!stackSpace.TryGetValue(kind, out var space))
+                    {
+                        var inventory = container ? container.GetInventory() : null;
+                        space = inventory == null
+                            ? 0
+                            : Mathf.Max(0, GetFreeStackSpace(inventory, item) -
+                                           inventory.GetEmptySlots() * maxStackSize);
+                    }
+
+                    var reserved = Mathf.Min(remaining, space + slots * maxStackSize);
+                    var intoStacks = Mathf.Min(reserved, space);
+                    var intoSlots = reserved - intoStacks;
+                    var usedSlots = (intoSlots + maxStackSize - 1) / maxStackSize;
+                    emptySlots[container] = slots - usedSlots;
+                    stackSpace[kind] = space - intoStacks + usedSlots * maxStackSize - intoSlots;
+                    remaining -= reserved;
+                }
+
+                if (remaining > 0) return false;
+            }
+
+            return true;
+        }
+
+        // Adds no more than the container has room for, and passes over a full one
+        // before the gate, so a full container is not written.
         private static int DepositIntoContainer(Player player, Container container, GameObject prefab,
             int amount)
         {
+            if (ContainerAccess.GetRoom(container, prefab) <= 0) return 0;
             if (!ContainerAccess.TryPrepareContainerMutation(player, container)) return 0;
 
             var inventory = container.GetInventory();
-            return inventory == null ? 0 : AddItem(inventory, prefab, amount);
+            return inventory == null
+                ? 0
+                : AddItem(inventory, prefab, Mathf.Min(amount, ContainerAccess.GetRoom(inventory, prefab)));
         }
 
         // Returns the number actually restored so the caller can verify the

@@ -230,9 +230,9 @@ namespace Automatics.AutomaticProcessing
             var origin = cookingStation.transform.position;
             foreach (var (container, _) in Logics.GetNearbyContainers(stationName, origin))
             {
-                var inventory = container.GetInventory();
-                if (!Logics.AcceptsProduct(stationName, inventory, itemName)) continue;
+                if (!Logics.CanStore(stationName, container, item.gameObject, itemName)) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
+                var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(stationName, inventory, itemName)) continue;
                 var storedItemCount =
                     Logics.AddItemAndGetCountDelta(inventory, item.gameObject, itemName, 1);

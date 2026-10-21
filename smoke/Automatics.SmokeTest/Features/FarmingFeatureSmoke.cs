@@ -129,6 +129,8 @@ namespace Automatics.SmokeTest
 
                 if (!Set(run, "_seedReserve", 0)) yield break;
                 CheckSowing(run, player, crop, cells, cultivation, created);
+
+                CheckDepositWithoutRoom(run, player, crop, cells[0], storage, created);
             }
             finally
             {
@@ -449,6 +451,179 @@ namespace Automatics.SmokeTest
             Check(run, "farming_sow_rotated_lattice", sown.Count > 0 && off.Count == 0,
                 $"{sown.Count} sown beside a crop turned {LatticeYaw}°, off the lattice: " +
                 (off.Count == 0 ? "none" : string.Join(", ", off.ToArray())));
+        }
+
+        // The harvest deposit (PickableHarvester.HarvestToContainers, called directly on a ripe crop
+        // of the section's own, with the Storage chest as the only target) where the yield does
+        // not fit. With the chest full of the crop's yield, the chest gets no add, no save and no
+        // warning, and the crop stays standing. With room for one and a yield of at least two (the
+        // crop's own amount is set to two), still nothing goes in and the crop stays: all or
+        // nothing, without the add and take-back. With one empty slot and two yields of different
+        // items (the crop's amount set to one, and one extra drop of another early item given to
+        // it), each of which alone would fit the slot, the same holds. The filler is the section's
+        // own yield, taken out at the end with the rest; the crop is removed at once.
+        private static void CheckDepositWithoutRoom(FeatureRun run, Player player, Crop crop, Vector3 cell,
+            GameObject storage, List<GameObject> created)
+        {
+            const string full = "farming_deposit_full_box_untouched";
+            const string partial = "farming_deposit_all_or_nothing";
+            const string competing = "farming_deposit_competing_yields_untouched";
+            const string probe = "AUTOMATICS_SMOKE_FARMING_DEPOSIT_PROBE";
+            void SkipFrom(int first, string reason)
+            {
+                var names = new[] { full, partial, competing };
+                for (var i = first; i < names.Length; i++) run.Skip(names[i], reason);
+            }
+
+            var container = storage.GetComponent<Container>();
+            var inventory = container.GetInventory();
+            var yieldPrefab = crop.Grown.GetComponent<Pickable>().m_itemPrefab;
+            var maxStack = Mathf.Max(1, yieldPrefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_maxStackSize);
+
+            // Full stacks into every empty slot, then exactly the space left in the yield's stacks,
+            // so filling the chest never makes an add that does not fit.
+            for (var call = 0; call < 1000 && inventory.GetEmptySlots() > 0; call++)
+                if (AddOwnYield(inventory, yieldPrefab, crop.YieldName, maxStack) <= 0) break;
+            for (var call = 0; call < 1000 && YieldSpace(inventory, crop.YieldName) > 0; call++)
+                if (AddOwnYield(inventory, yieldPrefab, crop.YieldName,
+                        Mathf.Min(maxStack, YieldSpace(inventory, crop.YieldName))) <= 0) break;
+            if (inventory.GetEmptySlots() > 0 || YieldSpace(inventory, crop.YieldName) > 0)
+            {
+                SkipFrom(0, $"the Storage chest could not be filled with the yield ({inventory.GetEmptySlots()} empty slot(s), " +
+                            $"room for {YieldSpace(inventory, crop.YieldName)} in its stacks)");
+                return;
+            }
+
+            var ripe = Object.Instantiate(crop.Grown, cell, Quaternion.identity);
+            created.Add(ripe);
+            SmokeSession.TrackSpawn(ripe);
+            try
+            {
+                if (!Objects.GetZNetView(ripe.transform, out var view) || !view || !view.IsValid())
+                {
+                    SkipFrom(0, "the ripe crop has no network view");
+                    return;
+                }
+                view.GetZDO().Persistent = false;
+                var pickable = ripe.GetComponent<Pickable>();
+
+                Deposit(run, full, player, pickable, view, container, probe,
+                    "with the Storage chest full, the deposit added nothing, saved nothing and logged no warning, and the crop stays standing");
+
+                var stack = inventory.GetAllItems().FirstOrDefault(x => x.m_shared.m_name == crop.YieldName);
+                if (stack != null && inventory.RemoveItem(stack, 1)) _ownYield--;
+                if (YieldSpace(inventory, crop.YieldName) != 1 || inventory.GetEmptySlots() > 0)
+                {
+                    SkipFrom(1, $"the Storage chest could not be left with room for exactly one ({inventory.GetEmptySlots()} empty slot(s), " +
+                                $"room for {YieldSpace(inventory, crop.YieldName)} in its stacks)");
+                    return;
+                }
+                pickable.m_amount = 2;
+                pickable.m_dontScale = true;
+                Deposit(run, partial, player, pickable, view, container, probe,
+                    "with room for one of a yield of two, the deposit added nothing, saved nothing and logged no warning, and the crop stays standing");
+
+                // One empty slot and no room in the yield's stacks: the stack left one short is
+                // topped up, and one full stack is taken out.
+                AddOwnYield(inventory, yieldPrefab, crop.YieldName, 1);
+                stack = inventory.GetAllItems().FirstOrDefault(x => x.m_shared.m_name == crop.YieldName);
+                var removed = stack != null ? stack.m_stack : 0;
+                if (stack != null && inventory.RemoveItem(stack)) _ownYield -= removed;
+                var other = OtherEarlyItem(inventory, crop.YieldName);
+                if (YieldSpace(inventory, crop.YieldName) != 0 || inventory.GetEmptySlots() != 1 || !other)
+                {
+                    SkipFrom(2, $"the Storage chest could not be left with exactly one empty slot and no room in the yield's stacks, " +
+                                $"or no other early item is absent from it ({inventory.GetEmptySlots()} empty slot(s), " +
+                                $"room for {YieldSpace(inventory, crop.YieldName)} in its stacks)");
+                    return;
+                }
+                pickable.m_amount = 1;
+                pickable.m_dontScale = true;
+                pickable.m_extraDrops = new DropTable
+                {
+                    m_drops = new List<DropTable.DropData>
+                    {
+                        new DropTable.DropData { m_item = other, m_stackMin = 1, m_stackMax = 1, m_weight = 1f, m_dontScale = true }
+                    },
+                    m_dropMin = 1,
+                    m_dropMax = 1,
+                    m_dropChance = 1f
+                };
+                Deposit(run, competing, player, pickable, view, container, probe,
+                    "with one empty slot and two yields of different items that would each fit it alone, the deposit added " +
+                    "nothing, saved nothing and logged no warning, and the crop stays standing");
+            }
+            finally
+            {
+                RemoveObjects(new[] { ripe });
+            }
+        }
+
+        // An early item other than the yield that the chest holds none of, so it has no stack to
+        // share there and needs an empty slot of its own.
+        private static GameObject OtherEarlyItem(Inventory inventory, string yieldName)
+        {
+            foreach (var name in new[] { "Stone", "Wood", "Resin", "Flint" })
+            {
+                var prefab = ObjectDB.instance.GetItemPrefab(name);
+                var drop = prefab ? prefab.GetComponent<ItemDrop>() : null;
+                if (!drop || drop.m_itemData.m_shared.m_name == yieldName) continue;
+                if (inventory.CountItems(drop.m_itemData.m_shared.m_name, -1, false) == 0) return prefab;
+            }
+
+            return null;
+        }
+
+        private static void Deposit(FeatureRun run, string name, Player player, Pickable pickable, ZNetView view,
+            Container container, string probe, string pass)
+        {
+            // Every unit in the chest, so an extra drop that went in counts too.
+            var inventory = container.GetInventory();
+            var before = inventory.NrOfItemsIncludingStacks();
+            var observer = new ContainerWriteObserver(probe, name);
+            if (!observer.Start(container, out var problem))
+            {
+                run.Skip(name, problem);
+                return;
+            }
+
+            PickableHarvester.HarvestOutcome outcome;
+            try
+            {
+                outcome = PickableHarvester.HarvestToContainers(player, pickable, view, new List<Container> { container });
+            }
+            finally
+            {
+                observer.Stop();
+            }
+
+            var after = inventory.NrOfItemsIncludingStacks();
+            var picked = pickable.GetPicked();
+            var seen = $"outcome {outcome}, picked={picked}, chest {before}->{after}, {observer.Describe()}";
+            var ok = outcome == PickableHarvester.HarvestOutcome.NotPicked && !picked && after == before &&
+                     observer.Adds == 0 && observer.Saves == 0 && observer.Warnings.Count == 0;
+            if (!observer.ProbeSeen)
+                run.Fail(name, $"the warning listener did not receive its own probe, so a warning could have gone unseen; {seen}");
+            else
+                Check(run, name, ok, ok ? pass : seen);
+        }
+
+        // Adds the section's own yield through the game's add, which caps one call at a stack, and
+        // counts it toward what the section takes out at the end.
+        private static int AddOwnYield(Inventory inventory, GameObject prefab, string yieldName, int amount)
+        {
+            var before = inventory.CountItems(yieldName, -1, false);
+            inventory.AddItem(prefab, amount);
+            var added = inventory.CountItems(yieldName, -1, false) - before;
+            if (added > 0) _ownYield += added;
+            return added;
+        }
+
+        // The space left in the stacks of the yield, counted here, apart from the code under test.
+        private static int YieldSpace(Inventory inventory, string yieldName)
+        {
+            return inventory.GetAllItems().Where(x => x.m_shared.m_name == yieldName)
+                .Sum(x => Mathf.Max(0, x.m_shared.m_maxStackSize - x.m_stack));
         }
 
         private static int _ownSeeds;

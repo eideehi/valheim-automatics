@@ -228,14 +228,30 @@ namespace Automatics.AutomaticProcessing
             return inventory.RemoveItem(item, 1);
         }
 
+        // Adds no more than the inventory has room for: an add that does not fit makes the game
+        // log a warning and save the container for nothing. The caller keeps what does not fit.
         public static int AddItemAndGetCountDelta(Inventory inventory, GameObject prefab,
             string itemName, int amount)
         {
-            if (inventory == null || prefab == null || amount <= 0) return 0;
+            if (inventory == null || prefab == null) return 0;
+
+            amount = Mathf.Min(amount, ContainerAccess.GetRoom(inventory, prefab));
+            if (amount <= 0) return 0;
 
             var itemCountBefore = inventory.CountItems(itemName);
             inventory.AddItem(prefab, amount);
             return Mathf.Max(0, inventory.CountItems(itemName) - itemCountBefore);
+        }
+
+        // Whether a container may take a product, checked before the gate: it has room for at
+        // least one at the current world level, and Store Only If Product Exists lets it. The
+        // room probe loads the container's saved contents first, so both read what it holds now,
+        // and a full container is passed over before the gate claims, loads or writes it.
+        public static bool CanStore(string target, Container container, GameObject product,
+            string productName)
+        {
+            return ContainerAccess.GetRoom(container, product) > 0 &&
+                   AcceptsProduct(target, container.GetInventory(), productName);
         }
 
         // Store Only If Product Exists: a container takes a product only when it already

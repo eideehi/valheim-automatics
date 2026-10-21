@@ -164,6 +164,8 @@ namespace Automatics.AutomaticSupply
             foreach (var container in SupplyContainers.Eligible(action.Player))
             {
                 if (arrived >= amount) break;
+                // A container is taken through the gate only when it holds the item now.
+                if (ContainerAccess.CountStock(container, name, quality) <= 0) continue;
                 if (!ContainerAccess.TryPrepareContainerMutation(action.Player, container)) continue;
                 var source = container.GetInventory();
                 if (source == null) continue;

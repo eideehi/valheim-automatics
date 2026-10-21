@@ -36,12 +36,13 @@ namespace Automatics.AutomaticProcessing
                 if (honeyRemaining <= 0) break;
                 if (Capacity() <= 0) break;
 
-                var inventory = container.GetInventory();
-                if (!Logics.AcceptsProduct(beehiveName, inventory, honeyName)) continue;
+                if (!Logics.CanStore(beehiveName, container, honeyItem.gameObject, honeyName))
+                    continue;
                 if (!Logics.TryClaimContainer(container)) continue;
 
                 var amount = Mathf.Min(Capacity(), honeyRemaining);
                 if (amount <= 0) break;
+                var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(beehiveName, inventory, honeyName)) continue;
 
                 var storedHoneyCount = Logics.AddItemAndGetCountDelta(inventory,

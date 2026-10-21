@@ -69,6 +69,39 @@ namespace Automatics.Valheim
             LoadContents(container);
         }
 
+        // The probe a store runs on a container before the gate below: the units of prefab's
+        // item, at the current world level, that the container can take now (see
+        // GetRoom(Inventory, GameObject)). It loads the saved contents first, as
+        // LoadSavedContents does, and claims and saves nothing, so a container with no room is
+        // passed over before the gate claims, loads or writes it. Called after the gate, it reads
+        // what the gate loaded. CountStock is the same probe for a take.
+        public static int GetRoom(Container container, GameObject prefab)
+        {
+            LoadSavedContents(container);
+            return GetRoom(container ? container.GetInventory() : null, prefab);
+        }
+
+        // The units of prefab's item, at the current world level, that the inventory can take:
+        // the space left in stacks of the same name, quality and world level, plus whole empty
+        // slots, which is what Inventory.AddItem fills. Inventory.CanAddItem also counts stacks of
+        // another quality, which AddItem does not fill, so an add sized by it could still fail.
+        public static int GetRoom(Inventory inventory, GameObject prefab)
+        {
+            var item = inventory != null && prefab ? PickableHarvester.CreatePickupItemData(prefab, 1) : null;
+            return item == null ? 0 : Mathf.Max(0, PickableHarvester.GetFreeStackSpace(inventory, item));
+        }
+
+        // The probe a take runs on a container before the gate: the units named name that the
+        // container holds now at or above the world level, of one quality or of every quality
+        // (below 0), as Inventory.CountItems counts them. It loads the saved contents first, so
+        // a container without the item is passed over before the gate claims or loads it.
+        public static int CountStock(Container container, string name, int quality)
+        {
+            LoadSavedContents(container);
+            var inventory = container ? container.GetInventory() : null;
+            return inventory == null ? 0 : inventory.CountItems(name, quality);
+        }
+
         public static bool IsAllowed(Container container, ICollection<string> allowedIdentifiers)
         {
             return container != null &&
@@ -121,7 +154,7 @@ namespace Automatics.Valheim
         // container rules of ContainerWritePolicy, which claim the container only where they
         // allow it and load its saved contents right before allowing the write. The load
         // replaces every item in the inventory, so callers read items, stock and room after
-        // this returns true.
+        // this returns true. A store or a take checks the container with the probe above first.
         public static bool TryPrepareContainerMutation(Player player, Container container)
         {
             return CanUseContainer(player, container) && TryAcquire(player, container);

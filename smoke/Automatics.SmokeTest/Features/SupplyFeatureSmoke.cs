@@ -236,6 +236,7 @@ namespace Automatics.SmokeTest
                 CheckBlockedChest(run, state, false);
                 CheckBlockedChest(run, state, true);
                 CheckOtherGamesChest(run, state);
+                CheckTakeWithoutStock(run, state);
             }
             finally
             {
@@ -893,6 +894,59 @@ namespace Automatics.SmokeTest
                 Check(run, name, !eligible && counted == 0 && !accepted && !taken &&
                                  Count(state.ChestInventory, shared.m_name, -1) == 2 && Count(state.Inventory, shared.m_name, -1) == 0,
                     $"eligible={eligible}, counted={counted}, accepted={accepted}, taken={taken}, chest={Count(state.ChestInventory, shared.m_name, -1)}/2, inventory={Count(state.Inventory, shared.m_name, -1)}");
+            }
+            finally
+            {
+                // Only the owner removes the chest's saved data with it.
+                if (view && view.IsValid() && !view.IsOwner()) view.ClaimOwnership();
+                SupplyContainers.Invalidate();
+                state.ClearTestItems();
+            }
+        }
+
+        // A take passes over a chest that does not hold the item without taking the chest. The
+        // chest is left without an owner, which the server claims before it writes a chest, so a
+        // take that went through the container gate first would show as the chest becoming this
+        // game's.
+        private static void CheckTakeWithoutStock(FeatureRun run, SectionState state)
+        {
+            const string name = "supply_take_leaves_chest_without_item_unclaimed";
+            var fireplace = state.Fireplace;
+            if (!fireplace)
+            {
+                run.Skip(name, "no test fireplace to name the item");
+                return;
+            }
+            if (!Objects.GetZNetView(state.Chest, out var view) || !view || !view.IsValid())
+            {
+                run.Skip(name, "the test chest has no network view");
+                return;
+            }
+
+            var shared = fireplace.m_fuelItem.m_itemData.m_shared;
+            try
+            {
+                state.ClearTestItems();
+                if (Count(state.ChestInventory, shared.m_name, -1) != 0)
+                {
+                    run.Skip(name, "the test chest still holds the item");
+                    return;
+                }
+                // As when the chest has no owner yet.
+                view.GetZDO().SetOwner(0L);
+
+                SupplyContainers.Invalidate();
+                if (!SupplyContainers.Eligible(state.Player).Contains(state.Chest))
+                {
+                    run.Skip(name, "the chest without an owner is not one Supply may take from");
+                    return;
+                }
+                var action = SupplyTransfer.Begin(state.Player);
+                var arrived = SupplyTransfer.Pull(action, shared.m_name, -1, 1);
+                SupplyTransfer.End(action, true);
+                var owned = view.HasOwner();
+                Check(run, name, action != null && arrived == 0 && !owned,
+                    $"opened={action != null}, arrived={arrived}, chest owned afterwards={owned}");
             }
             finally
             {

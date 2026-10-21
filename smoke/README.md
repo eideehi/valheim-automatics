@@ -689,8 +689,9 @@ The original module setting is restored under the shared session rules.
 
 ### Processing smoke command
 
-`automatics_smoke_processing` takes one subcommand: `rpc`, `toggle`, `config` or
-`skill` (the last three are described after `rpc`). Each is one smoke run.
+`automatics_smoke_processing` takes one subcommand: `rpc`, `toggle`, `config`,
+`skill` or `store` (the last four are described after `rpc`). Each is one smoke
+run.
 
 `automatics_smoke_processing rpc` checks that Automatic Processing keeps every
 item when it moves one from a chest into a station. Processing does that by
@@ -992,6 +993,65 @@ Safety, on top of the `rpc` rules:
   yourself.
 - The run does not touch your inventory. The filler and the bonus food are
   added to and taken from the check's own chest only.
+
+#### `automatics_smoke_processing store`
+
+Checks that Automatic Processing stores a product only where it fits. Before,
+a store into a full chest still called the game's `Inventory.AddItem`, which
+logged a warning and saved the chest on every attempt. The command changes no
+setting.
+
+What it does:
+
+- It places a wood chest and a smelter as `rpc` does, with the same rules for
+  where to stand, and fills every slot of the chest with full stacks of the
+  product of one of the smelter's conversions. Filling never calls an add that
+  does not fit.
+- It calls `SmelterProcess.Store`, the entry the game's `Smelter.Spawn` reaches,
+  once with the chest full and once after taking one product out, so the chest
+  has room for exactly one, offering three.
+- While each call runs, a container observer counts every call of
+  `Inventory.AddItem(ItemDrop.ItemData)` on the chest's inventory (the adds by
+  prefab go through it) and every `Container.Save` of the chest, through Harmony
+  prefixes applied before the call and removed right after it. A warning
+  listener records every warning or error Unity logs meanwhile. Before each
+  call it logs a deliberate warning, `AUTOMATICS_SMOKE_PROCESSING_STORE_PROBE`,
+  which it must receive, so an empty list proves something. The deliberate line
+  in the log is not a problem.
+- Everything happens in the frame the objects are placed. The product the call
+  drops at the smelter is the run's own and is removed at once; the filler and
+  the stored product are taken out of the chest before the run ends, and the
+  chest and the smelter are removed under the `rpc` rules.
+
+| Check | Asserts |
+|---|---|
+| `processing_store_full_chest_untouched` | With the chest full, Store returns false, the chest gets nothing, no add is called on its inventory, it is not saved, nothing is dropped, and no warning is logged |
+| `processing_store_stores_what_fits` | With room for one, Store returns true, puts one of three into the chest with exactly one add and no warning, and drops the other two at the smelter as it always has |
+
+A precondition that is missing SKIPs the run under `processing_store_setup`.
+Besides the `rpc` preconditions, the smelter's `allow_processing_by_*` lacking
+Craft or Store counts, and so does a chest that cannot be filled. A check is
+NOT-RUN when the observer cannot patch the game or the chest cannot be left
+with room for exactly one. A check FAILs when the warning listener did not
+receive its own probe.
+
+```text
+[Automatics Smoke] automatics_smoke_processing store started: it places a chest and a smelter ahead of you, fills the chest with the smelter's product, calls the smelter's Store entry with the chest full and with room for one, and removes them; no setting is changed
+[Automatics Smoke] automatics_smoke_processing store: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] PASS processing_store_full_chest_untouched: with the chest full of Copper, Store returned false and the chest got no add, no save and no warning
+[Automatics Smoke] PASS processing_store_stores_what_fits: with room for one Copper, Store put one of 3 into the chest with one add and no warning, and dropped the other 2 at the smelter, which the check removed
+[Automatics Smoke] Summary: total=2 passed=2 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+```
+
+The item name depends on the game's conversions and your language.
+
+Safety, on top of the `rpc` rules:
+
+- The run does not touch your inventory. The filler is added to and taken from
+  the check's own chest only.
+- The drop Store makes at the smelter for what does not fit is removed in the
+  same frame; it is the only drop the run removes.
+- The Harmony prefixes are removed right after each call, also when it throws.
 
 ### Feature smoke command
 
@@ -1304,12 +1364,27 @@ Cultivation chest, and runs one farming pass per check:
 | `farming_player_containers_harvest` | A ripe crop of that kind spawned on a free cell is picked, its yield goes into the Storage chest, it is replanted at the same spot with one seed from the Cultivation chest, and your inventory is unchanged |
 | `farming_replant_below_reserve` | With `Seed Reserve` above the seeds held and sowing on, the harvested spot is still replanted and nothing is sown on the free cells left |
 | `farming_sow_rotated_lattice` | Beside a growing crop of that kind turned 30°, every crop sown lies on that crop's rotated lattice and turned with it (SKIP when no lattice cell beside it is plantable) |
+| `farming_deposit_full_box_untouched` | With the Storage chest full of the crop's yield, the harvest deposit (`PickableHarvester.HarvestToContainers`, called directly on a ripe crop with the Storage chest as its only target) leaves the crop standing, and the chest gets nothing, no add call, no save and no warning |
+| `farming_deposit_all_or_nothing` | With room for one in the Storage chest and the crop's yield set to two, the deposit still puts nothing in and leaves the crop standing, again without an add call, a save or a warning |
+| `farming_deposit_competing_yields_untouched` | With one empty slot in the Storage chest and no room in the yield's stacks, the crop's yield set to one and one extra drop of another early item the chest holds none of given to it, two yields compete for the one slot that each would fit alone: the deposit puts nothing in and leaves the crop standing, without an add call, a save or a warning |
 | `farming_settings_restored` | Every changed setting is put back |
 
+The three deposit checks fill the Storage chest with the section's own yield
+(never with an add that does not fit), and run with the container observer of
+`automatics_smoke_processing store`: it counts the add calls on the chest's
+inventory and its saves through Harmony prefixes applied around the call only,
+and records every warning Unity logs meanwhile; its deliberate warning,
+`AUTOMATICS_SMOKE_FARMING_DEPOSIT_PROBE`, must arrive or the check FAILs. They
+SKIP when the chest cannot be filled, or left with room for exactly one or with
+exactly one empty slot, when none of Stone, Wood, Resin and Flint is both
+different from the yield and absent from the chest, or when the observer cannot
+patch the game. The ripe crop they use is removed right after them.
+
 Everything runs synchronously. Crops it plants are tracked and removed. The section takes out
-only the seeds it added and the yield it harvested; a chest that still holds
-anything else is left in the world and the log says where. No terrain is
-modified. A harvest may raise the pick skill, as a harvest by hand does.
+only the seeds it added and the yield it harvested or used as filler; a chest
+that still holds anything else is left in the world and the log says where. No
+terrain is modified. A harvest may raise the pick skill, as a harvest by hand
+does.
 
 #### `guide`
 
@@ -1546,6 +1621,7 @@ them. A check whose station or material cannot be found SKIPs and says why.
 | `supply_in_use_chest_untouched` | With the chest marked in use, the fireplace takes nothing from it |
 | `supply_warded_chest_untouched` | Inside a switched-on ward no player has access to, the fireplace takes nothing from the chest |
 | `supply_other_games_chest_untouched` | With the chest owned by another player's game (a made-up session id), Supply does not list or count it, the fireplace takes nothing from it, and the chest stays that game's; it is this game's again afterwards |
+| `supply_take_leaves_chest_without_item_unclaimed` | With the chest empty and without an owner (which the server claims before it writes a chest), a take of the fireplace's fuel moves nothing and leaves the chest without an owner: a chest that lacks the item is passed over before the container gate; it is this game's again afterwards |
 | `supply_settings_restored` | Every setting the section changed is back at your value |
 
 The crafting checks run in one frame, because the player drops a station it is

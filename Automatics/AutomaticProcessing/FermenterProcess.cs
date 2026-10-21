@@ -116,9 +116,9 @@ namespace Automatics.AutomaticProcessing
             {
                 if (productRemaining <= 0) break;
 
-                var inventory = container.GetInventory();
-                if (!Logics.AcceptsProduct(fermenterName, inventory, itemName)) continue;
+                if (!Logics.CanStore(fermenterName, container, item.gameObject, itemName)) continue;
                 if (!Logics.TryClaimContainer(container)) continue;
+                var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(fermenterName, inventory, itemName)) continue;
 
                 var storedItemCount = Logics.AddItemAndGetCountDelta(inventory, item.gameObject,

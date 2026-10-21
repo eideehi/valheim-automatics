@@ -39,11 +39,12 @@ namespace Automatics.AutomaticProcessing
             {
                 if (Capacity() <= 0) break;
 
-                var inventory = container.GetInventory();
-                if (!Logics.AcceptsProduct(wispSpawnerName, inventory, wispName)) continue;
+                if (!Logics.CanStore(wispSpawnerName, container, wispItem.gameObject, wispName))
+                    continue;
                 if (!Logics.TryClaimContainer(container)) continue;
 
                 if (Capacity() <= 0) break;
+                var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(wispSpawnerName, inventory, wispName)) continue;
                 var storedItemCount =
                     Logics.AddItemAndGetCountDelta(inventory, wispItem.gameObject, wispName, 1);
