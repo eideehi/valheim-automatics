@@ -171,6 +171,10 @@ namespace Automatics.ConsoleCommands
                     if (!TryGetLocalPlayer(args)) return;
                     PrintContainer(args);
                     return;
+                default:
+                    AddCommandError(args, Usage());
+                    args.Context.AddString(ExtraOption());
+                    return;
             }
         }
 
