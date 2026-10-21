@@ -23,8 +23,35 @@ namespace Automatics
 
         private void Awake()
         {
-            Automatics.Initialize(this, Logger);
-            ConfigurationGui.Register(this);
+            // Every bind would write the whole file. The entries are bound with autosave off and
+            // the file is written once afterwards. When initialization throws, nothing is
+            // written: the migration stops a start on purpose, and a save would then rewrite
+            // the version header that its pending passes still depend on.
+            var saveOnConfigSet = Config.SaveOnConfigSet;
+            Config.SaveOnConfigSet = false;
+            try
+            {
+                Automatics.Initialize(this, Logger);
+                ConfigurationGui.Register(this);
+            }
+            finally
+            {
+                Config.SaveOnConfigSet = saveOnConfigSet;
+            }
+
+            try
+            {
+                Config.Save();
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException ||
+                                      e is System.Security.SecurityException)
+            {
+                // The BepInEx logger itself, so the warning shows even with Automatics' own
+                // logging off.
+                Logger.LogWarning(
+                    $"Could not write the config file ({e.Message}). New entries reach the file " +
+                    "the next time a setting is saved.");
+            }
         }
 
         private void Update()
@@ -161,12 +188,10 @@ namespace Automatics
             }
 
             Config.Initialize(Plugin.Config);
-            Plugin.Config.Save();
 
             InitializeModules(Assembly.GetExecutingAssembly());
             ModuleRegistry.RequestInitialStates();
 
-            Plugin.Config.Save();
             ValheimObject.PostInitialize();
 
             _runtimeInitialized = true;
