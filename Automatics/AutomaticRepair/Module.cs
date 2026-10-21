@@ -59,9 +59,9 @@ namespace Automatics.AutomaticRepair
             // Patches before subscriptions, so the scope removes them in reverse order (R4.3).
             scope.PatchAll(typeof(Patches));
             scope.Subscribe<Action<Player, ZNetView>>(
-                h => Hooks.OnPlayerAwake += h,
-                h => Hooks.OnPlayerAwake -= h,
-                OnPlayerAwake);
+                h => Hooks.OnLocalPlayerAwake += h,
+                h => Hooks.OnLocalPlayerAwake -= h,
+                OnLocalPlayerAwake);
             scope.Subscribe<Action<Player, float>>(
                 h => Hooks.OnPlayerFixedUpdate += h,
                 h => Hooks.OnPlayerFixedUpdate -= h,
@@ -77,7 +77,7 @@ namespace Automatics.AutomaticRepair
             ResetSession();
         }
 
-        // Bookkeeping has no running gate: disable, activation retries and a new player all
+        // Bookkeeping has no running gate: disable, activation retries and a new local player all
         // release references to the previous session. The scope handles patch and hook removal.
         private static void ResetSession()
         {
@@ -93,7 +93,7 @@ namespace Automatics.AutomaticRepair
             ModuleRegistry.Register(Instance);
         }
 
-        private static void OnPlayerAwake(Player player, ZNetView zNetView)
+        private static void OnLocalPlayerAwake(Player player, ZNetView zNetView)
         {
             ResetSession();
         }

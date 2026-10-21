@@ -92,9 +92,9 @@ namespace Automatics.AutomaticFarming
             // 2. Subscriptions. Named methods, never lambdas: the delegate that is removed has to be
             //    the delegate that was added.
             scope.Subscribe<Action<Player, ZNetView>>(
-                h => Hooks.OnPlayerAwake += h,
-                h => Hooks.OnPlayerAwake -= h,
-                OnPlayerAwake);
+                h => Hooks.OnLocalPlayerAwake += h,
+                h => Hooks.OnLocalPlayerAwake -= h,
+                OnLocalPlayerAwake);
             scope.Subscribe<Action<Player, bool>>(
                 h => Hooks.OnPlayerUpdate += h,
                 h => Hooks.OnPlayerUpdate -= h,
@@ -129,11 +129,11 @@ namespace Automatics.AutomaticFarming
         }
 
         /// <summary>
-        ///     A new player means a new world session, which is where this module has always dropped
-        ///     its timers (R6.2). Deliberately not gated on <see cref="Running" />: it only empties
+        ///     The local player's spawn means a new world session, which is where this module has always
+        ///     dropped its timers (R6.2). Deliberately not gated on <see cref="Running" />: it only empties
         ///     bookkeeping and has no effect on the game, so reaching it after a stop is harmless.
         /// </summary>
-        private static void OnPlayerAwake(Player player, ZNetView zNetView)
+        private static void OnLocalPlayerAwake(Player player, ZNetView zNetView)
         {
             ResetSession();
         }

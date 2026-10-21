@@ -7,6 +7,7 @@ namespace Automatics
     internal static class Hooks
     {
         public static Action<Player, ZNetView> OnPlayerAwake { get; set; }
+        public static Action<Player, ZNetView> OnLocalPlayerAwake { get; set; }
         public static Action<Player, bool> OnPlayerUpdate { get; set; }
         public static Action<Player, float> OnPlayerFixedUpdate { get; set; }
         public static Action<float> OnDedicatedServerFixedUpdate { get; set; }

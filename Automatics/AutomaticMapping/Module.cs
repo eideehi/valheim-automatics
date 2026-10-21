@@ -135,10 +135,6 @@ namespace Automatics.AutomaticMapping
 
             // 2. Subscriptions. Named methods, never lambdas: the delegate that is removed has to
             //    be the delegate that was added.
-            scope.Subscribe<Action<Player, ZNetView>>(
-                h => Hooks.OnPlayerAwake += h,
-                h => Hooks.OnPlayerAwake -= h,
-                OnPlayerAwake);
             scope.Subscribe<Action<Player, bool>>(
                 h => Hooks.OnPlayerUpdate += h,
                 h => Hooks.OnPlayerUpdate -= h,
@@ -242,17 +238,6 @@ namespace Automatics.AutomaticMapping
         internal static void ResetSession()
         {
             AutomaticMapping.Cleanup();
-        }
-
-        /// <summary>
-        ///     A new local player means a new world session, which is where this module has always
-        ///     dropped its state (R6.2). Deliberately not gated on <see cref="Running" />: it only
-        ///     empties bookkeeping, so reaching it after a stop is harmless.
-        /// </summary>
-        private static void OnPlayerAwake(Player player, ZNetView zNetView)
-        {
-            if (Player.m_localPlayer == player)
-                ResetSession();
         }
 
         /// <summary>

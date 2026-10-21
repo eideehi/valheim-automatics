@@ -292,9 +292,11 @@ the handler counts, the component counts and the minimap's icon tables.
 | Check | Asserts |
 |---|---|
 | `mapping_initial_state_settled` | The registry reports `Enabled` before anything is changed |
+| `mapping_initial_player_awake_handlers_none` | Before anything is changed, no handler on `Hooks.OnPlayerAwake` or `Hooks.OnLocalPlayerAwake` is declared by a type of Automatic Mapping (a nested type or closure included), whatever the method is called |
 | `mapping_off_state_disabled` | The registry reports `Disabled` after the disable request |
 | `mapping_off_stopped_at_request` | Right after the disable request the module is still applied but no longer running, which is what every entry point checks, and the static scan's pass counter does not move until `Disabled`: the stop takes hold at the request, not at the teardown |
 | `mapping_off_patches_removed` | No patch is left under Mapping's Harmony id (SKIP when runtime patch removal is unavailable) |
+| `mapping_off_player_awake_handlers_none` | The same after the disable: Mapping declares no handler on either player-awake hook |
 | `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode`, `AutomaticsNavigationOverlay` or `AutomaticsNavigationGuide` is left in the scene |
 | `mapping_off_held_swarm_removed` | Once in the run, just before the first disable request at which a guide swarm is shown for the temporary target, that swarm is hidden and held the way a map click that clears navigation holds it. PASS when the held swarm is that swarm and no `AutomaticsNavigationGuide` is left after that disable; FAIL when no held swarm was made from the shown swarm or a guide object is left. Checked once, not per cycle (SKIP, with the reason, when no swarm was shown before any disable, for example with `enable_navigation_guide` off) |
 | `mapping_off_compass_removed` | The compass, seen on the small map before the large map is opened for the filter checks, is gone in the frame of the disable request once the compass update of the player's frame has run there, and no `AutomaticsCompass` is left once the module is `Disabled` |
@@ -302,6 +304,7 @@ the handler counts, the component counts and the minimap's icon tables.
 | `mapping_off_unsaved_pins_removed` | None of the unsaved pins the module held just before the disable is on the map (SKIP when it held none) |
 | `mapping_on_state_enabled` | The registry reports `Enabled` after the enable request |
 | `mapping_on_patches_applied` | The patches under Mapping's Harmony id are exactly the (target, patch method) pairs its three patch classes declare |
+| `mapping_on_player_awake_handlers_none` | The same with the module running again |
 | `mapping_on_components_attached` | Every fish, bird, ship and `MineRock5` with a ZDO, and every pickable that is a configured flora, carries its component from the running generation, and there is no other (SKIP, inconclusive, when the scene has none of them) |
 | `mapping_on_counts_at_baseline` | The handler counts of the hooks, caches and registries Mapping subscribes to, the component counts, and the lengths of `Minimap.m_icons` and `m_visibleIconTypes` are what they were before the run |
 | `mapping_on_scans_resumed` | Within 10 s the static scan has run again and, if it held pins before the run, it holds one again (SKIP when a setting keeps the static scan from running on its own, such as `static_object_mapping_key`) |
@@ -391,6 +394,17 @@ component count that was 0 at the baseline or a target of 0, makes its check
 SKIP as inconclusive. A module's own checks are reported after the checks of the
 phase they run in (at the request, while off or after the enable), and each one
 reports PASS, FAIL or SKIP.
+
+The session-reset handlers of Door, Farming, Mining, Repair, Supply and Woodcutting
+sit on `Hooks.OnLocalPlayerAwake`, which is raised only for a player character the
+local game owns, so their probes count that hook. Each of those modules also has a
+`<module>.Hooks.OnPlayerAwake.declared` probe: the handlers the module's own types
+declare on `Hooks.OnPlayerAwake`, whatever the method is called, which must read 0
+before the run, while it runs and while it is off, so a reset handler left on the
+all-player hook fails it. Automatic Pickup attaches to every
+player character and stays on `Hooks.OnPlayerAwake`. The run does not create a
+character that another game owns, so that a remote player's character leaves the
+session state alone is not checked in game.
 
 Safety, on top of the rules above:
 
@@ -567,7 +581,7 @@ range as it normally would; the check itself moves no item.
 `supply` uses the descriptor-driven runner for three off/on cycles of
 `automatic_supply / module`. It checks Supply's patches (the requirement checks
 and panels, the inventory counts, the removal overloads it measures, crafting,
-placement and the station intakes), its one `OnPlayerAwake` subscription and
+placement and the station intakes), its one `OnLocalPlayerAwake` subscription and
 named handler, and, while off, that no counting scope, suppression or open action
 is left (`supply_session_idle_while_off`). It spawns nothing and moves no item.
 Automatic Supply is off by default, so unlike the other modules it is turned on

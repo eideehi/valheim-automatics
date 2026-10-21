@@ -92,6 +92,9 @@ namespace Automatics.SmokeTest
         private sealed class MappingRun
         {
             private const string Settled = "mapping_initial_state_settled";
+            private const string InitialAwakeHandlers = "mapping_initial_player_awake_handlers_none";
+            private const string OffAwakeHandlers = "mapping_off_player_awake_handlers_none";
+            private const string OnAwakeHandlers = "mapping_on_player_awake_handlers_none";
             private const string OffState = "mapping_off_state_disabled";
             private const string OffStopped = "mapping_off_stopped_at_request";
             private const string OffPatches = "mapping_off_patches_removed";
@@ -118,18 +121,19 @@ namespace Automatics.SmokeTest
             // are reported in.
             private static readonly string[] Order =
             {
-                Settled, OffState, OffStopped, OffPatches, OffComponents, OffHeldSwarm, OffCompass, OffFilterControls, OffFilterSearch,
+                Settled, InitialAwakeHandlers, OffState, OffStopped, OffPatches, OffAwakeHandlers, OffComponents, OffHeldSwarm, OffCompass, OffFilterControls, OffFilterSearch,
                 OffTooltip, OffSavedPins, OffUnsavedPins,
-                OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, OnCompassOption,
+                OnState, OnFilterSearch, OnPatches, OnAwakeHandlers, OnComponents, OnBaseline, OnResumed, OnSavedPins,
+                OnCompassOption,
                 Restored, NoErrors
             };
 
             // Recorded once per cycle, and a PASS only when every cycle passed.
             private static readonly HashSet<string> PerCycle = new HashSet<string>(StringComparer.Ordinal)
             {
-                OffState, OffStopped, OffPatches, OffComponents, OffCompass, OffFilterControls, OffFilterSearch,
-                OffTooltip, OffSavedPins, OffUnsavedPins,
-                OnState, OnFilterSearch, OnPatches, OnComponents, OnBaseline, OnResumed, OnSavedPins, OnCompassOption
+                OffState, OffStopped, OffPatches, OffAwakeHandlers, OffComponents, OffCompass, OffFilterControls,
+                OffFilterSearch, OffTooltip, OffSavedPins, OffUnsavedPins,
+                OnState, OnFilterSearch, OnPatches, OnAwakeHandlers, OnComponents, OnBaseline, OnResumed, OnSavedPins, OnCompassOption
             };
 
             private static readonly FieldInfo PinsField = AccessTools.Field(typeof(Minimap), "m_pins");
@@ -262,6 +266,11 @@ namespace Automatics.SmokeTest
                 }
 
                 _baseline = TakeBaseline(components);
+                var initialAwake = MappingAwakeHandlers();
+                Settle(initialAwake.Count == 0 ? CheckStatus.Pass : CheckStatus.Fail, InitialAwakeHandlers,
+                    initialAwake.Count == 0
+                        ? "before the run Automatic Mapping declares no handler on Hooks.OnPlayerAwake or Hooks.OnLocalPlayerAwake"
+                        : $"before the run Automatic Mapping declares handler(s) on the player-awake hooks: {string.Join(", ", initialAwake)}");
                 _pinsBefore = new HashSet<Minimap.PinData>(AllPins());
                 _originalNavigation = Navigation.CaptureTarget();
                 _originalSearch = MapFilter.SearchText;
@@ -533,6 +542,11 @@ namespace Automatics.SmokeTest
                         $"{total} patch(es) are still under \"{_harmonyId}\" after the disable: [{string.Join(", ", left.OrderBy(x => x).Take(5))}] (AC-R3)");
                 }
 
+                var offAwake = MappingAwakeHandlers();
+                Cycle(OffAwakeHandlers, cycle, offAwake.Count == 0,
+                    "after the disable Automatic Mapping declares no handler on Hooks.OnPlayerAwake or Hooks.OnLocalPlayerAwake",
+                    $"after the disable Automatic Mapping declares handler(s) on the player-awake hooks: {string.Join(", ", offAwake)}");
+
                 var kinds = CountComponents();
                 var overlays = CountNavigationOverlays();
                 var guides = CountNavigationGuides();
@@ -594,6 +608,11 @@ namespace Automatics.SmokeTest
                 var enabledAt = Time.realtimeSinceStartup;
 
                 CheckPatchSet(cycle);
+
+                var onAwake = MappingAwakeHandlers();
+                Cycle(OnAwakeHandlers, cycle, onAwake.Count == 0,
+                    "with the module running it declares no handler on Hooks.OnPlayerAwake or Hooks.OnLocalPlayerAwake",
+                    $"with the module running it declares handler(s) on the player-awake hooks: {string.Join(", ", onAwake)}");
 
                 // The scan in Enable attaches synchronously, so the components are all there now,
                 // up to the same-frame timing described at ComponentSettleFrames.
@@ -955,6 +974,33 @@ namespace Automatics.SmokeTest
                 return result;
             }
 
+            // The handlers on the two player-awake hooks that a type of Automatic Mapping declares,
+            // a nested type or a closure included, whatever the method is called. The module has
+            // none: its session reset does not run from either hook.
+            private static List<string> MappingAwakeHandlers()
+            {
+                var found = new List<string>();
+                foreach (var pair in new[]
+                         {
+                             ("Hooks.OnPlayerAwake", Hooks.OnPlayerAwake as Delegate),
+                             ("Hooks.OnLocalPlayerAwake", Hooks.OnLocalPlayerAwake as Delegate)
+                         })
+                {
+                    if (pair.Item2 == null) continue;
+                    foreach (var handler in pair.Item2.GetInvocationList())
+                        if (IsMappingType(handler.Method.DeclaringType))
+                            found.Add($"{pair.Item1} -> {handler.Method.DeclaringType?.Name}.{handler.Method.Name}");
+                }
+
+                return found;
+            }
+
+            private static bool IsMappingType(Type type)
+            {
+                while (type?.DeclaringType != null) type = type.DeclaringType;
+                return type != null && type.Namespace == "Automatics.AutomaticMapping";
+            }
+
             private static int NavigationDestroyHandlers()
             {
                 return ZDOMan.instance?.m_onZDODestroyed?.GetInvocationList()
@@ -966,6 +1012,7 @@ namespace Automatics.SmokeTest
                 return new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["Hooks.OnPlayerAwake"] = Invocations(Hooks.OnPlayerAwake),
+                    ["Hooks.OnLocalPlayerAwake"] = Invocations(Hooks.OnLocalPlayerAwake),
                     ["Hooks.OnPlayerUpdate"] = Invocations(Hooks.OnPlayerUpdate),
                     ["Navigation destruction handlers"] = NavigationDestroyHandlers(),
                     ["Hooks.OnPlayerFixedUpdate"] = Invocations(Hooks.OnPlayerFixedUpdate),

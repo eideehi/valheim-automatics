@@ -83,9 +83,9 @@ namespace Automatics.AutomaticDoor
 
             // Named handlers let the scope remove the same delegates that it added.
             scope.Subscribe<Action<Player, ZNetView>>(
-                h => Hooks.OnPlayerAwake += h,
-                h => Hooks.OnPlayerAwake -= h,
-                OnPlayerAwake);
+                h => Hooks.OnLocalPlayerAwake += h,
+                h => Hooks.OnLocalPlayerAwake -= h,
+                OnLocalPlayerAwake);
             scope.Subscribe<Action<Player, float>>(
                 h => Hooks.OnPlayerFixedUpdate += h,
                 h => Hooks.OnPlayerFixedUpdate -= h,
@@ -122,10 +122,10 @@ namespace Automatics.AutomaticDoor
         }
 
         /// <summary>
-        ///     A new player marks a new world session. This only clears bookkeeping, so it remains
-        ///     safe and useful when a previously fetched invocation list reaches it after a stop.
+        ///     The local player's spawn marks a new world session. This only clears bookkeeping, so it
+        ///     remains safe and useful when a previously fetched invocation list reaches it after a stop.
         /// </summary>
-        private static void OnPlayerAwake(Player player, ZNetView nview)
+        private static void OnLocalPlayerAwake(Player player, ZNetView nview)
         {
             ResetState();
         }

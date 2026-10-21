@@ -22,8 +22,15 @@ namespace Automatics
         [HarmonyPatch(typeof(Player), "Awake")]
         private static void Player_Awake_Postfix(Player __instance)
         {
-            if (Objects.GetZNetView(__instance, out var zNetView))
-                Hooks.OnPlayerAwake?.Invoke(__instance, zNetView);
+            if (!Objects.GetZNetView(__instance, out var zNetView)) return;
+
+            Hooks.OnPlayerAwake?.Invoke(__instance, zNetView);
+
+            // A character the local game spawns gets a new ZDO that it owns, while a remote
+            // player's character arrives with the ZDO its own game owns. Player.m_localPlayer is
+            // only assigned after Awake, so ownership is what tells the two apart here.
+            if (Objects.HasValidOwnership(zNetView))
+                Hooks.OnLocalPlayerAwake?.Invoke(__instance, zNetView);
         }
 
         [HarmonyTranspiler]

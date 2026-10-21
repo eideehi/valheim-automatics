@@ -99,7 +99,7 @@ namespace Automatics.SmokeTest
                 PatchTypes = new[] { typeof(DoorPatches) },
                 Probes = new[]
                 {
-                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnLocalPlayerAwake", () => Hooks.OnLocalPlayerAwake, 1),
                     // The toggle shortcut's handler stays subscribed while the module is off.
                     Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 0),
                     Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
@@ -112,8 +112,10 @@ namespace Automatics.SmokeTest
                     // both times (0 -> 0 -> 0, 2 -> 0 -> 2). These name Door's own handler,
                     // count only its occurrences, and pin the re-enabled reading to exactly 1
                     // instead, so either failure shows.
-                    Probe.Counter("door.OnPlayerAwake.handler",
-                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(DoorModule), "OnPlayerAwake"),
+                    Probe.NoneDeclared("door.Hooks.OnPlayerAwake.declared",
+                        () => Hooks.OnPlayerAwake, typeof(DoorModule)),
+                    Probe.Counter("door.OnLocalPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnLocalPlayerAwake, typeof(DoorModule), "OnLocalPlayerAwake"),
                         OffExpectation.Zero, 0, () => 1),
                     Probe.Counter("door.OnToggleShortcut.handler",
                         () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(DoorModule), "OnToggleShortcut"),
@@ -248,11 +250,13 @@ namespace Automatics.SmokeTest
                 PatchTypes = new[] { typeof(FarmingPatches) },
                 Probes = new[]
                 {
-                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnLocalPlayerAwake", () => Hooks.OnLocalPlayerAwake, 1),
                     Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
                     Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
-                    Probe.Counter("farming.OnPlayerAwake.handler",
-                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(FarmingModule), "OnPlayerAwake"),
+                    Probe.NoneDeclared("farming.Hooks.OnPlayerAwake.declared",
+                        () => Hooks.OnPlayerAwake, typeof(FarmingModule)),
+                    Probe.Counter("farming.OnLocalPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnLocalPlayerAwake, typeof(FarmingModule), "OnLocalPlayerAwake"),
                         OffExpectation.Zero, 0, () => 1),
                     Probe.Counter("farming.OnPlayerUpdate.handler",
                         () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(FarmingModule), "OnPlayerUpdate"),
@@ -545,12 +549,14 @@ namespace Automatics.SmokeTest
                 PatchTypes = new[] { typeof(MiningPatches) },
                 Probes = new[]
                 {
-                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnLocalPlayerAwake", () => Hooks.OnLocalPlayerAwake, 1),
                     Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
                     Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
-                    Probe.Counter("mining.OnPlayerAwake.handler",
-                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(MiningModule),
-                            "OnPlayerAwake"), OffExpectation.Zero, 0, () => 1),
+                    Probe.NoneDeclared("mining.Hooks.OnPlayerAwake.declared",
+                        () => Hooks.OnPlayerAwake, typeof(MiningModule)),
+                    Probe.Counter("mining.OnLocalPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnLocalPlayerAwake, typeof(MiningModule),
+                            "OnLocalPlayerAwake"), OffExpectation.Zero, 0, () => 1),
                     Probe.Counter("mining.OnPlayerUpdate.handler",
                         () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(MiningModule),
                             "OnPlayerUpdate"), OffExpectation.Zero, 0, () => 1),
@@ -785,10 +791,12 @@ namespace Automatics.SmokeTest
                 PatchTypes = new[] { typeof(RepairPatches) },
                 Probes = new[]
                 {
-                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnLocalPlayerAwake", () => Hooks.OnLocalPlayerAwake, 1),
                     Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
-                    Probe.Counter("repair.OnPlayerAwake.handler",
-                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(RepairModule), "OnPlayerAwake"),
+                    Probe.NoneDeclared("repair.Hooks.OnPlayerAwake.declared",
+                        () => Hooks.OnPlayerAwake, typeof(RepairModule)),
+                    Probe.Counter("repair.OnLocalPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnLocalPlayerAwake, typeof(RepairModule), "OnLocalPlayerAwake"),
                         OffExpectation.Zero, 0, () => 1),
                     Probe.Counter("repair.OnPlayerFixedUpdate.handler",
                         () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(RepairModule), "OnPlayerFixedUpdate"),
@@ -816,9 +824,11 @@ namespace Automatics.SmokeTest
                 PatchTypes = new[] { typeof(SupplyPatches) },
                 Probes = new[]
                 {
-                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
-                    Probe.Counter("supply.OnPlayerAwake.handler",
-                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(SupplyModule), "OnPlayerAwake"),
+                    Probe.Handlers("Hooks.OnLocalPlayerAwake", () => Hooks.OnLocalPlayerAwake, 1),
+                    Probe.NoneDeclared("supply.Hooks.OnPlayerAwake.declared",
+                        () => Hooks.OnPlayerAwake, typeof(SupplyModule)),
+                    Probe.Counter("supply.OnLocalPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnLocalPlayerAwake, typeof(SupplyModule), "OnLocalPlayerAwake"),
                         OffExpectation.Zero, 0, () => 1)
                 },
                 Precondition = null,
@@ -859,12 +869,14 @@ namespace Automatics.SmokeTest
                 PatchTypes = new[] { typeof(WoodcuttingPatches) },
                 Probes = new[]
                 {
-                    Probe.Handlers("Hooks.OnPlayerAwake", () => Hooks.OnPlayerAwake, 1),
+                    Probe.Handlers("Hooks.OnLocalPlayerAwake", () => Hooks.OnLocalPlayerAwake, 1),
                     Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
                     Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
-                    Probe.Counter("woodcutting.OnPlayerAwake.handler",
-                        () => CountHandlersOf(Hooks.OnPlayerAwake, typeof(WoodcuttingModule),
-                            "OnPlayerAwake"), OffExpectation.Zero, 0, () => 1),
+                    Probe.NoneDeclared("woodcutting.Hooks.OnPlayerAwake.declared",
+                        () => Hooks.OnPlayerAwake, typeof(WoodcuttingModule)),
+                    Probe.Counter("woodcutting.OnLocalPlayerAwake.handler",
+                        () => CountHandlersOf(Hooks.OnLocalPlayerAwake, typeof(WoodcuttingModule),
+                            "OnLocalPlayerAwake"), OffExpectation.Zero, 0, () => 1),
                     Probe.Counter("woodcutting.OnPlayerUpdate.handler",
                         () => CountHandlersOf(Hooks.OnPlayerUpdate, typeof(WoodcuttingModule),
                             "OnPlayerUpdate"), OffExpectation.Zero, 0, () => 1),
@@ -1127,6 +1139,14 @@ namespace Automatics.SmokeTest
                     .Count(x => x.Method.DeclaringType == declaringType && x.Method.Name == methodName);
         }
 
+        // The handlers of a delegate that a type declares, whatever the method is called.
+        private static int CountHandlersDeclaredBy(Delegate handlers, Type declaringType)
+        {
+            return handlers == null
+                ? 0
+                : handlers.GetInvocationList().Count(x => x.Method.DeclaringType == declaringType);
+        }
+
         // An event is read through the field behind it; -1 when there is no such field.
         private static int CountEventHandlers(Type owner, string eventName)
         {
@@ -1202,6 +1222,10 @@ namespace Automatics.SmokeTest
             // target of 0 shows nothing, and makes the check inconclusive.
             public Func<int> Target;
 
+            // A probe that has to read 0 before the run, while the module is on and while it is
+            // off, such as the handlers a module must not have on a hook.
+            public bool AlwaysZero;
+
             // The handler count of a delegate property, such as Hooks.OnPlayerUpdate.
             public static Probe Handlers(string name, Func<Delegate> read, int delta)
             {
@@ -1239,6 +1263,16 @@ namespace Automatics.SmokeTest
                 {
                     Name = typeof(T).Name, Read = CountObjects<T>, Off = OffExpectation.Zero,
                     Target = eligible
+                };
+            }
+
+            // The handlers a type declares on a delegate, which have to be 0 in every state.
+            public static Probe NoneDeclared(string name, Func<Delegate> read, Type declaringType)
+            {
+                return new Probe
+                {
+                    Name = name, Read = () => CountHandlersDeclaredBy(read(), declaringType),
+                    Off = OffExpectation.Zero, AlwaysZero = true
                 };
             }
 
@@ -1809,6 +1843,17 @@ namespace Automatics.SmokeTest
                     if (now < 0 || before < 0)
                     {
                         reading.Failures.Add($"{probe.Name} could not be read");
+                        continue;
+                    }
+
+                    if (probe.AlwaysZero)
+                    {
+                        if (before != 0)
+                            reading.Failures.Add($"{probe.Name} read {before} before the run where it should read 0");
+                        else if (now != 0)
+                            reading.Failures.Add($"{probe.Name} reads {now} where it should read 0");
+                        else
+                            reading.Seen.Add($"{probe.Name} {now}");
                         continue;
                     }
 

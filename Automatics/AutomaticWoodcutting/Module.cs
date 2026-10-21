@@ -65,9 +65,9 @@ namespace Automatics.AutomaticWoodcutting
             scope.PatchAll(typeof(Patches));
 
             scope.Subscribe<Action<Player, ZNetView>>(
-                h => Hooks.OnPlayerAwake += h,
-                h => Hooks.OnPlayerAwake -= h,
-                OnPlayerAwake);
+                h => Hooks.OnLocalPlayerAwake += h,
+                h => Hooks.OnLocalPlayerAwake -= h,
+                OnLocalPlayerAwake);
             scope.Subscribe<Action<Player, bool>>(
                 h => Hooks.OnPlayerUpdate += h,
                 h => Hooks.OnPlayerUpdate -= h,
@@ -105,7 +105,7 @@ namespace Automatics.AutomaticWoodcutting
             ModuleRegistry.Register(Instance);
         }
 
-        private static void OnPlayerAwake(Player player, ZNetView nview)
+        private static void OnLocalPlayerAwake(Player player, ZNetView nview)
         {
             Cleanup();
         }

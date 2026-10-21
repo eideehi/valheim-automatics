@@ -64,9 +64,9 @@ namespace Automatics.AutomaticSupply
             // 2. Subscription. A named method, never a lambda: the delegate that is removed has to
             //    be the delegate that was added.
             scope.Subscribe<Action<Player, ZNetView>>(
-                h => Hooks.OnPlayerAwake += h,
-                h => Hooks.OnPlayerAwake -= h,
-                OnPlayerAwake);
+                h => Hooks.OnLocalPlayerAwake += h,
+                h => Hooks.OnLocalPlayerAwake -= h,
+                OnLocalPlayerAwake);
 
             Active = true;
         }
@@ -89,10 +89,10 @@ namespace Automatics.AutomaticSupply
         }
 
         /// <summary>
-        ///     A new player means a new world session. Not gated on <see cref="Running" />: it only
-        ///     empties bookkeeping.
+        ///     The local player's spawn means a new world session. Not gated on <see cref="Running" />: it
+        ///     only empties bookkeeping.
         /// </summary>
-        private static void OnPlayerAwake(Player player, ZNetView zNetView)
+        private static void OnLocalPlayerAwake(Player player, ZNetView zNetView)
         {
             ResetSession();
         }
