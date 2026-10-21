@@ -89,21 +89,33 @@ namespace Automatics.AutomaticMapping
                 }
             }
 
-            // Minimap.Start invokes LoadMapData before this postfix runs,
-            // so AddPin_Postfix coverage depends on module load order.
-            // A minimap the module is turned on for has pins the index
-            // never saw at all. Rebuilding from the live list covers both,
-            // and also drops stale PinData references from a prior session.
+            // The game restores the saved pins in the minimap's first
+            // Update, after the Minimap.Start postfix has called this, and
+            // the AddPin postfix tracks each of them as it comes back
+            // (TrackPin). A minimap the module is turned on for already has
+            // pins that postfix may never have seen, so both are rebuilt
+            // from the live list, which also drops stale PinData references
+            // from a prior session.
             AutomaticPins.Clear();
             PinIndex.Clear();
             PinCategories.Cleanup();
             var pins = GetAllPins(map);
             for (var i = 0; i < pins.Count; i++)
-            {
-                PinIndex.Track(pins[i]);
-                if (IsPersistedAutomaticPin(pins[i]))
-                    TrackAutomaticPin(pins[i]);
-            }
+                TrackPin(pins[i]);
+        }
+
+        /// <summary>
+        ///     Indexes a pin the minimap holds and recognises it as automatic when it is one
+        ///     Automatics saved itself (saved, no owner, the local platform user as its author).
+        ///     While the module runs, every pin added through Minimap.AddPin comes through here,
+        ///     the saved pins the game restores from the map data included, so a saved automatic
+        ///     pin is recognised however it got back onto the map.
+        /// </summary>
+        public static void TrackPin(Minimap.PinData pinData)
+        {
+            PinIndex.Track(pinData);
+            if (IsPersistedAutomaticPin(pinData))
+                TrackAutomaticPin(pinData);
         }
 
         /// <summary>

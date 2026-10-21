@@ -43,8 +43,9 @@ namespace Automatics.SmokeTest
     //     stop request on, and turning its option off alone removes it while the module runs;
     //   - while on, the patches are exactly the declared set, every eligible object in the scene
     //     carries its component from the running generation, the handler counts, component counts
-    //     and minimap icon tables are what they were before the run, the scans run again, and the
-    //     saved pins are still the ones there were before the run.
+    //     and minimap icon tables are what they were before the run, the scans run again, the
+    //     saved pins are still the ones there were before the run, and those recognized as
+    //     automatic before the run are recognized again.
     // A vehicle pin is a saved pin that follows its vehicle, and a disable moves it to where its
     // vehicle is, so the saved-pin comparison leaves the position of the vehicle pins out.
     //
@@ -114,6 +115,7 @@ namespace Automatics.SmokeTest
             private const string OnBaseline = "mapping_on_counts_at_baseline";
             private const string OnResumed = "mapping_on_scans_resumed";
             private const string OnSavedPins = "mapping_on_saved_pins_kept";
+            private const string OnRecognizedPins = "mapping_on_saved_automatic_pins_recognized";
             private const string Restored = "mapping_restored_initial_state";
             private const string NoErrors = "mapping_no_errors_logged";
 
@@ -124,7 +126,7 @@ namespace Automatics.SmokeTest
                 Settled, InitialAwakeHandlers, OffState, OffStopped, OffPatches, OffAwakeHandlers, OffComponents, OffHeldSwarm, OffCompass, OffFilterControls, OffFilterSearch,
                 OffTooltip, OffSavedPins, OffUnsavedPins,
                 OnState, OnFilterSearch, OnPatches, OnAwakeHandlers, OnComponents, OnBaseline, OnResumed, OnSavedPins,
-                OnCompassOption,
+                OnRecognizedPins, OnCompassOption,
                 Restored, NoErrors
             };
 
@@ -133,7 +135,8 @@ namespace Automatics.SmokeTest
             {
                 OffState, OffStopped, OffPatches, OffAwakeHandlers, OffComponents, OffCompass, OffFilterControls,
                 OffFilterSearch, OffTooltip, OffSavedPins, OffUnsavedPins,
-                OnState, OnFilterSearch, OnPatches, OnAwakeHandlers, OnComponents, OnBaseline, OnResumed, OnSavedPins, OnCompassOption
+                OnState, OnFilterSearch, OnPatches, OnAwakeHandlers, OnComponents, OnBaseline, OnResumed, OnSavedPins,
+                OnRecognizedPins, OnCompassOption
             };
 
             private static readonly FieldInfo PinsField = AccessTools.Field(typeof(Minimap), "m_pins");
@@ -607,6 +610,10 @@ namespace Automatics.SmokeTest
                     $"search reset failed after enable: text={MapFilter.SearchText}, pinned={MapFilter.SearchPinned}");
                 var enabledAt = Time.realtimeSinceStartup;
 
+                // Read as soon as the module reports Enabled, before the waits below give the scans
+                // time to take saved pins back into their caches.
+                CheckRecognizedPins(cycle);
+
                 CheckPatchSet(cycle);
 
                 var onAwake = MappingAwakeHandlers();
@@ -659,6 +666,33 @@ namespace Automatics.SmokeTest
                 while (option.MoveNext()) yield return option.Current;
 
                 _proceed = true;
+            }
+
+            // The saved pins recognized as automatic before the run are recognized again once the
+            // module is back on, so their filters, adoption and destroyed-object removal still
+            // reach them.
+            private void CheckRecognizedPins(int cycle)
+            {
+                if (_baseline.RecognizedPins.Count == 0)
+                {
+                    CycleSkip(OnRecognizedPins, cycle,
+                        "no saved pin was recognized as automatic before the run, so there was nothing to see recognized again");
+                    return;
+                }
+
+                var onMap = new HashSet<Minimap.PinData>(AllPins());
+                var kept = _baseline.RecognizedPins.Where(onMap.Contains).ToList();
+                if (kept.Count == 0)
+                {
+                    CycleSkip(OnRecognizedPins, cycle,
+                        $"inconclusive: none of the {_baseline.RecognizedPins.Count} saved pin(s) recognized as automatic before the run is on the map");
+                    return;
+                }
+
+                var lost = kept.Count(pin => !MappingMap.IsAutomaticPin(pin));
+                Cycle(OnRecognizedPins, cycle, lost == 0,
+                    $"the {kept.Count} saved pin(s) recognized as automatic before the run are recognized again right after the enable",
+                    $"{lost} of the {kept.Count} saved pin(s) recognized as automatic before the run are not recognized right after the enable");
             }
 
             // With the module running, turning the compass option off alone removes the compass
@@ -899,8 +933,10 @@ namespace Automatics.SmokeTest
             {
                 var vehicles = new HashSet<Minimap.PinData>(
                     AllPins().Where(pin => pin != null && pin.m_save && DynamicObjectMapping.OwnsPin(pin)));
+                var recognized = new HashSet<Minimap.PinData>(
+                    AllPins().Where(pin => pin != null && pin.m_save && MappingMap.IsAutomaticPin(pin)));
                 return new Baseline(HandlerCounts(), components, IconCount(), IconTypeCount(),
-                    vehicles, SavedPins(vehicles), StaticHeldCount());
+                    vehicles, SavedPins(vehicles), recognized, StaticHeldCount());
             }
 
             // Every kind is on exactly its eligible objects, all from the running generation.
@@ -1143,7 +1179,7 @@ namespace Automatics.SmokeTest
             {
                 public Baseline(Dictionary<string, int> handlers, List<Kind> components, int icons,
                     int iconTypes, HashSet<Minimap.PinData> vehiclePins, List<string> savedPins,
-                    int staticHeld)
+                    HashSet<Minimap.PinData> recognizedPins, int staticHeld)
                 {
                     Handlers = handlers;
                     Components = components;
@@ -1151,6 +1187,7 @@ namespace Automatics.SmokeTest
                     IconTypes = iconTypes;
                     VehiclePins = vehiclePins;
                     SavedPins = savedPins;
+                    RecognizedPins = recognizedPins;
                     StaticHeld = staticHeld;
                 }
 
@@ -1160,6 +1197,7 @@ namespace Automatics.SmokeTest
                 public int IconTypes { get; }
                 public HashSet<Minimap.PinData> VehiclePins { get; }
                 public List<string> SavedPins { get; }
+                public HashSet<Minimap.PinData> RecognizedPins { get; }
                 public int StaticHeld { get; }
             }
         }

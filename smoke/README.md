@@ -321,8 +321,9 @@ Takes `automatic_mapping / module` from `Enabled` through three off → on cycle
 by writing the setting, the way a user does, and makes sure it ends at its
 starting value. It spawns nothing. It turns `enable_compass` on for the run and
 puts it back at the end, as it does for the looked-at object bar and map filter
-settings it uses. Before the first cycle it records a baseline: the saved pins,
-the handler counts, the component counts and the minimap's icon tables.
+settings it uses. Before the first cycle it records a baseline: the saved pins
+and which of them are recognized as automatic, the handler counts, the component
+counts and the minimap's icon tables.
 
 | Check | Asserts |
 |---|---|
@@ -344,6 +345,7 @@ the handler counts, the component counts and the minimap's icon tables.
 | `mapping_on_counts_at_baseline` | The handler counts of the hooks, caches and registries Mapping subscribes to, the component counts, and the lengths of `Minimap.m_icons` and `m_visibleIconTypes` are what they were before the run |
 | `mapping_on_scans_resumed` | Within 10 s the static scan has run again and, if it held pins before the run, it holds one again (SKIP when a setting keeps the static scan from running on its own, such as `static_object_mapping_key`) |
 | `mapping_on_saved_pins_kept` | 4 s after the enable, once the flora pins are placed again, the saved pins are still the ones there were before the run |
+| `mapping_on_saved_automatic_pins_recognized` | As soon as the registry reports `Enabled`, every saved pin that was recognized as automatic before the run and is still on the map is recognized as automatic again (SKIP when no saved pin was recognized before the run, or none of them is on the map) |
 | `mapping_on_compass_option_off_removed` | With the module running, the compass is shown on the small map, is gone in the frame `enable_compass` is turned off and is not left in the scene two frames later; the option is then turned back on for the next cycle |
 
 The component counts are sampled again for up to 10 frames before a mismatch is
@@ -1078,6 +1080,10 @@ the console is open.
 | `pin_location_interior` | With the camera inside a dungeon interior, a ray at an interior surface saves the pin of the location in that zone at its entrance position (SKIP outdoors: interiors are out of pin range from outside) |
 | `pin_bare_ground` | A camera ray to bare terrain outside loaded location areas adds an unnamed saved `Icon3` pin at the hit point |
 | `pin_no_hit` | A camera ray with nothing within range adds nothing |
+| `pin_saved_automatic_recognized` | A saved pin with no owner and your platform user as its author, added through `Minimap.AddPin` as the game adds each saved pin back when it loads the map, is recognized as an automatic pin (SKIP when no local platform user is available) |
+| `pin_saved_manual_not_recognized` | The same kind of pin without an author, as a pin you placed or saved by clicking is stored, is not recognized as automatic |
+| `pin_shared_not_recognized` | The same kind of pin with your author but an owner, as a shared pin is stored, is not recognized as automatic |
+| `pin_saved_automatic_uncached_duplicate` | A ray to a spawned non-persistent Stone drop that has a recognized saved automatic pin at its position, under its stored name, and no static cache entry adds nothing: the action reports the duplicate, and the object's pin lookup (which the navigation key shares) returns that saved pin |
 | `pin_cleanup` | Every pin created by the section has been removed |
 
 Location checks read loaded locations without modifying them and remove only their own pins and objects. They SKIP with a reason when no suitable location ray without an existing manual pin is available; stand near a dungeon entrance or tar pit and retry. No location prefab is spawned because its initialization can generate terrain or entities. Vanilla `Piece.SetCreator` writes only while the creator is 0, so the creator-0 piece is its own spawn and never gets a creator. Test pieces, trees, deposits and creatures are non-persistent, placed only where the camera ray's first hit is the object at a point that exactly one loaded location area contains (strictly inside, as `Location.IsInside` tests), and deactivated and removed before the next check; the `pin_piece_name` piece gets its position back. Checks SKIP with a reason when no such spot, unobstructed ray or duplicate-free position is available, and `pin_location_ground` SKIPs when every terrain point it finds lies inside more than one area. The action gives world-generated pieces, terrain and unnamed hits the nearest containing loaded location; when that location is unrecognized, the usual object or ground pin applies. Player-built pieces, creatures, deposits, trees, loose items and non-piece networked parts of a location such as destructibles or interactables keep their own pins; the game spawns those parts as scene roots, not under the location.
@@ -1086,8 +1092,10 @@ Obstructed object rays, unavailable bare ground, existing duplicate pins, and
 no empty direction within range cause the affected checks to SKIP. Move to an
 open area and retry. Pin creation and removal finish in the same frame, before
 another map save or player input. Only pins added by the section's calls are
-removed; existing pins are untouched. The test drop and the test piece use the
-shared session cleanup, and the drop never enters the inventory. Cleanup failures stay registered with
+removed; existing pins are untouched. The saved-pin checks add their pins one at
+a time through `Minimap.AddPin` next to you; they never load, replace or clear
+the map data. The test drops and the test piece use the
+shared session cleanup, and the drops never enter the inventory. Cleanup failures stay registered with
 the session for retry. Physical hotkey input, save/reload persistence, and a
 module off/on with the saved pin remain in-game verification steps outside this
 section; use `automatics_smoke_lifecycle mapping` for the module lifecycle checks.

@@ -6,6 +6,7 @@ using Automatics.AutomaticMapping;
 using Automatics.Valheim;
 using HarmonyLib;
 using ModUtils;
+using Splatform;
 using UnityEngine;
 using MappingConfig = Automatics.AutomaticMapping.Config;
 using MappingModule = Automatics.AutomaticMapping.Module;
@@ -86,6 +87,8 @@ namespace Automatics.SmokeTest
                 CheckInterior(run, player, created);
                 CheckGround(run, player, created);
                 CheckMiss(run, player, created);
+                CheckSavedPinRecognition(run, player, map, created);
+                CheckUncachedAutomaticPin(run, player, map, created);
             }
             finally
             {
@@ -908,6 +911,158 @@ namespace Automatics.SmokeTest
                 return;
             }
             run.Skip("pin_no_hit", "every test direction hits something within range; stand outdoors and retry");
+        }
+
+        // The game adds every saved pin back through Minimap.AddPin when it loads the map data, so
+        // a pin added through it here takes the same path. Only a pin Automatics saved itself (no
+        // owner, the local platform user as its author) is recognized as automatic. The other two
+        // differ from it in one field each: a pin placed or saved by clicking has no author, and a
+        // shared pin has an owner.
+        private static void CheckSavedPinRecognition(FeatureRun run, Player player, Minimap map,
+            List<Minimap.PinData> created)
+        {
+            const string automaticCheck = "pin_saved_automatic_recognized";
+            const string manualCheck = "pin_saved_manual_not_recognized";
+            const string sharedCheck = "pin_shared_not_recognized";
+            var localUser = PlatformManager.DistributionPlatform?.LocalUser;
+            var author = localUser != null ? localUser.PlatformUserID : PlatformUserID.None;
+            if (!author.IsValid)
+            {
+                const string reason = "no local platform user is available to author a saved pin";
+                run.Skip(automaticCheck, reason);
+                run.Skip(manualCheck, reason);
+                run.Skip(sharedCheck, reason);
+                return;
+            }
+
+            var origin = player.transform.position;
+            Minimap.PinData Add(string name, float offset, long owner, PlatformUserID pinAuthor)
+            {
+                var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                try
+                {
+                    return map.AddPin(origin + Vector3.right * offset, Minimap.PinType.Icon3, name, true,
+                        false, owner, pinAuthor);
+                }
+                finally
+                {
+                    // Include the pin even if an AddPin postfix throws after adding it.
+                    created.AddRange(Map.GetAllPins().Where(pin => !before.Contains(pin)));
+                }
+            }
+
+            var automatic = Add("Automatics smoke saved automatic pin", 1f, 0L, author);
+            if (Map.IsAutomaticPin(automatic))
+                run.Pass(automaticCheck, "a saved pin with no owner and the local author");
+            else
+                run.Fail(automaticCheck, "a saved pin with no owner and the local author was not recognized as automatic");
+
+            var manual = Add("Automatics smoke saved manual pin", 2f, 0L, PlatformUserID.None);
+            if (!Map.IsAutomaticPin(manual))
+                run.Pass(manualCheck, "a saved pin with no owner and no author");
+            else
+                run.Fail(manualCheck, "a saved pin with no author was recognized as automatic");
+
+            var shared = Add("Automatics smoke shared pin", 3f, long.MinValue, author);
+            if (!Map.IsAutomaticPin(shared))
+                run.Pass(sharedCheck, "a saved pin with an owner and the local author");
+            else
+                run.Fail(sharedCheck, "a saved pin with an owner was recognized as automatic");
+        }
+
+        // A saved automatic pin the static scan's cache does not hold - restored with the map and
+        // not reached by a scan yet, or left when its object went out of range - is still that
+        // object's pin, so the key adds no second saved pin beside it. Once the ray resolves to
+        // the object, the action returns null without a new pin only where it reports the
+        // duplicate. A Stone drop is the object: no scan caches it, and its name is not the Wood
+        // of the section's earlier pins.
+        private static void CheckUncachedAutomaticPin(FeatureRun run, Player player, Minimap map,
+            List<Minimap.PinData> created)
+        {
+            const string check = "pin_saved_automatic_uncached_duplicate";
+            var localUser = PlatformManager.DistributionPlatform?.LocalUser;
+            var author = localUser != null ? localUser.PlatformUserID : PlatformUserID.None;
+            if (!author.IsValid)
+            {
+                run.Skip(check, "no local platform user is available to author a saved pin");
+                return;
+            }
+            var prefab = ZNetScene.instance.GetPrefab("Stone");
+            if (!prefab || !prefab.GetComponent<ItemDrop>())
+            {
+                run.Skip(check, "the Stone prefab is unavailable");
+                return;
+            }
+
+            var camera = GameCamera.instance.transform;
+            ItemDrop drop = null;
+            try
+            {
+                drop = FeaturesSmokeCommand.SpawnTestDrop(prefab,
+                    camera.position + camera.forward * 3f - camera.right * 1f, false);
+                if (!drop || !Objects.GetZNetView(drop, out var nview) ||
+                    nview.GetZDO() == null || nview.GetZDO().Persistent)
+                {
+                    run.Skip(check, "could not prepare a non-persistent Stone drop");
+                    return;
+                }
+                Physics.SyncTransforms();
+                var collider = drop.GetComponentsInChildren<Collider>().FirstOrDefault(x => x.enabled);
+                if (!collider)
+                {
+                    run.Skip(check, "the test drop has no enabled collider");
+                    return;
+                }
+                var origin = camera.position;
+                var ray = new Ray(origin, collider.bounds.center - origin);
+                if (!FirstHit(player, ray, out var hit) || !hit.collider.transform.IsChildOf(drop.transform) ||
+                    !ObjectPinning.TryResolveFromRay(player, ray, out var aimed) ||
+                    aimed.Instance != drop.gameObject)
+                {
+                    run.Skip(check, "the camera ray to the test drop is obstructed");
+                    return;
+                }
+                if (Map.GetClosestPin(aimed.Position, 2f,
+                        pin => pin.m_save && Localization.instance.Localize(pin.m_name) == aimed.Name,
+                        includeInactive: true) != null)
+                {
+                    run.Skip(check, "an existing saved pin of that name is within 2 m; move and retry");
+                    return;
+                }
+
+                var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                Minimap.PinData saved;
+                try
+                {
+                    saved = map.AddPin(aimed.Position, aimed.Type, Map.StoredPinName(Objects.GetName(drop)),
+                        true, false, 0L, author);
+                }
+                finally
+                {
+                    // Include the pin even if an AddPin postfix throws after adding it.
+                    created.AddRange(Map.GetAllPins().Where(pin => !before.Contains(pin)));
+                }
+                if (!Map.IsAutomaticPin(saved) || StaticObjectMapping.OwnsPin(saved) ||
+                    StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(aimed.UniqueId), out _))
+                {
+                    run.Fail(check, "precondition failed: the test pin is not an automatic pin outside the static cache");
+                    return;
+                }
+
+                var count = Map.GetAllPins().Count;
+                var added = Invoke(player, ray, created);
+                if (added == null && Map.GetAllPins().Count == count &&
+                    ReferenceEquals(ObjectPinning.FindStaticPin(aimed), saved))
+                    run.Pass(check, $"'{aimed.Name}': the key reported the saved automatic pin as the object's pin");
+                else
+                    run.Fail(check, added != null
+                        ? "the key added a second saved pin beside the object's saved automatic pin"
+                        : "the key added no pin, but the object's lookup did not return its saved automatic pin");
+            }
+            finally
+            {
+                FeaturesSmokeCommand.RemoveTestDrop(drop, "pin feature smoke");
+            }
         }
 
         private static bool FirstHit(Player player, Ray ray, out RaycastHit hit)

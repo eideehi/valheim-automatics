@@ -472,7 +472,7 @@ namespace Automatics.AutomaticMapping
         [HarmonyPatch(typeof(Minimap), nameof(Minimap.AddPin))]
         private static void Minimap_AddPin_Postfix(Minimap.PinData __result)
         {
-            PinIndex.Track(__result);
+            Map.TrackPin(__result);
         }
 
         [HarmonyPostfix]

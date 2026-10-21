@@ -118,14 +118,24 @@ namespace Automatics.AutomaticMapping
             // A saved patch pin leaves the cache; it stands at the patch centre, where the scan adds
             // no other pin, under the flora's name or its merged name.
             var network = FloraNode.Find(aimed.UniqueId)?.Network;
-            return network == null
-                ? null
-                : Map.GetClosestPin(PatchCenter(network), 1f,
+            if (network != null)
+                return Map.GetClosestPin(PatchCenter(network), 1f,
                     pin => pin.m_ownerID == 0L && (pin.m_save || StaticObjectMapping.OwnsPin(pin)) &&
                            (Localization.instance.Localize(pin.m_name) == aimed.Name ||
                             (PinCategories.TryGetFloraClusterLabel(pin.m_name, out var baseLabel) &&
                              baseLabel == aimed.Name)),
                     includeInactive: true);
+
+            // Any other saved automatic pin is outside the cache while the scan has not reached its
+            // object: restored with the map and not scanned yet, or left when the object went out
+            // of range. It stands at the object under the object's name. A pin held by another
+            // object's cache entry is left alone, as the scan's adoption leaves it.
+            return Map.GetClosestPin(aimed.Position, 1f,
+                pin => pin.m_ownerID == 0L && pin.m_save && Map.IsAutomaticPin(pin) &&
+                       !StaticObjectMapping.OwnsPin(pin) && !DynamicObjectMapping.OwnsPin(pin) &&
+                       (pin.m_name == aimed.StoredName ||
+                        Localization.instance.Localize(pin.m_name) == aimed.Name),
+                includeInactive: true);
         }
 
         // FloraNetwork.Center is refreshed only when the static scan reaches the patch, so the
