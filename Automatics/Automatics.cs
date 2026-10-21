@@ -125,7 +125,9 @@ namespace Automatics
                 }
                 catch (Exception e)
                 {
-                    Logger.Error($"Error while initializing {initializer.Name}\n{e}");
+                    // Straight to the BepInEx log: a module whose initializer fails never reaches
+                    // the registry, and Automatics' own logger is off by default.
+                    LogSource.LogError($"Error while initializing {initializer.Name}\n{e}");
                 }
         }
 

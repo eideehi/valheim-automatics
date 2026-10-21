@@ -422,7 +422,8 @@ namespace Automatics
         ///     A transition into <see cref="ModuleState.Faulted" /> is logged at Warning, every
         ///     other one at Info. A fault can be reached without any exception - an activation
         ///     that runs out of deferrals - and the default log filter drops Info, so logging it
-        ///     there would leave no trace of it at all.
+        ///     there would leave no trace of it at all. The Faulted line bypasses the filter
+        ///     altogether, because the fault message tells the user to look in the log.
         /// </summary>
         private static void PublishState(Entry entry)
         {
@@ -437,7 +438,7 @@ namespace Automatics
                 : $"Module {entry.Name} is now {state}";
 
             if (state == ModuleState.Faulted)
-                LogWarning(message);
+                LogFaultWarning(message);
             else
                 LogInfo(message);
 
@@ -549,11 +550,16 @@ namespace Automatics
             }
         }
 
+        /// <summary>
+        ///     Lifecycle fault reports go straight to the BepInEx log: the faulted-module message
+        ///     sends the user there, and the switch that filters Automatics' own logger is off by
+        ///     default.
+        /// </summary>
         private static void LogError(string message)
         {
             try
             {
-                Automatics.Logger?.Error(message);
+                Automatics.LogSource?.LogError(message);
             }
             catch
             {
@@ -566,6 +572,18 @@ namespace Automatics
             try
             {
                 Automatics.Logger?.Warning(message);
+            }
+            catch
+            {
+                // As above.
+            }
+        }
+
+        private static void LogFaultWarning(string message)
+        {
+            try
+            {
+                Automatics.LogSource?.LogWarning(message);
             }
             catch
             {
