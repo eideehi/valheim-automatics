@@ -198,7 +198,7 @@ namespace Automatics.AutomaticMapping
         private static bool GetDungeon(string name, out (string Identifier, bool IsAllowed) data)
             => ResolveStaticObject(ValheimObject.Dungeon, Config.AllowPinningDungeon, name, out data);
 
-        private static string StripCloneSuffix(string name)
+        internal static string StripCloneSuffix(string name)
         {
             if (string.IsNullOrEmpty(name)) return name;
             if (name.EndsWith(LocationCloneSuffix, StringComparison.Ordinal))
@@ -441,32 +441,12 @@ namespace Automatics.AutomaticMapping
 
                 // ZoneSystem.m_locationInstances is server-only, so non-host
                 // peers (dedicated-server clients, P2P clients) reach this
-                // point with no dungeon pins added. Location.s_allLocations
-                // is populated by every LocationProxy spawn regardless of
-                // role, so iterate it here as a fallback. Gate on Count == 0
-                // to keep SP / host on the single location-domain path
-                // above: running both paths exposes a no-entrance dedup
-                // race where SnapToGround.Snap shifts the spawned
-                // transform's Y while LocationInstance.m_position stays at
-                // the RegisterLocation Y, producing distinct
-                // MapPinIdentify keys that only Map.GetClosestPin's radius
-                // dedup papers over. Spot locations stay on the
-                // m_locationInstances path; #30 is scoped to dungeons.
+                // point with no location pins added and map the locations
+                // they have loaded instead. Gate on Count == 0 to keep SP /
+                // host on the single location-domain path above, so no
+                // location is classified or pinned twice.
                 if (ZoneSystem.instance.m_locationInstances.Count == 0)
-                {
-                    var allLocations = AllLocationsLazy.Value;
-                    if (allLocations != null)
-                    {
-                        for (var i = 0; i < allLocations.Count; i++)
-                        {
-                            var loc = allLocations[i];
-                            if (loc == null || !loc.m_hasInterior) continue;
-                            var locPos = loc.transform.position;
-                            if ((origin - locPos).sqrMagnitude > locationRangeSq) continue;
-                            DungeonMappingFromLocation(loc);
-                        }
-                    }
-                }
+                    LoadedLocationMapping(origin, locationRangeSq);
 
                 EndPassAndPruneStale();
             }
@@ -1656,14 +1636,27 @@ namespace Automatics.AutomaticMapping
         // P2P clients), where ZoneSystem.m_locationInstances is server-only.
         // LocationProxy spawns the underlying Location prefab on clients too,
         // so Location.s_allLocations is populated regardless of network role.
-        // The caller gates this on m_locationInstances.Count == 0; SP / host
-        // route every dungeon through the location-domain loop above instead.
-        private static bool DungeonMappingFromLocation(Location location)
+        // Each loaded location is classified by its prefab name through the
+        // same dungeon and spot paths the location instances take; a dungeon
+        // needs its interior, as before. The caller gates this on
+        // m_locationInstances.Count == 0; SP / host route every location
+        // through the location-domain loop instead.
+        private static void LoadedLocationMapping(Vector3 origin, float rangeSq)
         {
-            if (location == null || !location.m_hasInterior) return false;
-            var prefabName = StripCloneSuffix(location.gameObject.name);
-            return TryAddDungeonPin(prefabName, location.transform.position,
-                location.m_exteriorRadius);
+            var allLocations = AllLocationsLazy.Value;
+            if (allLocations == null) return;
+
+            for (var i = 0; i < allLocations.Count; i++)
+            {
+                var location = allLocations[i];
+                if (location == null) continue;
+                var pos = location.transform.position;
+                if ((origin - pos).sqrMagnitude > rangeSq) continue;
+                var prefabName = StripCloneSuffix(location.gameObject.name);
+                if (location.m_hasInterior &&
+                    TryAddDungeonPin(prefabName, pos, location.m_exteriorRadius)) continue;
+                TryAddSpotPin(prefabName, pos);
+            }
         }
 
         private static bool TryAddDungeonPin(string prefabName, Vector3 pos, float radius)
@@ -1731,11 +1724,14 @@ namespace Automatics.AutomaticMapping
 
         private static bool SpotMapping(ZoneSystem.LocationInstance instance)
         {
-            var prefabName = instance.m_location.m_prefabName;
+            return TryAddSpotPin(instance.m_location.m_prefabName, instance.m_position);
+        }
+
+        private static bool TryAddSpotPin(string prefabName, Vector3 pos)
+        {
             if (!GetSpot(prefabName, out var data)) return false;
             if (!data.IsAllowed) return true;
 
-            var pos = instance.m_position;
             var identify = new MapPinIdentify(pos);
             if (TryGetCachedPin(identify, out _))
             {

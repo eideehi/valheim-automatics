@@ -115,6 +115,7 @@ namespace Automatics.SmokeTest
                 CheckSavedPinRecognition(run, player, map, created);
                 CheckUncachedAutomaticPin(run, player, map, created);
                 CheckLoadingAreaKeepsPin(run, player, map, created);
+                CheckLoadedLocationSpot(run, player, map, created);
             }
             finally
             {
@@ -1250,6 +1251,102 @@ namespace Automatics.SmokeTest
             _loadingQueries++;
             __result = false;
             return false;
+        }
+
+        // A multiplayer client has no world location list (the game keeps
+        // ZoneSystem.m_locationInstances on the server), so its static pass classifies the Location
+        // objects loaded around the player instead. A single-player world never takes that path, so
+        // the check calls it directly for one test location: a bare Location component on a new
+        // GameObject with no network view, named as the game names a spawned spot, 6 m beside the
+        // player. No location prefab is spawned. The call's 1 m range leaves every real location
+        // out, and the test location is destroyed before the check returns.
+        private static void CheckLoadedLocationSpot(FeatureRun run, Player player, Minimap map,
+            List<Minimap.PinData> created)
+        {
+            const string check = "pin_loaded_location_spot";
+            var mapping = AccessTools.Method(typeof(StaticObjectMapping), "LoadedLocationMapping");
+            if (mapping == null)
+            {
+                run.Fail(check, "the static pass has no mapping of loaded locations");
+                return;
+            }
+            var spot = EarlyLocations.FirstOrDefault(x => MappingConfig.AllowPinningSpot.Contains(x) &&
+                ValheimObject.Spot.GetIdentify(x, out var identifier) && identifier == x);
+            if (spot == null || !ValheimObject.Spot.GetName(spot, out var label) || string.IsNullOrEmpty(label))
+            {
+                run.Skip(check, "no early-content spot is in allow_pinning_spot");
+                return;
+            }
+
+            var origin = player.transform.position;
+            var position = Vector3.zero;
+            var found = false;
+            for (var i = 0; i < 8 && !found; i++)
+            {
+                var angle = i * Mathf.PI / 4f;
+                position = origin + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 6f;
+                found = Map.GetClosestPin(position, 2f, includeInactive: true) == null &&
+                        !StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(position), out _) &&
+                        (StaticObjectMapping.LoadedLocations == null || !StaticObjectMapping.LoadedLocations.Any(
+                            location => location && Vector3.Distance(location.transform.position, position) < 2f));
+            }
+            if (!found)
+            {
+                run.Skip(check, "every test spot 6 m around you has a pin or a location within 2 m; move and retry");
+                return;
+            }
+            if (!MappingConfig.SaveStaticObjectPins && Map.ShouldSuppressTransientAutomaticPin(position))
+            {
+                run.Skip(check, "the map filters unsaved automatic pins at the test spot, for example because unexplored automatic pins are hidden");
+                return;
+            }
+
+            var go = new GameObject(spot + "(Clone)");
+            Minimap.PinData pin = null;
+            try
+            {
+                go.transform.position = position;
+                // Awake adds it to the game's list of loaded locations.
+                go.AddComponent<Location>();
+                var key = new StaticObjectMapping.MapPinIdentify(position);
+                List<Minimap.PinData> MapLoaded()
+                {
+                    var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                    try
+                    {
+                        mapping.Invoke(null, new object[] { position, 1f });
+                    }
+                    finally
+                    {
+                        created.AddRange(Map.GetAllPins().Where(x => !before.Contains(x)));
+                    }
+                    return Map.GetAllPins().Where(x => !before.Contains(x)).ToList();
+                }
+
+                var added = MapLoaded();
+                pin = added.FirstOrDefault();
+                var expectedType = IconPack.GetPinType(new Target { name = label, prefabName = spot });
+                if (added.Count != 1 || Utils.DistanceXZ(pin.m_pos, position) > 0.01f ||
+                    pin.m_name != Map.StoredPinName(label) || pin.m_type != expectedType ||
+                    !StaticObjectMapping.TryGetCachedPin(key, out var cached) || !ReferenceEquals(cached, pin) ||
+                    !StaticObjectMapping.TryGetPinKind(pin, out var kind) || kind != PinKind.Spot)
+                {
+                    run.Fail(check, $"the loaded location '{go.name}' did not get exactly one spot pin with its name, icon and position in the static cache (added {added.Count})");
+                    return;
+                }
+
+                var again = MapLoaded();
+                if (again.Count == 0 && Map.GetAllPins().Contains(pin) &&
+                    StaticObjectMapping.TryGetCachedPin(key, out cached) && ReferenceEquals(cached, pin))
+                    run.Pass(check, $"the loaded location '{go.name}' got one spot pin at its position, and mapping it again kept that pin and added nothing");
+                else
+                    run.Fail(check, "mapping the same loaded location again added a pin or dropped its spot pin");
+            }
+            finally
+            {
+                if (pin != null && map) map.RemovePin(pin);
+                UnityEngine.Object.DestroyImmediate(go);
+            }
         }
 
         private const string DestroyedDepositCheck = "pin_destroyed_deposit_removed";

@@ -326,6 +326,24 @@ namespace Automatics.ConsoleCommands
             }));
         }
 
+        // The world's location list (ZoneSystem.m_locationInstances) is kept by the server only. A
+        // multiplayer client, whose list is empty, lists the locations it has loaded instead.
+        private IEnumerable<(string PrefabName, Vector3 Position, float ExteriorRadius)> GetLocations()
+        {
+            if (_zoneSystem.m_locationInstances.Count > 0)
+                return from x in _zoneSystem.m_locationInstances.Values
+                    select (PrefabName: x.m_location.m_prefabName, Position: x.m_position,
+                        ExteriorRadius: x.m_location.m_exteriorRadius);
+
+            var loaded = StaticObjectMapping.LoadedLocations;
+            if (loaded == null)
+                return Enumerable.Empty<(string PrefabName, Vector3 Position, float ExteriorRadius)>();
+            return from x in loaded
+                where x
+                select (PrefabName: StaticObjectMapping.StripCloneSuffix(x.gameObject.name),
+                    Position: x.transform.position, ExteriorRadius: x.m_exteriorRadius);
+        }
+
         private void PrintDungeon(Terminal.ConsoleEventArgs args)
         {
             var objectType =
@@ -334,12 +352,11 @@ namespace Automatics.ConsoleCommands
             var count = 0;
             var knownNames = new HashSet<string>();
             var origin = _localPlayer.transform.position;
-            foreach (var location in from x in _zoneSystem
-                         .m_locationInstances.Values
-                     where Vector3.Distance(origin, x.m_position) < _radius
+            foreach (var location in from x in GetLocations()
+                     where Vector3.Distance(origin, x.Position) < _radius
                      select x)
             {
-                var prefabName = location.m_location.m_prefabName;
+                var prefabName = location.PrefabName;
                 var name = prefabName;
                 if (!knownNames.Add(name)) continue;
 
@@ -348,10 +365,10 @@ namespace Automatics.ConsoleCommands
                     identifier = PrefabNameToIdentifier(name);
 
                 var hasEntrance = false;
-                var pos = location.m_position;
+                var pos = location.Position;
                 string message = null;
                 foreach (var (x, y, _) in Objects
-                             .GetInsideSphere(pos, location.m_location.m_exteriorRadius,
+                             .GetInsideSphere(pos, location.ExteriorRadius,
                                  x => x.GetComponent<Teleport>(), ColliderBuffer,
                                  LayerMask.GetMask("character_trigger"))
                              .OrderBy(x => x.distance))
@@ -398,13 +415,12 @@ namespace Automatics.ConsoleCommands
             var count = 0;
             var knownNames = new HashSet<string>();
             var origin = _localPlayer.transform.position;
-            foreach (var (location, distance) in from x in _zoneSystem
-                         .m_locationInstances.Values
-                     let distance = Vector3.Distance(origin, x.m_position)
+            foreach (var (location, distance) in from x in GetLocations()
+                     let distance = Vector3.Distance(origin, x.Position)
                      where distance < _radius
                      select (x, distance))
             {
-                var prefabName = location.m_location.m_prefabName;
+                var prefabName = location.PrefabName;
                 var name = prefabName;
                 if (!knownNames.Add(name)) continue;
 
@@ -413,9 +429,9 @@ namespace Automatics.ConsoleCommands
                     identifier = PrefabNameToIdentifier(name);
 
                 var hasEntrance = false;
-                var pos = location.m_position;
+                var pos = location.Position;
                 foreach (var (_, x, _) in Objects
-                             .GetInsideSphere(pos, location.m_location.m_exteriorRadius,
+                             .GetInsideSphere(pos, location.ExteriorRadius,
                                  x => x.GetComponent<Teleport>(), ColliderBuffer,
                                  LayerMask.GetMask("character_trigger"))
                              .OrderBy(x => x.distance))
