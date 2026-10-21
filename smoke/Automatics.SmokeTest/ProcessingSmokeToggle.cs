@@ -27,7 +27,9 @@ namespace Automatics.SmokeTest
     // Automatics.AutomaticProcessing.Patches declares: none while off, exactly those while on.
     // While on, a test smelter of the check's own has to be refuelled by the injected
     // SmelterProcess.QuickRefuel, called by the game's own Smelter.UpdateSmelter, which is
-    // what shows the transpilers are back. Every error and exception Unity logs meanwhile is
+    // what shows the transpilers are back. The same smelter is then caught up over several fuel
+    // units in one frame, which has to add the fuel without a fuel RPC and effect per unit.
+    // Every error and exception Unity logs meanwhile is
     // captured. The setting is SmokeSession's to hand back, under the same rules as the
     // lifecycle command's: the change is recorded before it is made, one run at a time, a
     // change the user makes wins and stops the run, and the setting is put back only while it
@@ -152,6 +154,7 @@ namespace Automatics.SmokeTest
             private const string OnState = "processing_toggle_on_state_enabled";
             private const string OnPatches = "processing_toggle_on_patches_applied";
             private const string QuickRefuel = "processing_toggle_on_quickrefuel_acts";
+            private const string CatchUp = "processing_toggle_on_quickrefuel_catchup_no_per_unit_rpc";
             private const string Restored = "processing_toggle_restored_initial_state";
             private const string NoErrors = "processing_toggle_no_errors_logged";
 
@@ -167,12 +170,22 @@ namespace Automatics.SmokeTest
             private const float QuickRefuelTimeoutSeconds = 10f;
             private const float QuickRefuelRetrySeconds = 5f;
 
-            // Above fuel_count_of_suppress_processing, so QuickRefuel has fuel to take.
-            private const int FuelSurplus = 3;
+            // Above fuel_count_of_suppress_processing, so QuickRefuel has fuel to take: one unit
+            // for the watch and CatchUpUnits for the catch-up trial, with some to spare.
+            private const int FuelSurplus = 5;
+
+            // How many fuel units the catch-up trial refuels in one frame, and how long after
+            // the watch's last refuelling QuickRefuel call it waits so the trial's first refuel is a first
+            // one again (QuickRefuel forgets which smelters it has played the effect for after a
+            // second).
+            private const int CatchUpUnits = 3;
+            private const float CatchUpSettleSeconds = 1.05f;
+            private const float CatchUpSettleTimeoutSeconds = 5f;
 
             private static readonly string[] Order =
             {
-                InitialSettled, OffState, OffPatches, OnState, OnPatches, QuickRefuel, Restored, NoErrors
+                InitialSettled, OffState, OffPatches, OnState, OnPatches, QuickRefuel, CatchUp, Restored,
+                NoErrors
             };
 
             private readonly Dictionary<string, CheckResult> _checks =
@@ -194,6 +207,7 @@ namespace Automatics.SmokeTest
 
             private WaitResult _wait;
             private string _waitReport = "";
+            private int _trialFrames;
 
             public ToggleRun(int runId, string runner, Action<string> info, Action<string> warn)
                 : this(runId, runner, info, warn, new FuelBench())
@@ -224,6 +238,9 @@ namespace Automatics.SmokeTest
                     foreach (var name in Order)
                         if (name == QuickRefuel)
                             results.Add(_fuel.Result ?? CheckResult.Skip(QuickRefuel, _notReached));
+                        else if (name == CatchUp && !_checks.ContainsKey(name) && _fuel.Result != null)
+                            results.Add(CheckResult.Skip(CatchUp,
+                                $"not reached: {QuickRefuel} ended as {_fuel.Result.Status}, so the catch-up was not tried"));
                         else
                             results.Add(_checks.TryGetValue(name, out var result)
                                 ? result
@@ -492,6 +509,16 @@ namespace Automatics.SmokeTest
                 if (!StillWatching(frame) || !KeepIsolated(frame)) yield break;
                 _fuel.Record(frame, chest);
 
+                if (QuickRefuelObserver.Acted > 0 && _fuel.VanishedAt < 0 && _fuel.FirstBreak == null)
+                {
+                    _trialFrames = 0;
+                    var trial = TryCatchUp(chest, frame);
+                    while (trial.MoveNext()) yield return trial.Current;
+                    frame += _trialFrames;
+                    if (!StillWatching(frame) || !KeepIsolated(frame)) yield break;
+                    _fuel.Record(frame, chest);
+                }
+
                 var drops = _benches.NewDropsNear(new StationBench[] { _fuel });
                 if (_fuel.VanishedAt >= 0)
                     _fuel.Fail($"the test smelter disappeared at frame {_fuel.VanishedAt}{drops}");
@@ -504,7 +531,61 @@ namespace Automatics.SmokeTest
                         $"in {QuickRefuelTimeoutSeconds:0} s after the enable the game called the injected SmelterProcess.QuickRefuel {QuickRefuelObserver.Calls} time(s) for the test smelter, and it never refuelled it, with the smelter's catch-up set {(rearmed ? "twice" : "once")}{(paused ? "; the game was paused meanwhile" : "")} ({_fuel.Diagnose()})");
                 else
                     _fuel.Pass(
-                        $"{QuickRefuelObserver.ActedAt - _enabledAt:0.0} s after the enable, the game's own Smelter.UpdateSmelter called the injected SmelterProcess.QuickRefuel for the test smelter ({QuickRefuelObserver.Calls} call(s)) and it moved {DisplayName(_fuel.MaterialName)} from the test chest into the smelter's fuel; the ledger held on every frame (chest {_fuel.Last.Chest} + smelter fuel {_fuel.Last.Station} = {_fuel.Seeded} put in)");
+                        $"{QuickRefuelObserver.ActedAt - _enabledAt:0.0} s after the enable, the game's own Smelter.UpdateSmelter called the injected SmelterProcess.QuickRefuel for the test smelter ({QuickRefuelObserver.Calls} call(s)) and it moved {DisplayName(_fuel.MaterialName)} from the test chest into the smelter's fuel; the ledger held on every frame (chest {_fuel.Last.Chest} + smelter fuel {_fuel.Last.Station} + burnt in the catch-up trial {_fuel.Last.Products} = {_fuel.Seeded} put in)");
+            }
+
+            // Catches the watched smelter up over several fuel units in one frame, calling the
+            // injected QuickRefuel once per unit the way the game's loop does, and burns each
+            // unit but the last between the calls as the loop would. The fuel RPC and the
+            // fuel-added effect are counted meanwhile. Nothing here patches a game method: the
+            // smelter's RPC handler is wrapped through its own view, and its effect list is
+            // replaced for the trial by one that spawns a counting object.
+            private IEnumerator TryCatchUp(Inventory chest, int frame)
+            {
+                // QuickRefuel plays its effect once per smelter and second, so the trial starts
+                // in a second of its own.
+                var started = Time.realtimeSinceStartup;
+                var firstAgain = true;
+                while (Time.time - QuickRefuelObserver.LastActedTime <= CatchUpSettleSeconds)
+                {
+                    if (Time.realtimeSinceStartup - started >= CatchUpSettleTimeoutSeconds)
+                    {
+                        firstAgain = false;
+                        break;
+                    }
+
+                    yield return null;
+                    frame++;
+                    _trialFrames++;
+                    if (!StillWatching(frame) || !KeepIsolated(frame)) yield break;
+                    if (SmokeSession.ToggleEditedByUser)
+                    {
+                        Skip(CatchUp, "inconclusive: automatic_processing/module was changed outside the check");
+                        yield break;
+                    }
+
+                    _fuel.Record(frame, chest);
+                }
+
+                var outcome = _fuel.RunCatchUpTrial(chest, CatchUpUnits);
+                if (outcome.Problem != null)
+                {
+                    NotRun(CatchUp, outcome.Problem);
+                    yield break;
+                }
+
+                if (outcome.Refuelled < CatchUpUnits)
+                    NotRun(CatchUp,
+                        $"only {outcome.Refuelled} of {CatchUpUnits} direct QuickRefuel calls added fuel, so the catch-up could not be shown over several units ({_fuel.Diagnose()})");
+                else if (outcome.TakenFromChest != outcome.Refuelled || outcome.FuelAfter != 1)
+                    Fail(CatchUp,
+                        $"{outcome.Refuelled} QuickRefuel calls added fuel, but {outcome.TakenFromChest} {DisplayName(_fuel.MaterialName)} left the chest and the smelter holds {outcome.FuelAfter:0.###} fuel after the last call (1 expected)");
+                else if (outcome.RpcCalls > 1 || outcome.Effects > 1 || (firstAgain && outcome.Effects != 1))
+                    Fail(CatchUp,
+                        $"{outcome.Refuelled} QuickRefuel calls in one frame invoked the fuel RPC {outcome.RpcCalls} time(s) and played the fuel-added effect {outcome.Effects} time(s); at most one effect (the first refuel's{(firstAgain ? ", exactly one here" : "")}) and no per-unit RPC are expected");
+                else
+                    Pass(CatchUp,
+                        $"{outcome.Refuelled} QuickRefuel calls in one frame moved {outcome.TakenFromChest} {DisplayName(_fuel.MaterialName)} from the test chest into the smelter's fuel; the fuel RPC was invoked {outcome.RpcCalls} time(s) and the fuel-added effect played {outcome.Effects} time(s); the game's own RPC, invoked once as a control, ran the handler {outcome.ControlRpcCalls} time(s) and played the effect {outcome.ControlEffects} time(s)");
             }
 
             // -- The setting and the registry ---------------------------------------------------
@@ -808,6 +889,10 @@ namespace Automatics.SmokeTest
             private Smelter _station;
             private int _heldMaxFuel = -1;
 
+            // Fuel units the catch-up trial burnt between its calls, as the smelter's loop would.
+            // The ledger counts them as what the fuel turned into.
+            public int Burnt { get; private set; }
+
             public FuelBench() : base("processing_toggle_on_quickrefuel_acts", "$piece_smelter", "smelter")
             {
             }
@@ -872,6 +957,96 @@ namespace Automatics.SmokeTest
                 NView.GetZDO().Set(ZDOVars.s_accTime, CatchUpSeconds);
             }
 
+            // Calls the injected QuickRefuel `units` times in this frame, each time with no fuel
+            // left, as the smelter's loop does after burning the unit before. Every unit but the
+            // last is then burnt; the last stays, so the ordinary refuel stays out. Counts the
+            // calls of the smelter's RPC_AddFuel handler and the plays of its fuel-added effect.
+            // A control first runs the game's own RPC once, which both counters have to see.
+            public CatchUpOutcome RunCatchUpTrial(Inventory chest, int units)
+            {
+                var outcome = new CatchUpOutcome();
+                var handler = AccessTools.Method(typeof(Smelter), "RPC_AddFuel");
+                if (handler == null)
+                {
+                    outcome.Problem = "Smelter.RPC_AddFuel was not found, so its calls could not be counted";
+                    return outcome;
+                }
+
+                if (!NView.IsOwner())
+                {
+                    outcome.Problem = "the test smelter is not owned by this peer";
+                    return outcome;
+                }
+
+                var original = (Action<long>)Delegate.CreateDelegate(typeof(Action<long>), _station, handler);
+                var zdo = NView.GetZDO();
+                var rpcCalls = 0;
+                var effects = _station.m_fuelAddedEffects;
+                var counter = new GameObject("AutomaticsSmokeFuelEffectCounter");
+                counter.AddComponent<FuelEffectCounter>();
+
+                NView.Unregister("RPC_AddFuel");
+                NView.Register("RPC_AddFuel", (long sender) =>
+                {
+                    rpcCalls++;
+                    original(sender);
+                });
+                _station.m_fuelAddedEffects = new EffectList
+                {
+                    m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = counter } }
+                };
+
+                try
+                {
+                    FuelEffectCounter.Armed = true;
+                    FuelEffectCounter.Count = 0;
+
+                    Burnt += Mathf.RoundToInt(zdo.GetFloat(ZDOVars.s_fuel));
+                    zdo.Set(ZDOVars.s_fuel, 0f);
+                    NView.InvokeRPC("RPC_AddFuel");
+                    outcome.ControlRpcCalls = rpcCalls;
+                    outcome.ControlEffects = FuelEffectCounter.Count;
+                    zdo.Set(ZDOVars.s_fuel, 0f);
+                    if (outcome.ControlRpcCalls != 1 || outcome.ControlEffects != 1)
+                    {
+                        outcome.Problem =
+                            $"the game's own fuel RPC, invoked once as a control, ran the counted handler {outcome.ControlRpcCalls} time(s) and played the counted effect {outcome.ControlEffects} time(s) (1 each expected), so the counts could not show what QuickRefuel does";
+                        return outcome;
+                    }
+
+                    rpcCalls = 0;
+                    FuelEffectCounter.Count = 0;
+
+                    var before = chest.CountItems(MaterialName, -1, false);
+                    for (var i = 0; i < units; i++)
+                    {
+                        var fuel = SmelterProcess.QuickRefuel(_station, NView, 5f, 0f);
+                        if (!(fuel > 0f)) break;
+
+                        outcome.Refuelled++;
+                        outcome.FuelAfter = zdo.GetFloat(ZDOVars.s_fuel);
+                        if (i < units - 1)
+                        {
+                            Burnt += Mathf.RoundToInt(outcome.FuelAfter);
+                            zdo.Set(ZDOVars.s_fuel, 0f);
+                        }
+                    }
+
+                    outcome.TakenFromChest = before - chest.CountItems(MaterialName, -1, false);
+                    outcome.RpcCalls = rpcCalls;
+                    outcome.Effects = FuelEffectCounter.Count;
+                    return outcome;
+                }
+                finally
+                {
+                    FuelEffectCounter.Armed = false;
+                    NView.Unregister("RPC_AddFuel");
+                    NView.Register("RPC_AddFuel", original);
+                    _station.m_fuelAddedEffects = effects;
+                    UnityEngine.Object.Destroy(counter);
+                }
+            }
+
             // The game drives this one: its own Smelter.UpdateSmelter calls the injected entry.
             public override void Drive()
             {
@@ -892,6 +1067,7 @@ namespace Automatics.SmokeTest
                     content.AddForeign($"fuel {fuel:0.###}, not a whole number of pieces");
                 else
                     content.Material = units;
+                content.Products = Burnt;
                 return content;
             }
 
@@ -912,6 +1088,36 @@ namespace Automatics.SmokeTest
             }
         }
 
+        // What the catch-up trial saw. Problem is set when the trial could not be run or its
+        // counters could not be trusted.
+        private sealed class CatchUpOutcome
+        {
+            public string Problem { get; set; }
+            public int ControlRpcCalls { get; set; }
+            public int ControlEffects { get; set; }
+            public int Refuelled { get; set; }
+            public int TakenFromChest { get; set; }
+            public float FuelAfter { get; set; }
+            public int RpcCalls { get; set; }
+            public int Effects { get; set; }
+        }
+
+        // The effect the catch-up trial puts into the test smelter's fuel-added effect list. The
+        // list instantiates it for every play, so each copy that wakes while the trial is armed
+        // is one play; the original, made before, is not counted.
+        private sealed class FuelEffectCounter : MonoBehaviour
+        {
+            public static bool Armed { get; set; }
+            public static int Count { get; set; }
+
+            private void Awake()
+            {
+                if (!Armed) return;
+                Count++;
+                Destroy(gameObject);
+            }
+        }
+
         // Counts, for the test smelter, the calls the game makes to SmelterProcess.QuickRefuel and
         // those that refuelled it, from a postfix under the smoke plugin's own Harmony id. It
         // patches the mod's entry point, never a game method, and only while the toggle check
@@ -926,6 +1132,8 @@ namespace Automatics.SmokeTest
             public static int Calls { get; private set; }
             public static int Acted { get; private set; }
             public static float ActedAt { get; private set; }
+            // The game's Time.time of the latest call that refuelled the smelter.
+            public static float LastActedTime { get; private set; }
             public static bool Attached => _harmony != null;
 
             public static bool Attach(Smelter target, out string problem)
@@ -993,6 +1201,7 @@ namespace Automatics.SmokeTest
                 Calls = 0;
                 Acted = 0;
                 ActedAt = 0f;
+                LastActedTime = 0f;
             }
 
             // SmelterProcess.QuickRefuel adds to its own fuel parameter before it returns, and a
@@ -1010,6 +1219,7 @@ namespace Automatics.SmokeTest
                 if (!(__result > __state)) return;
                 if (Acted == 0) ActedAt = Time.realtimeSinceStartup;
                 Acted++;
+                LastActedTime = Time.time;
             }
         }
     }

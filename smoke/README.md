@@ -838,6 +838,7 @@ setting.
 | `processing_toggle_on_state_enabled` | The registry reports `Enabled` after the enable request |
 | `processing_toggle_on_patches_applied` | The patches under Processing's Harmony id are exactly the (target, patch method) pairs `Automatics.AutomaticProcessing.Patches` declares (13 on 11 methods, 4 of them transpilers) |
 | `processing_toggle_on_quickrefuel_acts` | Within 10 s of the enable, the game's own `Smelter.UpdateSmelter` calls the injected `SmelterProcess.QuickRefuel` for a test smelter, and it refuels it from the test chest |
+| `processing_toggle_on_quickrefuel_catchup_no_per_unit_rpc` | After the refuel above passed, the same smelter is caught up over 3 fuel units in one frame: 3 direct `SmelterProcess.QuickRefuel` calls each take one fuel from the test chest and add one to the smelter, and together they invoke the smelter's fuel RPC (`RPC_AddFuel`) at most once and play its fuel-added effect once (the first refuel's), not once per unit |
 | `processing_toggle_restored_initial_state` | The setting is back at its starting value and the registry reports the matching state |
 | `processing_toggle_no_errors_logged` | No error or exception was logged while the check ran |
 
@@ -850,7 +851,7 @@ fails, whatever was placed is removed at once, before the enable. The per-frame
 check runs on every frame the smelter stands, including the frames of the enable
 wait and the last watched frame. When it finds another container, the smelter's
 check is NOT-RUN and the test objects go through the keep rules at once. The
-chest gets `fuel_count_of_suppress_processing` + 3 of the smelter's fuel and
+chest gets `fuel_count_of_suppress_processing` + 5 of the smelter's fuel and
 nothing else. On the test smelter only, `m_maxFuel` is held at 1, so the
 ordinary refuel stays out and only the injected `QuickRefuel` can refuel it. Its
 catch-up time is set to 5 s, since `QuickRefuel` acts only while the smelter's
@@ -859,6 +860,24 @@ the calls to `SmelterProcess.QuickRefuel` for the test smelter. It patches the
 mod's method, never a game method, and it is removed at the end. A direct call
 made before the enable, which returns at once, checks that the postfix counts
 at all.
+
+The catch-up check runs right after the refuel check has seen the smelter refuelled
+and its ledger hold, with the module still on. It waits until a second has passed
+since the last call that refuelled the smelter, because `QuickRefuel` plays its
+effect once per smelter and second, and then calls `SmelterProcess.QuickRefuel`
+3 times in one frame. Each call gets no fuel left, as the smelter's loop does after
+burning the unit before, and every unit but the last is burnt between the calls the
+same way, so the ordinary refuel stays out. The ledger counts the burnt units as what
+the fuel turned into. The check counts the calls of the smelter's `RPC_AddFuel`
+handler and the plays of its fuel-added effect without patching a game method: for
+the length of the check it wraps the handler through the smelter's own network view
+and swaps the smelter's effect list for one that spawns a counting object, and it
+puts both back afterwards. A control first invokes the game's own `RPC_AddFuel` once,
+which both counts have to see once, or the check is NOT-RUN. It FAILs when the fuel
+that left the chest differs from the fuel added, when the smelter does not hold
+exactly the last unit afterwards, when the fuel RPC was invoked more than once, or
+when the effect played more than once (or not exactly once, when the wait for a fresh
+second finished). It is NOT-RUN when the 3 calls did not all add fuel.
 
 The log check watches everything Unity logs as an error or exception while the
 check runs. To show that it sees the log, it logs one deliberate entry as it
@@ -893,10 +912,11 @@ A passing run looks like this:
 [Automatics Smoke] PASS processing_toggle_off_patches_removed: no patch is left under "net.eidee.valheim.automatics.automatic-processing"
 [Automatics Smoke] PASS processing_toggle_on_state_enabled
 [Automatics Smoke] PASS processing_toggle_on_patches_applied: 13 patches on 11 methods (4 transpilers) under "net.eidee.valheim.automatics.automatic-processing", exactly the pairs Automatics.AutomaticProcessing.Patches declares
-[Automatics Smoke] PASS processing_toggle_on_quickrefuel_acts: 0.8 s after the enable, the game's own Smelter.UpdateSmelter called the injected SmelterProcess.QuickRefuel for the test smelter (1 call(s)) and it moved Coal from the test chest into the smelter's fuel; the ledger held on every frame (chest 3 + smelter fuel 1 = 4 put in)
+[Automatics Smoke] PASS processing_toggle_on_quickrefuel_acts: 0.8 s after the enable, the game's own Smelter.UpdateSmelter called the injected SmelterProcess.QuickRefuel for the test smelter (1 call(s)) and it moved Coal from the test chest into the smelter's fuel; the ledger held on every frame (chest 2 + smelter fuel 1 + burnt in the catch-up trial 3 = 6 put in)
+[Automatics Smoke] PASS processing_toggle_on_quickrefuel_catchup_no_per_unit_rpc: 3 QuickRefuel calls in one frame moved 3 Coal from the test chest into the smelter's fuel; the fuel RPC was invoked 0 time(s) and the fuel-added effect played 1 time(s); the game's own RPC, invoked once as a control, ran the handler 1 time(s) and played the effect 1 time(s)
 [Automatics Smoke] PASS processing_toggle_restored_initial_state: automatic_processing/module is already back at Enabled
 [Automatics Smoke] PASS processing_toggle_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
-[Automatics Smoke] Summary: total=8 passed=8 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+[Automatics Smoke] Summary: total=9 passed=9 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
 The Harmony id, the timing and the item name depend on your build and language.

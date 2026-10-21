@@ -326,7 +326,6 @@ namespace Automatics.AutomaticProcessing
                 if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
                 if (!Logics.TryRemoveItem(inventory, fuelName, minFuelCount, out _)) continue;
-                zNetView.InvokeRPC("RPC_AddFuel");
 
                 Logics.RefuelLog(fuelName, 1, smelterName, origin, container.m_name,
                     container.transform.position);
@@ -342,6 +341,9 @@ namespace Automatics.AutomaticProcessing
                 return fuel;
             }
 
+            // The owner adds the fuel here itself. Smelter.RPC_AddFuel would do the same write
+            // and play the fuel-added effect once per unit, which a long catch-up turns into
+            // hundreds of effects in one frame.
             fuel += 1f;
             zNetView.GetZDO().Set("fuel", fuel);
 
