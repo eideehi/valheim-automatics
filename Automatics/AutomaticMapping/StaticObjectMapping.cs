@@ -96,6 +96,28 @@ namespace Automatics.AutomaticMapping
         // kinds.
         private static int _staticClassifierVersion;
         private static int _committedStaticClassifierVersion;
+
+        // What the registries made of each source token (the Flora, Mineral, Spawner and Other
+        // registries, a miss included), so the walk through their matchers runs once per distinct
+        // name instead of once per collider per scan. The registries are the only input, so the
+        // memo is valid for the classifier version in _tokenClassificationsVersion and is emptied
+        // when that version moves or the module cleans up. It is keyed by the token only: which
+        // token a collider has, and the portal fallback, are read again on every scan. It keeps two
+        // generations so names that are gone do not stay: a lookup answers from the current
+        // generation, or copies the answer over from the previous one, and each committed scan
+        // makes the current generation the previous one and drops the one before.
+        private struct TokenClassification
+        {
+            public bool Found;
+            public PinKind Kind;
+            public string Identifier;
+        }
+
+        private static Dictionary<string, TokenClassification> TokenClassifications
+            = new Dictionary<string, TokenClassification>();
+        private static Dictionary<string, TokenClassification> PreviousTokenClassifications
+            = new Dictionary<string, TokenClassification>();
+        private static int _tokenClassificationsVersion;
         private static readonly HashSet<ValheimObject> PendingAllowlistInvalidations
             = new HashSet<ValheimObject>();
 
@@ -312,6 +334,8 @@ namespace Automatics.AutomaticMapping
             StaleRemovalScratch.Clear();
             AreaReadinessThisPass.Clear();
             MineralsMappedThisPass.Clear();
+            TokenClassifications.Clear();
+            PreviousTokenClassifications.Clear();
             _wishboneEquippedThisPass = null;
             PendingTiles.Clear();
             _tileFallbackSawTruncation = false;
@@ -823,6 +847,7 @@ namespace Automatics.AutomaticMapping
             _tileFallbackSawTruncation = false;
             PendingTiles.Clear();
             _committedStaticClassifierVersion = classifierVersion;
+            AgeTokenClassifications();
         }
 
         /// <summary>
@@ -844,9 +869,20 @@ namespace Automatics.AutomaticMapping
             _pendingScanSnapshot = null;
             _tileFallbackSawTruncation = false;
             _failedScanAnchor = now;
+            AgeTokenClassifications();
             // _cacheIncomplete intentionally stays true.
             // _lastCacheUpdateTime / _committedStaticClassifierVersion are
             // not advanced — this swap is not a clean rebuild.
+        }
+
+        // The names a committed scan looked up become the previous generation of the token memo,
+        // and the names only the generation before knew are dropped.
+        private static void AgeTokenClassifications()
+        {
+            var dropped = PreviousTokenClassifications;
+            PreviousTokenClassifications = TokenClassifications;
+            dropped.Clear();
+            TokenClassifications = dropped;
         }
 
         private static void SeedInitialTiles(Vector3 origin, float range)
@@ -905,8 +941,10 @@ namespace Automatics.AutomaticMapping
         /// iteration in <see cref="Mapping"/> still consults the per-category
         /// mapping functions which re-check <c>Config.AllowPinning*</c> so that
         /// runtime allowlist toggles take effect without a cache rebuild.
-        /// Memoization is the caller's responsibility (see the pending-fill
-        /// indexer assignment in <see cref="CacheStaticObjects"/>).
+        /// The component, its source token and the portal fallback are read
+        /// again on every call, so a rename or a new parent is picked up by the
+        /// next scan; only the registry walk for a token is reused (see
+        /// <see cref="ClassifyStaticToken"/>).
         /// </summary>
         private static ClassifiedStaticObject? ClassifyStaticObject(Collider collider)
         {
@@ -971,7 +1009,7 @@ namespace Automatics.AutomaticMapping
         private static bool ClassifyStaticComponent(Component component, string sourceToken,
             out PinKind kind, out string identifier)
         {
-            if (ClassifyStaticComponentSourceToken(sourceToken, out kind, out identifier))
+            if (ClassifyStaticToken(sourceToken, out kind, out identifier))
                 return true;
 
             if (component.GetComponent<TeleportWorld>())
@@ -984,6 +1022,38 @@ namespace Automatics.AutomaticMapping
             kind = default;
             identifier = string.Empty;
             return false;
+        }
+
+        /// <summary>
+        /// <see cref="ClassifyStaticComponentSourceToken"/> through the memo of
+        /// <see cref="TokenClassifications"/>. The memo is emptied first when the
+        /// classifier version has moved since it was filled; an answer found only in
+        /// <see cref="PreviousTokenClassifications"/> is kept in the current generation.
+        /// </summary>
+        private static bool ClassifyStaticToken(string sourceToken, out PinKind kind,
+            out string identifier)
+        {
+            if (_tokenClassificationsVersion != _staticClassifierVersion)
+            {
+                TokenClassifications.Clear();
+                PreviousTokenClassifications.Clear();
+                _tokenClassificationsVersion = _staticClassifierVersion;
+            }
+
+            if (!TokenClassifications.TryGetValue(sourceToken, out var memo))
+            {
+                if (!PreviousTokenClassifications.TryGetValue(sourceToken, out memo))
+                {
+                    memo.Found = ClassifyStaticComponentSourceToken(sourceToken, out memo.Kind,
+                        out memo.Identifier);
+                }
+
+                TokenClassifications[sourceToken] = memo;
+            }
+
+            kind = memo.Kind;
+            identifier = memo.Identifier;
+            return memo.Found;
         }
 
         /// <summary>

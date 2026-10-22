@@ -190,6 +190,7 @@ namespace Automatics.SmokeTest
                 CheckDepositsSharingPin(run, player, map, created);
                 CheckLoadedLocationSpot(run, player, map, created);
                 CheckDungeonWaitsForLocation(run, player, map, created);
+                CheckStaticClassificationFollowsObject(run, player);
             }
             finally
             {
@@ -2084,6 +2085,197 @@ namespace Automatics.SmokeTest
                 BepInEx.Logging.Logger.Listeners.Remove(warnings);
                 if (pin != null && map) map.RemovePin(pin);
                 if (go) UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        // An object with a name that can be changed, standing in for one whose hover name changes
+        // while it lives.
+        private sealed class SmokeNamedObject : MonoBehaviour, Hoverable
+        {
+            public string ObjectName = "";
+
+            public string GetHoverText() => ObjectName;
+
+            public string GetHoverName() => ObjectName;
+
+            public float GetHoverOffset() => 0f;
+        }
+
+        private static readonly System.Reflection.MethodInfo CacheStaticObjectsMethod =
+            AccessTools.Method(typeof(StaticObjectMapping), "CacheStaticObjects");
+
+        private static readonly System.Reflection.MethodInfo ClassifyTokenMethod =
+            AccessTools.Method(typeof(StaticObjectMapping), "ClassifyStaticComponentSourceToken");
+
+        private static readonly System.Reflection.FieldInfo StaticCacheField =
+            AccessTools.Field(typeof(StaticObjectMapping), "StaticObjectCache");
+
+        // The static scan classifies a collider by the object it belongs to and that object's current
+        // name, and a scan that follows another one must not keep what the earlier scan decided. One
+        // collider is classified by scans in turn while its object is renamed to a name of another
+        // kind, to a name no registry knows, and back, and while the collider moves under another
+        // object with another name and back. Each scan is the static scan's own entry point with
+        // its interval cleared, as a new pass of the static mapping starts, and the result is read
+        // from the static cache. The objects hold no network view and are not mapped, so no pin is
+        // added.
+        private static void CheckStaticClassificationFollowsObject(FeatureRun run, Player player)
+        {
+            const string check = "pin_static_classification_follows_object";
+            if (MappingConfig.StaticObjectMappingRange <= 0)
+            {
+                run.Skip(check, "static_object_mapping_range is 0, so the static scan does not run");
+                return;
+            }
+            if (CacheStaticObjectsMethod == null || ClassifyTokenMethod == null || StaticCacheField == null)
+            {
+                run.Fail(check, "the static scan has no entry point, token classifier or cache to observe");
+                return;
+            }
+            var cacheIncomplete = AccessTools.Field(typeof(StaticObjectMapping), "_cacheIncomplete");
+            var lastScan = AccessTools.Field(typeof(StaticObjectMapping), "_lastCacheUpdateTime");
+            if ((bool)cacheIncomplete.GetValue(null))
+            {
+                run.Skip(check, "the static scan here is incomplete; move away from dense builds and retry");
+                return;
+            }
+
+            bool Classify(string name, out PinKind kind, out string identifier)
+            {
+                var args = new object[] { name, null, null };
+                var found = (bool)ClassifyTokenMethod.Invoke(null, args);
+                kind = found ? (PinKind)args[1] : default;
+                identifier = found ? (string)args[2] : "";
+                return found;
+            }
+
+            string FindName(ValheimObject registry, PinKind expected, out string id)
+            {
+                foreach (var element in registry.GetAllElements())
+                foreach (var matcher in element.matches ?? new List<ObjectMatcher>())
+                {
+                    if (matcher == null || matcher.regex || string.IsNullOrEmpty(matcher.value)) continue;
+                    if (Classify(matcher.value, out var kind, out var identifier) && kind == expected &&
+                        identifier == element.identifier)
+                    {
+                        id = identifier;
+                        return matcher.value;
+                    }
+                }
+                id = "";
+                return null;
+            }
+
+            var floraName = FindName(ValheimObject.Flora, PinKind.Flora, out var floraId);
+            var mineralName = FindName(ValheimObject.Mineral, PinKind.Mineral, out var mineralId);
+            const string unknownName = "AutomaticsSmokeUnclassifiedName";
+            if (floraName == null || mineralName == null || Classify(unknownName, out _, out _))
+            {
+                run.Skip(check, "no exact flora name and exact mineral name were found in the registries, or the unclassified test name is known");
+                return;
+            }
+
+            var center = player.transform.position + player.transform.right * 3f + Vector3.up;
+            var hostA = new GameObject("AutomaticsSmokeHostA");
+            var hostB = new GameObject("AutomaticsSmokeHostB");
+            var holder = new GameObject("AutomaticsSmokeCollider");
+            try
+            {
+                hostA.transform.position = center;
+                hostB.transform.position = center + Vector3.up;
+                var objectA = hostA.AddComponent<SmokeNamedObject>();
+                var objectB = hostB.AddComponent<SmokeNamedObject>();
+                objectA.ObjectName = floraName;
+                objectB.ObjectName = mineralName;
+                holder.transform.SetParent(hostA.transform, false);
+                var collider = holder.AddComponent<BoxCollider>();
+                collider.size = Vector3.one * 0.5f;
+
+                // The result of one scan for the collider, or why the check cannot go on.
+                bool Scan(out bool classified, out ClassifiedStaticObject result, out string problem)
+                {
+                    Physics.SyncTransforms();
+                    lastScan.SetValue(null, 0f);
+                    CacheStaticObjectsMethod.Invoke(null, new object[] { player.transform.position });
+                    classified = false;
+                    result = default;
+                    problem = "";
+                    if ((bool)cacheIncomplete.GetValue(null) || (float)lastScan.GetValue(null) <= 0f)
+                    {
+                        problem = "the static scan did not finish here (its collider buffer is full); move away from dense builds and retry";
+                        return false;
+                    }
+                    var cache = (Dictionary<Collider, ClassifiedStaticObject>)StaticCacheField.GetValue(null);
+                    classified = cache.TryGetValue(collider, out result);
+                    return true;
+                }
+
+                string Expect(string step, string name, PinKind kind, string identifier, Component source)
+                {
+                    if (!Scan(out var classified, out var result, out var problem)) return "SKIP" + problem;
+                    if (!classified)
+                        return $"{step}: the collider was not classified, but its object is named as a {kind}";
+                    return result.Kind == kind && result.Identifier == identifier &&
+                           result.SourceToken == name && ReferenceEquals(result.Component, source)
+                        ? null
+                        : $"{step}: the collider was classified as {result.Kind} '{result.Identifier}' from '{result.SourceToken}', expected {kind} '{identifier}' from '{name}'";
+                }
+
+                string failure = Expect("first scan", floraName, PinKind.Flora, floraId, objectA);
+                if (failure == null)
+                {
+                    objectA.ObjectName = mineralName;
+                    failure = Expect("after the object was renamed to a mineral name", mineralName,
+                        PinKind.Mineral, mineralId, objectA);
+                }
+                if (failure == null)
+                {
+                    objectA.ObjectName = unknownName;
+                    if (!Scan(out var classified, out var result, out var problem)) failure = "SKIP" + problem;
+                    else if (classified)
+                        failure = $"after the object was renamed to an unknown name: the collider was still classified as {result.Kind} '{result.Identifier}' from '{result.SourceToken}'";
+                }
+                if (failure == null)
+                {
+                    objectA.ObjectName = floraName;
+                    failure = Expect("after the object got a known name again", floraName, PinKind.Flora,
+                        floraId, objectA);
+                }
+                if (failure == null)
+                {
+                    holder.transform.SetParent(hostB.transform, true);
+                    failure = Expect("after the collider moved under an object with a mineral name", mineralName,
+                        PinKind.Mineral, mineralId, objectB);
+                }
+                if (failure == null)
+                {
+                    holder.transform.SetParent(hostA.transform, true);
+                    failure = Expect("after the collider moved back under the first object", floraName,
+                        PinKind.Flora, floraId, objectA);
+                }
+
+                if (failure == null)
+                    run.Pass(check, "one collider was classified as a flora, then a mineral after its object was renamed, not at all under an unknown name, a flora again under a known name, and a mineral and a flora again as it moved under other objects");
+                else if (failure.StartsWith("SKIP"))
+                    run.Skip(check, failure.Substring(4));
+                else
+                    run.Fail(check, failure);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(holder);
+                UnityEngine.Object.DestroyImmediate(hostA);
+                UnityEngine.Object.DestroyImmediate(hostB);
+                // The destroyed collider leaves the cache with the next scan, not at the interval's end.
+                try
+                {
+                    Physics.SyncTransforms();
+                    lastScan.SetValue(null, 0f);
+                    CacheStaticObjectsMethod.Invoke(null, new object[] { player.transform.position });
+                }
+                catch (Exception e)
+                {
+                    run.Fail(check + "_cleanup", "the scan that drops the test collider failed: " + e.Message);
+                }
             }
         }
 
