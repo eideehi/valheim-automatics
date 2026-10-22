@@ -46,7 +46,7 @@ namespace Automatics.AutomaticFarming
     /// </remarks>
     internal sealed class FarmingContainers
     {
-        // By role, Cultivation first; filled for a farming pass only.
+        // By role, Cultivation first.
         private readonly List<DesignatedContainer>[] _ownedElsewhere;
 
         private FarmingContainers(List<DesignatedContainer> ownedCultivation,
@@ -115,7 +115,7 @@ namespace Automatics.AutomaticFarming
                 var step = ContainerAccess.GetWriteStep(player, container);
                 if (!ContainerAccess.IsWritable(step))
                 {
-                    if (forPass && step == ContainerWriteStep.Request)
+                    if (step == ContainerWriteStep.Request)
                         ownedElsewhere[(int)role - 1].Add(designated);
                     continue;
                 }
@@ -211,6 +211,20 @@ namespace Automatics.AutomaticFarming
         public bool HasMatchingPlantingNear(bool isSeed, Vector3 position, float range)
         {
             return AnyNear(isSeed ? OwnedSeedHarvest : OwnedCultivation, position, range);
+        }
+
+        /// <summary>
+        /// Whether farming would have a box for the yield of a crop at
+        /// <paramref name="position"/>: one this peer can mutate, or one another peer owns
+        /// that it would ask for (see <see cref="OwnedElsewhereDepositNear"/>).
+        /// </summary>
+        public bool HasDepositNear(bool isSeed, Vector3 position, float range)
+        {
+            return HasStorageNear(position, range) ||
+                   HasMatchingPlantingNear(isSeed, position, range) ||
+                   AnyNear(OwnedElsewhere(ContainerRole.Storage), position, range) ||
+                   AnyNear(OwnedElsewhere(isSeed ? ContainerRole.SeedHarvest
+                       : ContainerRole.Cultivation), position, range);
         }
 
         // The presence test of Near, without collecting or sorting the hits.

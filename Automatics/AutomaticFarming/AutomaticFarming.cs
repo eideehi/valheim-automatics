@@ -90,10 +90,9 @@ namespace Automatics.AutomaticFarming
                 return false;
 
             var containers = snapshot.Get(player);
-            if (containers.OwnedStorage.Count == 0 &&
-                containers.OwnedCultivation.Count == 0 &&
-                containers.OwnedSeedHarvest.Count == 0)
-                return false;
+            // A box another peer owns counts: farming asks for it and harvests the crop on a
+            // later pass, so pickup must not take the crop meanwhile.
+            if (!containers.HasUsableBoxes) return false;
 
             if (!playerCentred && !TryNearestAnchorDistance(containers, position, range, out _))
                 return false;
@@ -101,8 +100,7 @@ namespace Automatics.AutomaticFarming
             // A crop is harvested only when a box near it can take the yield.
             var boxRange = Config.ContainerSearchRange;
             var isSeed = ValheimObject.Flora.HasTag(identifier, "seed");
-            return containers.HasStorageNear(position, boxRange) ||
-                   containers.HasMatchingPlantingNear(isSeed, position, boxRange);
+            return containers.HasDepositNear(isSeed, position, boxRange);
         }
 
         /// <summary>
