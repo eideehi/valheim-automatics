@@ -231,7 +231,8 @@ namespace Automatics.SmokeTest
         // its timer again.
         private const int FarmingTimerFrames = 30;
 
-        // Automatic Farming owns one patch and three hook subscriptions and attaches no component.
+        // Automatic Farming owns one patch, three hook subscriptions and one Flora data subscription
+        // and attaches no component.
         // Automatic Pickup asks its crop claim before it collects a crop, so the claim has to let go
         // at the disable request and come back after the enable. The check harvests, plants and
         // designates nothing and changes no Farming or Pickup setting; its precondition keeps it
@@ -254,6 +255,7 @@ namespace Automatics.SmokeTest
                     Probe.Handlers("Hooks.OnLocalPlayerAwake", () => Hooks.OnLocalPlayerAwake, 1),
                     Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
                     Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
+                    Probe.Event(typeof(ValheimObject), "RegistryChanged", 1),
                     Probe.NoneDeclared("farming.Hooks.OnPlayerAwake.declared",
                         () => Hooks.OnPlayerAwake, typeof(FarmingModule)),
                     Probe.Counter("farming.OnLocalPlayerAwake.handler",
@@ -266,6 +268,11 @@ namespace Automatics.SmokeTest
                         () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(FarmingModule),
                             "OnPlayerFixedUpdate"),
                         OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("farming.OnRegistryChanged.handler",
+                        () => CountHandlersOf(
+                            AccessTools.Field(typeof(ValheimObject), "RegistryChanged")
+                                ?.GetValue(null) as Delegate, typeof(FarmingPlanting),
+                            "OnRegistryChanged"), OffExpectation.Zero, 0, () => 1),
                     // The patch inventory is read from FarmingPatches, including manual placement.
                     Probe.Counter("farming.pending_grid", () => global::Automatics.AutomaticFarming.GridPlanting.HasPending ? 1 : 0,
                         OffExpectation.Zero, 0),

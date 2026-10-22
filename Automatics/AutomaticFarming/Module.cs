@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Automatics.Valheim;
 using BepInEx.Configuration;
 using ModUtils;
 using UnityEngine;
@@ -8,7 +9,7 @@ namespace Automatics.AutomaticFarming
 {
     /// <summary>
     ///     Automatic Farming on the module lifecycle. A scope owns its container hover and manual planting patches and its
-    ///     three player hook subscriptions, so turning the module off removes them instead of
+    ///     three player hook subscriptions and its Flora data subscription, so turning the module off removes them instead of
     ///     leaving them installed. It attaches no component to anything in the scene, so an
     ///     activation has nothing to reconcile: crops, cultivated ground and designated containers
     ///     are looked up again on the next farming pass (R4.2).
@@ -103,6 +104,10 @@ namespace Automatics.AutomaticFarming
                 h => Hooks.OnPlayerFixedUpdate += h,
                 h => Hooks.OnPlayerFixedUpdate -= h,
                 OnPlayerFixedUpdate);
+            scope.Subscribe<Action<ValheimObject>>(
+                h => ValheimObject.RegistryChanged += h,
+                h => ValheimObject.RegistryChanged -= h,
+                CropPlanting.OnRegistryChanged);
 
             Active = true;
         }

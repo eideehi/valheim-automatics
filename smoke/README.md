@@ -597,12 +597,12 @@ checks:
 | `farming_session_state_captured` | Immediately before each disable request, without waiting a frame, the claimed crops and the farming timers are counted, and the sapling lookup is built if no farming pass built it yet (a read of the loaded prefabs; nothing in the world changes) |
 | `farming_off_stopped_at_request` | In the frame of the disable request the module remains applied but no longer running, which is what its two player hooks, its hover postfix and its crop claim open with |
 | `farming_claims_released_at_request` | In that same frame, no loaded crop is claimed any more, so Automatic Pickup collects them from then on; SKIP when no crop was claimed before the request |
-| `farming_off_probes_as_expected` | The three Farming hook handlers are gone, each Farming-owned handler's own occurrence in its hook is zero, and the number of containers with a farming role is unchanged |
+| `farming_off_probes_as_expected` | The three Farming hook handlers and the one `ValheimObject.RegistryChanged` handler are gone, each Farming-owned handler's own occurrence in its hook is zero, and the number of containers with a farming role is unchanged |
 | `farming_claims_released_while_off` | While off, no loaded crop is claimed; SKIP when none was claimed before the request |
 | `farming_timers_cleared` | A non-empty farming timer table observed immediately before disabling is empty while off; SKIP when it was already empty |
 | `farming_sapling_map_cleared` | The sapling lookup built before disabling is dropped while off |
 | `farming_on_patches_applied` | The patches under Farming's Harmony id exactly match the `Container.GetHoverText` postfix of `Automatics.AutomaticFarming.Patches` |
-| `farming_on_probes_at_baseline` | All three handlers are restored, each Farming-owned handler's own occurrence is back at one, and the number of containers with a farming role is still the same |
+| `farming_on_probes_at_baseline` | All three hook handlers and the `ValheimObject.RegistryChanged` handler are restored, each Farming-owned handler's own occurrence is back at one, and the number of containers with a farming role is still the same |
 | `farming_claims_restored` | The positive control: a crop is claimed again once the module is back on; SKIP when none was claimed before the request |
 | `farming_interval_timer_resumed` | When farming runs on an interval, its hook takes up its timer again within 30 frames of the enable; SKIP when farming runs on a key or is turned off |
 
@@ -1572,6 +1572,7 @@ share one pass):
 
 | Check | Pass condition |
 | --- | --- |
+| `farming_flora_change_rebuilds_sapling_lookup` | With the sapling lookup built, a User-defined Flora entry added through the registry (`ValheimObject.Flora.RegisterCustom`, as the setting does; no config value is written, and the custom entries that were there are put back afterwards) drops the lookup, and the next `CropPlanting.TryResolveSapling` for the chosen crop builds it again and still finds its sapling |
 | `farming_player_containers_harvest` | A ripe crop of that kind spawned on a free cell is picked, its yield goes into the Storage chest, it is replanted at the same spot with one seed from the Cultivation chest, and your inventory is unchanged |
 | `farming_replant_below_reserve` | With `Seed Reserve` above the seeds held and sowing on, the harvested spot is still replanted and nothing is sown on the free cells left |
 | `farming_replant_keeps_row_yaw` | A ripe crop standing at 194.5° (a planting yaw of 202.5° turned by 8° as growing does) is harvested and replanted at the same spot with a yaw of 202.5°, the planting yaw, not the grown crop's own |

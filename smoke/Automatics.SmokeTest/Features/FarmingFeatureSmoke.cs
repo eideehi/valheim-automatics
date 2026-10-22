@@ -82,6 +82,8 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
+            CheckFloraChangeRebuildsLookup(run, crop);
+
             var created = new List<GameObject>();
             GameObject storage = null, cultivation = null;
             _ownSeeds = 0;
@@ -232,6 +234,38 @@ namespace Automatics.SmokeTest
                 ? $"each of the {defaults.Count} default crop(s) has a sapling and none of the other " +
                   $"{identifiers.Count - defaults.Count} Flora identifier(s) has one"
                 : string.Join("; ", mismatches.ToArray()));
+        }
+
+        // A User-defined Flora added while the module runs drops the sapling lookup built so far,
+        // and the next question builds it again from the loaded prefabs and still resolves the
+        // section's crop. The entry is added through the registry, as the setting does, and the
+        // custom entries that were there are put back; no config value is written.
+        private static void CheckFloraChangeRebuildsLookup(FeatureRun run, Crop crop)
+        {
+            const string name = "farming_flora_change_rebuilds_sapling_lookup";
+            var flora = ValheimObject.Flora;
+            var kept = flora.GetCustomElements().ToList();
+            var added = new ObjectElement
+            {
+                identifier = "AutomaticsSmokeFarmingFlora",
+                label = "Automatics Smoke Farming Flora",
+                matches = new List<ObjectMatcher> { new ObjectMatcher { value = "$automatics_smoke_farming_flora" } }
+            };
+            try
+            {
+                var builtBefore = Planting.TryResolveSapling(crop.Identifier, out _) && Planting.SaplingMapBuilt;
+                flora.RegisterCustom(kept.Concat(new[] { added }));
+                var droppedByChange = !Planting.SaplingMapBuilt;
+                var resolvesAfter = Planting.TryResolveSapling(crop.Identifier, out _);
+                var rebuiltAfter = Planting.SaplingMapBuilt;
+                Check(run, name, builtBefore && droppedByChange && resolvesAfter && rebuiltAfter,
+                    $"lookup built before the change {builtBefore}, dropped by the change {droppedByChange}, " +
+                    $"{crop.Identifier} resolves afterwards {resolvesAfter}, lookup built again by that question {rebuiltAfter}");
+            }
+            finally
+            {
+                flora.RegisterCustom(kept);
+            }
         }
 
         // The first allowed crop that grows from seeds on cultivated ground in this biome, has no

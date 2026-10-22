@@ -67,6 +67,17 @@ namespace Automatics.AutomaticFarming
         }
 
         /// <summary>
+        /// Subscribed to <see cref="ValheimObject.RegistryChanged"/> through the module's scope
+        /// while it runs. The lookup is keyed by Flora identifier, so a change of the Flora data,
+        /// which only the User-defined Flora can make, drops it and the next question builds it
+        /// again. It is not built here: the change can arrive when no farming pass follows.
+        /// </summary>
+        internal static void OnRegistryChanged(ValheimObject registry)
+        {
+            if (ReferenceEquals(registry, ValheimObject.Flora)) _saplingByCrop = null;
+        }
+
+        /// <summary>
         /// Looks up the sapling whose grown crop matches <paramref name="cropIdentifier"/>
         /// (a <see cref="ValheimObject.Flora"/> identifier).
         /// </summary>
