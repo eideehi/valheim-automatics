@@ -180,6 +180,9 @@ namespace Automatics
 
             harmony.PatchAll(typeof(Patches));
             harmony.PatchAll(typeof(ContainerRequestPatches));
+            // Last, so that a game update the hook transpilers refuse leaves the patches above
+            // applied: Harmony stops a class at its first failing target.
+            harmony.PatchAll(typeof(Patches.PlayerUpdateHooks));
         }
 
         public static void InitializeRuntime(string language)

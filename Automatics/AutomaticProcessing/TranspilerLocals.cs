@@ -6,10 +6,11 @@ using System.Reflection.Emit;
 namespace Automatics.AutomaticProcessing
 {
     /// <summary>
-    ///     Resolves the IL locals the Automatic Processing transpilers read and write, and the
-    ///     positions their injected calls go to, from the instructions they anchor on. This is for
-    ///     locals whose declared type is shared with other locals of the same method and therefore
-    ///     cannot be resolved by type.
+    ///     Resolves the IL locals the Automatic Processing transpilers, the player update hook
+    ///     transpilers (Automatics/Patches.cs) and the Minimap.UpdateMap transpiler of Automatic
+    ///     Mapping read and write, and the positions their injected calls go to, from the
+    ///     instructions they anchor on. This is for locals whose declared type is shared with
+    ///     other locals of the same method and therefore cannot be resolved by type.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -24,8 +25,8 @@ namespace Automatics.AutomaticProcessing
     ///         The class depends on nothing but System.Reflection so that
     ///         tests/TranspilerLocalsHarness compiles this very file and executes the derivation
     ///         the game runs, on instruction lists shaped like the game's and on the released
-    ///         game's own method bodies. Patches.cs only converts between Harmony's
-    ///         CodeInstruction and <see cref="IlInstruction" />, and emits the injected calls at
+    ///         game's own method bodies. The Patches.cs files only convert between Harmony's
+    ///         CodeInstruction and <see cref="IlInstruction" />, and emit the injected calls at
     ///         the positions derived here.
     ///     </para>
     ///     <para>
@@ -42,6 +43,17 @@ namespace Automatics.AutomaticProcessing
         private const int SmelterAccumulatorStore = 3;
         private const int SmelterFuelStore = 6;
         private const int SmelterQueuedOreStore = 9;
+
+        // Positions inside the anchors of the player update hooks and of the gamepad closest-pin
+        // lookup in Minimap.UpdateMap.
+        private const int PlayerUpdateTakeInputLoad = 1;
+        private const int PlayerUpdateAnchorLength = 4;
+        private const int PlayerFixedUpdateDeltaLoad = 1;
+        private const int PlayerFixedUpdateAnchorLength = 3;
+        private const int ClosestPinPositionLoad = 1;
+        private const int ClosestPinStore = 6;
+        private const int ClosestPinLoad = 7;
+        private const int ClosestPinNullCheck = 8;
 
         internal static readonly Func<IlInstruction, bool> AnyLocalLoad = x => IsLocalLoad(x.OpCode);
         internal static readonly Func<IlInstruction, bool> AnyLocalStore = x => IsLocalStore(x.OpCode);
@@ -86,6 +98,98 @@ namespace Automatics.AutomaticProcessing
 
             return new SmelterLoopLocals(accumulator, fuel, queuedOre,
                 head + SmelterFuelStore + 1, head + SmelterQueuedOreStore + 1);
+        }
+
+        /// <summary>
+        ///     Derives the local that Player.Update hands UpdatePlacement as its takeInput argument,
+        ///     <c>UpdatePlacement(takeInput, Time.deltaTime)</c>, and the position right after that
+        ///     call, where the player update hook goes.
+        /// </summary>
+        /// <remarks>
+        ///     Player.Update declares many bool locals, so takeInput cannot be resolved by its type.
+        ///     The call must occur exactly once in the method, and the local that feeds its first
+        ///     argument must be declared as bool.
+        /// </remarks>
+        internal static HookSite DerivePlayerUpdateInput(MethodBase original,
+            IList<IlInstruction> code, MethodInfo getDeltaTime, MethodInfo updatePlacement)
+        {
+            const string where = "Player.Update";
+            var localTypes = LocalTypesOf(original, where);
+
+            var call = FindSingle(code, new[]
+                {
+                    Is(OpCodes.Ldarg_0), AnyLocalLoad, Is(OpCodes.Call, getDeltaTime),
+                    Is(OpCodes.Call, updatePlacement)
+                },
+                $"{where}: the call `UpdatePlacement(takeInput, Time.deltaTime)`");
+            var takeInput = RequireLocal(LocalAt(code, call + PlayerUpdateTakeInputLoad),
+                localTypes, typeof(bool), $"{where}: takeInput");
+
+            return new HookSite(takeInput, call + PlayerUpdateAnchorLength);
+        }
+
+        /// <summary>
+        ///     Derives the local that Player.FixedUpdate hands UpdateStealth,
+        ///     <c>UpdateStealth(fixedDeltaTime)</c>, and the position right after that call, where
+        ///     the player fixed update hook goes.
+        /// </summary>
+        /// <remarks>
+        ///     The call must occur exactly once in the method, and the local that feeds it must be
+        ///     declared as float.
+        /// </remarks>
+        internal static HookSite DerivePlayerFixedDeltaTime(MethodBase original,
+            IList<IlInstruction> code, MethodInfo updateStealth)
+        {
+            const string where = "Player.FixedUpdate";
+            var localTypes = LocalTypesOf(original, where);
+
+            var call = FindSingle(code, new[]
+                {
+                    Is(OpCodes.Ldarg_0), AnyLocalLoad, Is(OpCodes.Call, updateStealth)
+                },
+                $"{where}: the call `UpdateStealth(fixedDeltaTime)`");
+            var fixedDeltaTime = RequireLocal(LocalAt(code, call + PlayerFixedUpdateDeltaLoad),
+                localTypes, typeof(float), $"{where}: fixedDeltaTime");
+
+            return new HookSite(fixedDeltaTime, call + PlayerFixedUpdateAnchorLength);
+        }
+
+        /// <summary>
+        ///     Derives, in the JoyTabLeft branch of Minimap.UpdateMap,
+        ///     <c>PinData closestPin = GetClosestPin(pos, PinInteractRadius); if (closestPin != null)</c>,
+        ///     the local holding pos and the position of the null check.
+        /// </summary>
+        /// <remarks>
+        ///     UpdateMap stores several screen positions into Vector3 locals (the JoyTabRight branch
+        ///     removes a pin through one with the same radius), so pos cannot be resolved by its type.
+        ///     The lookup and its null check must occur exactly once in the method, the pin must be
+        ///     stored and tested through the same local, and pos must be declared as
+        ///     <paramref name="positionType" />, which the caller passes because this file builds
+        ///     without the game's assemblies. HarmonyX hands a transpiler every short branch in its
+        ///     long form, so the null check is a <c>brfalse</c>.
+        /// </remarks>
+        internal static ClosestPinSite DeriveGamepadClosestPin(MethodBase original,
+            IList<IlInstruction> code, Type positionType, MethodInfo getPinInteractRadius,
+            MethodInfo getClosestPin)
+        {
+            const string where = "Minimap.UpdateMap";
+            if (positionType == null)
+                throw new ArgumentNullException(nameof(positionType));
+            var localTypes = LocalTypesOf(original, where);
+
+            var lookup = FindSingle(code, new[]
+                {
+                    Is(OpCodes.Ldarg_0), AnyLocalLoad, Is(OpCodes.Ldarg_0),
+                    Is(OpCodes.Call, getPinInteractRadius), Is(OpCodes.Ldc_I4_1),
+                    Is(OpCodes.Call, getClosestPin), AnyLocalStore, AnyLocalLoad, Is(OpCodes.Brfalse)
+                },
+                $"{where}: the lookup `closestPin = GetClosestPin(pos, PinInteractRadius); if (closestPin != null)`");
+            var position = RequireLocal(LocalAt(code, lookup + ClosestPinPositionLoad),
+                localTypes, positionType, $"{where}: pos");
+            RequireSameLocal(code, lookup + ClosestPinStore, lookup + ClosestPinLoad,
+                $"{where}: closestPin");
+
+            return new ClosestPinSite(position, lookup + ClosestPinNullCheck);
         }
 
         /// <summary>
@@ -404,6 +508,14 @@ namespace Automatics.AutomaticProcessing
             return types;
         }
 
+        /// <summary>The declared type of every local of <paramref name="original" />, by index.</summary>
+        private static IList<Type> LocalTypesOf(MethodBase original, string where)
+        {
+            var body = original?.GetMethodBody() ?? throw new InvalidOperationException(
+                $"{where}: method body is unavailable, cannot check the declared local types");
+            return DeclaredLocalTypes(body.LocalVariables, where);
+        }
+
         /// <summary>An IL instruction as an opcode and its operand, independent of Harmony.</summary>
         internal readonly struct IlInstruction
         {
@@ -457,6 +569,39 @@ namespace Automatics.AutomaticProcessing
 
             /// <summary>Right after the store of GetQueuedOre's result, before anything reads it.</summary>
             internal int QuickCraftAt { get; }
+        }
+
+        /// <summary>The local a player update hook is handed, and where its call goes.</summary>
+        internal sealed class HookSite
+        {
+            internal HookSite(int local, int hookAt)
+            {
+                Local = local;
+                HookAt = hookAt;
+            }
+
+            internal int Local { get; }
+
+            /// <summary>Right after the anchored call.</summary>
+            internal int HookAt { get; }
+        }
+
+        /// <summary>
+        ///     The local holding the position Minimap.UpdateMap looks up the closest pin at, and the
+        ///     null check on that pin.
+        /// </summary>
+        internal sealed class ClosestPinSite
+        {
+            internal ClosestPinSite(int position, int nullCheckAt)
+            {
+                Position = position;
+                NullCheckAt = nullCheckAt;
+            }
+
+            internal int Position { get; }
+
+            /// <summary>The <c>brfalse</c> that skips the pin's update when no pin was found.</summary>
+            internal int NullCheckAt { get; }
         }
     }
 }

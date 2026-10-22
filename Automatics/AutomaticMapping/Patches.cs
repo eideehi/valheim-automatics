@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using UnityEngine;
+using TranspilerLocals = Automatics.AutomaticProcessing.TranspilerLocals;
 
 namespace Automatics.AutomaticMapping
 {
@@ -230,40 +231,37 @@ namespace Automatics.AutomaticMapping
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(Minimap), "UpdateMap")]
         private static IEnumerable<CodeInstruction> Minimap_UpdateMap_Transpiler(
-            IEnumerable<CodeInstruction> instructions, ILGenerator generator)
+            IEnumerable<CodeInstruction> instructions, ILGenerator generator, MethodBase original)
         {
             /*
              *   Vector3 pos3 = this.ScreenToWorldPoint(new Vector3(Screen.width / 2, Screen.height / 2));
-             *   PinData closestPin = this.GetClosestPin(pos3, this.m_removeRadius * (this.m_largeZoom * 2f));
+             *   PinData closestPin = this.GetClosestPin(pos3, this.PinInteractRadius);
              *   if (closestPin != null)
              *     if (closestPin.m_ownerID != 0L)
              *       closestPin.m_ownerID = 0L;
              *     else
              *       closestPin.m_checked = !closestPin.m_checked;
              * + else
-             * +   AutomaticMapping.SetSaveFlag(Map.GetClosestPin(pos3, this.m_removeRadius * (this.m_largeZoom * 2f));
+             * +   AutomaticMapping.SetSaveFlag(pos3, this.m_removeRadius * (this.m_largeZoom * 2f));
              */
-            // pos3 is local 8 (verified against the vanilla Minimap.UpdateMap IL). It is
-            // hardcoded rather than captured dynamically because UpdateMap has several
-            // ScreenToWorldPoint stores (the JoyTab branches), so a naive "first
-            // ScreenToWorldPoint + Stloc_S" capture grabs the RemoveMap branch's local 7,
-            // not the GetClosestPin branch's pos3. The ThrowIfInvalid guards below still
-            // make a layout change fail loudly at patch time instead of silently.
-            return new CodeMatcher(instructions, generator)
-                .MatchEndForward(
-                    new CodeMatch(OpCodes.Call,
-                        AccessTools.Method(typeof(Minimap), "GetClosestPin")),
-                    new CodeMatch(OpCodes.Stloc_S))
-                .ThrowIfInvalid("Could not find Minimap.UpdateMap GetClosestPin assignment.")
-                .MatchStartForward(
-                    new CodeMatch(OpCodes.Brfalse))
-                .ThrowIfInvalid("Could not find Minimap.UpdateMap closest-pin null check.")
-                .Advance(1)
+            // UpdateMap stores several screen positions into Vector3 locals (the JoyTab
+            // branches), so pos3 is the local that feeds the GetClosestPin call, and the null
+            // check is the one on that call's result. Both are derived, and checked, by
+            // TranspilerLocals.DeriveGamepadClosestPin.
+            var codes = instructions.ToList();
+            var site = TranspilerLocals.DeriveGamepadClosestPin(original, ToIl(codes),
+                typeof(Vector3),
+                AccessTools.Method(typeof(Minimap), "get_PinInteractRadius"),
+                AccessTools.Method(typeof(Minimap), "GetClosestPin"));
+
+            return new CodeMatcher(codes, generator)
+                .Start()
+                .Advance(site.NullCheckAt + 1)
                 .CreateLabel(out var ifPinNotNull)
                 .Advance(-1)
                 .Insert(
                     new CodeInstruction(OpCodes.Brtrue_S, ifPinNotNull),
-                    new CodeInstruction(OpCodes.Ldloc_S, 8),
+                    ToCode(TranspilerLocals.LoadLocal(site.Position)),
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Ldfld,
                         AccessTools.Field(typeof(Minimap), "m_removeRadius")),
@@ -278,6 +276,21 @@ namespace Automatics.AutomaticMapping
                     new CodeInstruction(OpCodes.Pop),
                     new CodeInstruction(OpCodes.Ldc_I4_0))
                 .InstructionEnumeration();
+        }
+
+        /// <summary>
+        ///     The transpiler's instructions as opcode and operand pairs, for
+        ///     <see cref="TranspilerLocals" /> to match against. Positions are shared with the list
+        ///     the transpiler edits.
+        /// </summary>
+        private static List<TranspilerLocals.IlInstruction> ToIl(IEnumerable<CodeInstruction> codes)
+        {
+            return codes.Select(x => new TranspilerLocals.IlInstruction(x.opcode, x.operand)).ToList();
+        }
+
+        private static CodeInstruction ToCode(TranspilerLocals.IlInstruction instruction)
+        {
+            return new CodeInstruction(instruction.OpCode, instruction.Operand);
         }
 
         [HarmonyTranspiler]

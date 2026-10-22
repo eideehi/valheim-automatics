@@ -92,6 +92,7 @@ namespace Automatics.AutomaticProcessing
                 ReleasedGameMethodBodies);
             RunMappingAnchorCases();
             RunRepairAnchorCases();
+            RunHookLocalCases();
 
             return _failures == 0 ? 0 : 1;
         }
@@ -571,9 +572,9 @@ namespace Automatics.AutomaticProcessing
         /// <summary>
         ///     A game method read straight from the released assembly with System.Reflection.Metadata:
         ///     its instructions as (opcode, operand) pairs, its declared local types, and the
-        ///     instructions some jump lands on. Calls to GetFuel and GetQueuedOre of the
-        ///     method's own type become the stand-ins the derivation is given; every other operand
-        ///     that the derivation does not read stays a placeholder.
+        ///     instructions some jump lands on. Calls to the game methods a derivation anchors on
+        ///     become the stand-ins the derivation is given; every other operand that the derivation
+        ///     does not read stays a placeholder.
         /// </summary>
         private sealed class DecodedMethod
         {
@@ -583,9 +584,14 @@ namespace Automatics.AutomaticProcessing
                 .GroupBy(opcode => (int)(ushort)opcode.Value)
                 .ToDictionary(group => group.Key, group => group.First());
 
+            // Keyed by Owner::name, the owner being the declaring type's own name.
             private static readonly Dictionary<string, MethodInfo> StandIns = new Dictionary<string, MethodInfo>
             {
-                ["GetFuel"] = GetFuel, ["GetQueuedOre"] = GetQueuedOre
+                ["Smelter::GetFuel"] = GetFuel, ["Smelter::GetQueuedOre"] = GetQueuedOre,
+                ["Player::UpdatePlacement"] = UpdatePlacement, ["Time::get_deltaTime"] = GetDeltaTime,
+                ["Player::UpdateStealth"] = UpdateStealth,
+                ["Minimap::get_PinInteractRadius"] = GetPinInteractRadius,
+                ["Minimap::GetClosestPin"] = GetClosestPin
             };
 
             public List<IlInstruction> Code { get; private set; }
@@ -649,7 +655,7 @@ namespace Automatics.AutomaticProcessing
                             pos += 4;
                             break;
                         case OperandType.InlineMethod:
-                            operand = ResolveCall(reader, BitConverter.ToInt32(il, pos), typeName);
+                            operand = ResolveCall(reader, BitConverter.ToInt32(il, pos));
                             pos += 4;
                             break;
                         case OperandType.InlineField:
@@ -685,7 +691,7 @@ namespace Automatics.AutomaticProcessing
                 };
             }
 
-            private static object ResolveCall(MetadataReader reader, int token, string typeName)
+            private static object ResolveCall(MetadataReader reader, int token)
             {
                 var handle = MetadataTokens.EntityHandle(token);
                 string name;
@@ -711,7 +717,7 @@ namespace Automatics.AutomaticProcessing
                     return "call";
                 }
 
-                return owner == typeName && StandIns.TryGetValue(name, out var standIn)
+                return StandIns.TryGetValue($"{owner}::{name}", out var standIn)
                     ? standIn
                     : (object)$"{owner}::{name}";
             }
@@ -770,7 +776,9 @@ namespace Automatics.AutomaticProcessing
 
             internal static Type NamedType(string space, string name)
             {
-                return space == "" && name == "Player" ? typeof(RepairPlayer) : typeof(OtherType);
+                if (space == "" && name == "Player") return typeof(RepairPlayer);
+                if (space == "UnityEngine" && name == "Vector3") return typeof(UnityVector3);
+                return typeof(OtherType);
             }
             public Type GetTypeFromSpecification(MetadataReader reader, object genericContext, TypeSpecificationHandle handle, byte rawTypeKind) => typeof(OtherType);
             public Type GetSZArrayType(Type elementType) => typeof(OtherType);
@@ -809,6 +817,29 @@ namespace Automatics.AutomaticProcessing
 
             public static void SetAccumulator(float accumulator)
             {
+            }
+
+            public static void UpdatePlacement(bool takeInput, float dt)
+            {
+            }
+
+            public static float GetDeltaTime()
+            {
+                return 0f;
+            }
+
+            public static void UpdateStealth(float dt)
+            {
+            }
+
+            public static float GetPinInteractRadius()
+            {
+                return 0f;
+            }
+
+            public static object GetClosestPin(UnityVector3 pos, float radius, bool mustBeVisible)
+            {
+                return null;
             }
         }
     }

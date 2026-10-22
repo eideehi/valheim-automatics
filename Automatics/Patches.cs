@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using ModUtils;
+using TranspilerLocals = Automatics.AutomaticProcessing.TranspilerLocals;
 
 namespace Automatics
 {
@@ -31,70 +34,6 @@ namespace Automatics
             // only assigned after Awake, so ownership is what tells the two apart here.
             if (Objects.HasValidOwnership(zNetView))
                 Hooks.OnLocalPlayerAwake?.Invoke(__instance, zNetView);
-        }
-
-        [HarmonyTranspiler]
-        [HarmonyPatch(typeof(Player), "Update")]
-        private static IEnumerable<CodeInstruction> Player_Update_Transpiler(
-            IEnumerable<CodeInstruction> instructions, ILGenerator generator)
-        {
-            /*
-             *     this.UpdatePlacement(input, Time.deltaTime);
-             * +   Hooks.OnPlayerUpdate?.Invoke(this, input);
-             *   }
-             */
-            return new CodeMatcher(instructions, generator)
-                .MatchEndForward(new CodeMatch(OpCodes.Call,
-                    AccessTools.Method(typeof(Player), "UpdatePlacement")))
-                .Advance(1)
-                .CreateLabel(out var ifNull)
-                .Insert(
-                    new CodeInstruction(OpCodes.Ldarg_0),
-                    new CodeInstruction(OpCodes.Ldloc_1),
-                    new CodeInstruction(OpCodes.Callvirt,
-                        AccessTools.Method(typeof(Action<Player, bool>), "Invoke")))
-                .CreateLabel(out var invoke)
-                .MatchStartBackwards(new CodeMatch(OpCodes.Ldarg_0))
-                .Insert(
-                    new CodeInstruction(OpCodes.Call,
-                        AccessTools.Method(typeof(Hooks), "get_OnPlayerUpdate")),
-                    new CodeInstruction(OpCodes.Dup),
-                    new CodeInstruction(OpCodes.Brtrue_S, invoke),
-                    new CodeInstruction(OpCodes.Pop),
-                    new CodeInstruction(OpCodes.Br_S, ifNull))
-                .InstructionEnumeration();
-        }
-
-        [HarmonyTranspiler]
-        [HarmonyPatch(typeof(Player), "FixedUpdate")]
-        private static IEnumerable<CodeInstruction> Player_FixedUpdate_Transpiler(
-            IEnumerable<CodeInstruction> instructions, ILGenerator generator)
-        {
-            /*
-             *   this.UpdateStealth(fixedDeltaTime);
-             * + Hooks.OnPlayerFixedUpdate(this, fixedDeltaTime);
-             *   if ((bool) (UnityEngine.Object) GameCamera.instance && (double) Vector3.Distance(GameCamera.instance.transform.position, this.transform.position) < 2.0)
-             */
-            return new CodeMatcher(instructions, generator)
-                .MatchStartForward(new CodeMatch(OpCodes.Call,
-                    AccessTools.Method(typeof(Player), "UpdateStealth")))
-                .Advance(1)
-                .CreateLabel(out var skip)
-                .Insert(
-                    new CodeInstruction(OpCodes.Ldarg_0),
-                    new CodeInstruction(OpCodes.Ldloc_0),
-                    new CodeInstruction(OpCodes.Callvirt,
-                        AccessTools.Method(typeof(Action<Player, float>), "Invoke")))
-                .CreateLabel(out var exec)
-                .MatchStartBackwards(new CodeMatch(OpCodes.Ldarg_0))
-                .Insert(
-                    new CodeInstruction(OpCodes.Call,
-                        AccessTools.Method(typeof(Hooks), "get_OnPlayerFixedUpdate")),
-                    new CodeInstruction(OpCodes.Dup),
-                    new CodeInstruction(OpCodes.Brtrue_S, exec),
-                    new CodeInstruction(OpCodes.Pop),
-                    new CodeInstruction(OpCodes.Br_S, skip))
-                .InstructionEnumeration();
         }
 
         [HarmonyPrefix]
@@ -127,6 +66,107 @@ namespace Automatics
         {
             if (___m_nview && ___m_nview.GetZDO() != null)
                 __instance.gameObject.AddComponent<PickableCache>();
+        }
+
+        /// <summary>
+        ///     The transpilers that raise the player update hooks. They are patched on their own,
+        ///     after the patches above: when a game update changes what they anchor on, they refuse
+        ///     at patch time, and the terminal and cache patches are already applied by then.
+        /// </summary>
+        [HarmonyPatch]
+        internal static class PlayerUpdateHooks
+        {
+            [HarmonyTranspiler]
+            [HarmonyPatch(typeof(Player), "Update")]
+            private static IEnumerable<CodeInstruction> Player_Update_Transpiler(
+                IEnumerable<CodeInstruction> instructions, ILGenerator generator,
+                MethodBase original)
+            {
+                /*
+                 *   this.UpdatePlacement(takeInput, Time.deltaTime);
+                 * + Hooks.OnPlayerUpdate?.Invoke(this, takeInput);
+                 *   this.UpdateStats();
+                 */
+                // takeInput and the hook position are derived, and checked, by
+                // TranspilerLocals.DerivePlayerUpdateInput. Insert leaves the position on the
+                // first inserted instruction, so the null test goes in front of the invocation.
+                var codes = instructions.ToList();
+                var site = TranspilerLocals.DerivePlayerUpdateInput(original, ToIl(codes),
+                    AccessTools.Method(typeof(UnityEngine.Time), "get_deltaTime"),
+                    AccessTools.Method(typeof(Player), "UpdatePlacement"));
+
+                return new CodeMatcher(codes, generator)
+                    .Start()
+                    .Advance(site.HookAt)
+                    .CreateLabel(out var ifNull)
+                    .Insert(
+                        new CodeInstruction(OpCodes.Ldarg_0),
+                        ToCode(TranspilerLocals.LoadLocal(site.Local)),
+                        new CodeInstruction(OpCodes.Callvirt,
+                            AccessTools.Method(typeof(Action<Player, bool>), "Invoke")))
+                    .CreateLabel(out var invoke)
+                    .Insert(
+                        new CodeInstruction(OpCodes.Call,
+                            AccessTools.Method(typeof(Hooks), "get_OnPlayerUpdate")),
+                        new CodeInstruction(OpCodes.Dup),
+                        new CodeInstruction(OpCodes.Brtrue_S, invoke),
+                        new CodeInstruction(OpCodes.Pop),
+                        new CodeInstruction(OpCodes.Br_S, ifNull))
+                    .InstructionEnumeration();
+            }
+
+            [HarmonyTranspiler]
+            [HarmonyPatch(typeof(Player), "FixedUpdate")]
+            private static IEnumerable<CodeInstruction> Player_FixedUpdate_Transpiler(
+                IEnumerable<CodeInstruction> instructions, ILGenerator generator,
+                MethodBase original)
+            {
+                /*
+                 *   this.UpdateStealth(fixedDeltaTime);
+                 * + Hooks.OnPlayerFixedUpdate(this, fixedDeltaTime);
+                 *   if ((bool) (UnityEngine.Object) GameCamera.instance && (double) Vector3.Distance(GameCamera.instance.transform.position, this.transform.position) < 2.0)
+                 */
+                // fixedDeltaTime and the hook position are derived, and checked, by
+                // TranspilerLocals.DerivePlayerFixedDeltaTime.
+                var codes = instructions.ToList();
+                var site = TranspilerLocals.DerivePlayerFixedDeltaTime(original, ToIl(codes),
+                    AccessTools.Method(typeof(Player), "UpdateStealth"));
+
+                return new CodeMatcher(codes, generator)
+                    .Start()
+                    .Advance(site.HookAt)
+                    .CreateLabel(out var skip)
+                    .Insert(
+                        new CodeInstruction(OpCodes.Ldarg_0),
+                        ToCode(TranspilerLocals.LoadLocal(site.Local)),
+                        new CodeInstruction(OpCodes.Callvirt,
+                            AccessTools.Method(typeof(Action<Player, float>), "Invoke")))
+                    .CreateLabel(out var exec)
+                    .Insert(
+                        new CodeInstruction(OpCodes.Call,
+                            AccessTools.Method(typeof(Hooks), "get_OnPlayerFixedUpdate")),
+                        new CodeInstruction(OpCodes.Dup),
+                        new CodeInstruction(OpCodes.Brtrue_S, exec),
+                        new CodeInstruction(OpCodes.Pop),
+                        new CodeInstruction(OpCodes.Br_S, skip))
+                    .InstructionEnumeration();
+            }
+
+            /// <summary>
+            ///     The transpiler's instructions as opcode and operand pairs, for
+            ///     <see cref="TranspilerLocals" /> to match against. Positions are shared with the
+            ///     list the transpiler edits.
+            /// </summary>
+            private static List<TranspilerLocals.IlInstruction> ToIl(IEnumerable<CodeInstruction> codes)
+            {
+                return codes.Select(x => new TranspilerLocals.IlInstruction(x.opcode, x.operand))
+                    .ToList();
+            }
+
+            private static CodeInstruction ToCode(TranspilerLocals.IlInstruction instruction)
+            {
+                return new CodeInstruction(instruction.OpCode, instruction.Operand);
+            }
         }
     }
 }
