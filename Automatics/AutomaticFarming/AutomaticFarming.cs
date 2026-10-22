@@ -506,7 +506,7 @@ namespace Automatics.AutomaticFarming
             // its spacing origin and orientation, so sown crops line up with hand-planted grids;
             // without one it is aligned to the world axes.
             // The world-axis grid is anchored at the world origin, so it stays put as you move.
-            if (!LatticeSnapping.TryFindLattice(Objects.GetPrefabName(sapling.gameObject), origin, range,
+            if (!LatticeSnapping.TryFindLattice(sapling.gameObject, origin, range,
                     out var latticeOrigin, out var lattice))
             {
                 latticeOrigin = Vector3.zero;
@@ -522,28 +522,28 @@ namespace Automatics.AutomaticFarming
             for (var z = startZ; z <= maxZ; z += step)
             {
                 // Cheapest checks first: a horizontal squared-distance disc cull,
-                // then cultivated ground, then the seed reserve, before the
-                // physics-heavy plantability check in TryPlant.
+                // then cultivated ground, which the heightmap answers from x and z
+                // alone and so before the ground ray, then the seed reserve, before
+                // the physics-heavy plantability checks in TryPlant, which turn a
+                // crowded cell down before the ward and roof checks.
                 var dx = x - local.x;
                 var dz = z - local.z;
                 if (dx * dx + dz * dz > rangeSqr) continue;
 
                 var pos = latticeOrigin + lattice * new Vector3(x, 0f, z);
+                if (!CropPlanting.IsCultivated(pos, out var heightmap)) continue;
                 pos.y = zone.GetGroundHeight(pos);
-                if (!CropPlanting.IsCultivated(pos)) continue;
                 if (cellAllowed != null && !cellAllowed(pos)) continue;
                 if (!CropPlanting.CanAffordPlanting(seedPool, sapling, reserve)) return sown;
 
                 // A probe plants nothing; it reports the first cell the sapling can grow on.
                 if (probe)
                 {
-                    if (PrivateArea.CheckAccess(pos, 0f, false) &&
-                        CropPlanting.CanPlantAt(plant, pos, out _))
-                        return 1;
+                    if (CropPlanting.CanPlaceAt(plant, heightmap, pos, out _)) return 1;
                     continue;
                 }
 
-                if (CropPlanting.TryPlant(player, sapling, plant, seedPool, pos, lattice,
+                if (CropPlanting.TryPlant(player, sapling, plant, heightmap, seedPool, pos, lattice,
                         reserve, out _))
                     sown++;
             }

@@ -335,9 +335,10 @@ namespace Automatics.SmokeTest
             return false;
         }
 
-        // The rules CropPlanting.TryPlant applies before it places a crop, in its order: build
-        // access, CanPlantAt (biome, cultivation, roof, grow space) and the slope limit for pieces
-        // that refuse tilting ground. Grass has no collider, so it never blocks grow space.
+        // The rules CropPlanting.TryPlant applies before it places a crop, in its order: the ground
+        // checks (biome, cultivation, heat, cold) and grow space, then build access, the roof check
+        // and the slope limit for pieces that refuse tilting ground. Grass has no collider, so it
+        // never blocks grow space.
         private static string CellProblem(Piece piece, Plant plant, Vector3 pos)
         {
             if (!Heightmap.FindHeightmap(pos)) return "no terrain";

@@ -88,16 +88,16 @@ namespace Automatics.AutomaticFarming
         /// consumption.
         /// </summary>
         public static bool TryPlant(Player player, Piece sapling, SeedPool seedPool, Vector3 pos,
-            Quaternion rot, int reserve, out string reason)
+            Quaternion rot, int reserve, out PlantRefusal refusal)
         {
             var plant = sapling.GetComponent<Plant>();
             if (plant == null)
             {
-                reason = "sapling has no Plant component";
+                refusal = PlantRefusal.Rule("sapling has no Plant component");
                 return false;
             }
 
-            return TryPlant(player, sapling, plant, seedPool, pos, rot, reserve, out reason);
+            return TryPlant(player, sapling, plant, seedPool, pos, rot, reserve, out refusal);
         }
 
         // Overload taking a pre-resolved Plant so the proactive-sow grid does not
@@ -108,19 +108,19 @@ namespace Automatics.AutomaticFarming
         // the player place without seeds (no-cost mode or the piece's free-build key),
         // the seed reserve gate is skipped. Automatic farming never passes it.
         public static bool TryPlant(Player player, Piece sapling, Plant plant, SeedPool seedPool,
-            Vector3 pos, Quaternion rot, int reserve, out string reason, bool placementCostWaived = false)
+            Vector3 pos, Quaternion rot, int reserve, out PlantRefusal refusal, bool placementCostWaived = false)
         {
-            if (!PrivateArea.CheckAccess(pos, 0f, false))
-            {
-                reason = "no build access (PrivateArea)";
-                return false;
-            }
+            return TryPlant(player, sapling, plant, Heightmap.FindHeightmap(pos), seedPool, pos, rot, reserve,
+                out refusal, placementCostWaived);
+        }
 
-            if (!CanPlantAt(plant, pos, out var status))
-            {
-                reason = status.ToString();
-                return false;
-            }
+        // The proactive-sow grid passes the heightmap its cultivation test already found at pos,
+        // which is the one Heightmap.FindHeightmap(pos) returns: the search reads only x and z.
+        internal static bool TryPlant(Player player, Piece sapling, Plant plant, Heightmap heightmap,
+            SeedPool seedPool, Vector3 pos, Quaternion rot, int reserve, out PlantRefusal refusal,
+            bool placementCostWaived = false)
+        {
+            if (!CanPlaceAt(plant, heightmap, pos, out refusal)) return false;
 
             // Vanilla forbids placing a tilt-sensitive piece on a steep slope
             // (Player.UpdatePlacementGhost). Plant.UpdateHealth does not model
@@ -128,18 +128,15 @@ namespace Automatics.AutomaticFarming
             // a seed and withers.
             if (sapling.m_notOnTiltingSurface && IsTooTilted(pos))
             {
-                reason = "tilting surface";
+                refusal = PlantRefusal.Rule("tilting surface");
                 return false;
             }
 
             // The reserve gate and the consume step below share the one resolved
             // pool, so they see the same container set (in Inventory mode no
             // container is touched at all).
-            if (!placementCostWaived && !HasSeedAboveReserve(seedPool, sapling, reserve, out var seedInfo))
-            {
-                reason = $"seed reserve ({seedInfo})";
+            if (!placementCostWaived && !HasSeedAboveReserve(seedPool, sapling, reserve, out refusal))
                 return false;
-            }
 
             player.PlacePiece(sapling, pos, rot, false);
 
@@ -157,16 +154,65 @@ namespace Automatics.AutomaticFarming
                 !ZoneSystem.instance.GetGlobalKey(sapling.FreeBuildKey()))
                 ConsumeSeeds(player, seedPool, sapling);
 
-            reason = "";
+            refusal = default;
+            return true;
+        }
+
+        /// <summary>
+        /// The placement checks of TryPlant before the slope and the seeds, cheapest first: the
+        /// heightmap checks and the grow-space overlap of <see cref="CanPlantAt"/>, then build
+        /// access, then its roof rays, so a crowded cell is turned down before the ward and roof
+        /// checks. No check changes what another one answers, so the order changes no answer, only
+        /// which reason a cell that fails several of them gets.
+        /// </summary>
+        internal static bool CanPlaceAt(Plant plant, Heightmap heightmap, Vector3 pos,
+            out PlantRefusal refusal)
+        {
+            if (!CanGrowAt(plant, heightmap, pos, out var status))
+            {
+                refusal = PlantRefusal.Of(status);
+                return false;
+            }
+
+            if (!PrivateArea.CheckAccess(pos, 0f, false))
+            {
+                refusal = PlantRefusal.Rule("no build access (PrivateArea)");
+                return false;
+            }
+
+            if (HasRoof(pos))
+            {
+                refusal = PlantRefusal.Of(Plant.Status.NoSun);
+                return false;
+            }
+
+            refusal = default;
             return true;
         }
 
         /// <summary>
         /// Replicates <c>Plant.UpdateHealth</c> + <c>HaveRoof</c> + <c>HaveGrowSpace</c>
         /// for a freshly placed sapling so callers can reject spots that would
-        /// settle anything other than <see cref="Plant.Status.Healthy"/>.
+        /// settle anything other than <see cref="Plant.Status.Healthy"/>. Grow space
+        /// is tested before the roof, the costlier check, so a spot that has neither
+        /// reports NoSpace where vanilla would report NoSun.
         /// </summary>
         public static bool CanPlantAt(Plant sapling, Vector3 pos, out Plant.Status reason)
+        {
+            if (!CanGrowAt(sapling, Heightmap.FindHeightmap(pos), pos, out reason)) return false;
+
+            if (HasRoof(pos))
+            {
+                reason = Plant.Status.NoSun;
+                return false;
+            }
+
+            return true;
+        }
+
+        // Everything CanPlantAt checks except the roof, on the heightmap found at pos.
+        private static bool CanGrowAt(Plant sapling, Heightmap heightmap, Vector3 pos,
+            out Plant.Status reason)
         {
             reason = Plant.Status.Healthy;
 
@@ -180,7 +226,6 @@ namespace Automatics.AutomaticFarming
                 return false;
             }
 
-            var heightmap = Heightmap.FindHeightmap(pos);
             if (heightmap)
             {
                 var biome = heightmap.GetBiome(pos);
@@ -212,12 +257,6 @@ namespace Automatics.AutomaticFarming
                 }
             }
 
-            if (HasRoof(pos))
-            {
-                reason = Plant.Status.NoSun;
-                return false;
-            }
-
             if (!HasGrowSpace(pos, sapling.m_growRadius))
             {
                 reason = Plant.Status.NoSpace;
@@ -233,10 +272,14 @@ namespace Automatics.AutomaticFarming
             return HasSeedAboveReserve(seedPool, sapling, reserve, out _);
         }
 
-        /// <summary>True when <paramref name="pos"/> sits on cultivated ground.</summary>
-        public static bool IsCultivated(Vector3 pos)
+        /// <summary>
+        /// True when <paramref name="pos"/> sits on cultivated ground. The heightmap search and
+        /// its paint mask read only x and z, so no ground height is needed; the heightmap is
+        /// handed back for the placement checks of the same spot.
+        /// </summary>
+        public static bool IsCultivated(Vector3 pos, out Heightmap heightmap)
         {
-            var heightmap = Heightmap.FindHeightmap(pos);
+            heightmap = Heightmap.FindHeightmap(pos);
             return heightmap && heightmap.IsCultivated(pos);
         }
 
@@ -301,7 +344,7 @@ namespace Automatics.AutomaticFarming
         }
 
         private static bool HasSeedAboveReserve(SeedPool pool, Piece sapling, int reserve,
-            out string seedInfo)
+            out PlantRefusal refusal)
         {
             foreach (var requirement in sapling.m_resources)
             {
@@ -314,12 +357,12 @@ namespace Automatics.AutomaticFarming
                 var have = pool.Count(name);
                 if (have - amount < reserve)
                 {
-                    seedInfo = $"{name}: have {have}, need {amount} keeping {reserve}";
+                    refusal = PlantRefusal.SeedReserve(name, have, amount, reserve);
                     return false;
                 }
             }
 
-            seedInfo = "";
+            refusal = default;
             return true;
         }
 
@@ -413,6 +456,52 @@ namespace Automatics.AutomaticFarming
             }
 
             return parts.Count > 0 ? string.Join(", ", parts.ToArray()) : "none";
+        }
+
+        /// <summary>
+        /// Why TryPlant placed nothing. It is put into words only when a log line asks for it,
+        /// so the sow grid and grid planting, which discard it, build no text per cell.
+        /// </summary>
+        internal readonly struct PlantRefusal
+        {
+            private readonly string _rule;
+            private readonly Plant.Status _status;
+            private readonly string _seed;
+            private readonly int _have;
+            private readonly int _need;
+            private readonly int _keep;
+
+            private PlantRefusal(string rule, Plant.Status status, string seed, int have, int need,
+                int keep)
+            {
+                _rule = rule;
+                _status = status;
+                _seed = seed;
+                _have = have;
+                _need = need;
+                _keep = keep;
+            }
+
+            internal static PlantRefusal Rule(string rule)
+            {
+                return new PlantRefusal(rule, Plant.Status.Healthy, null, 0, 0, 0);
+            }
+
+            internal static PlantRefusal Of(Plant.Status status)
+            {
+                return new PlantRefusal(null, status, null, 0, 0, 0);
+            }
+
+            internal static PlantRefusal SeedReserve(string seed, int have, int need, int keep)
+            {
+                return new PlantRefusal(null, Plant.Status.Healthy, seed ?? "", have, need, keep);
+            }
+
+            public override string ToString()
+            {
+                if (_seed != null) return $"seed reserve ({_seed}: have {_have}, need {_need} keeping {_keep})";
+                return _rule ?? _status.ToString();
+            }
         }
     }
 }

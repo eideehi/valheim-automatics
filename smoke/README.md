@@ -1566,13 +1566,15 @@ interval of 0, a farming range of 4 m, a container search range of 8 m, the
 chosen crop as the only allowed crop and a spacing factor of 2.5, then restores
 them. It spawns two chests beside you and gives them the Storage and
 Cultivation roles through the real designation path, puts seeds into the
-Cultivation chest, and runs one farming pass per check:
+Cultivation chest, and runs one farming pass per check (the two sowing checks
+share one pass):
 
 | Check | Pass condition |
 | --- | --- |
 | `farming_player_containers_harvest` | A ripe crop of that kind spawned on a free cell is picked, its yield goes into the Storage chest, it is replanted at the same spot with one seed from the Cultivation chest, and your inventory is unchanged |
 | `farming_replant_below_reserve` | With `Seed Reserve` above the seeds held and sowing on, the harvested spot is still replanted and nothing is sown on the free cells left |
-| `farming_sow_rotated_lattice` | Beside a growing crop of that kind turned 30°, every crop sown lies on that crop's rotated lattice and turned with it (SKIP when no lattice cell beside it is plantable) |
+| `farming_sow_rotated_lattice` | Beside a growing crop of that kind turned 30°, and with a growing crop of another early kind half a metre from you (nearer than the turned one, so only a crop of the same kind may anchor the lattice; left out when no other early crop has a sapling), every crop sown lies on the turned crop's lattice and turned with it (SKIP when no lattice cell beside it is plantable) |
+| `farming_sow_exactly_plantable_cells` | In that same pass, the crops sown are exactly the cells worked out before it: the turned crop's lattice cells within Farming Range of you, walked as the sowing grid walks them, that are cultivated, within Container Search Range of one of the two chests, and pass build access, `CropPlanting.CanPlantAt` (biome, cultivation, temperature, grow space, roof) and, for a crop that refuses tilting ground, the slope limit. The Cultivation chest is given seeds for every such cell first, so running out never ends the pass early. A FAIL lists the cells not sown and the crops sown elsewhere, relative to you (SKIP when no such cell exists or the chest cannot take the seeds) |
 | `farming_deposit_full_box_untouched` | With the Storage chest full of the crop's yield, the harvest deposit (`PickableHarvester.HarvestToContainers`, called directly on a ripe crop with the Storage chest as its only target) leaves the crop standing, and the chest gets nothing, no add call, no save and no warning |
 | `farming_deposit_all_or_nothing` | With room for one in the Storage chest and the crop's yield set to two, the deposit still puts nothing in and leaves the crop standing, again without an add call, a save or a warning |
 | `farming_deposit_competing_yields_untouched` | With one empty slot in the Storage chest and no room in the yield's stacks, the crop's yield set to one and one extra drop of another early item the chest holds none of given to it, two yields compete for the one slot that each would fit alone: the deposit puts nothing in and leaves the crop standing, without an add call, a save or a warning |

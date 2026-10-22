@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using HarmonyLib;
 using ModUtils;
 using UnityEngine;
@@ -39,6 +40,8 @@ namespace Automatics.AutomaticFarming
         // Grown on saturation, so the nearest crop is chosen from every candidate in the radius.
         private const int MaxColliderBuffer = 8192;
         private static Collider[] _colliderBuffer = new Collider[256];
+        // The plants one anchor search has judged, by instance id; emptied when a search starts.
+        private static readonly HashSet<int> VisitedPlants = new HashSet<int>();
 
         private sealed class GhostUpdate
         {
@@ -183,7 +186,7 @@ namespace Automatics.AutomaticFarming
             if (!plant || plant.m_attachDistance > 0f) return false;
             var spacing = plant.m_growRadius * Config.SowingSpacingFactor;
             if (spacing < 0.1f) return false;
-            if (!TryFindAnchor(Objects.GetPrefabName(selected.gameObject), rawPoint,
+            if (!TryFindAnchor(PrefabHash(selected.gameObject), rawPoint,
                     SearchRadius(spacing, Config.GridPlantingSize), out var anchor)) return false;
 
             var anchorYaw = anchor.transform.rotation.eulerAngles.y;
@@ -198,24 +201,34 @@ namespace Automatics.AutomaticFarming
 
         // The lattice of the nearest growing crop of the prefab within the radius: that crop's
         // position and its yaw. Proactive sowing uses it to continue the rows already planted.
-        internal static bool TryFindLattice(string prefabName, Vector3 centre, float radius, out Vector3 origin,
+        internal static bool TryFindLattice(GameObject prefab, Vector3 centre, float radius, out Vector3 origin,
             out Quaternion rotation)
         {
             origin = centre;
             rotation = Quaternion.identity;
-            if (!TryFindAnchor(prefabName, centre, radius, out var anchor)) return false;
+            if (!TryFindAnchor(PrefabHash(prefab), centre, radius, out var anchor)) return false;
 
             origin = anchor.transform.position;
             rotation = Quaternion.Euler(0f, anchor.transform.rotation.eulerAngles.y, 0f);
             return true;
         }
 
+        // The prefab hash the ZDO of an object placed from the prefab carries: ZNetView hashes the
+        // object's prefab name, which is the prefab's own name with the clone suffix cut off.
+        private static int PrefabHash(GameObject prefab)
+        {
+            return Objects.GetPrefabName(prefab).GetStableHashCode();
+        }
+
         // The nearest growing crop of the prefab within the radius, measured on the ground plane.
         // A crop that has grown is a different object with a randomized yaw, so it anchors nothing.
-        private static bool TryFindAnchor(string prefabName, Vector3 centre, float radius, out Plant anchor)
+        // A crop is matched by its ZDO's prefab hash, so no name is built per collider, and a crop
+        // with several colliders is judged once.
+        private static bool TryFindAnchor(int prefabHash, Vector3 centre, float radius, out Plant anchor)
         {
             anchor = null;
             var best = float.MaxValue;
+            VisitedPlants.Clear();
             int count;
             while ((count = Physics.OverlapSphereNonAlloc(centre, radius, _colliderBuffer, PlantMask.Value)) ==
                    _colliderBuffer.Length && _colliderBuffer.Length < MaxColliderBuffer)
@@ -224,9 +237,9 @@ namespace Automatics.AutomaticFarming
             {
                 var plant = _colliderBuffer[i].GetComponentInParent<Plant>();
                 _colliderBuffer[i] = null;
-                if (!plant || plant == anchor) continue;
+                if (!plant || !VisitedPlants.Add(plant.GetInstanceID())) continue;
                 var view = plant.GetComponent<ZNetView>();
-                if (!view || !view.IsValid() || Objects.GetPrefabName(plant.gameObject) != prefabName) continue;
+                if (!view || !view.IsValid() || view.GetZDO().GetPrefab() != prefabHash) continue;
                 var offset = plant.transform.position - centre;
                 var distance = new Vector2(offset.x, offset.z).sqrMagnitude;
                 if (distance > radius * radius || distance >= best) continue;

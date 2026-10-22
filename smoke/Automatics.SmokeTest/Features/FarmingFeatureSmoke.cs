@@ -20,10 +20,11 @@ namespace Automatics.SmokeTest
     // Drives one Automatic Farming pass at a time in Player With Containers mode, next to an empty
     // cultivated plot the player stands beside: a harvest goes into the role containers and is
     // replanted from them (also below Seed Reserve, which holds back only sowing), and sowing
-    // continues the rows of a rotated crop. Everything runs synchronously on objects the section
-    // spawns; the containers, crops and their contents are removed afterwards and no terrain is
-    // changed. A harvest may raise the pick skill, as a harvest by hand does. First, and without
-    // changing anything, it checks that the default crop list holds exactly the crops with a sapling.
+    // continues the rows of a rotated crop, on exactly the cells the planting rules allow.
+    // Everything runs synchronously on objects the section spawns; the containers, crops and their
+    // contents are removed afterwards and no terrain is changed. A harvest may raise the pick
+    // skill, as a harvest by hand does. First, and without changing anything, it checks that the
+    // default crop list holds exactly the crops with a sapling.
     internal static class FarmingFeatureSmoke
     {
         private const string Label = "farming feature smoke";
@@ -128,7 +129,7 @@ namespace Automatics.SmokeTest
                 Physics.SyncTransforms();
 
                 if (!Set(run, "_seedReserve", 0)) yield break;
-                CheckSowing(run, player, crop, cells, cultivation, created);
+                CheckSowing(run, player, crop, cells, storage, cultivation, created);
 
                 CheckDepositWithoutRoom(run, player, crop, cells[0], storage, created);
             }
@@ -384,12 +385,22 @@ namespace Automatics.SmokeTest
                 (freeBuild ? "free-build world so seed use is not checked, " : "") + $"reserve {FarmingConfig.SeedReserve}, sowing {FarmingConfig.EnableProactiveSowing}");
         }
 
+        // One sowing pass beside a growing crop of the section's kind turned 30°, with a growing crop
+        // of another kind nearer to you, which must not anchor the lattice. The crops sown must lie
+        // on the turned crop's lattice, and they must be exactly the cells that the rules a sown
+        // cell passes allow, worked out before the pass.
         private static void CheckSowing(FeatureRun run, Player player, Crop crop, List<Vector3> cells,
-            GameObject cultivation, List<GameObject> created)
+            GameObject storage, GameObject cultivation, List<GameObject> created)
         {
+            const string onLattice = "farming_sow_rotated_lattice";
+            const string plantable = "farming_sow_exactly_plantable_cells";
+            void SkipBoth(string reason)
+            {
+                run.Skip(onLattice, reason);
+                run.Skip(plantable, reason);
+            }
+
             var inventory = cultivation.GetComponent<Container>().GetInventory();
-            inventory.AddItem(crop.SeedPrefab, 10, 1, 0, 0L, "", false);
-            _ownSeeds += 10;
             var rotation = Quaternion.Euler(0f, LatticeYaw, 0f);
 
             // An anchor with at least two free cells of its rotated lattice beside it.
@@ -409,7 +420,7 @@ namespace Automatics.SmokeTest
             }
             if (anchor == null)
             {
-                run.Skip("farming_sow_rotated_lattice", "no cell with two free cells of a rotated lattice beside it; " +
+                SkipBoth("no cell with two free cells of a rotated lattice beside it; " +
                     "stand beside a larger empty cultivated plot");
                 return;
             }
@@ -423,6 +434,7 @@ namespace Automatics.SmokeTest
             }
             if (Objects.GetZNetView(go.transform, out var view) && view && view.IsValid())
                 view.GetZDO().Persistent = false;
+            var other = SpawnOtherCrop(player, crop, anchor.Value, created);
             Physics.SyncTransforms();
             var neighbours = new[] { Vector3.right, Vector3.left, Vector3.forward, Vector3.back }
                 .Select(o => anchor.Value + rotation * (o * crop.Step))
@@ -430,14 +442,26 @@ namespace Automatics.SmokeTest
                 .Count(p => Vector3.Distance(player.transform.position, p) < FarmingRange - 0.5f && Plantable(crop, p));
             if (neighbours == 0)
             {
-                run.Skip("farming_sow_rotated_lattice", "no lattice cell beside the rotated crop is plantable once it stands; " +
+                SkipBoth("no lattice cell beside the rotated crop is plantable once it stands; " +
                     "stand beside a larger empty cultivated plot");
                 return;
             }
 
+            // Seeds for every plantable cell, so running out never ends the pass early.
+            var expected = PlantableLatticeCells(player, crop, go, storage, cultivation);
+            var seeds = Mathf.Max(10, expected.Count * crop.SeedAmount);
+            var seedPrefab = ObjectDB.instance.GetItemPrefab(crop.SeedPrefab);
+            if (!seedPrefab || !inventory.CanAddItem(seedPrefab, seeds))
+            {
+                SkipBoth($"the Cultivation chest cannot take the {seeds} seeds the {expected.Count} plantable cell(s) need");
+                return;
+            }
+            inventory.AddItem(crop.SeedPrefab, seeds, 1, 0, 0L, "", false);
+            _ownSeeds += seeds;
+
             Farming.TryFarming(player);
 
-            var sown = created.Skip(before).Where(x => x && x != go && x.GetComponent<Plant>()).ToList();
+            var sown = created.Skip(before).Where(x => x && x != go && x != other && x.GetComponent<Plant>()).ToList();
             var off = new List<string>();
             foreach (var plant in sown)
             {
@@ -448,9 +472,107 @@ namespace Automatics.SmokeTest
                 if (dx > 0.05f || dz > 0.05f || Mathf.Min(yaw, 90f - yaw) > 1f)
                     off.Add($"({local.x:F2}, {local.z:F2}) yaw {plant.transform.eulerAngles.y:F1}");
             }
-            Check(run, "farming_sow_rotated_lattice", sown.Count > 0 && off.Count == 0,
-                $"{sown.Count} sown beside a crop turned {LatticeYaw}°, off the lattice: " +
-                (off.Count == 0 ? "none" : string.Join(", ", off.ToArray())));
+            Check(run, onLattice, sown.Count > 0 && off.Count == 0,
+                $"{sown.Count} sown beside a crop turned {LatticeYaw}°" +
+                (other ? ", with a crop of another kind nearer to you" : ", no other crop kind has a sapling to stand nearer") +
+                ", off the lattice: " + (off.Count == 0 ? "none" : string.Join(", ", off.ToArray())));
+
+            if (expected.Count == 0)
+            {
+                run.Skip(plantable, "no lattice cell in range passes the planting rules");
+                return;
+            }
+            var origin = player.transform.position;
+            var missed = expected.Where(c => !sown.Any(p => Flat(p.transform.position - c) < 0.05f)).ToList();
+            var extra = sown.Select(p => p.transform.position)
+                .Where(p => !expected.Any(c => Flat(p - c) < 0.05f)).ToList();
+            Check(run, plantable, missed.Count == 0 && extra.Count == 0 && sown.Count == expected.Count,
+                $"{sown.Count} sown, {expected.Count} lattice cell(s) within {FarmingRange} m pass the planting rules; " +
+                $"not sown: {Offsets(missed, origin)}; sown on no such cell: {Offsets(extra, origin)}");
+        }
+
+        // A sapling of another early crop, half a metre from you on the side away from the turned
+        // crop and turned to the world axes: the nearest growing plant, of another kind. Null when
+        // no other early crop has a sapling.
+        private static GameObject SpawnOtherCrop(Player player, Crop crop, Vector3 anchor, List<GameObject> created)
+        {
+            Piece sapling = null;
+            foreach (var identifier in EarlyFlora)
+            {
+                if (!Planting.TryResolveSapling(identifier, out var candidate) || candidate == crop.Sapling) continue;
+                var plant = candidate.GetComponent<Plant>();
+                if (!plant || plant.m_attachDistance > 0f) continue;
+                sapling = candidate;
+                break;
+            }
+            if (!sapling) return null;
+
+            var origin = player.transform.position;
+            var away = new Vector3(origin.x - anchor.x, 0f, origin.z - anchor.z);
+            var position = origin + (away.sqrMagnitude > 0.0001f ? away.normalized : Vector3.forward) * 0.5f;
+            position.y = ZoneSystem.instance.GetGroundHeight(position);
+            var go = Object.Instantiate(sapling.gameObject, position, Quaternion.identity);
+            created.Add(go);
+            SmokeSession.TrackSpawn(go);
+            if (Objects.GetZNetView(go.transform, out var view) && view && view.IsValid())
+                view.GetZDO().Persistent = false;
+            return go;
+        }
+
+        // The cells one sowing pass must fill, worked out before it from the rules a sown cell
+        // passes. They are walked as the sowing grid walks them, on the turned crop's lattice
+        // within Farming Range of you, so they are the same positions (at 4 m and a spacing of at
+        // least 0.25 m the grid stays under its size cap, so the range is not shrunk). Each must
+        // be cultivated, within Container Search Range of one of the two chests, and pass build
+        // access, CanPlantAt and, for a crop that refuses tilting ground, the slope limit. At a
+        // spacing factor of 2.5 a crop sown on one cell leaves its neighbours room, so the order
+        // the pass sows them in does not matter.
+        private static List<Vector3> PlantableLatticeCells(Player player, Crop crop, GameObject anchor,
+            params GameObject[] chests)
+        {
+            var origin = player.transform.position;
+            var latticeOrigin = anchor.transform.position;
+            var lattice = Quaternion.Euler(0f, anchor.transform.rotation.eulerAngles.y, 0f);
+            var step = crop.Plant.m_growRadius * FarmingConfig.SowingSpacingFactor;
+            var range = (float)FarmingConfig.FarmingRange;
+            var rangeSqr = range * range;
+            var boxRangeSqr = (float)FarmingConfig.ContainerSearchRange * FarmingConfig.ContainerSearchRange;
+            var local = Quaternion.Inverse(lattice) * (origin - latticeOrigin);
+            var startX = Mathf.Ceil((local.x - range) / step) * step;
+            var startZ = Mathf.Ceil((local.z - range) / step) * step;
+            var maxX = local.x + range;
+            var maxZ = local.z + range;
+            var cells = new List<Vector3>();
+            for (var x = startX; x <= maxX; x += step)
+            for (var z = startZ; z <= maxZ; z += step)
+            {
+                var dx = x - local.x;
+                var dz = z - local.z;
+                if (dx * dx + dz * dz > rangeSqr) continue;
+                var pos = latticeOrigin + lattice * new Vector3(x, 0f, z);
+                pos.y = ZoneSystem.instance.GetGroundHeight(pos);
+                var heightmap = Heightmap.FindHeightmap(pos);
+                if (!heightmap || !heightmap.IsCultivated(pos)) continue;
+                if (chests.All(c => (c.transform.position - pos).sqrMagnitude > boxRangeSqr)) continue;
+                if (Plantable(crop, pos) && !TooTilted(crop, pos)) cells.Add(pos);
+            }
+            return cells;
+        }
+
+        // The slope limit for a crop that refuses tilting ground: the terrain normal under the
+        // cell, cast down from a metre above it.
+        private static bool TooTilted(Crop crop, Vector3 pos)
+        {
+            return crop.Sapling.m_notOnTiltingSurface &&
+                   Physics.Raycast(pos + Vector3.up, Vector3.down, out var hit, 4f, LayerMask.GetMask("terrain")) &&
+                   hit.normal.y < 0.8f;
+        }
+
+        private static string Offsets(List<Vector3> cells, Vector3 origin)
+        {
+            return cells.Count == 0
+                ? "none"
+                : string.Join(", ", cells.Select(c => $"({c.x - origin.x:F2}, {c.z - origin.z:F2})").ToArray());
         }
 
         // The harvest deposit (PickableHarvester.HarvestToContainers, called directly on a ripe crop
