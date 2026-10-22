@@ -1808,12 +1808,13 @@ namespace Automatics.SmokeTest
                 Map.RefreshPins();
                 var active = pin.m_uiElement && pin.m_uiElement.gameObject.activeInHierarchy;
                 _clickPosition = pin.m_pos;
-                var isPressed = AccessTools.Method(typeof(BepInEx.Configuration.KeyboardShortcut), "IsPressed");
+                var isPressed = AccessTools.Method(typeof(global::Automatics.Valheim.HotkeyInput),
+                    nameof(global::Automatics.Valheim.HotkeyInput.IsHeld));
                 harmony.Patch(isPressed,
                     prefix: new HarmonyMethod(typeof(GuideFeatureSmoke), nameof(Pressed)));
                 harmony.Patch(AccessTools.Method(typeof(Minimap), "ScreenToWorldPoint"),
                     postfix: new HarmonyMethod(typeof(GuideFeatureSmoke), nameof(ClickPosition)));
-                var keyProbe = (bool)isPressed.Invoke(MappingConfig.NavigationStartKey, null);
+                var keyProbe = (bool)isPressed.Invoke(null, new object[] { MappingConfig.NavigationStartKey });
                 _pressedCalls = 0;
                 _clickPositionObserved = false;
                 var radius = (float)AccessTools.Field(typeof(Minimap), "m_removeRadius").GetValue(map) *

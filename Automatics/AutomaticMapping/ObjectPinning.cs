@@ -16,7 +16,7 @@ namespace Automatics.AutomaticMapping
             if (!Module.Running) return;
             if (!player || player != Player.m_localPlayer || !player.IsOwner()) return;
             if (!takeInput || Minimap.InTextInput() || Config.PinObjectKey.MainKey == KeyCode.None) return;
-            if (!Config.PinObjectKey.IsDown()) return;
+            if (!HotkeyInput.IsDown(Config.PinObjectKey)) return;
             if (!GameCamera.instance) return;
 
             // Runs inside Player.Update every frame: an exception must not escape into it.

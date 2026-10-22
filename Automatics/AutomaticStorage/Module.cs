@@ -1,4 +1,5 @@
 using System;
+using Automatics.Valheim;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -103,7 +104,7 @@ namespace Automatics.AutomaticStorage
             if (Game.IsPaused()) return;
             if (player.InAttack() || player.InDodge()) return;
             if (Config.StoreItemsKey.MainKey == KeyCode.None) return;
-            if (!Config.StoreItemsKey.IsDown()) return;
+            if (!HotkeyInput.IsDown(Config.StoreItemsKey)) return;
 
             var result = AutomaticStorage.Store(player);
             AutomaticStorage.ShowResultMessage(player, result);

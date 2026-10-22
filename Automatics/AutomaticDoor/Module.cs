@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Automatics.Valheim;
 using BepInEx.Configuration;
 using ModUtils;
 using UnityEngine;
@@ -169,7 +170,7 @@ namespace Automatics.AutomaticDoor
         {
             if (!takeInput) return;
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
-            if (!Config.AutomaticDoorEnableDisableToggle.IsDown()) return;
+            if (!HotkeyInput.IsDown(Config.AutomaticDoorEnableDisableToggle)) return;
 
             var entry = Config.ModuleEntry;
             if (entry == null) return;

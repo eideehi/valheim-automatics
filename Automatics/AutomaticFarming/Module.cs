@@ -166,7 +166,7 @@ namespace Automatics.AutomaticFarming
             TryDesignateContainer(player);
 
             if (Config.FarmingKey.MainKey == KeyCode.None) return;
-            if (!Config.FarmingKey.IsDown()) return;
+            if (!HotkeyInput.IsDown(Config.FarmingKey)) return;
 
             // The key runs one pass whatever the interval is, and the interval starts over.
             FarmingTimers[player.GetPlayerID()] = 0f;
@@ -180,7 +180,7 @@ namespace Automatics.AutomaticFarming
         private static void TryDesignateContainer(Player player)
         {
             if (Config.DesignateContainerKey.MainKey == KeyCode.None) return;
-            if (!Config.DesignateContainerKey.IsDown()) return;
+            if (!HotkeyInput.IsDown(Config.DesignateContainerKey)) return;
 
             var hovering = Reflections.GetField<GameObject>(player, "m_hovering");
             if (!hovering) return;

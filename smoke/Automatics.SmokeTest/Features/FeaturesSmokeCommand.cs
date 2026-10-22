@@ -735,7 +735,7 @@ namespace Automatics.SmokeTest
             try
             {
                 focusedField.SetValue(map, false);
-                patcher.Patch(AccessTools.Method(typeof(KeyboardShortcut), "IsDown"),
+                patcher.Patch(AccessTools.Method(typeof(HotkeyInput), nameof(HotkeyInput.IsDown)),
                     prefix: new HarmonyMethod(typeof(MapFilterFeatureSmoke), nameof(ForceKeyDown)));
                 patcher.Patch(AccessTools.Method(typeof(ObjectPinning), "TryPinFromRay"),
                     prefix: new HarmonyMethod(typeof(MapFilterFeatureSmoke), nameof(CountPinAction)));

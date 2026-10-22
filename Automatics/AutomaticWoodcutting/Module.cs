@@ -183,7 +183,7 @@ namespace Automatics.AutomaticWoodcutting
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
             if (Config.WoodcuttingKey.MainKey == KeyCode.None) return;
-            if (!Config.WoodcuttingKey.IsDown()) return;
+            if (!HotkeyInput.IsDown(Config.WoodcuttingKey)) return;
 
             RunKeyPass(player);
         }

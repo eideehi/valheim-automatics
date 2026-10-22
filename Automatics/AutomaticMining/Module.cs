@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Automatics.Valheim;
 using BepInEx.Configuration;
 using ModUtils;
 using UnityEngine;
@@ -152,7 +153,7 @@ namespace Automatics.AutomaticMining
             if (Player.m_localPlayer != player || !player.IsOwner()) return;
             if (!takeInput) return;
             if (Config.MiningKey.MainKey == KeyCode.None) return;
-            if (!Config.MiningKey.IsDown()) return;
+            if (!HotkeyInput.IsDown(Config.MiningKey)) return;
 
             // The key runs one pass whatever the interval is, and the interval starts over.
             MiningTimers[player.GetPlayerID()] = 0f;

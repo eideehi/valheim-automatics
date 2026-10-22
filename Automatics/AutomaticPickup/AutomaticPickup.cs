@@ -337,8 +337,9 @@ namespace Automatics.AutomaticPickup
             if (!Live) return;
             if (Config.PickupAllNearbyKey.MainKey == KeyCode.None) return;
             if (_player.InAttack() || _player.InDodge()) return;
+            // The key first, so the reflective TakeInput call runs only in the frame the key goes down.
+            if (!HotkeyInput.IsDown(Config.PickupAllNearbyKey)) return;
             if (!Reflections.InvokeMethod<bool>(_player, "TakeInput")) return;
-            if (!Config.PickupAllNearbyKey.IsDown()) return;
 
             RequestKeyPickup(Reflections.GetField<GameObject>(_player, "m_hovering"));
         }

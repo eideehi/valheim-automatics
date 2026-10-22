@@ -1,4 +1,5 @@
 ﻿using System;
+using Automatics.Valheim;
 using ModUtils;
 using UnityEngine;
 
@@ -76,7 +77,7 @@ namespace Automatics.AutomaticMapping
             if (!map || Minimap.InTextInput()) return false;
             if (Config.NavigationStartKey.MainKey == KeyCode.None) return false;
             if (map.m_mode != Minimap.MapMode.Large) return false;
-            if (!Config.NavigationStartKey.IsPressed()) return false;
+            if (!HotkeyInput.IsHeld(Config.NavigationStartKey)) return false;
 
             var pos = Reflections.InvokeMethod<Vector3>(map, "ScreenToWorldPoint",
                 ZInput.pointerPosition);
@@ -97,7 +98,7 @@ namespace Automatics.AutomaticMapping
         internal static void OnPlayerUpdate(Player player, bool takeInput)
         {
             if (!CanHandleAimedKey(player, takeInput)) return;
-            if (!Config.NavigateToAimedObjectKey.IsDown() || !GameCamera.instance) return;
+            if (!HotkeyInput.IsDown(Config.NavigateToAimedObjectKey) || !GameCamera.instance) return;
             try
             {
                 var camera = GameCamera.instance.transform;

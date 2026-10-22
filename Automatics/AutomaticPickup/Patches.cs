@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using Automatics.Valheim;
 using HarmonyLib;
 using UnityEngine;
 
@@ -28,7 +29,7 @@ namespace Automatics.AutomaticPickup
                 if (!itemDrop || !AutomaticPickup.IsCollectable(itemDrop)) return true;
             }
 
-            return !Config.PickupAllNearbyKey.IsPressed();
+            return !HotkeyInput.IsHeld(Config.PickupAllNearbyKey);
         }
 
         [HarmonyPostfix]

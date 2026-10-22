@@ -192,6 +192,14 @@ placement (AltPlace) is held (turn `Grid Planting` off or set
 `Grid Planting Size` to 1 to stop grid planting). Message settings can usually
 be set to `None`, `Center`, or `TopLeft`.
 
+A shortcut works while you hold other keys, such as the movement keys, but not
+while you hold a modifier key (Shift, Ctrl, Alt, AltGr, or the Windows or
+Command key) that the shortcut does not include. With the game's default
+controls, Left Shift runs and Left Ctrl crouches: a shortcut without modifiers
+still does not work while you hold Left Shift or Left Ctrl, and the default
+`Pickup All Nearby Key` (Left Shift + E) also works while you walk or run.
+This paragraph does not apply to `Grid Planting Key` and `Slot Lock Key`.
+
 ### Containers in multiplayer
 
 In multiplayer, the modules that move items in and out of containers (storage,
@@ -853,7 +861,7 @@ Modes:
 | Mode | Behavior |
 | --- | --- |
 | Periodic pickup | Runs at `Automatic Pickup Interval` whether or not `Pickup All Nearby Key` is assigned. Set the interval to `0` to turn it off. |
-| `Pickup All Nearby Key` (Left Shift + E by default) | Hold the shortcut while interacting with a pickable object or item to pick up matching nearby objects. |
+| `Pickup All Nearby Key` (Left Shift + E by default) | Hold the shortcut while interacting with a pickable object or item to pick up matching nearby objects. It also works while you walk or run; see [Shortcuts and messages](#shortcuts-and-messages). |
 
 Key settings:
 

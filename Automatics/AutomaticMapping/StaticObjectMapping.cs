@@ -193,7 +193,7 @@ namespace Automatics.AutomaticMapping
         {
             // The key runs one pass whatever the interval is, and the interval starts over.
             if (takeInput && !Minimap.InTextInput() && Config.StaticObjectMappingKey.MainKey != KeyCode.None &&
-                Config.StaticObjectMappingKey.IsDown())
+                HotkeyInput.IsDown(Config.StaticObjectMappingKey))
             {
                 _mappingTimer = 0f;
                 return true;
