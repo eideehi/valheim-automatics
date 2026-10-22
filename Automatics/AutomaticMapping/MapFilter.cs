@@ -114,7 +114,9 @@ namespace Automatics.AutomaticMapping
         {
             _blockedInputFrame = Time.frameCount;
             AccessTools.Method(InputType, "DeactivateInputField").Invoke(SearchInput, new object[] { false });
-            if (EventSystem.current && EventSystem.current.currentSelectedGameObject == SearchInput.gameObject)
+            // A selection already in progress (click-away) moves the focus itself and rejects a nested change.
+            if (EventSystem.current && !EventSystem.current.alreadySelecting &&
+                EventSystem.current.currentSelectedGameObject == SearchInput.gameObject)
                 EventSystem.current.SetSelectedGameObject(null);
             ForceInputLabelUpdate.Invoke(SearchInput, null);
             OnSearchChanged((string)InputTextProperty.GetValue(SearchInput));
