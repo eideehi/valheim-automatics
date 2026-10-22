@@ -40,6 +40,11 @@ namespace Automatics.AutomaticWoodcutting
         private ZNetView _zNetView;
         private string _prefabName;
 
+        // Where this component sits in AllInstance, or -1 when it is not registered. Order in
+        // AllInstance means nothing: passes sort by distance and area woodcutting visits every
+        // entry.
+        private int _index = -1;
+
         internal static int AllInstanceCount => AllInstance.Count;
         public int ScopeGeneration { get; set; }
 
@@ -97,6 +102,7 @@ namespace Automatics.AutomaticWoodcutting
                 throw new Exception("Component does not have ZNetView");
 
             _prefabName = Objects.GetPrefabName(gameObject);
+            _index = AllInstance.Count;
             AllInstance.Add(this);
         }
 
@@ -112,7 +118,15 @@ namespace Automatics.AutomaticWoodcutting
 
         private void Unregister()
         {
-            AllInstance.Remove(this);
+            // The last entry takes this one's place. A second call, detach then destroy, finds -1.
+            if (_index >= 0)
+            {
+                var last = AllInstance[AllInstance.Count - 1];
+                AllInstance[_index] = last;
+                last._index = _index;
+                AllInstance.RemoveAt(AllInstance.Count - 1);
+                _index = -1;
+            }
 
             _component = null;
             _target = null;
@@ -399,6 +413,12 @@ namespace Automatics.AutomaticWoodcutting
             var pivot = transform.position;
             ColliderBuffer.Clear();
             GetComponentsInChildren(false, ColliderBuffer);
+            if (!HasReachableCollider(ColliderBuffer, eye, range))
+            {
+                ColliderBuffer.Clear();
+                return false;
+            }
+
             foreach (var candidate in ColliderBuffer)
             {
                 if (!candidate.enabled || candidate.isTrigger) continue;
@@ -424,6 +444,24 @@ namespace Automatics.AutomaticWoodcutting
 
             ColliderBuffer.Clear();
             return collider != null;
+        }
+
+        // Whether a ray from the eyes of the given length can land on any of the colliders: one
+        // that is enabled, not a trigger, on a layer of SightMask and whose bounds reach within
+        // range of the eyes. A ray lands on nothing else, and no point of a collider lies nearer
+        // the eyes than its bounds, so a target without one is left alone before any ray is cast.
+        // Every ray of a target is still cast when one collider is reachable: a ray aimed at one
+        // collider can land on another.
+        private static bool HasReachableCollider(List<Collider> colliders, Vector3 eye, float range)
+        {
+            var sqrRange = range * range;
+            foreach (var collider in colliders)
+                if (collider.enabled && !collider.isTrigger &&
+                    (SightMask & (1 << collider.gameObject.layer)) != 0 &&
+                    collider.bounds.SqrDistance(eye) <= sqrRange)
+                    return true;
+
+            return false;
         }
 
         // The points of the collider the entry aims at from the eyes, into aims; pivot is the

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Automatics.Valheim;
 using BepInEx.Configuration;
 using ModUtils;
 using UnityEngine;
@@ -8,7 +9,8 @@ namespace Automatics.AutomaticWoodcutting
 {
     /// <summary>
     ///     Automatic Woodcutting on the module lifecycle. A scope owns its patches, three hook
-    ///     subscriptions and every <see cref="AutomaticWoodcutting" /> component it attaches, so
+    ///     subscriptions, one tree data subscription and every
+    ///     <see cref="AutomaticWoodcutting" /> component it attaches, so
     ///     turning the module off removes them without interrupting a woodcutting pass already
     ///     begun. Passes and area woodcutting are peer features: enable_automatic_woodcutting
     ///     turns only the passes off.
@@ -76,6 +78,13 @@ namespace Automatics.AutomaticWoodcutting
                 h => Hooks.OnPlayerFixedUpdate += h,
                 h => Hooks.OnPlayerFixedUpdate -= h,
                 OnPlayerFixedUpdate);
+            // A custom tree changed while the module was off reached no handler, so what was
+            // resolved before is dropped.
+            TreeSpecies.ClearSpecies();
+            scope.Subscribe<Action<ValheimObject>>(
+                h => ValheimObject.RegistryChanged += h,
+                h => ValheimObject.RegistryChanged -= h,
+                TreeSpecies.OnRegistryChanged);
 
             ReconcileTrees(scope);
             Active = true;

@@ -12,10 +12,15 @@ namespace Automatics.AutomaticMining
     {
         private static readonly IList<AutomaticMining> AllInstance;
         private static readonly RaycastHit[] RaycastHitBuffer;
+        private static readonly List<Collider> SectionBuffer;
         private static readonly Lazy<int> MineralMaskLazy;
 
         private Component _component;
         private ZNetView _zNetView;
+
+        // Where this component sits in AllInstance, or -1 when it is not registered. Order in
+        // AllInstance means nothing: passes sort by distance and area mining visits every entry.
+        private int _index = -1;
 
         internal static int AllInstanceCount => AllInstance.Count;
         public int ScopeGeneration { get; set; }
@@ -24,6 +29,7 @@ namespace Automatics.AutomaticMining
         {
             AllInstance = new List<AutomaticMining>();
             RaycastHitBuffer = new RaycastHit[128];
+            SectionBuffer = new List<Collider>();
             MineralMaskLazy = new Lazy<int>(() =>
                 LayerMask.GetMask("piece", "Default", "static_solid", "Default_small"));
         }
@@ -39,6 +45,7 @@ namespace Automatics.AutomaticMining
             if (!Objects.GetZNetView(_component, out _zNetView))
                 throw new Exception("Component does not have ZNetView");
 
+            _index = AllInstance.Count;
             AllInstance.Add(this);
         }
 
@@ -54,7 +61,15 @@ namespace Automatics.AutomaticMining
 
         private void Unregister()
         {
-            AllInstance.Remove(this);
+            // The last entry takes this one's place. A second call, detach then destroy, finds -1.
+            if (_index >= 0)
+            {
+                var last = AllInstance[AllInstance.Count - 1];
+                AllInstance[_index] = last;
+                last._index = _index;
+                AllInstance.RemoveAt(AllInstance.Count - 1);
+                _index = -1;
+            }
 
             _component = null;
             _zNetView = null;
@@ -63,6 +78,9 @@ namespace Automatics.AutomaticMining
         public static void TryMining(Player player)
         {
             //TODO: Improve position taking method. Petrified bone and soft tissue position is not being obtained correctly.
+            // No target can be mined without a usable pickaxe, so none is looked for.
+            if (!HasUsablePickaxe(player)) return;
+
             var origin = player.transform.position;
             // Filter to owned, mineable minerals before measuring distance: AutomaticMining
             // is attached to every Destructible in the world (barrels, crates, ...), so the
@@ -133,6 +151,8 @@ namespace Automatics.AutomaticMining
                     targets.Add(new AreaMining.Target(parent, automaticMining._component,
                         automaticMining._zNetView, collider, minToolTier, point, distance));
                 }
+
+                SectionBuffer.Clear();
             }
         }
 
@@ -210,14 +230,17 @@ namespace Automatics.AutomaticMining
             }
         }
 
-        private static Collider[] GetColliders(IDestructible parent)
+        // The hit colliders of the target. Those of a MineRock5 are read into SectionBuffer, which
+        // the caller empties once it has no more use for them.
+        private static IReadOnlyList<Collider> GetColliders(IDestructible parent)
         {
             switch (parent)
             {
                 case MineRock rock:
                     return Reflections.GetField<Collider[]>(rock, "m_hitAreas");
                 case MineRock5 rock5:
-                    return rock5.gameObject.GetComponentsInChildren<Collider>();
+                    rock5.gameObject.GetComponentsInChildren(false, SectionBuffer);
+                    return SectionBuffer;
                 case Destructible destructible:
                     var collider = destructible.GetComponentInChildren<Collider>();
                     return collider != null
@@ -229,9 +252,9 @@ namespace Automatics.AutomaticMining
         }
 
         private static bool Mining(Player player, ItemDrop.ItemData pickaxe, float range,
-            IDestructible parent, params Collider[] colliders)
+            IDestructible parent, IReadOnlyList<Collider> colliders)
         {
-            if (colliders == null || colliders.Length == 0) return false;
+            if (colliders == null || colliders.Count == 0) return false;
 
             var equipments = player.GetInventory().GetEquippedItems();
             var parts = (from collider in colliders
@@ -241,6 +264,8 @@ namespace Automatics.AutomaticMining
                       IsMineableMineral(collider, equipments)
                 orderby result.Distance
                 select (collider, result.Position)).Take(3).ToList();
+            // The damage below can start area mining, which reads the buffer again.
+            SectionBuffer.Clear();
             var mined = false;
             foreach (var (collider, hit) in parts)
             {
@@ -271,6 +296,27 @@ namespace Automatics.AutomaticMining
             return pickaxe.m_durability > 0f;
         }
 
+        // Whether GetPickaxe finds a pickaxe for some tool tier: the current weapon, or, unless one
+        // has to be equipped, an item of the inventory, that is a pickaxe with durability left.
+        private static bool HasUsablePickaxe(Player player)
+        {
+            var weapon = player.GetCurrentWeapon();
+            if (weapon != null && IsPickaxeWithDurability(weapon)) return true;
+
+            if (Config.NeedToEquipPickaxe) return false;
+
+            foreach (var item in player.GetInventory().GetAllItems())
+                if (IsPickaxeWithDurability(item))
+                    return true;
+
+            return false;
+        }
+
+        private static bool IsPickaxeWithDurability(ItemDrop.ItemData item)
+        {
+            return item.m_durability > 0f && item.m_shared.m_skillType == Skills.SkillType.Pickaxes;
+        }
+
         private static ItemDrop.ItemData GetPickaxe(Player player, int minToolTier)
         {
             var weapon = player.GetCurrentWeapon();
@@ -299,6 +345,13 @@ namespace Automatics.AutomaticMining
         private static (Vector3 Position, float Distance) GetHitPosition(Vector3 origin,
             Collider target, float range)
         {
+            // The ray lands on the target only if the target is on a layer of MineralMask and its
+            // bounds reach within range of the origin: no point of a collider lies nearer than its
+            // bounds.
+            if ((MineralMask & (1 << target.gameObject.layer)) == 0 ||
+                target.bounds.SqrDistance(origin) > range * range)
+                return (Vector3.zero, -1f);
+
             var direction = target.bounds.center - origin;
             var hitCount = Physics.RaycastNonAlloc(origin, direction, RaycastHitBuffer, range,
                 MineralMask);

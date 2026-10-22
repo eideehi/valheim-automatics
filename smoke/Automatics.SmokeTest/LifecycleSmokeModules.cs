@@ -43,6 +43,7 @@ using WoodcuttingComponent = Automatics.AutomaticWoodcutting.AutomaticWoodcuttin
 using WoodcuttingConfig = Automatics.AutomaticWoodcutting.Config;
 using WoodcuttingModule = Automatics.AutomaticWoodcutting.Module;
 using WoodcuttingPatches = Automatics.AutomaticWoodcutting.Patches;
+using WoodcuttingSpecies = Automatics.AutomaticWoodcutting.TreeSpecies;
 
 namespace Automatics.SmokeTest
 {
@@ -852,8 +853,8 @@ namespace Automatics.SmokeTest
         private const int WoodcuttingTimerFrames = 30;
 
         // Automatic Woodcutting owns the patches that attach its component and those of area
-        // woodcutting, three hook subscriptions and one component on every tree, log and tree
-        // stump with a ZDO. It is off by default, so when it is off in your settings the run turns
+        // woodcutting, three hook subscriptions, one tree data subscription and one component on
+        // every tree, log and tree stump with a ZDO. It is off by default, so when it is off in your settings the run turns
         // it on first and puts it back off at the end. The precondition keeps it from hitting a
         // tree in an on interval: without a usable axe a pass hits nothing.
         private static ModuleDescriptor DescribeWoodcutting()
@@ -872,6 +873,7 @@ namespace Automatics.SmokeTest
                     Probe.Handlers("Hooks.OnLocalPlayerAwake", () => Hooks.OnLocalPlayerAwake, 1),
                     Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
                     Probe.Handlers("Hooks.OnPlayerFixedUpdate", () => Hooks.OnPlayerFixedUpdate, 1),
+                    Probe.Event(typeof(ValheimObject), "RegistryChanged", 1),
                     Probe.NoneDeclared("woodcutting.Hooks.OnPlayerAwake.declared",
                         () => Hooks.OnPlayerAwake, typeof(WoodcuttingModule)),
                     Probe.Counter("woodcutting.OnLocalPlayerAwake.handler",
@@ -883,6 +885,11 @@ namespace Automatics.SmokeTest
                     Probe.Counter("woodcutting.OnPlayerFixedUpdate.handler",
                         () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(WoodcuttingModule),
                             "OnPlayerFixedUpdate"), OffExpectation.Zero, 0, () => 1),
+                    Probe.Counter("woodcutting.OnRegistryChanged.handler",
+                        () => CountHandlersOf(
+                            AccessTools.Field(typeof(ValheimObject), "RegistryChanged")
+                                ?.GetValue(null) as Delegate, typeof(WoodcuttingSpecies),
+                            "OnRegistryChanged"), OffExpectation.Zero, 0, () => 1),
                     Probe.Components<WoodcuttingComponent>(CountEligibleTrees),
                     Probe.Counter("AllInstance.Count", () => WoodcuttingComponent.AllInstanceCount,
                         OffExpectation.Zero, 0, CountActiveWoodcuttingComponents)
