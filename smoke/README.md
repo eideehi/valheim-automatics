@@ -1188,7 +1188,7 @@ Safety, on top of the `rpc` rules:
 
 `automatics_smoke_features all` runs every section below, and
 `automatics_smoke_features <section>` runs one of them: `pickup`, `pin`,
-`mining`, `planting`, `farming`, `guide`, `compass`, `supply`, `woodcutting` or `woodcuttingarea`. Run it from the in-game console while
+`mining`, `planting`, `farming`, `guide`, `compass`, `supply`, `woodcutting`, `woodcuttingarea` or `repair`. Run it from the in-game console while
 a single-player world is loaded. Each section drives the real game code path of
 one feature against objects it spawns next to the player. The run ends with one
 `[Automatics Smoke] Summary: ...` line over every section it ran. A section that
@@ -2095,3 +2095,64 @@ skills, stamina and settings are put back. The swings and fellings still count t
 statistics. Do not move or attack while the section runs. Area woodcutting in a
 real forest, with real stumps and falling trees, remains an in-game check outside
 this section.
+
+#### `repair`
+
+Run `automatics_smoke_features repair` in a single-player world with Automatic
+Repair enabled, with `piece_search_range` and `crafting_station_search_range` of at
+least 4, the no-cost cheat off, and two free inventory slots. The section calls the
+module's own entries, `PieceRepair.Repair` for the periodic piece pass and
+`ItemRepair.Repair` and `ItemRepair.CraftingStationInteractHook` for the two item
+paths, against non-persistent objects it spawns 1.5 to 2.2 m from you. Every check
+sets up and calls in one frame, so the module's own timers cannot act on the test
+objects in between. The section:
+
+- adds an observer patch, removed at the end, that records only while a check has
+  it armed: the repair calls on test pieces (and refuses them on any other piece),
+  the ward flashes of the test ward (the flash of any other ward is dropped, so no
+  ward of yours flashes), the ward access checks, the skill raises, the usability
+  checks of crafting stations, the recipe lookups and the build station lookups.
+  While an item check is armed, the worn-item collection returns only that check's
+  test items, so no item of yours is repaired, charged or counted. For the piece
+  pass it also hands
+  the module a hammer item data in place of the one in your hand, so your equipment
+  and build selection are not touched. Its removal is registered with the session
+  before its patches go on;
+- spawns, per check, damaged test pieces (their stored health set to half),
+  undamaged ones (a stationless piece and a wood wall), a test ward made small and enabled, and wood walls (which need a
+  workbench in range); the stationless piece is the first piece of the hammer's
+  table that needs no build station and has nothing on it that does more than stand
+  there. Each piece is made undamaged and removed when its check is done;
+- spawns two test workbenches 1.5 m from you with their roof requirement off, and
+  waits one frame so that the game lists them; the item checks then add one worn
+  earlier-biome item that a workbench repairs and one that only another station
+  repairs, at 37 percent of their durability, and remove them afterwards;
+- turns `repair_items_when_accessing_the_crafting_station` on for the interaction
+  checks, through the session, and puts it back;
+- puts back your skills (the Crafting skill the checks raise) and your stamina, and
+  runs the same hand-back when the run is cut short.
+
+| Check | Asserts |
+|---|---|
+| `repair_piece_damaged_only` | A pass repairs two damaged test pieces. An undamaged stationless piece and an undamaged wood wall cause no repair call, no ward access check and no station lookup (SKIP when the observer sees no access check at the damaged pieces) |
+| `repair_piece_ward_no_flash` | A control check with flashing on is denied and seen by the observer; then a pass flashes the test ward no time, leaves the damaged piece inside the ward alone and repairs the damaged piece outside it (SKIP when the ward grants you access or the control flash is not seen) |
+| `repair_piece_station_lookup_once` | Three damaged wood walls cost one build station lookup, and all are repaired when a build station is in range or the no-workbench rule is on, and none otherwise |
+| `repair_piece_in_range_station_repairs` | With a test workbench in range, two damaged wood walls are repaired after one build station lookup |
+| `repair_piece_stops_when_tool_used_up` | With a tool that has one repair of durability left, a pass over three damaged pieces repairs one and leaves the tool at zero or below; a pass with the used-up tool repairs nothing and changes nothing (SKIP for a tool that does not use durability) |
+| `repair_item_none_worn_touches_no_station` | With nothing worn, a pass asks no station whether it is usable and looks up no recipe, whatever you carry |
+| `repair_item_periodic_raises_crafting` | The periodic pass repairs the worn test item and raises the Crafting skill by the wear it had, as a hand repair does |
+| `repair_item_station_checked_once` | In the same pass, each of the two test workbenches is asked once whether it is usable |
+| `repair_item_recipe_resolved_once` | An item that only another station repairs costs one recipe lookup with two stations in range, and stays worn |
+| `repair_item_unusable_station_excluded` | With both test workbenches made unusable (a fire requirement they do not meet), the periodic pass repairs nothing, raises nothing, and asks each once |
+| `repair_item_interaction_raises_crafting` | The interaction repairs the worn test item at the station, raises the Crafting skill by the wear it had, and asks the station once |
+| `repair_item_interaction_unusable_station_excluded` | At an unusable station the interaction repairs and raises nothing |
+| `repair_settings_restored` | Reported when the section changed a setting: it is back at your value |
+
+The periodic item checks SKIP when a crafting station of yours is within
+`crafting_station_search_range` of you, because the pass would let it repair the
+test items before the test workbenches do; stand farther from it. The exclusion of
+station-requiring pieces is only seen where no build station is in range of you:
+when one is, `repair_piece_station_lookup_once` expects the walls to be repaired.
+Repairing a piece sends the module's usual animation trigger, so your character may
+swing once. A repair with the real hammer, the interaction through the real
+crafting panel and multiplayer remain in-game checks outside this section.

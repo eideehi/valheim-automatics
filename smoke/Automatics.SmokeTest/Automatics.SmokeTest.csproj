@@ -90,6 +90,7 @@
     <Compile Include="Features\FarmingFeatureSmoke.cs" />
     <Compile Include="Features\WoodcuttingFeatureSmoke.cs" />
     <Compile Include="Features\WoodcuttingAreaFeatureSmoke.cs" />
+    <Compile Include="Features\RepairFeatureSmoke.cs" />
   </ItemGroup>
 
   <ItemGroup Label="BepInEx">

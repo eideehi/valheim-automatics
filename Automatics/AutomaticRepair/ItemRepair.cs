@@ -9,14 +9,22 @@ namespace Automatics.AutomaticRepair
     {
         private static readonly List<ItemDrop.ItemData> WornItemsBuffer;
 
+        // The recipe of each item of WornItemsBuffer, by index, looked up when a usable station
+        // first needs it and kept for the rest of the pass.
+        private static readonly List<Recipe> RecipeBuffer;
+        private static bool _recipesResolved;
+
         static ItemRepair()
         {
             WornItemsBuffer = new List<ItemDrop.ItemData>();
+            RecipeBuffer = new List<Recipe>();
         }
 
         internal static void Cleanup()
         {
             WornItemsBuffer.Clear();
+            RecipeBuffer.Clear();
+            _recipesResolved = false;
         }
 
         private static void ShowRepairMessage(Player player, int repairCount)
@@ -39,15 +47,44 @@ namespace Automatics.AutomaticRepair
                    Enumerable.Empty<CraftingStation>();
         }
 
+        // Collects the carried items that are worn and can be repaired at all.
+        private static void CollectWornItems(Player player)
+        {
+            RecipeBuffer.Clear();
+            _recipesResolved = false;
+            WornItemsBuffer.Clear();
+            player.GetInventory().GetWornItems(WornItemsBuffer);
+            WornItemsBuffer.RemoveAll(item => !item.m_shared.m_canBeReparied);
+        }
+
+        private static Recipe GetRecipe(int index)
+        {
+            if (!_recipesResolved)
+            {
+                RecipeBuffer.Clear();
+                foreach (var item in WornItemsBuffer)
+                    RecipeBuffer.Add(ObjectDB.instance.GetRecipe(item));
+                _recipesResolved = true;
+            }
+
+            return RecipeBuffer[index];
+        }
+
         private static int RepairAll(Player player, CraftingStation station)
         {
             if (!CanUseRepairStation(player, station)) return 0;
 
-            WornItemsBuffer.Clear();
-            player.GetInventory().GetWornItems(WornItemsBuffer);
+            CollectWornItems(player);
+            return RepairWornItems(player, station);
+        }
+
+        // Repairs the collected items that the station can repair. The station has already
+        // been checked for usability.
+        private static int RepairWornItems(Player player, CraftingStation station)
+        {
             var repaired = 0;
-            foreach (var item in WornItemsBuffer)
-                if (RepairOne(player, station, item))
+            for (var i = 0; i < WornItemsBuffer.Count; i++)
+                if (RepairOne(player, station, i))
                     repaired++;
             return repaired;
         }
@@ -58,11 +95,15 @@ namespace Automatics.AutomaticRepair
                    station != null && station.CheckUsable(player, false);
         }
 
-        private static bool RepairOne(Player player, CraftingStation station,
-            ItemDrop.ItemData item)
+        private static bool RepairOne(Player player, CraftingStation station, int index)
         {
-            if (!CanRepair(player, station, item)) return false;
+            var item = WornItemsBuffer[index];
+            // An earlier station of the pass has already repaired it.
+            if (item.m_durability >= item.GetMaxDurability()) return false;
+            if (!CanRepair(player, station, item, index)) return false;
 
+            player.RaiseSkill(Skills.SkillType.Crafting,
+                1f - item.m_durability / item.GetMaxDurability());
             item.m_durability = item.GetMaxDurability();
 
             Automatics.Logger.Debug(() =>
@@ -71,13 +112,12 @@ namespace Automatics.AutomaticRepair
         }
 
         private static bool CanRepair(Player player, CraftingStation station,
-            ItemDrop.ItemData item)
+            ItemDrop.ItemData item, int index)
         {
-            if (!item.m_shared.m_canBeReparied) return false;
             if (player.NoCostCheat()) return true;
             if (station == null) return false;
 
-            var recipe = ObjectDB.instance.GetRecipe(item);
+            var recipe = GetRecipe(index);
             if (recipe == null) return false;
             if (recipe.m_craftingStation == null && recipe.m_repairStation == null) return false;
 
@@ -107,16 +147,22 @@ namespace Automatics.AutomaticRepair
         {
             if (!Module.Running) return;
             if (player == null || player != Player.m_localPlayer || !Objects.HasValidOwnership(player)) return;
+
             // No-cost-cheat repair needs no crafting station, so it must not be
             // gated by the station search range (which can be set to 0 to disable
             // only the station-based path).
-            if (player.NoCostCheat())
+            var noCost = player.NoCostCheat();
+            if (!noCost && Config.CraftingStationSearchRange <= 0) return;
+
+            // Nothing worn: no station, roof or fire probe is worth making.
+            CollectWornItems(player);
+            if (WornItemsBuffer.Count == 0) return;
+
+            if (noCost)
             {
-                ShowRepairMessage(player, RepairAll(player, null));
+                ShowRepairMessage(player, RepairWornItems(player, null));
                 return;
             }
-
-            if (Config.CraftingStationSearchRange <= 0) return;
 
             var range = Config.CraftingStationSearchRange;
             var origin = player.transform.position;
@@ -127,7 +173,7 @@ namespace Automatics.AutomaticRepair
                 if (station == null) continue;
                 if (Vector3.Distance(origin, station.transform.position) > range) continue;
                 if (!station.CheckUsable(player, false)) continue;
-                count += RepairAll(player, station);
+                count += RepairWornItems(player, station);
             }
 
             ShowRepairMessage(player, count);

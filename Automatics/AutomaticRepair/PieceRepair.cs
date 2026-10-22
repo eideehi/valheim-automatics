@@ -22,10 +22,16 @@ namespace Automatics.AutomaticRepair
         private static readonly HashSet<Piece> PieceSet = new HashSet<Piece>();
         private static readonly Collider[] ColliderBuffer = new Collider[256];
 
+        // Whether a build station of each name is in range of the player, for the scan in
+        // progress only: the player does not move within a scan.
+        private static readonly Dictionary<string, bool> StationInRange =
+            new Dictionary<string, bool>();
+
         internal static void Cleanup()
         {
             PieceBuffer.Clear();
             PieceSet.Clear();
+            StationInRange.Clear();
             Array.Clear(ColliderBuffer, 0, ColliderBuffer.Length);
             _skipRadiusMethodLookup = false;
         }
@@ -45,11 +51,28 @@ namespace Automatics.AutomaticRepair
 
         private static bool CheckCanRepairPiece(Player player, Piece piece)
         {
-            return player.NoCostCheat() || piece.m_craftingStation == null ||
-                   CraftingStation.HaveBuildStationInRange(piece.m_craftingStation.m_name,
-                       player.transform.position) ||
-                   ZoneSystem.instance != null &&
-                   ZoneSystem.instance.GetGlobalKey(GlobalKeys.NoWorkbench);
+            if (player.NoCostCheat() || piece.m_craftingStation == null) return true;
+
+            var stationName = piece.m_craftingStation.m_name;
+            if (!StationInRange.TryGetValue(stationName, out var inRange))
+            {
+                inRange = CraftingStation.HaveBuildStationInRange(stationName,
+                    player.transform.position) != null;
+                StationInRange[stationName] = inRange;
+            }
+
+            return inRange || ZoneSystem.instance != null &&
+                ZoneSystem.instance.GetGlobalKey(GlobalKeys.NoWorkbench);
+        }
+
+        // The test WearNTear.Repair makes before it sends the repair RPC: a valid view whose
+        // stored health is below the maximum.
+        private static bool IsDamaged(WearNTear wearNTear)
+        {
+            var zNetView = wearNTear.GetComponent<ZNetView>();
+            return zNetView != null && zNetView.IsValid() &&
+                   zNetView.GetZDO().GetFloat(ZDOVars.s_health, wearNTear.m_health) <
+                   wearNTear.m_health;
         }
 
         private static bool IsRepairAction(Player player, ItemDrop.ItemData item)
@@ -187,17 +210,23 @@ namespace Automatics.AutomaticRepair
             var origin = player.transform.position;
             var range = Config.PieceSearchRange;
             var count = 0;
+            StationInRange.Clear();
             foreach (var piece in GetNearbyPieces(origin, range))
             {
+                // Damage first, so that ward access and the build station are only evaluated
+                // for pieces that would be repaired. The access check must not flash wards.
+                var wearNTear = piece.GetComponent<WearNTear>();
+                if (wearNTear == null || !IsDamaged(wearNTear)) continue;
+
                 var position = piece.transform.position;
 
-                if (!PrivateArea.CheckAccess(position) || !CheckCanRepairPiece(player, piece))
+                if (!PrivateArea.CheckAccess(position, 0f, false) || !CheckCanRepairPiece(player, piece))
                     continue;
 
                 if (!player.HaveStamina(toolData.m_attack.m_attackStamina)) break;
+                if (toolData.m_useDurability && tool.m_durability <= 0f) break;
 
-                var wearNTear = piece.GetComponent<WearNTear>();
-                if (wearNTear == null || !wearNTear.Repair()) continue;
+                if (!wearNTear.Repair()) continue;
 
                 piece.m_placeEffect.Create(position, piece.transform.rotation);
 
