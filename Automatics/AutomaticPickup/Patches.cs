@@ -21,10 +21,12 @@ namespace Automatics.AutomaticPickup
             if (!Module.Running) return true;
             if (!go) return true;
 
-            if (!go.GetComponentInParent<Pickable>() &&
-                !go.GetComponentInParent<PickableItem>() &&
-                !go.GetComponentInParent<ItemDrop>())
-                return true;
+            // The key stands in for vanilla's interaction only with what the key's pass takes.
+            if (!go.GetComponentInParent<Pickable>() && !go.GetComponentInParent<PickableItem>())
+            {
+                var itemDrop = go.GetComponentInParent<ItemDrop>();
+                if (!itemDrop || !AutomaticPickup.IsCollectable(itemDrop)) return true;
+            }
 
             return !Config.PickupAllNearbyKey.IsPressed();
         }
@@ -85,6 +87,7 @@ namespace Automatics.AutomaticPickup
         {
             if (!Module.Running) return;
             if (Config.PickupAllNearbyKey.MainKey == KeyCode.None) return;
+            if (!AutomaticPickup.IsCollectable(__instance)) return;
 
             var keyCode = Config.PickupAllNearbyKey.ToString();
             var name = __instance.m_itemData.m_shared.m_name;

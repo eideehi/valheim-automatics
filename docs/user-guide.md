@@ -868,6 +868,14 @@ drops that allow automatic pickup. Targeted pickup matches the hovered object's
 displayed pickable name or item name. Automatics still checks inventory space,
 carry weight, tar restrictions, and pieces that should not be picked up.
 
+Pickup does nothing while you are dead, waiting to respawn, or teleporting.
+Periodic pickup takes an item drop only once the game lets you pick it up. For a
+drop that is not yet pickable, such as one that has just appeared or that another
+player's game controls, it asks for it as the game's own auto-pickup does and
+takes it on a later pass. Pickup leaves fish that are still in the water, as the
+game only lets you pick those up out of the water, and with the
+`Pickup All Nearby Key` held, placed item pieces keep the game's own take.
+
 ## Automatic farming
 
 With the module enabled, hold Left Alt while planting with the cultivator to add

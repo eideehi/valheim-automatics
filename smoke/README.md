@@ -1219,13 +1219,18 @@ spawned; otherwise they stay and the log says so.
 | `pickup_hover_text_shows_key` | `ItemDrop.GetHoverText()` of a spawned Wood drop contains the line the hover patch adds: the key as BepInEx prints it and the translated message with the item's name (SKIP when the key is not set and could not be bound for the run) |
 | `pickup_key_pass_same_name_only` | Two Wood drops and one Stone drop lie 1.5 m to your right, a metre apart, with `m_autoPickup` cleared, so neither vanilla auto-pickup nor periodic pickup can take them. A key pass requested on the first Wood drop, through the call Automatic Pickup makes when the key goes down, takes both Wood drops, the Wood in your inventory grows by exactly 2, and the Stone drop is left. The Wood drops vanishing without the inventory growing is a FAIL; more Wood arriving than the check spawned is a SKIP, because Wood of your own was nearby (SKIP when `automatic_pickup_range` is below 2.5 m) |
 | `pickup_key_and_interval_in_one_pass` | The same three drops, 0.6 m apart, placed to your left half a metre beyond vanilla auto-pickup's reach (SKIP, inconclusive, when a Wood drop has rolled out of `automatic_pickup_range` before the requests; a FAIL gives each drop's distance at the request). In one frame the first Wood drop is given `m_autoPickup` and both the interval's and the key's request are made, through the calls `FixedUpdate` and `Update` make. The one pass that follows takes the hovered Wood drop for the interval, still takes the other Wood drop by its name for the key, and leaves the Stone drop; the same inventory rules apply (SKIP when the range does not reach past vanilla auto-pickup) |
+| `pickup_interval_pass_waits_for_pickable_drop` | With periodic pickup off (`automatic_pickup_interval` set to 0 for the check, so only the check's own requests make passes), a Wood drop that allows auto-pickup lies to your left a metre beyond vanilla auto-pickup's reach. In the frame it spawns, while vanilla still refuses it, the interval's request is made, through the call `FixedUpdate` makes. That pass has to leave the drop in the world, also for half a second after vanilla starts allowing it, since taking it then would mean the pass had started vanilla's deferred pickup; a second request made once vanilla allows it picks the drop up, and the Wood in your inventory grows by exactly 1. The drop vanishing before the second request is a FAIL; a first pass that ran only after vanilla allowed the drop is a SKIP (SKIP when the interval could not be set to 0, or the range does not reach past vanilla auto-pickup) |
+| `pickup_key_takes_not_yet_pickable_drop` | With periodic pickup off, a Wood drop with `m_autoPickup` cleared lies 1.5 m to your right. In the frame it spawns, while vanilla still refuses it, a key pass is requested on it, through the call `Update` makes. The key pass collects the drop once vanilla allows it, and the Wood in your inventory grows by exactly 1 (SKIP when the interval could not be set to 0, or `automatic_pickup_range` is below 2 m) |
+| `pickup_key_leaves_fish_in_water` | Two `Fish1` drops lie a step apart, 1.5 m to your right, with `m_autoPickup` cleared; the game's water level is written into one of them, so vanilla's `Fish.IsOutOfWater` is false for it. The hover text of the fish in water lacks the Pickup All Nearby line and the other one has it. A key pass requested on the fish in water makes no pass: both fish stay. A key pass requested on the other fish takes it, the fish in your inventory grows by exactly 1, and the fish in water stays (SKIP when `automatic_pickup_range` is below 2.5 m, the prefab is missing, or the fish could not be put in and out of water; SKIP, inconclusive, when right before either request, or on any frame of a pass before a fish is taken, the fish in water no longer reads the level written into it, has a water volume attached or is out of water, or the other fish is in water: a real water volume around the fish writes its own level into it, so run the check away from water) |
 | `pickup_interval_runs_with_key_bound` | With the key set and `automatic_pickup_interval` above 0, a Wood drop placed to your left a metre beyond vanilla auto-pickup's reach is picked up by Automatic Pickup's own timer (SKIP when the key or the interval could not be set for the run, or the range does not reach past vanilla auto-pickup) |
 | `pickup_settings_restored` | Reported only when the section changed a setting: every setting it changed is back at your value |
 
 Every world check SKIPs unless `automatic_pickup / module` is `Enabled`. When
 `pickup_all_nearby_key` is not set, it is bound to its default, `E + LeftShift`,
-for the section. When `automatic_pickup_interval` is 0, it is set to its
-default, 0.5, for the last check only, because while it is above 0 Automatic
+for the section. When `automatic_pickup_interval` is above 0, it is set to 0 for
+the three checks that make their own passes, so that no pass of the timer's can
+take the drop they watch. For the last check it is set back to your value, or,
+when it is 0, to its default, 0.5, because while it is above 0 Automatic
 Pickup also picks up your own items nearby. `pickup_settings_restored` then
 reports putting them back: PASS when they are back, SKIP when you changed one
 while the section ran and your value was kept, FAIL when one could not be written
@@ -1240,8 +1245,12 @@ auto-pickup take it. A passing run looks like this:
 [Automatics Smoke] PASS pickup_hover_text_shows_key: 'E + LeftShift' with 'Pick up nearby Wood'
 [Automatics Smoke] PASS pickup_key_pass_same_name_only: both Wood drops were picked up and the Stone drop was left (woodDelta=2)
 [Automatics Smoke] PASS pickup_key_and_interval_in_one_pass: one pass took the hovered Wood drop with the interval and the other Wood drop by its name, and left the Stone drop (woodDelta=2)
+[Automatics Smoke] PASS pickup_interval_pass_waits_for_pickable_drop: a pass made while vanilla refused the drop left it in the world, and a later pass picked it up
+[Automatics Smoke] PASS pickup_key_takes_not_yet_pickable_drop: a key pass made while vanilla refused the drop collected it once vanilla allowed it, with periodic pickup off
+[Automatics Smoke] PASS pickup_key_leaves_fish_in_water: a fish in water got no key pass and no hover line; a key pass on a fish out of water took it and left the one in water
 [Automatics Smoke] PASS pickup_interval_runs_with_key_bound: a Wood drop 3 m away was picked up at interval 0.5s with pickup_all_nearby_key 'E + LeftShift'
-[Automatics Smoke] Summary: total=5 passed=5 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[Automatics Smoke] PASS pickup_settings_restored: automatic_pickup/automatic_pickup_interval is already back at 0.5
+[Automatics Smoke] Summary: total=9 passed=9 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 #### `pin`

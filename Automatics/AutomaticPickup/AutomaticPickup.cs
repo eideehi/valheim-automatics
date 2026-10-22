@@ -87,12 +87,18 @@ namespace Automatics.AutomaticPickup
         ///     here rather than only in Update and FixedUpdate: those two refuse to raise
         ///     _active while paused, but a pass already suspended at a yield would otherwise
         ///     resume and pick during the pause.
+        ///     A dead player and a teleporting one are idle for the same reason, and vanilla
+        ///     auto-pickup skips both too: a corpse waiting to respawn must not keep filling its
+        ///     inventory around the tombstone, and the respawned player carries a new
+        ///     component of its own.
         /// </summary>
         private bool Live =>
             Alive
             && !Module.StopRequested
             && !Game.IsPaused()
-            && _player.IsOwner();
+            && _player.IsOwner()
+            && !_player.IsDead()
+            && !_player.IsTeleporting();
 
         private void Awake()
         {
@@ -190,7 +196,8 @@ namespace Automatics.AutomaticPickup
         ///     The Pickup All Nearby key's request: the next pass picks up the nearby objects of the
         ///     same kind and name as <paramref name="target" />. Update makes it when the key goes
         ///     down, with the object the player hovers at that moment. Nothing is requested when
-        ///     the target is none of the kinds pickup handles.
+        ///     the target is none of the kinds pickup handles, or is an item drop pickup leaves to
+        ///     vanilla (see <see cref="IsCollectable" />).
         /// </summary>
         internal void RequestKeyPickup(GameObject target)
         {
@@ -211,7 +218,7 @@ namespace Automatics.AutomaticPickup
                 _keyName = GetPickableItemName(pickableItem);
                 _keyTarget = pickableItem.gameObject;
             }
-            else if (itemDrop)
+            else if (itemDrop && IsCollectable(itemDrop))
             {
                 _keyKind = KeyTargetKind.ItemDrop;
                 _keyName = GetItemDropName(itemDrop);
@@ -224,6 +231,21 @@ namespace Automatics.AutomaticPickup
 
             _keyRequested = true;
             _active = true;
+        }
+
+        /// <summary>
+        ///     Whether pickup, and the Pickup All Nearby key that stands in for vanilla's own
+        ///     interaction, take this item drop. A placed item piece is left to vanilla's
+        ///     alternate take, and a fish is left to vanilla while it is in the water: vanilla
+        ///     lets a fish be picked up only out of water. The passes, the key's request, the
+        ///     interact patch and the hover line all ask this, so the key never stands in for an
+        ///     interaction the passes would not carry out.
+        /// </summary>
+        internal static bool IsCollectable(ItemDrop itemDrop)
+        {
+            if (itemDrop.IsPiece()) return false;
+
+            return !itemDrop.TryGetComponent(out Fish fish) || fish.IsOutOfWater();
         }
 
         internal static void ClearSharedBuffers()
@@ -279,7 +301,7 @@ namespace Automatics.AutomaticPickup
                     yield return null;
                     if (!Alive) yield break;
                     if (!Live) continue;
-                    PickupAllNearby(_player, (ItemDrop x) => x.m_autoPickup);
+                    PickupAllNearby(_player, (ItemDrop x) => x.m_autoPickup, false);
                 }
 
                 if (!byKey) continue;
@@ -300,7 +322,7 @@ namespace Automatics.AutomaticPickup
                         PickupAllNearby(_player, (PickableItem x) => GetPickableItemName(x) == keyName);
                         break;
                     case KeyTargetKind.ItemDrop:
-                        PickupAllNearby(_player, (ItemDrop x) => GetItemDropName(x) == keyName);
+                        PickupAllNearby(_player, (ItemDrop x) => GetItemDropName(x) == keyName, true);
                         break;
                 }
 
@@ -419,7 +441,9 @@ namespace Automatics.AutomaticPickup
             }
         }
 
-        private static void PickupAllNearby(Player player, Predicate<ItemDrop> predicate)
+        // startDeferred is the key pass's: see PickItemDrop.
+        private static void PickupAllNearby(Player player, Predicate<ItemDrop> predicate,
+            bool startDeferred)
         {
             var origin = player.transform.position;
 
@@ -434,14 +458,14 @@ namespace Automatics.AutomaticPickup
             {
                 var itemDrop = ItemDropBuffer[i];
                 if (!itemDrop) continue;
-                if (itemDrop.IsPiece()) continue;
                 if ((origin - itemDrop.transform.position).sqrMagnitude > rangeSq) continue;
                 if (!predicate.Invoke(itemDrop)) continue;
+                if (!IsCollectable(itemDrop)) continue;
                 if (itemDrop.InTar()) continue;
                 if (Objects.GetZNetView(itemDrop, out var zNetView) && zNetView.GetZDO() != null)
                     try
                     {
-                        PickItemDrop(player, itemDrop);
+                        PickItemDrop(player, itemDrop, startDeferred);
                     }
                     catch (Exception e)
                     {
@@ -481,8 +505,24 @@ namespace Automatics.AutomaticPickup
             zNetView.Destroy();
         }
 
-        private static void PickItemDrop(Player player, ItemDrop itemDrop)
+        // Vanilla refuses a drop it does not own yet: for the first half second after the drop
+        // spawns, and while another game owns it. ItemDrop.Pickup then starts a deferred pickup
+        // that polls until ownership arrives and takes the drop without looking at the room
+        // left. The periodic pass does what Player.AutoPickup does instead: it asks for
+        // ownership, which vanilla throttles itself, skips the drop, and takes it on a later
+        // pass, once CanPickup says it is the local game's, checking room on the loaded data.
+        // The key pass runs once per press and has no later pass to come back on, so it starts
+        // the deferred pickup (a drop is visited once per pass, so once per press), after the
+        // same room check.
+        private static void PickItemDrop(Player player, ItemDrop itemDrop, bool startDeferred)
         {
+            if (!startDeferred && !itemDrop.CanPickup())
+            {
+                itemDrop.RequestOwn();
+                return;
+            }
+
+            itemDrop.Load();
             if (!PickableHarvester.CanAddItem(player, itemDrop.m_itemData)) return;
             itemDrop.Pickup(player);
         }

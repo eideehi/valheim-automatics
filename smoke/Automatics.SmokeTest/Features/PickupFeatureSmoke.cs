@@ -17,8 +17,9 @@ namespace Automatics.SmokeTest
     // when the same pass picks up for the interval and takes the hovered object first.
     //
     // The world checks need Automatic Pickup running; the section never turns it on. An unset
-    // Pickup All Nearby key is bound to its default, Left Shift + E, for the run, and an
-    // interval of 0 is set to its default, 0.5 s, for the last check only. Both go through
+    // Pickup All Nearby key is bound to its default, Left Shift + E, for the run. A periodic
+    // interval above 0 is set to 0 for the three checks that make their own passes, and an
+    // interval of 0 is set to its default, 0.5 s, for the last check only. All go through
     // SmokeSession like the lifecycle command's module toggle: the change is recorded before it
     // is made, and put back afterwards unless the user changed the setting meanwhile.
     //
@@ -29,6 +30,10 @@ namespace Automatics.SmokeTest
     // also makes the request FixedUpdate makes, AutomaticPickup.RequestIntervalPickup, in the
     // same frame. The interval check leaves periodic pickup to the component's own FixedUpdate
     // timer, with a drop placed beyond vanilla's auto-pickup reach and inside Automatic Pickup's.
+    //
+    // The two checks on drops vanilla does not allow yet spawn the drop and make the request in
+    // the same frame, so the first pass sees a drop that vanilla still refuses (it refuses a
+    // drop for 0.5 s after it spawns).
     //
     // Item safety as in the world command: picked-up test items are removed from the inventory
     // only when the count of that item grew by exactly what the check spawned; otherwise they
@@ -43,7 +48,12 @@ namespace Automatics.SmokeTest
         private const string KeyPassCheck = "pickup_key_pass_same_name_only";
         private const string OverlapCheck = "pickup_key_and_interval_in_one_pass";
         private const string IntervalCheck = "pickup_interval_runs_with_key_bound";
+        private const string WaitsCheck = "pickup_interval_pass_waits_for_pickable_drop";
+        private const string KeyNotYetPickableCheck = "pickup_key_takes_not_yet_pickable_drop";
+        private const string FishCheck = "pickup_key_leaves_fish_in_water";
         private const string RestoreCheck = "pickup_settings_restored";
+
+        private const string FishPrefab = "Fish1";
 
         // Bounds on the waits, not estimates of them: vanilla refuses a drop for 0.5 s after it
         // spawns, and a pass the component starts finishes within a few frames.
@@ -66,6 +76,9 @@ namespace Automatics.SmokeTest
                 run.Skip(HoverCheck, problem);
                 run.Skip(KeyPassCheck, problem);
                 run.Skip(OverlapCheck, problem);
+                run.Skip(WaitsCheck, problem);
+                run.Skip(KeyNotYetPickableCheck, problem);
+                run.Skip(FishCheck, problem);
                 run.Skip(IntervalCheck, problem);
                 yield break;
             }
@@ -86,8 +99,7 @@ namespace Automatics.SmokeTest
                 yield return null;
                 if (!run.IsCurrent)
                 {
-                    run.Skip(OverlapCheck, "the run was abandoned before this check");
-                    run.Skip(IntervalCheck, "the run was abandoned before this check");
+                    SkipAbandoned(run, OverlapCheck, WaitsCheck, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
                     yield break;
                 }
 
@@ -98,14 +110,55 @@ namespace Automatics.SmokeTest
                 yield return null;
                 if (!run.IsCurrent)
                 {
-                    run.Skip(IntervalCheck, "the run was abandoned before this check");
+                    SkipAbandoned(run, WaitsCheck, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
                     yield break;
                 }
 
-                // Periodic pickup off is set to its default, 0.5 s, only for this last check:
-                // while it is on, Automatic Pickup also picks up your own items nearby.
+                // The next three checks make their own passes, so periodic pickup is switched off
+                // for them: a pass the timer made could take the drop they watch.
+                var userInterval = PickupConfig.AutomaticPickupInterval;
+                if (userInterval > 0f)
+                    Write(run, held, PickupConfig.AutomaticPickupIntervalEntry, 0f);
+
+                var waits = FeaturesSmokeCommand.Contain(
+                    CheckIntervalPassWaits(run, player, component, wood), run, WaitsCheck);
+                while (waits.MoveNext()) yield return waits.Current;
+
+                yield return null;
+                if (!run.IsCurrent)
+                {
+                    SkipAbandoned(run, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
+                    yield break;
+                }
+
+                var keyNotYetPickable = FeaturesSmokeCommand.Contain(
+                    CheckKeyTakesNotYetPickable(run, player, component, wood), run, KeyNotYetPickableCheck);
+                while (keyNotYetPickable.MoveNext()) yield return keyNotYetPickable.Current;
+
+                yield return null;
+                if (!run.IsCurrent)
+                {
+                    SkipAbandoned(run, FishCheck, IntervalCheck);
+                    yield break;
+                }
+
+                var fish = FeaturesSmokeCommand.Contain(
+                    CheckFishInWater(run, player, component), run, FishCheck);
+                while (fish.MoveNext()) yield return fish.Current;
+
+                yield return null;
+                if (!run.IsCurrent)
+                {
+                    SkipAbandoned(run, IntervalCheck);
+                    yield break;
+                }
+
+                // Periodic pickup is back on for this last check, at the user's interval or, when
+                // that is 0, at its default, 0.5 s: while it is on, Automatic Pickup also picks
+                // up your own items nearby.
                 if (PickupConfig.AutomaticPickupInterval <= 0f)
-                    Write(run, held, PickupConfig.AutomaticPickupIntervalEntry, 0.5f);
+                    Write(run, held, PickupConfig.AutomaticPickupIntervalEntry,
+                        userInterval > 0f ? userInterval : 0.5f);
 
                 var interval = FeaturesSmokeCommand.Contain(
                     CheckIntervalPickup(run, player, wood), run, IntervalCheck);
@@ -578,6 +631,624 @@ namespace Automatics.SmokeTest
                         $"[Automatics Smoke] {IntervalCheck}: the Wood periodic pickup took could not be attributed to the test drop, so it was left in the inventory");
                 FeaturesSmokeCommand.RemoveTestDrop(drop, IntervalCheck);
             }
+        }
+
+        private static void SkipAbandoned(FeatureRun run, params string[] checks)
+        {
+            foreach (var check in checks)
+                run.Skip(check, "the run was abandoned before this check");
+        }
+
+        // A Wood drop that allows auto-pickup, a metre beyond vanilla's auto-pickup reach, is
+        // asked for in the frame it spawns, when vanilla still refuses it. The pass the interval
+        // asks for must leave it alone - not start vanilla's deferred pickup, which would take
+        // it as soon as vanilla allows - and a later pass must take it.
+        private static IEnumerator CheckIntervalPassWaits(FeatureRun run, Player player,
+            PickupComponent component, GameObject woodPrefab)
+        {
+            if (!player)
+            {
+                run.Skip(WaitsCheck, "the local player went away");
+                yield break;
+            }
+
+            if (PickupConfig.AutomaticPickupInterval > 0f)
+            {
+                run.Skip(WaitsCheck,
+                    "automatic_pickup_interval is above 0 and could not be set to 0 for the run, so the timer could make a pass of its own; set it to 0 to include this check");
+                yield break;
+            }
+
+            var distance = player.m_autoPickupRange + 1f;
+            var range = PickupConfig.AutomaticPickupRange;
+            if (distance > range - 0.5f)
+            {
+                run.Skip(WaitsCheck,
+                    $"automatic_pickup_range is {range:0.#} m, too short to place a drop beyond vanilla auto-pickup ({player.m_autoPickupRange:0.#} m); set it to {distance + 0.5f:0.#} m or more to include this check");
+                yield break;
+            }
+
+            var inventory = player.GetInventory();
+            var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
+            var transform = player.transform;
+            var position = transform.position + Vector3.up * 0.3f - transform.right * distance;
+
+            ItemDrop drop = null;
+            var woodMayBeLeft = false;
+            try
+            {
+                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, position, true);
+                if (drop == null)
+                {
+                    run.Skip(WaitsCheck, "the test drop could not be set up");
+                    yield break;
+                }
+
+                if (drop.CanPickup())
+                {
+                    run.Skip(WaitsCheck, "inconclusive: vanilla already allowed the drop in the frame it spawned");
+                    yield break;
+                }
+
+                if (!PickableHarvester.CanAddItem(player, drop.m_itemData))
+                {
+                    run.Skip(WaitsCheck, "the inventory cannot take one Wood (space or weight); make room to include this check");
+                    yield break;
+                }
+
+                var before = PickableHarvester.CountExactItems(inventory, sample);
+                woodMayBeLeft = true;
+
+                // The pass takes the request within a tenth of a second and reaches the drops
+                // two frames after it starts; three more frames make sure it has been through.
+                component.RequestIntervalPickup();
+                var paused = Game.IsPaused();
+                var started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && !FeaturesSmokeCommand.IsConsumed(drop) &&
+                       Reflections.GetField<bool>(component, "_active") &&
+                       Time.realtimeSinceStartup - started < KeyPassTimeoutSeconds)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) paused = true;
+                }
+
+                for (var frame = 0; frame < 3 && run.IsCurrent && player; frame++)
+                    yield return null;
+
+                if (!run.IsCurrent || !player)
+                {
+                    run.Skip(WaitsCheck, "inconclusive: the run was abandoned or the player went away during the first pass");
+                    yield break;
+                }
+
+                if (FeaturesSmokeCommand.IsConsumed(drop))
+                {
+                    run.Fail(WaitsCheck,
+                        "the pass took the drop before vanilla allowed it to be picked up");
+                    yield break;
+                }
+
+                if (drop.CanPickup())
+                {
+                    run.Skip(WaitsCheck,
+                        "inconclusive: the first pass ran after vanilla had already allowed the drop (a slow frame or a pause)");
+                    yield break;
+                }
+
+                // No pass is requested while vanilla starts allowing the drop and for half a
+                // second after it: a deferred pickup started by the first pass would take it now.
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && !FeaturesSmokeCommand.IsConsumed(drop) &&
+                       !drop.CanPickup() &&
+                       Time.realtimeSinceStartup - started < PickableTimeoutSeconds)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) paused = true;
+                }
+
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && !FeaturesSmokeCommand.IsConsumed(drop) &&
+                       Time.realtimeSinceStartup - started < SettleSeconds)
+                    yield return null;
+
+                if (!run.IsCurrent || !player)
+                {
+                    run.Skip(WaitsCheck, "inconclusive: the run was abandoned or the player went away while the check waited");
+                    yield break;
+                }
+
+                if (FeaturesSmokeCommand.IsConsumed(drop))
+                {
+                    run.Fail(WaitsCheck,
+                        "the first pass, made while vanilla still refused the drop, left it to be picked up without a later pass: it started vanilla's deferred pickup");
+                    yield break;
+                }
+
+                if (!drop.CanPickup())
+                {
+                    if (paused)
+                        run.Skip(WaitsCheck,
+                            $"inconclusive: the game was paused while the check waited up to {PickableTimeoutSeconds:0.#}s for the drop to become pickable");
+                    else
+                        run.Fail(WaitsCheck, $"the drop did not become pickable within {PickableTimeoutSeconds:0.#}s");
+                    yield break;
+                }
+
+                component.RequestIntervalPickup();
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && !FeaturesSmokeCommand.IsConsumed(drop) &&
+                       Time.realtimeSinceStartup - started < KeyPassTimeoutSeconds)
+                    yield return null;
+
+                if (!player)
+                {
+                    run.Skip(WaitsCheck, "inconclusive: the local player went away during the second pass");
+                    yield break;
+                }
+
+                var delta = PickableHarvester.CountExactItems(inventory, sample) - before;
+                if (delta <= 0) woodMayBeLeft = false;
+
+                if (!FeaturesSmokeCommand.IsConsumed(drop))
+                {
+                    if (!run.IsCurrent || paused)
+                        run.Skip(WaitsCheck,
+                            "inconclusive: the run was abandoned or the game was paused while the check waited");
+                    else
+                        run.Fail(WaitsCheck,
+                            $"a later pass did not pick up the drop within {KeyPassTimeoutSeconds:0.#}s of vanilla allowing it");
+                    yield break;
+                }
+
+                if (delta <= 0)
+                {
+                    run.Skip(WaitsCheck,
+                        "inconclusive: the drop was taken but no Wood reached the inventory, so something other than Automatic Pickup took it");
+                    yield break;
+                }
+
+                var note = "";
+                if (delta == 1 && FeaturesSmokeCommand.RemoveExactItems(inventory, sample, 1) == 1)
+                    woodMayBeLeft = false;
+                else
+                    note = $"; the Wood count grew by {delta}, so the test Wood could not be told apart from your own and was left in the inventory";
+
+                run.Pass(WaitsCheck,
+                    $"a pass made while vanilla refused the drop left it in the world, and a later pass picked it up{note}");
+            }
+            finally
+            {
+                if (woodMayBeLeft)
+                    FeaturesSmokeCommand.Warn(
+                        $"[Automatics Smoke] {WaitsCheck}: the Wood the later pass took could not be attributed to the test drop, so it was left in the inventory");
+                FeaturesSmokeCommand.RemoveTestDrop(drop, WaitsCheck);
+            }
+        }
+
+        // A key pass is requested in the frame a Wood drop spawns, when vanilla still refuses it,
+        // with periodic pickup off. The drop's m_autoPickup is cleared, so only the key pass can
+        // take it: it has to start vanilla's deferred pickup, which takes the drop once vanilla
+        // allows it.
+        private static IEnumerator CheckKeyTakesNotYetPickable(FeatureRun run, Player player,
+            PickupComponent component, GameObject woodPrefab)
+        {
+            if (!player)
+            {
+                run.Skip(KeyNotYetPickableCheck, "the local player went away");
+                yield break;
+            }
+
+            if (PickupConfig.AutomaticPickupInterval > 0f)
+            {
+                run.Skip(KeyNotYetPickableCheck,
+                    "automatic_pickup_interval is above 0 and could not be set to 0 for the run; set it to 0 to include this check");
+                yield break;
+            }
+
+            if (PickupConfig.AutomaticPickupRange < 2f)
+            {
+                run.Skip(KeyNotYetPickableCheck,
+                    $"automatic_pickup_range is {PickupConfig.AutomaticPickupRange:0.#} m and the test drop lies 1.5 m away; set it to 2 m or more to include this check");
+                yield break;
+            }
+
+            var inventory = player.GetInventory();
+            var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
+            var transform = player.transform;
+            var position = transform.position + Vector3.up * 0.3f + transform.right * 1.5f;
+
+            // The key pass is ignored within 0.2 s of a vanilla interaction.
+            var started = Time.realtimeSinceStartup;
+            while (run.IsCurrent && player &&
+                   Time.time - Reflections.GetField<float>(player, "m_lastHoverInteractTime") < HoverInteractCooldown &&
+                   Time.realtimeSinceStartup - started < KeyPassTimeoutSeconds)
+                yield return null;
+
+            if (!run.IsCurrent || !player)
+            {
+                run.Skip(KeyNotYetPickableCheck, "inconclusive: the run was abandoned or the player went away before the pass");
+                yield break;
+            }
+
+            ItemDrop drop = null;
+            var woodMayBeLeft = false;
+            try
+            {
+                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, position, false);
+                if (drop == null)
+                {
+                    run.Skip(KeyNotYetPickableCheck, "the test drop could not be set up");
+                    yield break;
+                }
+
+                if (drop.CanPickup())
+                {
+                    run.Skip(KeyNotYetPickableCheck, "inconclusive: vanilla already allowed the drop in the frame it spawned");
+                    yield break;
+                }
+
+                if (!PickableHarvester.CanAddItem(player, drop.m_itemData))
+                {
+                    run.Skip(KeyNotYetPickableCheck, "the inventory cannot take one Wood (space or weight); make room to include this check");
+                    yield break;
+                }
+
+                var before = PickableHarvester.CountExactItems(inventory, sample);
+                woodMayBeLeft = true;
+
+                component.RequestKeyPickup(drop.gameObject);
+
+                var paused = Game.IsPaused();
+                started = Time.realtimeSinceStartup;
+                var timeout = PickableTimeoutSeconds + KeyPassTimeoutSeconds;
+                while (run.IsCurrent && player && !FeaturesSmokeCommand.IsConsumed(drop) &&
+                       Time.realtimeSinceStartup - started < timeout)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) paused = true;
+                }
+
+                if (!player)
+                {
+                    run.Skip(KeyNotYetPickableCheck, "inconclusive: the local player went away while the check waited");
+                    yield break;
+                }
+
+                var delta = PickableHarvester.CountExactItems(inventory, sample) - before;
+                if (delta <= 0) woodMayBeLeft = false;
+
+                if (!FeaturesSmokeCommand.IsConsumed(drop))
+                {
+                    if (!run.IsCurrent || paused)
+                        run.Skip(KeyNotYetPickableCheck,
+                            "inconclusive: the run was abandoned or the game was paused while the check waited");
+                    else
+                        run.Fail(KeyNotYetPickableCheck,
+                            $"a key pass made while vanilla refused the drop did not collect it within {timeout:0.#}s, with periodic pickup off");
+                    yield break;
+                }
+
+                if (delta <= 0)
+                {
+                    run.Skip(KeyNotYetPickableCheck,
+                        "inconclusive: the drop was taken but no Wood reached the inventory, so something other than Automatic Pickup took it");
+                    yield break;
+                }
+
+                var note = "";
+                if (delta == 1 && FeaturesSmokeCommand.RemoveExactItems(inventory, sample, 1) == 1)
+                    woodMayBeLeft = false;
+                else
+                    note = $"; the Wood count grew by {delta}, so the test Wood could not be told apart from your own and was left in the inventory";
+
+                run.Pass(KeyNotYetPickableCheck,
+                    $"a key pass made while vanilla refused the drop collected it once vanilla allowed it, with periodic pickup off{note}");
+            }
+            finally
+            {
+                if (woodMayBeLeft)
+                    FeaturesSmokeCommand.Warn(
+                        $"[Automatics Smoke] {KeyNotYetPickableCheck}: the Wood the key pass took could not be attributed to the test drop, so it was left in the inventory");
+                FeaturesSmokeCommand.RemoveTestDrop(drop, KeyNotYetPickableCheck);
+            }
+        }
+
+        // Two fish drops of one kind lie a few steps from the player, one in water and one out of
+        // it. Vanilla lets a fish be picked up only out of water, so a key pass requested on the
+        // fish in water makes no request, the hover line is not added to it, and a key pass
+        // requested on the fish out of water takes that fish and leaves the one in water.
+        private static IEnumerator CheckFishInWater(FeatureRun run, Player player, PickupComponent component)
+        {
+            if (!player)
+            {
+                run.Skip(FishCheck, "the local player went away");
+                yield break;
+            }
+
+            var range = PickupConfig.AutomaticPickupRange;
+            if (range < 2.5f)
+            {
+                run.Skip(FishCheck,
+                    $"automatic_pickup_range is {range:0.#} m and the test drops lie up to 1.9 m away; set it to 2.5 m or more to include this check");
+                yield break;
+            }
+
+            var prefab = ZNetScene.instance.GetPrefab(FishPrefab);
+            if (prefab == null || prefab.GetComponent<ItemDrop>() == null || prefab.GetComponent<Fish>() == null)
+            {
+                run.Skip(FishCheck, $"the {FishPrefab} prefab was not found or is not a fish drop");
+                yield break;
+            }
+
+            var inventory = player.GetInventory();
+            var sample = PickableHarvester.CreatePickupItemData(prefab, 1);
+            var transform = player.transform;
+            var origin = transform.position + Vector3.up * 0.3f + transform.right * 1.5f;
+
+            ItemDrop swimming = null;
+            ItemDrop landed = null;
+            var fishMayBeLeft = false;
+            try
+            {
+                swimming = FeaturesSmokeCommand.SpawnTestDrop(prefab, origin, false);
+                landed = FeaturesSmokeCommand.SpawnTestDrop(prefab, origin + transform.forward * 0.6f, false);
+                if (swimming == null || landed == null)
+                {
+                    run.Skip(FishCheck, "a test drop could not be set up");
+                    yield break;
+                }
+
+                var swimmingFish = swimming.GetComponent<Fish>();
+                var landedFish = landed.GetComponent<Fish>();
+                if (swimmingFish == null || landedFish == null)
+                {
+                    run.Skip(FishCheck, $"the spawned {FishPrefab} carries no Fish component");
+                    yield break;
+                }
+
+                // The water level Fish keeps for itself, set above the fish: what the game's water
+                // volume writes into it when the fish is in water.
+                var level = swimming.transform.position.y + 10f;
+                Reflections.SetField(swimmingFish, "m_inWater", level);
+                if (swimmingFish.IsOutOfWater() || !landedFish.IsOutOfWater())
+                {
+                    run.Skip(FishCheck, "inconclusive: the test fish could not be put in and out of water");
+                    yield break;
+                }
+
+                var key = PickupConfig.PickupAllNearbyKey;
+                if (key.MainKey != KeyCode.None)
+                {
+                    var line = $"[<color=yellow><b>{key}</b></color>]";
+                    if (swimming.GetHoverText().Contains(line))
+                    {
+                        run.Fail(FishCheck, "the hover text of a fish in water shows the Pickup All Nearby line");
+                        yield break;
+                    }
+
+                    if (!landed.GetHoverText().Contains(line))
+                    {
+                        run.Fail(FishCheck, "the hover text of a fish out of water lacks the Pickup All Nearby line");
+                        yield break;
+                    }
+                }
+
+                var paused = Game.IsPaused();
+                var started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player &&
+                       !(swimming.CanPickup() && landed.CanPickup()) &&
+                       !AnyConsumed(swimming, landed) &&
+                       Time.realtimeSinceStartup - started < PickableTimeoutSeconds)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) paused = true;
+                }
+
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player &&
+                       Time.time - Reflections.GetField<float>(player, "m_lastHoverInteractTime") < HoverInteractCooldown &&
+                       Time.realtimeSinceStartup - started < KeyPassTimeoutSeconds)
+                    yield return null;
+
+                if (!run.IsCurrent || !player)
+                {
+                    run.Skip(FishCheck, "inconclusive: the run was abandoned or the player went away before the pass");
+                    yield break;
+                }
+
+                if (AnyConsumed(swimming, landed))
+                {
+                    run.Fail(FishCheck,
+                        "a test fish disappeared before the pass; its m_autoPickup was false, so neither vanilla auto-pickup nor periodic pickup should have taken it");
+                    yield break;
+                }
+
+                if (!(swimming.CanPickup() && landed.CanPickup()))
+                {
+                    if (paused)
+                        run.Skip(FishCheck,
+                            $"inconclusive: the game was paused while the check waited up to {PickableTimeoutSeconds:0.#}s for the fish to become pickable");
+                    else
+                        run.Fail(FishCheck, $"the fish did not become pickable within {PickableTimeoutSeconds:0.#}s");
+                    yield break;
+                }
+
+                if (!PickableHarvester.CanAddItem(player, landed.m_itemData, 2))
+                {
+                    run.Skip(FishCheck, "the inventory cannot take two fish (space or weight); make room to include this check");
+                    yield break;
+                }
+
+                var distances = $"swimming {Distance(player, swimming):0.00} m, landed {Distance(player, landed):0.00} m, range {range:0.#} m";
+                if (Distance(player, swimming) > range - 0.1f || Distance(player, landed) > range - 0.1f)
+                {
+                    run.Skip(FishCheck, $"inconclusive: a fish moved out of automatic_pickup_range before the pass ({distances})");
+                    yield break;
+                }
+
+                var fixture = FishFixtureProblem(swimming, level, landed);
+                if (fixture != null)
+                {
+                    run.Skip(FishCheck, $"inconclusive: before the pass, {fixture}; {FishAwayFromWater}");
+                    yield break;
+                }
+
+                var before = PickableHarvester.CountExactItems(inventory, sample);
+                fishMayBeLeft = true;
+
+                // On the fish in water: no request, so a pass that took both fish of this name
+                // would show here. The fixture is read on every frame until a fish is taken.
+                component.RequestKeyPickup(swimming.gameObject);
+                string broken = null;
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && Time.realtimeSinceStartup - started < SettleSeconds + 0.3f &&
+                       !AnyConsumed(swimming, landed))
+                {
+                    yield return null;
+                    if (broken == null) broken = FishFixtureProblem(swimming, level, landed);
+                }
+
+                if (!player)
+                {
+                    run.Skip(FishCheck, "inconclusive: the local player went away during the pass");
+                    yield break;
+                }
+
+                var delta = PickableHarvester.CountExactItems(inventory, sample) - before;
+                if (delta <= 0) fishMayBeLeft = false;
+                if (AnyConsumed(swimming, landed) || delta != 0)
+                {
+                    var taken =
+                        $"swimming taken={FeaturesSmokeCommand.IsConsumed(swimming)}, landed taken={FeaturesSmokeCommand.IsConsumed(landed)}, fishDelta={delta}";
+                    if (broken != null)
+                        run.Skip(FishCheck,
+                            $"inconclusive: before a fish was taken, {broken}; {FishAwayFromWater} ({taken})");
+                    else
+                        run.Fail(FishCheck, $"a key pass requested on a fish in water took fish ({taken})");
+                    yield break;
+                }
+
+                fixture = FishFixtureProblem(swimming, level, landed);
+                if (fixture != null)
+                {
+                    run.Skip(FishCheck, $"inconclusive: before the second pass, {fixture}; {FishAwayFromWater}");
+                    yield break;
+                }
+
+                // On the fish out of water: that fish is taken, the one in water stays.
+                fishMayBeLeft = true;
+                component.RequestKeyPickup(landed.gameObject);
+                // Read only while the fish in water is still there: a fixture that breaks after it
+                // was taken cannot explain that it was taken.
+                broken = null;
+                paused = Game.IsPaused();
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && !FeaturesSmokeCommand.IsConsumed(landed) &&
+                       Time.realtimeSinceStartup - started < KeyPassTimeoutSeconds)
+                {
+                    yield return null;
+                    if (Game.IsPaused()) paused = true;
+                    if (broken == null && !FeaturesSmokeCommand.IsConsumed(swimming))
+                        broken = FishFixtureProblem(swimming, level, landed);
+                }
+
+                started = Time.realtimeSinceStartup;
+                while (run.IsCurrent && player && Time.realtimeSinceStartup - started < SettleSeconds)
+                {
+                    yield return null;
+                    if (broken == null && !FeaturesSmokeCommand.IsConsumed(swimming))
+                        broken = FishFixtureProblem(swimming, level, landed);
+                }
+
+                if (!player)
+                {
+                    run.Skip(FishCheck, "inconclusive: the local player went away during the pass");
+                    yield break;
+                }
+
+                delta = PickableHarvester.CountExactItems(inventory, sample) - before;
+                if (delta <= 0) fishMayBeLeft = false;
+                var landedTaken = FeaturesSmokeCommand.IsConsumed(landed);
+                var swimmingTaken = FeaturesSmokeCommand.IsConsumed(swimming);
+                if (delta == 1 && landedTaken && !swimmingTaken &&
+                    FeaturesSmokeCommand.RemoveExactItems(inventory, sample, 1) == 1)
+                    fishMayBeLeft = false;
+                var notes = fishMayBeLeft
+                    ? "; the picked-up test fish could not be told apart from your own and was left in the inventory"
+                    : "";
+
+                if ((!landedTaken || swimmingTaken) && broken != null)
+                {
+                    run.Skip(FishCheck,
+                        $"inconclusive: during the second pass, {broken}; {FishAwayFromWater} (landed taken={landedTaken}, swimming taken={swimmingTaken}){notes}");
+                    yield break;
+                }
+
+                if (!landedTaken)
+                {
+                    if (paused && run.IsCurrent)
+                        run.Skip(FishCheck, "inconclusive: the game was paused during the pass");
+                    else
+                        run.Fail(FishCheck,
+                            $"a key pass requested on a fish out of water did not take it within {KeyPassTimeoutSeconds:0.#}s{notes}");
+                    yield break;
+                }
+
+                if (swimmingTaken)
+                {
+                    run.Fail(FishCheck,
+                        $"a key pass requested on a fish out of water also took the fish in water{notes}");
+                    yield break;
+                }
+
+                if (delta != 1)
+                {
+                    run.Skip(FishCheck,
+                        $"inconclusive: the fish in the inventory grew by {delta}, not 1, so a fish of your own was nearby{notes}");
+                    yield break;
+                }
+
+                run.Pass(FishCheck,
+                    $"a fish in water got no key pass and no hover line; a key pass on a fish out of water took it and left the one in water{notes}");
+            }
+            finally
+            {
+                if (fishMayBeLeft)
+                    FeaturesSmokeCommand.Warn(
+                        $"[Automatics Smoke] {FishCheck}: the fish the pass took could not be attributed to the test drops, so it was left in the inventory");
+                FeaturesSmokeCommand.RemoveTestDrop(swimming, FishCheck);
+                FeaturesSmokeCommand.RemoveTestDrop(landed, FishCheck);
+            }
+        }
+
+        private const string FishAwayFromWater =
+            "a water volume around the test fish writes its own level into a fish inside it on every update, so run this check away from water";
+
+        // Why the test fish are no longer one in water and one out of it, or null while they are.
+        // A fish already taken is not read. A water volume whose trigger holds a fish writes the
+        // real water level into it on every update (WaterVolume.UpdateFloaters), so near water the
+        // level the check wrote does not hold.
+        private static string FishFixtureProblem(ItemDrop swimming, float level, ItemDrop landed)
+        {
+            if (!FeaturesSmokeCommand.IsConsumed(swimming))
+            {
+                var fish = swimming.GetComponent<Fish>();
+                var read = Reflections.GetField<float>(fish, "m_inWater");
+                var volume = Reflections.GetField<WaterVolume>(fish, "m_waterVolume") != null;
+                if (read != level || volume || fish.IsOutOfWater())
+                    return $"the fish set in water reads a water level of {read:0.00} m, not the {level:0.00} m written into it, " +
+                           $"has {(volume ? "a" : "no")} water volume attached and is {(fish.IsOutOfWater() ? "out of" : "in")} water " +
+                           $"(fish at {swimming.transform.position.y:0.00} m)";
+            }
+
+            if (!FeaturesSmokeCommand.IsConsumed(landed))
+            {
+                var fish = landed.GetComponent<Fish>();
+                if (!fish.IsOutOfWater())
+                    return $"the fish set out of water is in water (water level {Reflections.GetField<float>(fish, "m_inWater"):0.00} m, fish at {landed.transform.position.y:0.00} m)";
+            }
+
+            return null;
         }
 
         private static float Distance(Player player, ItemDrop drop)
