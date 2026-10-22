@@ -18,6 +18,7 @@ namespace Automatics.AutomaticMapping
         private readonly string _objectName;
         private EnemyHud _hud;
         private Component _nameText;
+        private GameObject _healthGroup;
         private GuiBar _healthFast;
         private GuiBar _healthSlow;
         private GuiBar _healthFriendly;
@@ -51,6 +52,7 @@ namespace Automatics.AutomaticMapping
             overlay.Find("Alerted").gameObject.SetActive(false);
             overlay.Find("Aware").gameObject.SetActive(false);
             _nameText = overlay.Find("Name").GetComponent(NameType);
+            _healthGroup = overlay.Find("Health").gameObject;
             _healthFast = overlay.Find("Health/health_fast").GetComponent<GuiBar>();
             _healthSlow = overlay.Find("Health/health_slow").GetComponent<GuiBar>();
             _healthFast.gameObject.SetActive(true);
@@ -67,7 +69,8 @@ namespace Automatics.AutomaticMapping
             return true;
         }
 
-        internal void Show(string rawName, float distance, Vector3 screenPoint, float health)
+        internal void Show(string rawName, float distance, Vector3 screenPoint, float health,
+            bool labelOnly = false)
         {
             var meters = Mathf.RoundToInt(distance);
             if (!ReferenceEquals(rawName, _rawName) || meters != _meters)
@@ -81,9 +84,14 @@ namespace Automatics.AutomaticMapping
                 _meters = meters;
                 NameTextProperty.SetValue(_nameText, _displayName + " [" + meters + "m]");
             }
-            _healthFast.SetValue(health);
-            _healthSlow.SetValue(health);
-            if (_healthFriendly) _healthFriendly.SetValue(health);
+            // The label is reused between targets, so the bar goes back for the next one that has it.
+            if (_healthGroup.activeSelf == labelOnly) _healthGroup.SetActive(!labelOnly);
+            if (!labelOnly)
+            {
+                _healthFast.SetValue(health);
+                _healthSlow.SetValue(health);
+                if (_healthFriendly) _healthFriendly.SetValue(health);
+            }
             Root.transform.position = screenPoint;
             SetVisible(true);
         }
@@ -144,6 +152,7 @@ namespace Automatics.AutomaticMapping
             Root = null;
             _hud = null;
             _nameText = null;
+            _healthGroup = null;
             _healthFast = null;
             _healthSlow = null;
             _healthFriendly = null;

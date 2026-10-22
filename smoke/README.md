@@ -1356,6 +1356,18 @@ the session for retry. Physical hotkey input, save/reload persistence, and a
 module off/on with the saved pin remain in-game verification steps outside this
 section; use `automatics_smoke_lifecycle mapping` for the module lifecycle checks.
 
+#### `aimbar`
+
+The looked-at object bar section aims at a spawned boar, a player-built wall piece
+and a mushroom. These checks cover the targets that get only a name and distance
+label, and the bar coming back:
+
+| Check | Asserts |
+|---|---|
+| `aimbar_hidden_creature` | A boar with its HUD hidden, aimed at, gets the looked-at label with its name and the rounded horizontal distance in brackets, and the label's Health group is not shown |
+| `aimbar_boss` | The same for the boar marked as a boss |
+| `aimbar_bar_after_label_only` | A mushroom aimed at right after those two, with the same label object, gets the label with its Health group shown again and a full bar |
+
 #### `mining`
 
 Run `automatics_smoke_features mining` in a single-player world with Automatic

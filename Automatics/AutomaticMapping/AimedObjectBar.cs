@@ -84,7 +84,9 @@ namespace Automatics.AutomaticMapping
                 Overlay.SetVisible(false);
                 return;
             }
-            Overlay.Show(aimed.Name, distance, screenPoint, MappingOverlay.GetHealth(aimed.Instance));
+            // Bosses and creatures with hidden HUDs get the name and distance without a bar.
+            var labelOnly = _character && (_character.IsBoss() || _character.m_hideHud);
+            Overlay.Show(aimed.Name, distance, screenPoint, MappingOverlay.GetHealth(aimed.Instance), labelOnly);
         }
 
         internal static Character GetHudTarget()

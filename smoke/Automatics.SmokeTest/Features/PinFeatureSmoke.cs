@@ -3775,17 +3775,26 @@ namespace Automatics.SmokeTest
             Navigation.ClearTarget();
             first.m_hideHud = true;
             if (!AimAndUpdate(player, first.gameObject, out error)) run.Fail("aimbar_hidden_creature", error);
-            else CheckBar(run, player, first.gameObject, "aimbar_hidden_creature", 1f);
+            else CheckBar(run, player, first.gameObject, "aimbar_hidden_creature", 1f, true);
             first.m_hideHud = false;
             var boss = first.m_boss;
             first.m_boss = true;
             try
             {
                 if (!AimAndUpdate(player, first.gameObject, out error, false)) run.Fail("aimbar_boss", error);
-                else CheckBar(run, player, first.gameObject, "aimbar_boss", 1f);
+                else CheckBar(run, player, first.gameObject, "aimbar_boss", 1f, true);
             }
             finally { first.m_boss = boss; }
             Remove(second);
+
+            // The label is reused: an object with a bar gets its bar back after a label-only look.
+            var pickup = Spawn("Pickable_Mushroom",
+                camera.position + forward * 5f + Vector3.Cross(Vector3.up, forward) * 3f,
+                Quaternion.identity, spawned, out error);
+            if (!pickup) run.Fail("aimbar_bar_after_label_only", error);
+            else if (!AimAndUpdate(player, pickup, out error)) run.Fail("aimbar_bar_after_label_only", error);
+            else CheckBar(run, player, pickup, "aimbar_bar_after_label_only", 1f);
+            Remove(pickup);
         }
 
         private static void CheckSamePiece(FeatureRun run, Player player, GameObject go)
@@ -3807,9 +3816,10 @@ namespace Automatics.SmokeTest
                 var slow = label ? label.transform.Find("Health/health_slow").GetComponent<GuiBar>() : null;
                 var values = fast && slow && Mathf.Abs(BarValue(fast) - health) < 0.01f &&
                     Mathf.Abs(BarValue(slow) - health) < 0.01f;
+                var barShown = label && label.transform.Find("Health").gameObject.activeInHierarchy;
                 Check(run, "aimbar_same_piece", !LabelVisible() && NamedLabels() == 1 &&
-                    label && label.activeInHierarchy && health < 1f && values,
-                    $"only the navigation label is visible for the damaged player-built piece; health={health:F3}, both bars match={values}");
+                    label && label.activeInHierarchy && health < 1f && values && barShown,
+                    $"only the navigation label is visible for the damaged player-built piece; health={health:F3}, both bars match={values}, bar shown={barShown}");
             }
             Navigation.ClearTarget();
         }
@@ -3900,7 +3910,8 @@ namespace Automatics.SmokeTest
             if (SmokeSession.DestroyTestObject(go, 0, "aimed bar smoke")) SmokeSession.ReleaseSpawn(go);
         }
 
-        private static void CheckBar(FeatureRun run, Player player, GameObject go, string check, float health)
+        private static void CheckBar(FeatureRun run, Player player, GameObject go, string check, float health,
+            bool labelOnly = false)
         {
             var character = go.GetComponent<Character>();
             var vanilla = character && !character.m_hideHud && !character.IsBoss();
@@ -3916,9 +3927,15 @@ namespace Automatics.SmokeTest
             var values = fast && slow && Mathf.Abs(BarValue(fast) - health) < 0.01f &&
                          Mathf.Abs(BarValue(slow) - health) < 0.01f &&
                          (!friendly || Mathf.Abs(BarValue(friendly.GetComponent<GuiBar>()) - health) < 0.01f);
+            // The label-only look keeps the name and distance and drops the whole Health group; every
+            // other look, the game's own enemy HUD included (its clone has the same group), shows it.
+            var healthGroup = root ? root.transform.Find("Health") : null;
+            var barShown = healthGroup && healthGroup.gameObject.activeInHierarchy;
+            var barOk = barShown != labelOnly;
+            if (labelOnly) values = true;
             Check(run, check, root && root.activeInHierarchy && name == expectedName + DistanceText(player, go) &&
-                values && (!vanilla || !LabelVisible()),
-                $"visible={root && root.activeInHierarchy}, name='{name}', expected='{expectedName + DistanceText(player, go)}', health={health:F3}, bars match={values}, vanilla={vanilla}");
+                values && barOk && (!vanilla || !LabelVisible()),
+                $"visible={root && root.activeInHierarchy}, name='{name}', expected='{expectedName + DistanceText(player, go)}', health={health:F3}, bars match={values}, bar shown={barShown}, label only={labelOnly}, vanilla={vanilla}");
         }
 
         private static float BarValue(GuiBar bar) =>
