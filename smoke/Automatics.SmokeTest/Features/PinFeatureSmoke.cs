@@ -189,6 +189,7 @@ namespace Automatics.SmokeTest
                 CheckMinedDeposit(run, player, map, created);
                 CheckDepositsSharingPin(run, player, map, created);
                 CheckLoadedLocationSpot(run, player, map, created);
+                CheckDungeonWaitsForLocation(run, player, map, created);
             }
             finally
             {
@@ -1946,6 +1947,143 @@ namespace Automatics.SmokeTest
             {
                 if (pin != null && map) map.RemovePin(pin);
                 UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        // Collects the warnings written to the BepInEx log while it is registered.
+        private sealed class WarningListener : BepInEx.Logging.ILogListener
+        {
+            public readonly List<string> Messages = new List<string>();
+
+            public void LogEvent(object sender, BepInEx.Logging.LogEventArgs eventArgs)
+            {
+                if (eventArgs.Level == BepInEx.Logging.LogLevel.Warning)
+                    Messages.Add(eventArgs.Data?.ToString() ?? "");
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
+        // A single-player world lists every location instance, spawned or not, and the static
+        // pass maps a dungeon from that list. The entrance belongs to the Location object the
+        // game spawns later, so a dungeon without that object is left to a later pass: no pin and
+        // no warning. The check calls the pass's dungeon mapping directly for one test instance
+        // 6 m beside the player that is in no world list, first with no Location object there and
+        // then with a bare one (no prefab is spawned), which has no entrance. The dungeon is the
+        // first early-content one in allow_pinning_dungeon, and its 2 m radius leaves every real
+        // location and pin out.
+        private static void CheckDungeonWaitsForLocation(FeatureRun run, Player player, Minimap map,
+            List<Minimap.PinData> created)
+        {
+            const string check = "pin_dungeon_waits_for_location";
+            var mapping = AccessTools.Method(typeof(StaticObjectMapping), "DungeonMapping");
+            if (mapping == null)
+            {
+                run.Fail(check, "the static pass has no mapping of a location instance's dungeon");
+                return;
+            }
+            var dungeon = EarlyLocations.FirstOrDefault(x => ValheimObject.Dungeon.GetIdentify(x, out var identifier) &&
+                identifier == x && MappingConfig.AllowPinningDungeon.Contains(x));
+            if (dungeon == null || !ValheimObject.Dungeon.GetName(dungeon, out var label) || string.IsNullOrEmpty(label))
+            {
+                run.Skip(check, "no early-content dungeon is in allow_pinning_dungeon");
+                return;
+            }
+
+            const float radius = 2f;
+            var origin = player.transform.position;
+            var position = Vector3.zero;
+            var found = false;
+            for (var i = 0; i < 8 && !found; i++)
+            {
+                var angle = i * Mathf.PI / 4f;
+                position = origin + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 6f;
+                found = Map.GetClosestPin(position, radius * 2f, includeInactive: true) == null &&
+                        !StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(position), out _) &&
+                        !Physics.OverlapSphere(position, radius, LayerMask.GetMask("character_trigger"),
+                            QueryTriggerInteraction.Collide).Any(collider => collider.GetComponent<Teleport>()) &&
+                        (StaticObjectMapping.LoadedLocations == null || !StaticObjectMapping.LoadedLocations.Any(
+                            location => location && Utils.DistanceXZ(location.transform.position, position) < 2f));
+            }
+            if (!found)
+            {
+                run.Skip(check, "every test spot 6 m around you has a pin, a dungeon entrance or a location within 2 m; move and retry");
+                return;
+            }
+            if (!MappingConfig.SaveStaticObjectPins && Map.ShouldSuppressTransientAutomaticPin(position))
+            {
+                run.Skip(check, "the map filters unsaved automatic pins at the test spot, for example because unexplored automatic pins are hidden");
+                return;
+            }
+
+            var instance = new ZoneSystem.LocationInstance
+            {
+                m_location = new ZoneSystem.ZoneLocation { m_prefabName = dungeon, m_exteriorRadius = radius },
+                m_position = position,
+                m_placed = true
+            };
+            var warnings = new WarningListener();
+            var warningsLogged = global::Automatics.Config.IsLogEnabled(BepInEx.Logging.LogLevel.Warning);
+            var key = new StaticObjectMapping.MapPinIdentify(position);
+            GameObject go = null;
+            Minimap.PinData pin = null;
+            BepInEx.Logging.Logger.Listeners.Add(warnings);
+            try
+            {
+                List<Minimap.PinData> MapDungeon(out bool handled)
+                {
+                    var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                    try
+                    {
+                        handled = (bool)mapping.Invoke(null, new object[] { instance });
+                    }
+                    finally
+                    {
+                        created.AddRange(Map.GetAllPins().Where(x => !before.Contains(x)));
+                    }
+                    return Map.GetAllPins().Where(x => !before.Contains(x)).ToList();
+                }
+
+                var waiting = MapDungeon(out var handledWaiting);
+                if (waiting.Count != 0 || StaticObjectMapping.TryGetCachedPin(key, out _) ||
+                    warnings.Messages.Any(x => x.Contains("has no entrance")) || !handledWaiting)
+                {
+                    pin = waiting.FirstOrDefault();
+                    run.Fail(check, $"a dungeon whose Location object has not spawned got {waiting.Count} pin(s), a cached pin, a no-entrance warning, or was not treated as a dungeon");
+                    return;
+                }
+
+                go = new GameObject(dungeon + "(Clone)");
+                go.transform.position = position;
+                // Awake adds it to the game's list of loaded locations.
+                go.AddComponent<Location>();
+                var spawned = MapDungeon(out var handledSpawned);
+                pin = spawned.FirstOrDefault();
+                var expectedType = IconPack.GetPinType(new Target { name = label, prefabName = dungeon });
+                if (spawned.Count != 1 || !handledSpawned || Utils.DistanceXZ(pin.m_pos, position) > 0.01f ||
+                    pin.m_name != Map.StoredPinName(label) || pin.m_type != expectedType ||
+                    !StaticObjectMapping.TryGetCachedPin(key, out var cached) || !ReferenceEquals(cached, pin) ||
+                    !StaticObjectMapping.TryGetPinKind(pin, out var kind) || kind != PinKind.Dungeon)
+                {
+                    run.Fail(check, $"the dungeon whose Location object has spawned and has no entrance did not get exactly one pin with its name, icon and position in the static cache (added {spawned.Count})");
+                    return;
+                }
+                if (warningsLogged && !warnings.Messages.Any(x => x.Contains("has no entrance")))
+                {
+                    run.Fail(check, "the dungeon with a spawned Location object and no entrance did not log that it has no entrance");
+                    return;
+                }
+
+                run.Pass(check, "a dungeon with no spawned Location object got no pin and no warning; once the Location object stood there, it got one pin at its position" +
+                    (warningsLogged ? " and the no-entrance warning" : " (the no-entrance warning was not checked: warnings are not logged with the current log settings)"));
+            }
+            finally
+            {
+                BepInEx.Logging.Logger.Listeners.Remove(warnings);
+                if (pin != null && map) map.RemovePin(pin);
+                if (go) UnityEngine.Object.DestroyImmediate(go);
             }
         }
 

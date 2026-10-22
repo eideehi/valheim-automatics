@@ -1799,7 +1799,8 @@ namespace Automatics.AutomaticMapping
             return TryAddDungeonPin(
                 instance.m_location.m_prefabName,
                 instance.m_position,
-                instance.m_location.m_exteriorRadius);
+                instance.m_location.m_exteriorRadius,
+                false);
         }
 
         // Client-side fallback for non-host peers (dedicated-server clients,
@@ -1824,12 +1825,31 @@ namespace Automatics.AutomaticMapping
                 if ((origin - pos).sqrMagnitude > rangeSq) continue;
                 var prefabName = StripCloneSuffix(location.gameObject.name);
                 if (location.m_hasInterior &&
-                    TryAddDungeonPin(prefabName, pos, location.m_exteriorRadius)) continue;
+                    TryAddDungeonPin(prefabName, pos, location.m_exteriorRadius, true)) continue;
                 TryAddSpotPin(prefabName, pos);
             }
         }
 
-        private static bool TryAddDungeonPin(string prefabName, Vector3 pos, float radius)
+        // The location the game has spawned at this position, if any. A location instance exists
+        // in the world data long before its Location object does (the object spawns when the
+        // zone loads and its prefab is ready), and the entrance is part of that object.
+        private static bool IsLocationSpawned(Vector3 pos)
+        {
+            var allLocations = AllLocationsLazy.Value;
+            if (allLocations == null) return false;
+
+            for (var i = 0; i < allLocations.Count; i++)
+            {
+                var location = allLocations[i];
+                if (location != null && Utils.DistanceXZ(location.transform.position, pos) < 1f)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryAddDungeonPin(string prefabName, Vector3 pos, float radius,
+            bool locationSpawned)
         {
             Teleport GetTeleport(Collider collider)
             {
@@ -1880,6 +1900,10 @@ namespace Automatics.AutomaticMapping
                 MarkSeen(locationIdentify);
                 return true;
             }
+
+            // Without its Location object there is no entrance to find yet. The dungeon is left
+            // to a later pass instead of getting a centre pin that the entrance pin would follow.
+            if (!locationSpawned && !IsLocationSpawned(pos)) return true;
 
             if (Map.GetClosestPin(pos, radius, x => x.m_name == name,
                     includeInactive: true) == null)
