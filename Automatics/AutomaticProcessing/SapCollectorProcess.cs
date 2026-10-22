@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using Automatics.Valheim;
 using ModUtils;
 using UnityEngine;
 
@@ -14,49 +15,63 @@ namespace Automatics.AutomaticProcessing
             var sapCollectorName = sapCollector.m_name;
             if (!Logics.IsAllowProcessing(sapCollectorName, Process.Store)) return false;
 
-            var sapCount = zNetView.GetZDO().GetInt("level") + increaseCount;
-            if (sapCount <= 0) return false;
+            var sapUnits = zNetView.GetZDO().GetInt("level") + increaseCount;
+            if (sapUnits <= 0) return false;
 
             var sapItem = sapCollector.m_spawnItem;
             var sapData = sapItem.m_itemData.m_shared;
             var sapName = sapData.m_name;
+            // One unit yields what extracting it by hand yields (SapCollector.RPC_Extract), the
+            // world's resource rate included.
+            var sapPerUnit = Game.instance.ScaleDrops(sapItem.m_itemData, 1);
 
             var maxProductStacks = Config.ProductStacksOfSuppressProcessing(sapCollectorName);
             var origin = sapCollector.transform.position;
-            var sapRemaining = sapCount;
+            var unitsRemaining = sapUnits;
             var containers = Logics.GetNearbyContainers(sapCollectorName, origin)
                 .Select(x => x.container).ToList();
             var inventories = containers.Select(Logics.ReadInventory).ToList();
             // The product stack limit covers every container in range together. It is read
-            // again after the gate, which can reload the container about to be written.
+            // again after the gate, which can reload the container about to be written. The
+            // limit and the room are counted in items, and only whole units are stored: a unit
+            // goes in with its whole yield or stays in the collector.
             int Capacity() => Logics.GetProductCapacity(inventories, sapName,
                 sapData.m_maxStackSize, maxProductStacks);
             Container askable = null;
             foreach (var container in containers)
             {
-                if (sapRemaining <= 0) break;
-                if (Capacity() <= 0) break;
+                if (unitsRemaining <= 0) break;
+                if (Capacity() < sapPerUnit) break;
 
+                // A container without room for one whole unit is passed over before the gate,
+                // as a full one is.
+                if (ContainerAccess.GetRoom(container, sapItem.gameObject) < sapPerUnit) continue;
                 if (!Logics.CanStore(sapCollectorName, container, sapItem.gameObject, sapName))
                     continue;
                 if (!Logics.TryClaimContainer(container, ref askable)) continue;
 
-                var amount = Mathf.Min(Capacity(), sapRemaining);
-                if (amount <= 0) break;
+                var units = Mathf.Min(unitsRemaining, Capacity() / sapPerUnit);
+                if (units <= 0) break;
                 var inventory = container.GetInventory();
                 if (!Logics.AcceptsProduct(sapCollectorName, inventory, sapName)) continue;
 
+                // One add stores at most one stack (Inventory.AddItem(GameObject, int)).
+                var room = Mathf.Min(ContainerAccess.GetRoom(inventory, sapItem.gameObject),
+                    sapData.m_maxStackSize);
+                units = Mathf.Min(units, room / sapPerUnit);
+                if (units <= 0) continue;
+
                 var storedSapCount = Logics.AddItemAndGetCountDelta(inventory,
-                    sapItem.gameObject, sapName, amount);
+                    sapItem.gameObject, sapName, units * sapPerUnit);
                 if (storedSapCount <= 0) continue;
 
                 Logics.StoreLog(sapName, storedSapCount, container.m_name,
                     container.transform.position, sapCollectorName, origin);
-                sapRemaining -= storedSapCount;
+                unitsRemaining -= storedSapCount / sapPerUnit;
             }
 
-            if (sapRemaining > 0 && Capacity() > 0) Logics.AskFor(askable);
-            zNetView.GetZDO().Set("level", Mathf.Clamp(sapRemaining, 0, sapCollector.m_maxLevel));
+            if (unitsRemaining > 0 && Capacity() >= sapPerUnit) Logics.AskFor(askable);
+            zNetView.GetZDO().Set("level", Mathf.Clamp(unitsRemaining, 0, sapCollector.m_maxLevel));
             return true;
         }
     }

@@ -690,8 +690,8 @@ The original module setting is restored under the shared session rules.
 ### Processing smoke command
 
 `automatics_smoke_processing` takes one subcommand: `rpc`, `toggle`, `config`,
-`skill` or `store` (the last four are described after `rpc`). Each is one smoke
-run.
+`skill`, `store` or `collect` (the last five are described after `rpc`). Each is
+one smoke run.
 
 `automatics_smoke_processing rpc` checks that Automatic Processing keeps every
 item when it moves one from a chest into a station. Processing does that by
@@ -911,7 +911,7 @@ A passing run looks like this:
 [Automatics Smoke] PASS processing_toggle_off_state_disabled
 [Automatics Smoke] PASS processing_toggle_off_patches_removed: no patch is left under "net.eidee.valheim.automatics.automatic-processing"
 [Automatics Smoke] PASS processing_toggle_on_state_enabled
-[Automatics Smoke] PASS processing_toggle_on_patches_applied: 13 patches on 11 methods (4 transpilers) under "net.eidee.valheim.automatics.automatic-processing", exactly the pairs Automatics.AutomaticProcessing.Patches declares
+[Automatics Smoke] PASS processing_toggle_on_patches_applied: 13 patches on 11 methods (3 transpilers) under "net.eidee.valheim.automatics.automatic-processing", exactly the pairs Automatics.AutomaticProcessing.Patches declares
 [Automatics Smoke] PASS processing_toggle_on_quickrefuel_acts: 0.8 s after the enable, the game's own Smelter.UpdateSmelter called the injected SmelterProcess.QuickRefuel for the test smelter (1 call(s)) and it moved Coal from the test chest into the smelter's fuel; the ledger held on every frame (chest 2 + smelter fuel 1 + burnt in the catch-up trial 3 = 6 put in)
 [Automatics Smoke] PASS processing_toggle_on_quickrefuel_catchup_no_per_unit_rpc: 3 QuickRefuel calls in one frame moved 3 Coal from the test chest into the smelter's fuel; the fuel RPC was invoked 0 time(s) and the fuel-added effect played 1 time(s); the game's own RPC, invoked once as a control, ran the handler 1 time(s) and played the effect 1 time(s)
 [Automatics Smoke] PASS processing_toggle_restored_initial_state: automatic_processing/module is already back at Enabled
@@ -1072,6 +1072,93 @@ Safety, on top of the `rpc` rules:
 - The drop Store makes at the smelter for what does not fit is removed in the
   same frame; it is the only drop the run removes.
 - The Harmony prefixes are removed right after each call, also when it throws.
+
+#### `automatics_smoke_processing collect`
+
+Checks that what Automatic Processing stores from a piece that collects an item
+over time (a beehive, a sap extractor, a wisp fountain) is what taking it out by
+hand yields, the world's resource rate included, and that it stores only whole
+units. Before, one stored item stood for each unit at any resource rate, a
+beehive could store more units than it holds, and a sap extractor that filled up
+while nothing could be stored never stored again. The command sets the game's
+resource rate for the run and puts it back; it changes no setting.
+
+What it does:
+
+- It places a wood chest, a beehive, a sap extractor and a wisp fountain as
+  `rpc` does, with the same rules for where to stand.
+- It sets the world's resource rate (`Game.m_resourceRate`) to 3, after
+  registering the hand-back that puts it back.
+- For each piece it takes one unit out as a player's hand does, through the
+  piece's own RPC: `Beehive.RPC_Extract` or `SapCollector.RPC_Extract` with one
+  unit in the piece, and `Pickable.RPC_Pick` (without a skill bonus) on a wisp the
+  fountain lures, which the check spawns. What that drops is the yield of one unit
+  at that rate. The drops and the wisp are removed at once.
+- It calls each piece's Store entry (`BeehiveProcess.Store`,
+  `SapCollectorProcess.Store`, `WispSpawnerProcess.Store`) against the chest. For
+  the sap extractor it also runs the piece's own update tick,
+  `SapCollector.UpdateTick`, through reflection, so the patches on it run too. To
+  leave the chest with an exact room, it fills every slot with full stacks of the
+  piece's item and takes that room out again.
+- Everything happens in the frame the objects are placed, so no piece runs an
+  update of its own. What the run stored is taken out of the chest and every
+  piece is emptied before the chest and the pieces are removed under the `rpc`
+  rules.
+
+| Check | Asserts |
+|---|---|
+| `processing_collect_beehive_yield` | With one unit in the beehive and one new unit, Store returns true, puts twice the hand yield of one unit into the chest and empties the hive |
+| `processing_collect_beehive_whole_units` | With room in the chest for one unit and all but one item of a second, and 3 new units, Store puts one unit's yield in and leaves 2 units in the hive; no part of a unit is stored |
+| `processing_collect_beehive_clamped_to_maximum` | With 3 more new units than the hive holds, Store puts the hive's maximum in and keeps none of the rest, as the game's own `Beehive.IncreseLevel` would |
+| `processing_collect_sapcollector_yield` | The yield check, for the sap extractor |
+| `processing_collect_sapcollector_whole_units` | The whole-unit check, for the sap extractor |
+| `processing_collect_sapcollector_resumes_when_full` | At its maximum level with the chest full, a tick of the piece's own update keeps every unit; once the chest has room for one unit, the next tick stores that unit |
+| `processing_collect_wisplure_yield` | Store puts the hand yield of one wisp into the chest and returns true |
+| `processing_collect_wisplure_whole_unit` | With room for all but one item of a wisp's yield, Store puts nothing in and returns false, so the fountain lures the wisp as usual |
+| `processing_collect_rate_restored` | The world's resource rate is back at its value before the run |
+
+No check may leave a new item drop.
+
+A precondition that is missing SKIPs the run under `processing_collect_setup`,
+or the checks of the piece it concerns with the same message. Besides the `rpc`
+preconditions, these count: a piece's `allow_processing_by_*` lacks Store, its
+`*_store_only_if_product_exists` is on, or its
+`*_product_stacks_of_suppress_processing` is above 0 (that limit, not the chest,
+would decide what is stored). A yield or whole-unit check SKIPs when one unit
+still yields one item at the test rate, because the game does not scale that
+item. A piece's checks are NOT-RUN when taking a unit out by hand dropped nothing
+of its item, and a check is NOT-RUN when the chest cannot be left with the room
+it needs.
+
+```text
+[Automatics Smoke] automatics_smoke_processing collect started: it places a chest, a beehive, a sap extractor and a wisp fountain ahead of you, sets the world's resource rate to 3, takes one unit out of each by hand, drives each one's Store entry into the chest, and removes them; the resource rate is put back and no setting is changed
+[Automatics Smoke] automatics_smoke_processing collect: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] PASS processing_collect_beehive_yield: at a resource rate of 3, one unit of the beehive yields 3 Honey by hand, and Store put the 2 units it held into the chest as 6 Honey and emptied it
+[Automatics Smoke] PASS processing_collect_beehive_whole_units: with room for 5 Honey in the chest and 3 new units, Store put one unit in as 3 Honey and left 2 units in the beehive
+[Automatics Smoke] PASS processing_collect_beehive_clamped_to_maximum: with 7 new units and room in the chest, Store put the beehive's maximum of 4 units in as 12 Honey and kept none of the rest
+[Automatics Smoke] PASS processing_collect_sapcollector_yield: at a resource rate of 3, one unit of the sap extractor yields 3 Sap by hand, and Store put the 2 units it held into the chest as 6 Sap and emptied it
+[Automatics Smoke] PASS processing_collect_sapcollector_whole_units: with room for 5 Sap in the chest and 3 new units, Store put one unit in as 3 Sap and left 2 units in the sap extractor
+[Automatics Smoke] PASS processing_collect_sapcollector_resumes_when_full: full at its maximum of 4 units with the chest full, the sap extractor kept them on a tick; with room for one unit, its next tick stored 3 Sap and left 3
+[Automatics Smoke] PASS processing_collect_wisplure_yield: at a resource rate of 3, picking a lured wisp by hand yields 3 Wisp, and Store put 3 into the chest
+[Automatics Smoke] PASS processing_collect_wisplure_whole_unit: with room for 2 Wisp in the chest, Store put none of a wisp's 3 in and returned false, so the fountain lures the wisp as usual
+[Automatics Smoke] PASS processing_collect_rate_restored: the world's resource rate is back at 1
+[Automatics Smoke] Summary: total=9 passed=9 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+```
+
+The item names, the yields and the units a piece holds depend on your game build
+and language.
+
+Safety, on top of the `rpc` rules:
+
+- The run does not touch your inventory. The filler is added to and taken from
+  the check's own chest only.
+- The resource rate is put back when the run ends or throws, and by the session
+  if the smoke plugin stops mid-run. The run changes and restores it within one
+  frame, so no other part of the game acts on the changed rate.
+- The drops the hand extraction makes, and the wisp it picks, are the run's own
+  and are removed in the same frame; they are the only objects the run removes
+  besides its chest and pieces. A drop Store made would be reported, never
+  removed.
 
 ### Feature smoke command
 

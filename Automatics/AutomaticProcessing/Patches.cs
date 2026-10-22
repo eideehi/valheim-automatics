@@ -246,6 +246,18 @@ namespace Automatics.AutomaticProcessing
             return !SapCollectorProcess.Store(__instance, ___m_nview, i);
         }
 
+        // SapCollector.UpdateTick stops raising the level once the collector is full, so the
+        // IncreseLevel prefix above would never run again for a collector that filled up while
+        // nothing could be stored. Each tick retries what it holds; Store returns at once when it
+        // holds nothing.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SapCollector), "UpdateTick")]
+        private static void SapCollector_UpdateTick_Postfix(SapCollector __instance,
+            ZNetView ___m_nview)
+        {
+            SapCollectorProcess.Store(__instance, ___m_nview, 0);
+        }
+
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(WispSpawner), "TrySpawn")]
         public static IEnumerable<CodeInstruction> WispSpawner_TrySpawn_Transpiler(

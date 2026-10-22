@@ -8,6 +8,7 @@ using HarmonyLib;
 using ModUtils;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using BeehiveProcess = Automatics.AutomaticProcessing.BeehiveProcess;
 using ContainerAccess = Automatics.Valheim.ContainerAccess;
 using CookingStationProcess = Automatics.AutomaticProcessing.CookingStationProcess;
 using FermenterProcess = Automatics.AutomaticProcessing.FermenterProcess;
@@ -18,7 +19,9 @@ using ProcessingConfig = Automatics.AutomaticProcessing.Config;
 using ProcessingLogics = Automatics.AutomaticProcessing.Logics;
 using ProcessingModule = Automatics.AutomaticProcessing.Module;
 using Processor = Automatics.AutomaticProcessing.Processor;
+using SapCollectorProcess = Automatics.AutomaticProcessing.SapCollectorProcess;
 using SmelterProcess = Automatics.AutomaticProcessing.SmelterProcess;
+using WispSpawnerProcess = Automatics.AutomaticProcessing.WispSpawnerProcess;
 
 namespace Automatics.SmokeTest
 {
@@ -44,7 +47,9 @@ namespace Automatics.SmokeTest
     // automatic_processing/module through its real setting, and a read-only look at the
     // automatic_processing section of the live .cfg. skill is in ProcessingSmokeSkill.cs: who
     // gains the skill and bonus food for what Processing does at a cooking station. store, below
-    // rpc: a product is stored only where it fits.
+    // rpc: a product is stored only where it fits. collect, below store: what Processing stores
+    // from a piece that collects an item over time is what taking it out by hand yields, in
+    // whole units.
     //
     // Safety follows the asymmetric rule of the other smoke commands (smoke/README.md): only
     // objects this command spawned are changed, test items go only into its own chest, and
@@ -79,7 +84,8 @@ namespace Automatics.SmokeTest
                 { "toggle", RunToggle },
                 { "config", RunConfig },
                 { "skill", RunSkill },
-                { "store", RunStore }
+                { "store", RunStore },
+                { "collect", RunCollect }
             };
 
         private static MonoBehaviour _host;
@@ -150,6 +156,13 @@ namespace Automatics.SmokeTest
         private static IEnumerator RunStore(Terminal context, int runId, string runner)
         {
             return RunBench(context, runner, () => new StoreRun(runId, runner,
+                line => Emit(context, LogLevel.Info, line),
+                line => Emit(context, LogLevel.Warning, line)));
+        }
+
+        private static IEnumerator RunCollect(Terminal context, int runId, string runner)
+        {
+            return RunBench(context, runner, () => new CollectRun(runId, runner,
                 line => Emit(context, LogLevel.Info, line),
                 line => Emit(context, LogLevel.Warning, line)));
         }
@@ -1061,6 +1074,580 @@ namespace Automatics.SmokeTest
             }
         }
 
+        // -- The collect subcommand --------------------------------------------------------
+
+        // collect: what Processing stores from a piece that collects an item over time - a
+        // beehive, a sap extractor, a wisp fountain - is what taking it out by hand yields, the
+        // world's resource rate included, and only in whole units. The run places a chest and the
+        // three pieces as rpc does and sets the game's resource rate (Game.m_resourceRate) to
+        // TestRate, through a hand-back registered with the session first. For each piece it
+        // takes one unit out by hand through the piece's own RPC (Beehive.RPC_Extract,
+        // SapCollector.RPC_Extract, or Pickable.RPC_Pick on a wisp the fountain lures) and counts
+        // what that drops: the yield of one unit at that rate. Then it drives the piece's Store
+        // entry against the chest: empty, with room for one unit and all but one item of a
+        // second, with more new units than a beehive holds, and, for the sap extractor, full at
+        // its maximum level and then with room for one unit, through the piece's own update tick.
+        // Everything happens in the frame of the spawn. The drops the hand extraction made are
+        // removed at once; whatever the run stored is taken out of the chest and every piece is
+        // emptied before the hand-back. The rate is put back however the run ends; no setting is
+        // changed.
+        private sealed class CollectRun : BenchRun
+        {
+            private const string Setup = "processing_collect_setup";
+            private const string HiveYield = "processing_collect_beehive_yield";
+            private const string HiveWholeUnits = "processing_collect_beehive_whole_units";
+            private const string HiveClamped = "processing_collect_beehive_clamped_to_maximum";
+            private const string SapYield = "processing_collect_sapcollector_yield";
+            private const string SapWholeUnits = "processing_collect_sapcollector_whole_units";
+            private const string SapResumes = "processing_collect_sapcollector_resumes_when_full";
+            private const string WispYield = "processing_collect_wisplure_yield";
+            private const string WispWholeUnit = "processing_collect_wisplure_whole_unit";
+            private const string RateRestored = "processing_collect_rate_restored";
+
+            // A world resource rate other than the default, so that one unit yields more than one
+            // item and storing one item per unit shows.
+            private const float TestRate = 3f;
+
+            // New units offered with room for one unit and all but one item of a second: one is
+            // stored, the rest stays in the piece.
+            private const int OfferedUnits = 3;
+
+            // New units beyond a beehive's maximum.
+            private const int UnitsAboveMaximum = 3;
+
+            private static readonly string[] Order =
+            {
+                HiveYield, HiveWholeUnits, HiveClamped, SapYield, SapWholeUnits, SapResumes,
+                WispYield, WispWholeUnit, RateRestored
+            };
+
+            private readonly Dictionary<string, CheckResult> _checks =
+                new Dictionary<string, CheckResult>(StringComparer.Ordinal);
+
+            private readonly BeehiveBench _hive;
+            private readonly SapCollectorBench _sap;
+            private readonly WispLureBench _wisp;
+            private string _notReached = "not reached: an earlier step stopped the run";
+
+            // The resource rate the run changes, and what it was before.
+            private Func<string, bool> _rateHandBack;
+            private float _rate;
+            private bool _rateTouched;
+
+            public CollectRun(int runId, string runner, Action<string> info, Action<string> warn)
+                : this(runId, runner, info, warn, new BeehiveBench(Setup),
+                    new SapCollectorBench(Setup), new WispLureBench(Setup))
+            {
+            }
+
+            private CollectRun(int runId, string runner, Action<string> info, Action<string> warn,
+                BeehiveBench hive, SapCollectorBench sap, WispLureBench wisp)
+                : base(runId, runner, info, warn, new List<StationBench> { hive, sap, wisp })
+            {
+                _hive = hive;
+                _sap = sap;
+                _wisp = wisp;
+            }
+
+            public override IReadOnlyList<CheckResult> Results
+            {
+                get
+                {
+                    // A run stopped before the first check reports why under the setup check.
+                    if (_checks.Count == 0)
+                        return new[]
+                        {
+                            _stations.Select(x => x.Result).FirstOrDefault(x => x != null) ??
+                            CheckResult.Fail(Setup, "the run ended before this check reached a result")
+                        };
+
+                    return Order.Select(name => _checks.TryGetValue(name, out var result)
+                        ? result
+                        : NotReached(name)).ToList();
+                }
+            }
+
+            // A check that was not judged carries what settled its piece (a SKIP before the
+            // piece was placed, say), or else why the run did not reach it.
+            private CheckResult NotReached(string check)
+            {
+                var settled = Owner(check)?.Result;
+                if (settled == null) return CheckResult.Skip(check, _notReached);
+
+                switch (settled.Status)
+                {
+                    case CheckStatus.Fail:
+                        return CheckResult.Fail(check, settled.Message);
+                    case CheckStatus.NotRun:
+                        return CheckResult.NotRun(check, settled.Message);
+                    default:
+                        return CheckResult.Skip(check, settled.Message);
+                }
+            }
+
+            // The piece a check is about; none for the rate check.
+            private StationBench Owner(string check)
+            {
+                if (check == RateRestored) return null;
+                if (check.StartsWith("processing_collect_beehive_", StringComparison.Ordinal)) return _hive;
+                return check.StartsWith("processing_collect_sapcollector_", StringComparison.Ordinal)
+                    ? (StationBench)_sap
+                    : _wisp;
+            }
+
+            private IEnumerable<CollectorBench> Collectors =>
+                Active.OfType<CollectorBench>();
+
+            public override IEnumerator Execute()
+            {
+                _info(
+                    $"[Automatics Smoke] {_runner} started: it places a chest, a beehive, a sap extractor and a wisp fountain ahead of you, sets the world's resource rate to {TestRate}, takes one unit out of each by hand, drives each one's Store entry into the chest, and removes them; the resource rate is put back and no setting is changed");
+
+                var player = Player.m_localPlayer;
+                if (!CheckEnvironment(player)) yield break;
+                if (!FindChestPrefab(out var chestPrefab)) yield break;
+
+                ResolveStations();
+                ChooseCollectorItems();
+                if (Active.Count == 0) yield break;
+
+                if (!PlanLayout(player, out var chestPosition, out var distance)) yield break;
+                if (!CheckSurroundings(chestPosition, distance)) yield break;
+                if (!PlaceBenches(chestPrefab, chestPosition, distance)) yield break;
+
+                // Everything from here to the end happens in the frame of the spawn.
+                if (!CheckSources()) yield break;
+
+                try
+                {
+                    SetRate();
+                    foreach (var collector in Collectors.ToList()) MeasureByHand(collector);
+
+                    if (Collectors.Contains(_hive))
+                    {
+                        CheckYield(_hive, HiveYield);
+                        CheckWholeUnits(_hive, HiveWholeUnits);
+                        CheckHiveClamped();
+                    }
+
+                    if (Collectors.Contains(_sap))
+                    {
+                        CheckYield(_sap, SapYield);
+                        CheckWholeUnits(_sap, SapWholeUnits);
+                        CheckSapResumes();
+                    }
+
+                    if (Collectors.Contains(_wisp))
+                    {
+                        CheckWispYield();
+                        CheckWispWholeUnit();
+                    }
+                }
+                finally
+                {
+                    // The chest held nothing before the run, and the pieces held nothing; whatever
+                    // the run put in either goes, so the ledger balances.
+                    EmptyAll();
+                    RestoreRate();
+                }
+            }
+
+            public override void Stopped(Exception e)
+            {
+                var message = $"the run stopped on {e.GetType().Name}: {e.Message}";
+                // The check that was running is the first one neither judged nor settled with its
+                // piece.
+                var running = Order.FirstOrDefault(x => !_checks.ContainsKey(x) && Owner(x)?.Result == null);
+                if (_checks.Count == 0) FailRemaining(message);
+                else if (running != null) _checks[running] = CheckResult.Fail(running, message);
+                _notReached = "not reached: " + message;
+            }
+
+            public override void HandBack(string reason)
+            {
+                base.HandBack(reason);
+                if (_rateHandBack == null) return;
+                PutBackRate(reason);
+                SmokeSession.ReleaseHandBack(_rateHandBack);
+                _rateHandBack = null;
+            }
+
+            // A piece is tried only when Store may run on it and nothing in the settings decides
+            // what it stores besides the chest.
+            private void ChooseCollectorItems()
+            {
+                foreach (var collector in Collectors.ToList())
+                {
+                    var rawName = collector.ObjectName.Substring(1);
+                    var limit = ProcessingConfig.ProductStacksOfSuppressProcessing(collector.ObjectName);
+                    if (ProcessingConfig.StoreOnlyIfProductExists(collector.ObjectName))
+                        collector.Skip(
+                            $"{rawName}_store_only_if_product_exists is on, so the {collector.Label} stores only into a chest that already holds its item");
+                    else if (limit > 0)
+                        collector.Skip(
+                            $"{rawName}_product_stacks_of_suppress_processing is {limit}, so that limit, not the room in the chest, would decide what the {collector.Label} stores");
+                    else if (!collector.Item)
+                        collector.Skip($"the {collector.Label} yields no item in this game build");
+                    else
+                        collector.Choose(new Conversion(collector.Item, collector.Item, 1));
+                }
+            }
+
+            // Records the rate and registers its hand-back, and only then changes it.
+            private void SetRate()
+            {
+                _rate = Game.m_resourceRate;
+                _rateHandBack = PutBackRate;
+                SmokeSession.TrackHandBack(_rateHandBack);
+                _rateTouched = true;
+                Game.m_resourceRate = TestRate;
+            }
+
+            private bool PutBackRate(string reason)
+            {
+                if (_rateTouched) Game.m_resourceRate = _rate;
+                _rateTouched = false;
+                return true;
+            }
+
+            private void RestoreRate()
+            {
+                if (_rateHandBack == null) return;
+                PutBackRate(_runner);
+                SmokeSession.ReleaseHandBack(_rateHandBack);
+                _rateHandBack = null;
+
+                _checks[RateRestored] = Mathf.Approximately(Game.m_resourceRate, _rate)
+                    ? CheckResult.Pass(RateRestored, $"the world's resource rate is back at {_rate}")
+                    : CheckResult.Fail(RateRestored,
+                        $"the world's resource rate is {Game.m_resourceRate}, not {_rate}");
+            }
+
+            // One unit taken out by hand, through the piece's own RPC: what that drops is the
+            // yield of one unit at the test rate. Nothing else runs while the RPC does, so every
+            // drop that appears meanwhile is its own; all of them are removed at once.
+            private void MeasureByHand(CollectorBench collector)
+            {
+                var known = DropIds();
+                var taken = collector.TakeOneByHand(_runner, out var problem);
+
+                var others = new List<string>();
+                foreach (var drop in AllDrops().Where(x => !known.Contains(x.GetInstanceID())).ToList())
+                {
+                    if (drop.m_itemData.m_shared.m_name == collector.MaterialName)
+                        collector.PerUnit += drop.m_itemData.m_stack;
+                    else
+                        others.Add($"{DisplayName(drop.m_itemData.m_shared.m_name)} x{drop.m_itemData.m_stack}");
+                    SmokeSession.DestroyTestObject(drop.gameObject, 0, _runner);
+                }
+
+                var item = DisplayName(collector.MaterialName);
+                if (!taken)
+                    collector.NotRun(problem);
+                else if (collector.PerUnit <= 0)
+                    collector.NotRun(
+                        $"taking one unit out of the test {collector.Label} by hand dropped no {item}{(others.Count > 0 ? $" (it dropped {string.Join(", ", others)})" : "")}");
+                else
+                    collector.HandNote = others.Count == 0
+                        ? ""
+                        : $"; by hand it also dropped {string.Join(", ", others)}, which Store does not take";
+            }
+
+            // A removed drop stays findable until the frame ends, so each call is compared with a
+            // set of drops taken right before it.
+            private static IEnumerable<ItemDrop> AllDrops()
+            {
+                return Object.FindObjectsByType<ItemDrop>(FindObjectsInactive.Exclude,
+                        FindObjectsSortMode.None)
+                    .Where(x => x && x.m_itemData?.m_shared != null);
+            }
+
+            private static HashSet<int> DropIds()
+            {
+                return new HashSet<int>(AllDrops().Select(x => x.GetInstanceID()));
+            }
+
+            // Item drops that appeared since known was taken; nothing else runs meanwhile, so
+            // they are the call's. Reported, never removed: Store drops nothing.
+            private static string NewDrops(HashSet<int> known)
+            {
+                var found = AllDrops().Where(x => !known.Contains(x.GetInstanceID()))
+                    .Select(x =>
+                        $"{DisplayName(x.m_itemData.m_shared.m_name)} x{x.m_itemData.m_stack} at {Where(x.transform.position)}")
+                    .ToList();
+                return found.Count == 0
+                    ? ""
+                    : $"; new item drops, left where they are: {string.Join(", ", found)}";
+            }
+
+            // At the test rate the yield must differ from one item per unit, or storing one item
+            // per unit would pass as well.
+            private bool RateShows(CollectorBench collector, string check)
+            {
+                if (collector.PerUnit > 1) return true;
+                _checks[check] = CheckResult.Skip(check,
+                    $"at a resource rate of {TestRate}, one unit of the {collector.Label} still yields one {DisplayName(collector.MaterialName)} by hand in this game build, so storing one per unit cannot be told apart");
+                return false;
+            }
+
+            private sealed class CollectOutcome
+            {
+                public bool Stored;
+                public int Delivered;
+                public int Level;
+                public string Drops;
+
+                public string Describe(string item)
+                {
+                    return
+                        $"Store returned {Stored}, the chest got {Delivered} {item}, {Level} unit(s) left in the piece{Drops}";
+                }
+            }
+
+            private CollectOutcome Store(CollectorBench collector, int newUnits)
+            {
+                var chest = _benches.ChestInventory;
+                var known = DropIds();
+                var before = chest.CountItems(collector.MaterialName, -1, false);
+                var outcome = new CollectOutcome { Stored = collector.Store(newUnits) };
+                outcome.Delivered = chest.CountItems(collector.MaterialName, -1, false) - before;
+                outcome.Level = collector.Level;
+                outcome.Drops = NewDrops(known);
+                return outcome;
+            }
+
+            // One unit already in the piece and one new one: both are stored, each with what one
+            // unit yields by hand.
+            private void CheckYield(CollectorBench collector, string check)
+            {
+                if (!RateShows(collector, check)) return;
+
+                ClearChest();
+                collector.Level = 1;
+                var outcome = Store(collector, 1);
+                var item = DisplayName(collector.MaterialName);
+                var expected = 2 * collector.PerUnit;
+                _checks[check] = outcome.Stored && outcome.Delivered == expected &&
+                                 outcome.Level == 0 && outcome.Drops.Length == 0
+                    ? CheckResult.Pass(check,
+                        $"at a resource rate of {TestRate}, one unit of the {collector.Label} yields {collector.PerUnit} {item} by hand, and Store put the 2 units it held into the chest as {expected} {item} and emptied it{collector.HandNote}")
+                    : CheckResult.Fail(check,
+                        $"one unit yields {collector.PerUnit} {item} by hand, so 2 units should store {expected} and leave none; {outcome.Describe(item)}");
+            }
+
+            // Room for one unit and all but one item of a second: one unit goes in with its whole
+            // yield, and the others stay in the piece; no part of a unit is stored.
+            private void CheckWholeUnits(CollectorBench collector, string check)
+            {
+                if (!RateShows(collector, check)) return;
+
+                var item = DisplayName(collector.MaterialName);
+                var offered = Mathf.Min(OfferedUnits, collector.MaxLevel);
+                if (offered < 2)
+                {
+                    _checks[check] = CheckResult.Skip(check,
+                        $"the {collector.Label} holds at most {collector.MaxLevel} unit(s), so no unit can be left in it");
+                    return;
+                }
+
+                var room = 2 * collector.PerUnit - 1;
+                if (!LeaveRoom(collector, room, out var problem))
+                {
+                    _checks[check] = CheckResult.NotRun(check, problem);
+                    return;
+                }
+
+                collector.Level = 0;
+                var outcome = Store(collector, offered);
+                var roomLeft = Room(collector);
+                _checks[check] = outcome.Stored && outcome.Delivered == collector.PerUnit &&
+                                 outcome.Level == offered - 1 && roomLeft == room - collector.PerUnit &&
+                                 outcome.Drops.Length == 0
+                    ? CheckResult.Pass(check,
+                        $"with room for {room} {item} in the chest and {offered} new units, Store put one unit in as {collector.PerUnit} {item} and left {offered - 1} units in the {collector.Label}")
+                    : CheckResult.Fail(check,
+                        $"with room for {room} {item} and {offered} new units of {collector.PerUnit} {item} each, Store should put in {collector.PerUnit} and leave {offered - 1} units; {outcome.Describe(item)}, room for {roomLeft} left");
+            }
+
+            // More new units than the hive holds: it stores what vanilla's IncreseLevel would
+            // have kept, its maximum, and drops the rest as vanilla does.
+            private void CheckHiveClamped()
+            {
+                var check = HiveClamped;
+                var item = DisplayName(_hive.MaterialName);
+                var maximum = _hive.MaxLevel;
+                var expected = maximum * _hive.PerUnit;
+                var maxStack = _hive.Item.m_itemData.m_shared.m_maxStackSize;
+                if (maximum < 1 || expected > maxStack)
+                {
+                    _checks[check] = CheckResult.Skip(check,
+                        $"the beehive holds {maximum} unit(s) of {_hive.PerUnit} {item}, which is not one stack of {maxStack}");
+                    return;
+                }
+
+                ClearChest();
+                _hive.Level = 0;
+                var offered = maximum + UnitsAboveMaximum;
+                var outcome = Store(_hive, offered);
+                _checks[check] = outcome.Stored && outcome.Delivered == expected &&
+                                 outcome.Level == 0 && outcome.Drops.Length == 0
+                    ? CheckResult.Pass(check,
+                        $"with {offered} new units and room in the chest, Store put the beehive's maximum of {maximum} units in as {expected} {item} and kept none of the rest")
+                    : CheckResult.Fail(check,
+                        $"the beehive holds at most {maximum} units of {_hive.PerUnit} {item}, so {offered} new units should store {expected}; {outcome.Describe(item)}");
+            }
+
+            // At its maximum level the sap extractor stops producing, so no new unit reaches
+            // Store. Its own update tick must still store what it holds once room appears.
+            private void CheckSapResumes()
+            {
+                var check = SapResumes;
+                var item = DisplayName(_sap.MaterialName);
+                var maximum = _sap.MaxLevel;
+                if (!SapCollectorBench.CanTick)
+                {
+                    _checks[check] = CheckResult.NotRun(check,
+                        "SapCollector.UpdateTick was not found in this game build");
+                    return;
+                }
+
+                if (maximum < 1)
+                {
+                    _checks[check] = CheckResult.Skip(check, "the sap extractor holds no unit");
+                    return;
+                }
+
+                if (!LeaveRoom(_sap, 0, out var problem))
+                {
+                    _checks[check] = CheckResult.NotRun(check, problem);
+                    return;
+                }
+
+                _sap.Level = maximum;
+                var chest = _benches.ChestInventory;
+                var known = DropIds();
+                var before = chest.CountItems(_sap.MaterialName, -1, false);
+                _sap.Tick();
+                var heldWhileFull = _sap.Level;
+                var deliveredWhileFull = chest.CountItems(_sap.MaterialName, -1, false) - before;
+
+                chest.RemoveItem(_sap.MaterialName, _sap.PerUnit, -1, false);
+                if (Room(_sap) != _sap.PerUnit)
+                {
+                    _checks[check] = CheckResult.NotRun(check,
+                        $"the test chest could not be left with room for exactly {_sap.PerUnit} {item} (room for {Room(_sap)})");
+                    return;
+                }
+
+                before = chest.CountItems(_sap.MaterialName, -1, false);
+                _sap.Tick();
+                var delivered = chest.CountItems(_sap.MaterialName, -1, false) - before;
+                var drops = NewDrops(known);
+                _checks[check] = heldWhileFull == maximum && deliveredWhileFull == 0 &&
+                                 delivered == _sap.PerUnit && _sap.Level == maximum - 1 &&
+                                 drops.Length == 0
+                    ? CheckResult.Pass(check,
+                        $"full at its maximum of {maximum} units with the chest full, the sap extractor kept them on a tick; with room for one unit, its next tick stored {delivered} {item} and left {maximum - 1}")
+                    : CheckResult.Fail(check,
+                        $"with the chest full, a tick left {heldWhileFull} of {maximum} units and stored {deliveredWhileFull}; with room for one unit of {_sap.PerUnit} {item}, the next tick stored {delivered} and left {_sap.Level} units (expected {_sap.PerUnit} stored and {maximum - 1} left){drops}");
+            }
+
+            // One wisp lured into the chest instead: the whole yield of picking it by hand.
+            private void CheckWispYield()
+            {
+                var check = WispYield;
+                if (!RateShows(_wisp, check)) return;
+
+                ClearChest();
+                var item = DisplayName(_wisp.MaterialName);
+                var outcome = Store(_wisp, 1);
+                _checks[check] = outcome.Stored && outcome.Delivered == _wisp.PerUnit &&
+                                 outcome.Drops.Length == 0
+                    ? CheckResult.Pass(check,
+                        $"at a resource rate of {TestRate}, picking a lured wisp by hand yields {_wisp.PerUnit} {item}, and Store put {_wisp.PerUnit} into the chest{_wisp.HandNote}")
+                    : CheckResult.Fail(check,
+                        $"picking a lured wisp by hand yields {_wisp.PerUnit} {item}; Store returned {outcome.Stored} and the chest got {outcome.Delivered}{outcome.Drops}");
+            }
+
+            // Room for all but one item of a wisp's yield: nothing goes in, and Store leaves the
+            // wisp to the game.
+            private void CheckWispWholeUnit()
+            {
+                var check = WispWholeUnit;
+                if (!RateShows(_wisp, check)) return;
+
+                var item = DisplayName(_wisp.MaterialName);
+                var room = _wisp.PerUnit - 1;
+                if (!LeaveRoom(_wisp, room, out var problem))
+                {
+                    _checks[check] = CheckResult.NotRun(check, problem);
+                    return;
+                }
+
+                var outcome = Store(_wisp, 1);
+                _checks[check] = !outcome.Stored && outcome.Delivered == 0 && outcome.Drops.Length == 0
+                    ? CheckResult.Pass(check,
+                        $"with room for {room} {item} in the chest, Store put none of a wisp's {_wisp.PerUnit} in and returned false, so the fountain lures the wisp as usual")
+                    : CheckResult.Fail(check,
+                        $"with room for {room} {item}, a wisp's {_wisp.PerUnit} do not fit; Store returned {outcome.Stored} and the chest got {outcome.Delivered}{outcome.Drops}");
+            }
+
+            // Takes every collector's item out of the chest: the chest held nothing before the run.
+            private void ClearChest()
+            {
+                var chest = _benches?.ChestInventory;
+                if (chest == null) return;
+                foreach (var collector in _stations.OfType<CollectorBench>().Where(x => x.Chosen != null))
+                {
+                    var left = chest.CountItems(collector.MaterialName, -1, false);
+                    if (left > 0) chest.RemoveItem(collector.MaterialName, left, -1, false);
+                }
+            }
+
+            private void EmptyAll()
+            {
+                ClearChest();
+                foreach (var collector in _stations.OfType<CollectorBench>())
+                    if (collector.Go && collector.NView != null && collector.NView.IsValid())
+                        collector.Level = 0;
+            }
+
+            // Fills every slot of the chest with full stacks of the item and takes room out again,
+            // so the chest has room for exactly that many. Filling never calls an add that does not
+            // fit.
+            private bool LeaveRoom(CollectorBench collector, int room, out string problem)
+            {
+                ClearChest();
+                var chest = _benches.ChestInventory;
+                var name = collector.MaterialName;
+                var maxStack = Mathf.Max(1, collector.Item.m_itemData.m_shared.m_maxStackSize);
+                for (var call = 0; call < 1000 && chest.GetEmptySlots() > 0; call++)
+                {
+                    var count = chest.CountItems(name, -1, false);
+                    chest.AddItem(collector.MaterialPrefab, maxStack);
+                    if (chest.CountItems(name, -1, false) <= count) break;
+                }
+
+                if (room > 0 && chest.GetEmptySlots() == 0) chest.RemoveItem(name, room, -1, false);
+                var left = Room(collector);
+                problem = left == room
+                    ? null
+                    : $"the test chest could not be left with room for exactly {room} {DisplayName(name)} (stack size {maxStack}, room for {left})";
+                return problem == null;
+            }
+
+            // Room for the item counted here, apart from the code under test: the space left in its
+            // stacks plus whole empty slots.
+            private int Room(CollectorBench collector)
+            {
+                var chest = _benches.ChestInventory;
+                var maxStack = Mathf.Max(1, collector.Item.m_itemData.m_shared.m_maxStackSize);
+                return chest.GetEmptySlots() * maxStack + chest.GetAllItems()
+                    .Where(x => x.m_shared.m_name == collector.MaterialName)
+                    .Sum(x => Mathf.Max(0, x.m_shared.m_maxStackSize - x.m_stack));
+            }
+        }
+
         // -- Test objects -----------------------------------------------------------------
 
         // The chest and the stations one run spawned, and their hand-back. A station is removed
@@ -1492,7 +2079,7 @@ namespace Automatics.SmokeTest
                 foreach (var go in ZNetScene.instance.m_prefabs)
                 {
                     if (!go) continue;
-                    var component = go.GetComponent(ComponentType);
+                    var component = FindComponent(go);
                     if (!component || Objects.GetName(component) != ObjectName) continue;
 
                     Prefab = go;
@@ -1500,6 +2087,13 @@ namespace Automatics.SmokeTest
                 }
 
                 return false;
+            }
+
+            // The station's component on a prefab or a spawned piece: on its root object, unless
+            // the station keeps it further down.
+            protected virtual Component FindComponent(GameObject go)
+            {
+                return go.GetComponent(ComponentType);
             }
 
             public void Choose(Conversion conversion)
@@ -1987,6 +2581,270 @@ namespace Automatics.SmokeTest
             {
                 return
                     $"content={NView.GetZDO().GetInt(ZDOVars.s_content)}, exposed={ExposedField.GetValue(_station)}";
+            }
+        }
+
+        // A piece that collects an item over time and holds it, in units, until it is taken out:
+        // a beehive, a sap extractor, a wisp fountain. It takes no material, so its one conversion
+        // is its own item to itself: the chest may hold that item, and the hand-back counts it.
+        // The collect run takes everything it stored out of the chest and empties the piece before
+        // the hand-back, so the ledger balances with nothing put in.
+        private abstract class CollectorBench : StationBench
+        {
+            protected CollectorBench(string checkName, string objectName, string label)
+                : base(checkName, objectName, label)
+            {
+            }
+
+            public override string FuelName => null;
+
+            public override Process RequiredProcess => Process.Store;
+
+            // The item the piece yields, from its prefab; null when it yields none.
+            public abstract ItemDrop Item { get; }
+
+            // The units the piece holds at most.
+            public abstract int MaxLevel { get; }
+
+            // What one unit yields when taken out by hand, as the collect run measured it, and
+            // anything else that drop brought.
+            public int PerUnit { get; set; }
+            public string HandNote { get; set; } = "";
+
+            // The units the piece holds (ZDOVars.s_level, the "level" Processing reads).
+            public virtual int Level
+            {
+                get => NView.GetZDO().GetInt(ZDOVars.s_level);
+                set => NView.GetZDO().Set(ZDOVars.s_level, value);
+            }
+
+            public override IEnumerable<Conversion> Conversions()
+            {
+                var item = Item;
+                if (item) yield return new Conversion(item, item, 1);
+            }
+
+            public override void Prepare()
+            {
+            }
+
+            public override void Drive()
+            {
+                Store(0);
+            }
+
+            // The piece's Store entry, as the game reaches it when newUnits are made.
+            public abstract bool Store(int newUnits);
+
+            // Takes one unit out as a player's hand does, through the piece's own RPC.
+            public abstract bool TakeOneByHand(string runner, out string problem);
+
+            public override StationContent ReadContent()
+            {
+                return new StationContent { Products = Level };
+            }
+
+            public override void ClearContent()
+            {
+                Level = 0;
+            }
+
+            protected override string DiagnoseStation()
+            {
+                return $"level={Level}/{MaxLevel}";
+            }
+        }
+
+        private sealed class BeehiveBench : CollectorBench
+        {
+            private Beehive _prefab;
+            private Beehive _station;
+
+            public BeehiveBench(string checkName) : base(checkName, "$piece_beehive", "beehive")
+            {
+            }
+
+            protected override Type ComponentType => typeof(Beehive);
+
+            public override ItemDrop Item => _prefab ? _prefab.m_honeyItem : null;
+
+            public override int MaxLevel => _station ? _station.m_maxHoney : 0;
+
+            protected override bool BindPrefab(GameObject prefab)
+            {
+                _prefab = prefab.GetComponent<Beehive>();
+                return _prefab != null;
+            }
+
+            protected override Component BindStation(GameObject go)
+            {
+                _station = go.GetComponent<Beehive>();
+                return _station;
+            }
+
+            public override bool Store(int newUnits)
+            {
+                return BeehiveProcess.Store(_station, NView, newUnits);
+            }
+
+            // Beehive.RPC_Extract drops each unit it holds, scaled by Game.ScaleDrops, and empties
+            // the hive.
+            public override bool TakeOneByHand(string runner, out string problem)
+            {
+                Level = 1;
+                NView.InvokeRPC("RPC_Extract");
+                problem = Level == 0 ? null : $"the beehive's own RPC_Extract left {Level} unit(s) in it";
+                return problem == null;
+            }
+        }
+
+        private sealed class SapCollectorBench : CollectorBench
+        {
+            private static readonly MethodInfo UpdateTickMethod =
+                AccessTools.Method(typeof(SapCollector), "UpdateTick");
+
+            private SapCollector _prefab;
+            private SapCollector _station;
+
+            public SapCollectorBench(string checkName)
+                : base(checkName, "$piece_sapcollector", "sap extractor")
+            {
+            }
+
+            public static bool CanTick => UpdateTickMethod != null;
+
+            protected override Type ComponentType => typeof(SapCollector);
+
+            public override ItemDrop Item => _prefab ? _prefab.m_spawnItem : null;
+
+            public override int MaxLevel => _station ? _station.m_maxLevel : 0;
+
+            protected override bool BindPrefab(GameObject prefab)
+            {
+                _prefab = prefab.GetComponent<SapCollector>();
+                return _prefab != null;
+            }
+
+            protected override Component BindStation(GameObject go)
+            {
+                _station = go.GetComponent<SapCollector>();
+                return _station;
+            }
+
+            public override bool Store(int newUnits)
+            {
+                return SapCollectorProcess.Store(_station, NView, newUnits);
+            }
+
+            // SapCollector.RPC_Extract drops each unit it holds, scaled by Game.ScaleDrops, and
+            // empties the piece.
+            public override bool TakeOneByHand(string runner, out string problem)
+            {
+                Level = 1;
+                NView.InvokeRPC("RPC_Extract");
+                problem = Level == 0 ? null : $"the sap extractor's own RPC_Extract left {Level} unit(s) in it";
+                return problem == null;
+            }
+
+            // The piece's own update (SapCollector.UpdateTick, which the game runs every few
+            // seconds), with whatever is patched into it.
+            public void Tick()
+            {
+                UpdateTickMethod.Invoke(_station, null);
+            }
+        }
+
+        private sealed class WispLureBench : CollectorBench
+        {
+            private WispSpawner _prefab;
+            private WispSpawner _station;
+
+            public WispLureBench(string checkName)
+                : base(checkName, "$piece_wisplure", "wisp fountain")
+            {
+            }
+
+            protected override Type ComponentType => typeof(WispSpawner);
+
+            // The game's WispSpawner finds its network view among its parents (WispSpawner.Start),
+            // so it need not sit on the piece's root.
+            protected override Component FindComponent(GameObject go)
+            {
+                return go.GetComponentInChildren<WispSpawner>(true);
+            }
+
+            private Pickable Lured =>
+                _prefab && _prefab.m_wispPrefab ? _prefab.m_wispPrefab.GetComponent<Pickable>() : null;
+
+            public override ItemDrop Item
+            {
+                get
+                {
+                    var lured = Lured;
+                    return lured && lured.m_itemPrefab ? lured.m_itemPrefab.GetComponent<ItemDrop>() : null;
+                }
+            }
+
+            public override int MaxLevel => 0;
+
+            // A wisp fountain holds nothing: each unit is a wisp it lures, or Store takes instead.
+            public override int Level
+            {
+                get => 0;
+                set { }
+            }
+
+            protected override bool BindPrefab(GameObject prefab)
+            {
+                _prefab = (WispSpawner)FindComponent(prefab);
+                return _prefab != null;
+            }
+
+            // WispSpawner sets m_nview only in Start, after the frame of the spawn, so the bench
+            // binds the view WispSpawner.Start would find and hands it to Store itself.
+            protected override Component BindStation(GameObject go)
+            {
+                _station = (WispSpawner)FindComponent(go);
+                return _station ? _station.GetComponentInParent<ZNetView>() : null;
+            }
+
+            public override bool Store(int newUnits)
+            {
+                return WispSpawnerProcess.Store(_station, NView);
+            }
+
+            // A wisp the fountain lures, picked as a player's hand picks it: Pickable.RPC_Pick
+            // without a skill bonus, which drops its yield and removes the wisp. The wisp is the
+            // run's own and is removed in any case.
+            public override bool TakeOneByHand(string runner, out string problem)
+            {
+                problem = null;
+                var prefab = _station.m_wispPrefab;
+                if (!prefab || !prefab.GetComponent<Pickable>())
+                {
+                    problem = "the wisp fountain lures nothing that can be picked";
+                    return false;
+                }
+
+                var wisp = Object.Instantiate(prefab, _station.transform.position + Vector3.up,
+                    Quaternion.identity);
+                try
+                {
+                    var nview = wisp.GetComponent<ZNetView>();
+                    if (!nview || !nview.IsValid())
+                    {
+                        problem = "the lured wisp has no valid ZNetView";
+                        return false;
+                    }
+
+                    nview.GetZDO().Persistent = false;
+                    nview.InvokeRPC("RPC_Pick", 0);
+                    return true;
+                }
+                finally
+                {
+                    SmokeSession.DestroyTestObject(wisp, 0, runner);
+                }
             }
         }
 
