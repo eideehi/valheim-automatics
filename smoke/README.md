@@ -836,7 +836,7 @@ setting.
 | `processing_toggle_off_state_disabled` | The registry reports `Disabled` after the disable request |
 | `processing_toggle_off_patches_removed` | No patch is left under Processing's Harmony id (SKIP when runtime patch removal is unavailable) |
 | `processing_toggle_on_state_enabled` | The registry reports `Enabled` after the enable request |
-| `processing_toggle_on_patches_applied` | The patches under Processing's Harmony id are exactly the (target, patch method) pairs `Automatics.AutomaticProcessing.Patches` declares (13 on 11 methods, 4 of them transpilers) |
+| `processing_toggle_on_patches_applied` | The patches under Processing's Harmony id are exactly the (target, patch method) pairs `Automatics.AutomaticProcessing.Patches` declares (13 on 11 methods, 3 of them transpilers) |
 | `processing_toggle_on_quickrefuel_acts` | Within 10 s of the enable, the game's own `Smelter.UpdateSmelter` calls the injected `SmelterProcess.QuickRefuel` for a test smelter, and it refuels it from the test chest |
 | `processing_toggle_on_quickrefuel_catchup_no_per_unit_rpc` | After the refuel above passed, the same smelter is caught up over 3 fuel units in one frame: 3 direct `SmelterProcess.QuickRefuel` calls each take one fuel from the test chest and add one to the smelter, and together they invoke the smelter's fuel RPC (`RPC_AddFuel`) at most once and play its fuel-added effect once (the first refuel's), not once per unit |
 | `processing_toggle_restored_initial_state` | The setting is back at its starting value and the registry reports the matching state |
@@ -1188,7 +1188,8 @@ Safety, on top of the `rpc` rules:
 
 `automatics_smoke_features all` runs every section below, and
 `automatics_smoke_features <section>` runs one of them: `pickup`, `pin`,
-`mining`, `planting`, `farming`, `guide`, `compass`, `supply`, `woodcutting`, `woodcuttingarea` or `repair`. Run it from the in-game console while
+`navhotkey`, `aimbar`, `mapfilter`, `pintooltip`, `mining`, `planting`, `farming`, `guide`,
+`compass`, `supply`, `woodcutting`, `woodcuttingarea` or `repair`. Run it from the in-game console while
 a single-player world is loaded. Each section drives the real game code path of
 one feature against objects it spawns next to the player. The run ends with one
 `[Automatics Smoke] Summary: ...` line over every section it ran. A section that
