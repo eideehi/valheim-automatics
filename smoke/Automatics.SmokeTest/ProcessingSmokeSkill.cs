@@ -29,12 +29,21 @@ namespace Automatics.SmokeTest
     // has a skill factor for every builder; once, the chest is filled first so that it has room
     // for exactly one more item.
     //
+    // Cooked food that the Store entry could not put away when it was finished is put away by
+    // the oven's own update on a later pass. For that the check leaves cooked food in a slot of
+    // the oven, with every other slot burnt, and runs the game's own CookingStation.UpdateCooking
+    // (which Processing patches): with the chest full the slot and the burnt slots stay as they
+    // are and nothing is raised; once the chest has room the next update stores the food once,
+    // with one raise and one bonus roll, and a second update stores nothing more; and an oven
+    // without fuel, which the game's cooking loop skips, is emptied the same way.
+    //
     // Your skill level and progress, the bonus chance and the patch are put back however the
     // run ends, through a hand-back registered with the session before any of them changes. The
-    // bonus food and the filler the check added are taken out of its chest again right away, so
-    // the chest and the oven go through the rpc subcommand's hand-back with their ledger
-    // balanced. No setting is changed, and no frame passes while the test objects stand, so the
-    // oven's own update never runs.
+    // bonus food and the filler the check added are taken out of its chest again right away, and
+    // the burnt slots the check made are emptied, so the chest and the oven go through the rpc
+    // subcommand's hand-back with their ledger balanced. No setting is changed, and no frame
+    // passes while the test objects stand, so the oven's own update runs only when the check
+    // calls it.
     internal static partial class ProcessingSmokeCommand
     {
         private static IEnumerator RunSkill(Terminal context, int runId, string runner)
@@ -52,6 +61,9 @@ namespace Automatics.SmokeTest
             private const string Builder = "processing_skill_builder";
             private const string BuilderBonus = "processing_skill_builder_bonus";
             private const string BonusNoRoom = "processing_skill_builder_bonus_no_room";
+            private const string DoneWaits = "processing_skill_done_slot_waits_for_room";
+            private const string DoneLater = "processing_skill_done_slot_stored_on_later_pass";
+            private const string DoneNoFuel = "processing_skill_done_slot_stored_without_fuel";
             private const string Restored = "processing_skill_state_restored";
 
             private const string HarmonyId = "net.eidee.valheim.automatics.smoke.processing-skill";
@@ -60,7 +72,8 @@ namespace Automatics.SmokeTest
             private const float CraftRaise = 0.4f;
             private const float StoreRaise = 0.6f;
 
-            // One Craft and one Store per check, each on one material.
+            // One Craft and one Store per check, each on one material. The finished-slot checks
+            // add the one material each needs just before they run (SeedForFinished).
             private const int Cycles = 5;
 
             // Times a skill factor of at least 0.01, far above any roll.
@@ -69,10 +82,17 @@ namespace Automatics.SmokeTest
             // CookingStation.Status.Done; the enum is private.
             private const int CookedStatus = 1;
 
+            // CookingStation.Status.Burnt.
+            private const int BurntStatus = 2;
+
             private static readonly string[] Order =
             {
-                NoBuilder, OtherBuilder, Builder, BuilderBonus, BonusNoRoom, Restored
+                NoBuilder, OtherBuilder, Builder, BuilderBonus, BonusNoRoom, DoneWaits, DoneLater,
+                DoneNoFuel, Restored
             };
+
+            private static readonly MethodInfo UpdateCookingMethod =
+                AccessTools.Method(typeof(CookingStation), "UpdateCooking");
 
             private static readonly FieldInfo CreatorField = AccessTools.Field(typeof(Piece), "m_creator");
 
@@ -137,7 +157,7 @@ namespace Automatics.SmokeTest
             public override IEnumerator Execute()
             {
                 _info(
-                    $"[Automatics Smoke] {_runner} started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder, and removes them; your cooking skill and the game's bonus chance are put back, and no setting is changed");
+                    $"[Automatics Smoke] {_runner} started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder and runs the oven's own update over cooked food that could not be stored, and removes them; your cooking skill and the game's bonus chance are put back, and no setting is changed");
 
                 var player = Player.m_localPlayer;
                 if (!CheckEnvironment(player)) yield break;
@@ -209,6 +229,7 @@ namespace Automatics.SmokeTest
                 CheckNobody(OtherBuilder, "another player as the builder",
                     Cycle(station, piece, other, CertainBonusChance));
                 CheckBuilder(station, piece, playerId);
+                CheckFinishedSlot(station, piece, playerId);
                 CheckRestored(player);
             }
 
@@ -456,6 +477,329 @@ namespace Automatics.SmokeTest
                 _checks[BonusNoRoom] = result.Status == CheckStatus.Pass && drops.Length > 0
                     ? CheckResult.Fail(BonusNoRoom, "the cooked item went in, but" + drops)
                     : result;
+            }
+
+            private sealed class UpdatePass
+            {
+                public int Delivered;
+                public List<float> Raises;
+                public string[] Slots;
+            }
+
+            // Cooked food left in a slot of the oven, as its update leaves it when storing the
+            // food was blocked, and every other slot burnt: the update then has no free slot to
+            // feed, and the burnt slots show that they are left alone.
+            private bool LeaveFinished(CookingStation station, Piece piece, long builder, out int slot,
+                out string problem)
+            {
+                slot = -1;
+                problem = null;
+                var zdo = _oven.NView.GetZDO();
+                var materialPrefabName = _oven.Chosen.From.gameObject.name;
+
+                CreatorField.SetValue(piece, builder);
+                _oven.Prepare();
+                CookingStationProcess.Craft(station, _oven.NView);
+                Raises.Clear();
+
+                for (var i = 0; i < station.m_slots.Length && slot < 0; i++)
+                    if (zdo.GetString("slot" + i) == materialPrefabName)
+                        slot = i;
+                if (slot < 0)
+                {
+                    problem =
+                        $"the Craft entry put no {DisplayName(_oven.MaterialName)} into the oven ({_oven.Diagnose()})";
+                    return false;
+                }
+
+                for (var i = 0; i < station.m_slots.Length; i++)
+                {
+                    if (i == slot || string.IsNullOrEmpty(zdo.GetString("slot" + i))) continue;
+                    problem = $"slot {i} of the test stone oven was not empty";
+                    return false;
+                }
+
+                // What the oven's own update writes once the food is cooked, and once it is burnt.
+                zdo.Set("slot" + slot, _oven.Chosen.To.gameObject.name);
+                zdo.Set("slotstatus" + slot, CookedStatus);
+                for (var i = 0; i < station.m_slots.Length; i++)
+                {
+                    if (i == slot) continue;
+                    zdo.Set("slot" + i, station.m_overCookedItem.gameObject.name);
+                    zdo.Set("slot" + i, 0f);
+                    zdo.Set("slotstatus" + i, BurntStatus);
+                }
+
+                return true;
+            }
+
+            // Empties the burnt slots the check made, and takes the filler and the bonus out of the
+            // chest, so that only the cooked item that left its slot stays.
+            private void TidyFinished(Inventory chest, string productName, int start, int slot)
+            {
+                var zdo = _oven.NView.GetZDO();
+                foreach (var i in Enumerable.Range(0, _oven.Station.m_slots.Length))
+                {
+                    if (zdo.GetInt("slotstatus" + i) != BurntStatus) continue;
+                    zdo.Set("slot" + i, "");
+                    zdo.Set("slot" + i, 0f);
+                    zdo.Set("slotstatus" + i, 0);
+                }
+
+                var kept = slot >= 0 && string.IsNullOrEmpty(zdo.GetString("slot" + slot)) ? 1 : 0;
+                var surplus = chest.CountItems(productName, -1, false) - start - kept;
+                if (surplus > 0) chest.RemoveItem(productName, surplus, -1, false);
+            }
+
+            private string[] SlotStates(CookingStation station)
+            {
+                var zdo = _oven.NView.GetZDO();
+                return Enumerable.Range(0, station.m_slots.Length)
+                    .Select(i => zdo.GetString("slot" + i) + "/" + zdo.GetInt("slotstatus" + i))
+                    .ToArray();
+            }
+
+            // One run of the game's own cooking update, which Processing patches.
+            private UpdatePass RunUpdate(CookingStation station, Inventory chest, string productName)
+            {
+                var before = chest.CountItems(productName, -1, false);
+                Raises.Clear();
+                UpdateCookingMethod.Invoke(station, null);
+                return new UpdatePass
+                {
+                    Delivered = chest.CountItems(productName, -1, false) - before,
+                    Raises = TakeRaises(),
+                    Slots = SlotStates(station)
+                };
+            }
+
+            // Fills every slot of the chest with the product and tops up the stacks, so the chest
+            // has no room for it. Filling never calls an add that does not fit.
+            private static bool FillChest(Inventory chest, ItemDrop product, string productName,
+                out string problem)
+            {
+                var maxStack = Mathf.Max(1, product.m_itemData.m_shared.m_maxStackSize);
+                for (var call = 0; call < 1000 && chest.GetEmptySlots() > 0; call++)
+                {
+                    var count = chest.CountItems(productName, -1, false);
+                    chest.AddItem(product.gameObject, maxStack);
+                    if (chest.CountItems(productName, -1, false) <= count) break;
+                }
+
+                var room = RoomFor(chest, productName, maxStack);
+                if (room > 0 && chest.GetEmptySlots() == 0) chest.AddItem(product.gameObject, room);
+
+                room = RoomFor(chest, productName, maxStack);
+                problem = room == 0
+                    ? null
+                    : $"the test chest could not be filled with {DisplayName(productName)} (stack size {maxStack}, {chest.GetEmptySlots()} empty slot(s), room for {room})";
+                return problem == null;
+            }
+
+            private static int RoomFor(Inventory chest, string productName, int maxStack)
+            {
+                return chest.GetEmptySlots() * maxStack + chest.GetAllItems()
+                    .Where(x => x.m_shared.m_name == productName)
+                    .Sum(x => Mathf.Max(0, x.m_shared.m_maxStackSize - x.m_stack));
+            }
+
+            private static List<int> ChangedSlots(string[] expected, string[] actual, Func<int, bool> include)
+            {
+                return Enumerable.Range(0, Math.Min(expected.Length, actual.Length))
+                    .Where(i => include(i) && expected[i] != actual[i]).ToList();
+            }
+
+            // Puts the one material the next finished-slot scenario crafts into the chest, and
+            // counts it in the ledger. Material the chest holds beyond the count Processing leaves
+            // alone (unused by an earlier check that skipped) is taken out and left out of the
+            // ledger, so that once the scenario's Craft has taken its material, the oven's update
+            // finds nothing it may feed to a free slot.
+            private bool SeedForFinished(out string reason)
+            {
+                var chest = _benches.ChestInventory;
+                var reserve = ProcessingConfig.MaterialCountOfSuppressProcessing(_oven.ObjectName);
+                var surplus = chest.CountItems(_oven.MaterialName, -1, false) - reserve;
+                if (surplus > 0)
+                {
+                    var held = chest.CountItems(_oven.MaterialName, -1, false);
+                    chest.RemoveItem(_oven.MaterialName, surplus, -1, false);
+                    _oven.Seeded -= held - chest.CountItems(_oven.MaterialName, -1, false);
+                }
+
+                var added = SeedChest(chest, _oven.MaterialPrefab, _oven.MaterialName, 1);
+                _oven.Seeded += added;
+                reason = chest.CountItems(_oven.MaterialName, -1, false) != reserve + 1
+                    ? $"the test chest does not hold exactly {reserve + 1} {DisplayName(_oven.MaterialName)} to craft one from"
+                    : null;
+                return reason == null;
+            }
+
+            // Cooked food whose storing was blocked when it finished is stored by the oven's update
+            // on a later pass: not while the chest is full, once with its one raise and one bonus
+            // roll when the chest has room, never twice, and also without fuel in the oven.
+            private void CheckFinishedSlot(CookingStation station, Piece piece, long playerId)
+            {
+                var chest = _benches.ChestInventory;
+                var checks = new[] { DoneWaits, DoneLater, DoneNoFuel };
+
+                string reason = null;
+                if (UpdateCookingMethod == null)
+                    reason = "CookingStation.UpdateCooking was not found in this game build";
+                else if (!station.m_overCookedItem)
+                    reason = "the stone oven has no burnt item in this game build";
+                else SeedForFinished(out reason);
+                if (reason != null)
+                {
+                    foreach (var check in checks) _checks[check] = CheckResult.Skip(check, reason);
+                    return;
+                }
+
+                // What one cooked item is worth: the item, and the game's bonus when it gives one.
+                var amount = station.m_canGiveBonusYield ? Mathf.Max(0, InventoryGui.instance.m_craftBonusAmount) : 0;
+                var expected = 1 + amount;
+                var product = _oven.Chosen.To;
+                var productName = _oven.ProductName;
+
+                var start = chest.CountItems(productName, -1, false);
+                var slot = -1;
+                InventoryGui.instance.m_craftBonusChance = CertainBonusChance;
+                _bonusTouched = true;
+                try
+                {
+                    if (!LeaveFinished(station, piece, playerId, out slot, out var problem) ||
+                        !FillChest(chest, product, productName, out problem))
+                    {
+                        _checks[DoneWaits] = CheckResult.NotRun(DoneWaits, problem);
+                        _checks[DoneLater] = CheckResult.NotRun(DoneLater, problem);
+                    }
+                    else
+                    {
+                        var before = SlotStates(station);
+                        var blocked = RunUpdate(station, chest, productName);
+                        _checks[DoneWaits] = JudgeBlocked(blocked, before, slot);
+
+                        chest.RemoveItem(productName, expected, -1, false);
+                        var room = RoomFor(chest, productName,
+                            Mathf.Max(1, product.m_itemData.m_shared.m_maxStackSize));
+                        if (room != expected)
+                            _checks[DoneLater] = CheckResult.NotRun(DoneLater,
+                                $"the test chest could not be left with room for exactly {expected} {DisplayName(productName)} (room for {room})");
+                        else
+                        {
+                            var first = RunUpdate(station, chest, productName);
+                            var second = RunUpdate(station, chest, productName);
+                            _checks[DoneLater] = JudgeStoredLater(first, second, before, slot, expected);
+                        }
+                    }
+                }
+                finally
+                {
+                    InventoryGui.instance.m_craftBonusChance = _bonusChance;
+                    TidyFinished(chest, productName, start, slot);
+                }
+
+                CheckFinishedWithoutFuel(station, piece, playerId, expected);
+            }
+
+            private void CheckFinishedWithoutFuel(CookingStation station, Piece piece, long playerId,
+                int expected)
+            {
+                if (!station.m_useFuel)
+                {
+                    _checks[DoneNoFuel] = CheckResult.Skip(DoneNoFuel,
+                        "the stone oven uses no fuel in this game build");
+                    return;
+                }
+
+                if (!SeedForFinished(out var reason))
+                {
+                    _checks[DoneNoFuel] = CheckResult.Skip(DoneNoFuel, reason);
+                    return;
+                }
+
+                var chest = _benches.ChestInventory;
+                var productName = _oven.ProductName;
+                var start = chest.CountItems(productName, -1, false);
+                var slot = -1;
+                InventoryGui.instance.m_craftBonusChance = CertainBonusChance;
+                _bonusTouched = true;
+                try
+                {
+                    if (!LeaveFinished(station, piece, playerId, out slot, out var problem))
+                    {
+                        _checks[DoneNoFuel] = CheckResult.NotRun(DoneNoFuel, problem);
+                        return;
+                    }
+
+                    _oven.NView.GetZDO().Set(ZDOVars.s_fuel, 0f);
+                    var before = SlotStates(station);
+                    var pass = RunUpdate(station, chest, productName);
+                    _checks[DoneNoFuel] = JudgeStoredOnce(DoneNoFuel, pass, before, slot, expected,
+                        $"with no fuel in the oven, one update stored the finished {DisplayName(productName)} ({expected} with the bonus), emptied its slot with one raise of the {_skill} skill by {StoreRaise}, and left the burnt slots as they were");
+                }
+                finally
+                {
+                    InventoryGui.instance.m_craftBonusChance = _bonusChance;
+                    TidyFinished(chest, productName, start, slot);
+                }
+            }
+
+            private CheckResult JudgeBlocked(UpdatePass pass, string[] before, int slot)
+            {
+                var faults = new List<string>();
+                if (pass.Slots[slot] != before[slot])
+                    faults.Add($"the finished slot went from \"{before[slot]}\" to \"{pass.Slots[slot]}\"");
+                if (ChangedSlots(before, pass.Slots, i => i != slot).Count > 0)
+                    faults.Add("a burnt slot changed");
+                if (pass.Delivered != 0)
+                    faults.Add($"the chest got {pass.Delivered} {DisplayName(_oven.ProductName)}");
+                if (pass.Raises.Count > 0) faults.Add($"the {_skill} skill was raised {Describe(pass.Raises)}");
+
+                return faults.Count == 0
+                    ? CheckResult.Pass(DoneWaits,
+                        $"with the chest full of {DisplayName(_oven.ProductName)}, the oven's update left the finished slot and the burnt slots as they were, put nothing in the chest and raised no skill")
+                    : CheckResult.Fail(DoneWaits, string.Join("; ", faults));
+            }
+
+            private CheckResult JudgeStoredLater(UpdatePass first, UpdatePass second, string[] before,
+                int slot, int expected)
+            {
+                var faults = StoredOnceFaults(first, before, slot, expected);
+                if (second.Delivered != 0)
+                    faults.Add($"a second update put {second.Delivered} more {DisplayName(_oven.ProductName)} in the chest");
+                if (second.Raises.Count > 0)
+                    faults.Add($"a second update raised the {_skill} skill {Describe(second.Raises)}");
+                if (ChangedSlots(first.Slots, second.Slots, i => true).Count > 0)
+                    faults.Add("a second update changed a slot");
+
+                return faults.Count == 0
+                    ? CheckResult.Pass(DoneLater,
+                        $"once the chest had room, the oven's update stored the finished {DisplayName(_oven.ProductName)} ({expected} with the bonus), emptied its slot and raised the {_skill} skill once by {StoreRaise}; a second update stored nothing more and raised nothing; the burnt slots were left as they were")
+                    : CheckResult.Fail(DoneLater, string.Join("; ", faults));
+            }
+
+            private CheckResult JudgeStoredOnce(string check, UpdatePass pass, string[] before, int slot,
+                int expected, string passText)
+            {
+                var faults = StoredOnceFaults(pass, before, slot, expected);
+                return faults.Count == 0
+                    ? CheckResult.Pass(check, passText)
+                    : CheckResult.Fail(check, string.Join("; ", faults));
+            }
+
+            private List<string> StoredOnceFaults(UpdatePass pass, string[] before, int slot, int expected)
+            {
+                var faults = new List<string>();
+                if (pass.Slots[slot] != "/0")
+                    faults.Add($"the oven's slot still holds \"{pass.Slots[slot]}\"");
+                if (pass.Delivered != expected)
+                    faults.Add(
+                        $"the chest got {pass.Delivered} {DisplayName(_oven.ProductName)}, not {expected}");
+                if (pass.Raises.Count != 1 || !Mathf.Approximately(pass.Raises[0], StoreRaise))
+                    faults.Add($"the {_skill} skill was raised {Describe(pass.Raises)}, not once by {StoreRaise}");
+                if (ChangedSlots(before, pass.Slots, i => i != slot).Count > 0)
+                    faults.Add("a burnt slot changed");
+                return faults;
             }
 
             private CheckResult JudgeBuilder(string check, CycleOutcome outcome, int expected, string pass)

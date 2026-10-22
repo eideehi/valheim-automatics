@@ -149,6 +149,9 @@ namespace Automatics.AutomaticProcessing
             // Refuel runs here rather than inside UpdateFuel: the game calls UpdateFuel only while
             // the station still has fuel, so a station that has run out would never be refuelled.
             CookingStationProcess.Refuel(__instance, ___m_nview);
+            // Cooked food whose storing was blocked when it finished is stored here, whatever
+            // the fire or fuel is, before Craft looks for a free slot.
+            CookingStationProcess.StoreFinished(__instance, ___m_nview);
             CookingStationProcess.Craft(__instance, ___m_nview);
         }
 

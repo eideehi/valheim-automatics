@@ -964,11 +964,23 @@ What it does:
   factor whoever the builder is.
 - Once, it fills the chest with the cooked product first, so that the chest has
   room for exactly one more item.
+- Cooked food that `Store` could not put away when it was finished is put away
+  by the oven's update on a later pass. For that, the run leaves cooked food in
+  one slot of the oven and burns every other slot (so the oven has no free slot
+  to feed), makes the bonus roll certain, and runs the game's own
+  `CookingStation.UpdateCooking`, which Processing patches: with the chest full
+  of the product, then, once the chest has room for exactly the item and its
+  bonus, twice more; and once more for a second cooked item with the oven's fuel
+  at 0, when the game's own cooking loop does not run. Before each of the two
+  cooked items it puts one more of the material into the chest, so that after
+  the Craft that cooks it the chest holds only the count Processing leaves alone
+  and the update has nothing to feed to a free slot.
 - Everything happens in the frame the objects are placed, so the oven's own
-  update never runs. The bonus food and the filler are taken out of the chest
-  right after each call, also when the call throws, so only the cooked item that
-  left the oven's slot stays. The chest and the oven are then removed under the
-  `rpc` rules.
+  update runs only when the run calls it. The bonus food and the filler are
+  taken out of the chest right after each call, also when the call throws, so
+  only the cooked item that left the oven's slot stays, and the burnt slots the
+  run made are emptied. The chest and the oven are then removed under the `rpc`
+  rules.
 
 | Check | Asserts |
 |---|---|
@@ -977,6 +989,9 @@ What it does:
 | `processing_skill_builder` | With you as the builder and an impossible bonus roll, Craft raises the skill once by 0.4, and Store raises it once by 0.6 and puts exactly one item in |
 | `processing_skill_builder_bonus` | With you as the builder and a certain bonus roll, Store puts in one item plus the game's bonus amount, with the same raises |
 | `processing_skill_builder_bonus_no_room` | With room for one item and a certain bonus roll, Store still puts the cooked item in, without its bonus, empties the slot and raises the skill by 0.6, and nothing appears on the ground |
+| `processing_skill_done_slot_waits_for_room` | With the chest full of the product and cooked food in a slot, the oven's update leaves that slot and the burnt slots as they are, puts nothing in the chest and raises no skill |
+| `processing_skill_done_slot_stored_on_later_pass` | Once the chest has room for the item and its bonus, the next update stores the cooked food once, empties the slot, puts the item and one bonus roll's worth in the chest and raises the skill once by 0.6; a second update stores and raises nothing more; the burnt slots stay as they were |
+| `processing_skill_done_slot_stored_without_fuel` | With the oven's fuel at 0, one update stores the cooked food the same way, with one raise and the burnt slots untouched |
 | `processing_skill_state_restored` | Your skill level and progress, the bonus chance and the prefix are back as they were |
 
 A precondition that is missing SKIPs the run under `processing_skill_setup`.
@@ -984,19 +999,28 @@ Besides the `rpc` preconditions, these count: the oven's
 `allow_processing_by_*` lacks Craft or Store, its
 `*_store_only_if_product_exists` is on, or the oven raises no skill in this game
 build, or the bonus roll cannot be made certain. The two bonus checks SKIP when
-the oven gives no bonus food in this game build. A check is NOT-RUN when Craft
-took nothing or the chest could not be filled to room for exactly one item.
+the oven gives no bonus food in this game build. The three finished-slot checks
+SKIP when the test chest does not hold exactly the one more material they need
+(after taking out what an earlier check left unused), when the oven has no
+burnt item in this game build, or when `CookingStation.UpdateCooking` is not
+found; the one with no fuel SKIPs when the oven uses no fuel. A check is NOT-RUN when Craft took nothing, a slot of the
+oven was not empty or the chest could not be filled to room for exactly one item
+(for the finished-slot checks, to be full, or to hold room for exactly the item
+and its bonus).
 
 ```text
-[Automatics Smoke] automatics_smoke_processing skill started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder, and removes them; your cooking skill and the game's bonus chance are put back, and no setting is changed
+[Automatics Smoke] automatics_smoke_processing skill started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder and runs the oven's own update over cooked food that could not be stored, and removes them; your cooking skill and the game's bonus chance are put back, and no setting is changed
 [Automatics Smoke] automatics_smoke_processing skill: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
 [Automatics Smoke] PASS processing_skill_no_builder: with no builder, Craft took one Bread dough and Store put one Bread into the chest with the bonus roll made certain, and neither raised the Cooking skill
 [Automatics Smoke] PASS processing_skill_other_builder: with another player as the builder, Craft took one Bread dough and Store put one Bread into the chest with the bonus roll made certain, and neither raised the Cooking skill
 [Automatics Smoke] PASS processing_skill_builder: with you as the builder and the bonus roll made impossible, Craft raised the Cooking skill by 0.4 and Store by 0.6 and put exactly one Bread into the chest
 [Automatics Smoke] PASS processing_skill_builder_bonus: with you as the builder and the bonus roll made certain, Store put 2 Bread (one and the bonus of 1) into the chest, and the Cooking skill rose by 0.4 and 0.6; the bonus was taken out again
 [Automatics Smoke] PASS processing_skill_builder_bonus_no_room: with room for one item in the chest and the bonus roll made certain, Store put the cooked Bread in without its bonus, emptied the slot and raised the Cooking skill by 0.6; the filler was taken out again
+[Automatics Smoke] PASS processing_skill_done_slot_waits_for_room: with the chest full of Bread, the oven's update left the finished slot and the burnt slots as they were, put nothing in the chest and raised no skill
+[Automatics Smoke] PASS processing_skill_done_slot_stored_on_later_pass: once the chest had room, the oven's update stored the finished Bread (2 with the bonus), emptied its slot and raised the Cooking skill once by 0.6; a second update stored nothing more and raised nothing; the burnt slots were left as they were
+[Automatics Smoke] PASS processing_skill_done_slot_stored_without_fuel: with no fuel in the oven, one update stored the finished Bread (2 with the bonus), emptied its slot with one raise of the Cooking skill by 0.6, and left the burnt slots as they were
 [Automatics Smoke] PASS processing_skill_state_restored: the Cooking skill is back at level 12 with progress 3.5, the bonus chance at 0.25, and the Player.RaiseSkill prefix is removed
-[Automatics Smoke] Summary: total=6 passed=6 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+[Automatics Smoke] Summary: total=9 passed=9 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
 The item names, the bonus amount, the skill figures and the bonus chance depend

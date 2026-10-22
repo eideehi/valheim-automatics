@@ -8,6 +8,9 @@ namespace Automatics.AutomaticProcessing
 {
     internal static class CookingStationProcess
     {
+        // CookingStation.Status.Done; the enum is private.
+        private const int DoneStatus = 1;
+
         private static bool IsFireLit(CookingStation cookingStation)
         {
             return Reflections.InvokeMethod<bool>(cookingStation, "IsFireLit");
@@ -219,6 +222,29 @@ namespace Automatics.AutomaticProcessing
             }
 
             Logics.AskFor(askable);
+        }
+
+        // Stores the cooked food that is still in the station's slots. The game's update reaches
+        // Store only when food turns cooked or burnt, so food whose storing was blocked then, for
+        // want of a container with room, stays in its slot, and at a station that does not burn
+        // food it stays for good. Called once per cooking update, whatever the station's fire or
+        // fuel is, so a station whose slots are all cooked is emptied too. Burnt food is left in
+        // its slot.
+        public static void StoreFinished(CookingStation cookingStation, ZNetView zNetView)
+        {
+            if (!Module.Running) return;
+            if (!Objects.HasValidOwnership(zNetView)) return;
+
+            var zdo = zNetView.GetZDO();
+            for (var slot = 0; slot < cookingStation.m_slots.Length; slot++)
+            {
+                if (zdo.GetInt("slotstatus" + slot) != DoneStatus) continue;
+
+                var item = zdo.GetString("slot" + slot);
+                var conversion =
+                    cookingStation.m_conversion.FirstOrDefault(x => x.m_to.gameObject.name == item);
+                if (conversion != null) Store(cookingStation, zNetView, slot, conversion);
+            }
         }
 
         [UsedImplicitly]
