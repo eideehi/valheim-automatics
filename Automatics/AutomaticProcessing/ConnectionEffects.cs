@@ -30,6 +30,7 @@ namespace Automatics.AutomaticProcessing
         private static int _currentProcessorId;
         private static float _nextRefreshTime;
         private static ConnectionTemplate _template;
+        private static MaterialPropertyBlock _colorBlock;
 
         // Memoize the hovered GameObject -> ProcessorContext resolution so the up
         // to five GetComponentInParent calls in TryGetProcessorContext only run
@@ -45,15 +46,26 @@ namespace Automatics.AutomaticProcessing
 
         public static void Cleanup()
         {
+            ClearHelpers();
+            _lastHovering = null;
+            _lastContextValid = false;
+            _lastContext = default;
+        }
+
+        // Removes the helpers but keeps the hover memo, so the frames in which nothing
+        // connectable is hovered cost nothing once the helpers are gone.
+        private static void ClearHelpers()
+        {
+            _currentProcessorId = 0;
+            _nextRefreshTime = 0f;
+
+            if (ActiveHelpers.Count == 0)
+                return;
+
             foreach (var id in ActiveHelpers.Keys.ToList())
                 RemoveHelper(id);
 
             ActiveHelpers.Clear();
-            _currentProcessorId = 0;
-            _nextRefreshTime = 0f;
-            _lastHovering = null;
-            _lastContextValid = false;
-            _lastContext = default;
         }
 
         public static void Update(Player player)
@@ -67,7 +79,7 @@ namespace Automatics.AutomaticProcessing
             var hovering = HoveringRef(player);
             if (!hovering)
             {
-                Cleanup();
+                ClearHelpers();
                 return;
             }
 
@@ -76,7 +88,7 @@ namespace Automatics.AutomaticProcessing
             {
                 if (!_lastContextValid)
                 {
-                    Cleanup();
+                    ClearHelpers();
                     return;
                 }
 
@@ -89,14 +101,14 @@ namespace Automatics.AutomaticProcessing
                 _lastContext = context;
                 if (!_lastContextValid)
                 {
-                    Cleanup();
+                    ClearHelpers();
                     return;
                 }
             }
 
             if (Config.ContainerSearchRange(context.Name) <= 0f || !HasSourceProcess(context.Name))
             {
-                Cleanup();
+                ClearHelpers();
                 return;
             }
 
@@ -115,7 +127,7 @@ namespace Automatics.AutomaticProcessing
             var template = GetTemplate();
             if (!template)
             {
-                Cleanup();
+                ClearHelpers();
                 return;
             }
 
@@ -277,17 +289,39 @@ namespace Automatics.AutomaticProcessing
                 main.startColor = color;
             }
 
+            // Tint through a property block: renderer.materials would clone every material
+            // per helper, and those clones are never destroyed. The shared materials are only
+            // read here. Line, trail and particle renderers are Renderers too, so they take
+            // the block as well.
+            if (_colorBlock == null)
+                _colorBlock = new MaterialPropertyBlock();
+            var block = _colorBlock;
             foreach (var renderer in helper.Connection.GetComponentsInChildren<Renderer>(true))
             {
-                foreach (var material in renderer.materials)
+                var hasColor = false;
+                var hasTintColor = false;
+                var hasEmissionColor = false;
+                foreach (var material in renderer.sharedMaterials)
                 {
-                    if (material.HasProperty(ColorPropertyId))
-                        material.SetColor(ColorPropertyId, color);
-                    if (material.HasProperty(TintColorPropertyId))
-                        material.SetColor(TintColorPropertyId, color);
-                    if (material.HasProperty(EmissionColorPropertyId))
-                        material.SetColor(EmissionColorPropertyId, color);
+                    if (!material) continue;
+
+                    hasColor |= material.HasProperty(ColorPropertyId);
+                    hasTintColor |= material.HasProperty(TintColorPropertyId);
+                    hasEmissionColor |= material.HasProperty(EmissionColorPropertyId);
                 }
+
+                if (!hasColor && !hasTintColor && !hasEmissionColor)
+                    continue;
+
+                block.Clear();
+                renderer.GetPropertyBlock(block);
+                if (hasColor)
+                    block.SetColor(ColorPropertyId, color);
+                if (hasTintColor)
+                    block.SetColor(TintColorPropertyId, color);
+                if (hasEmissionColor)
+                    block.SetColor(EmissionColorPropertyId, color);
+                renderer.SetPropertyBlock(block);
             }
 
             helper.LastAppliedColor = color;
