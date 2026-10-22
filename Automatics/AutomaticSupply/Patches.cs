@@ -144,6 +144,7 @@ namespace Automatics.AutomaticSupply
             _removalDepth = 0;
             _panelStockVersion = -1;
             _panelRebuildPending = false;
+            _panelRebuildHeld = false;
         }
 
         private static bool IsLocalPlayer(Humanoid character)
@@ -431,10 +432,14 @@ namespace Automatics.AutomaticSupply
             CraftFrame __state)
         {
             if (__state.Suppressed) SupplyScope.Unsuppress();
+            var moved = __state.Action != null && __state.Action.Ledger.Count > 0;
             SupplyTransfer.End(__state.Action, __exception == null);
-            // Vanilla rebuilt the recipe list inside the craft, while the containers were hidden
-            // from the check; rebuild it once more now that they count again.
-            if (__state.Suppressed) RefreshCraftingPanel(__instance);
+            // The rebuild vanilla asked for inside the craft was held back while the containers
+            // were hidden from its check; the recipe list is rebuilt once now that they count
+            // again, after what the craft did not use went back.
+            var held = _panelRebuildHeld;
+            _panelRebuildHeld = false;
+            if (__state.Suppressed && (held || moved)) RefreshCraftingPanel(__instance);
         }
 
         private static readonly Action<InventoryGui, bool> UpdateCraftingPanel =
@@ -442,12 +447,15 @@ namespace Automatics.AutomaticSupply
                 AccessTools.Method(typeof(InventoryGui), "UpdateCraftingPanel"));
 
         private static int _panelStockVersion = -1;
+        private static bool _panelRebuildHeld;
 
         private static void RefreshCraftingPanel(InventoryGui gui)
         {
             if (!gui || !InventoryGui.IsVisible() || !Player.m_localPlayer) return;
             try
             {
+                // Taken before the rebuild too, so one that throws is not tried again until the
+                // stock changes.
                 _panelStockVersion = SupplyContainers.Version;
                 UpdateCraftingPanel(gui, false);
             }
@@ -457,16 +465,47 @@ namespace Automatics.AutomaticSupply
             }
         }
 
+        // Inside a craft the containers are hidden from its requirement check, and vanilla
+        // rebuilds the recipe list there; that rebuild is held back for the craft's finalizer.
+        // Not gated on Running: it is part of a craft already under way.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(InventoryGui), "UpdateCraftingPanel")]
+        private static bool InventoryGui_UpdateCraftingPanel_Prefix()
+        {
+            if (!SupplyScope.Suppressed) return true;
+            _panelRebuildHeld = true;
+            return false;
+        }
+
+        // Every rebuild, vanilla's own included (opening the inventory, a tab, a drag), shows
+        // the stock it read, so the stock version is taken after it. A rebuild in which no recipe
+        // counts the containers reads none; the stock is read here then, at most every half
+        // second like any read. A call a prefix skipped, this module's or another mod's, rebuilt
+        // nothing and records nothing.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InventoryGui), "UpdateCraftingPanel")]
+        private static void InventoryGui_UpdateCraftingPanel_Postfix(bool __runOriginal)
+        {
+            if (!__runOriginal || !Module.Running || SupplyScope.Suppressed) return;
+            var player = Player.m_localPlayer;
+            if (!player) return;
+            SupplyContainers.Refresh(player);
+            _panelStockVersion = SupplyContainers.Version;
+            _panelRebuildPending = false;
+        }
+
         // The recipe list is built when the panel opens and after a craft, so it would keep a
-        // container change until then. UpdateRecipe runs while the panel is shown and counts the
-        // selected recipe's requirements, which refreshes the stock at most every half second;
-        // the list is rebuilt only when that refresh found the stock changed, and one tick later,
-        // so the rebuild never shares a frame with the refresh or with the panel opening.
+        // container change until then. UpdateRecipe runs while the panel is shown; the stock is
+        // refreshed here at most every half second, whichever recipe is selected (one where the
+        // player chooses one ingredient counts nothing from the containers). The list is rebuilt
+        // only when that refresh found the stock changed, and one tick later, so the rebuild
+        // never shares a frame with the refresh or with the panel opening.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(InventoryGui), "UpdateRecipe")]
         private static void InventoryGui_UpdateRecipe_Postfix(InventoryGui __instance, Player player)
         {
             if (!Module.Running || !IsLocalPlayer(player) || SupplyScope.Suppressed) return;
+            SupplyContainers.Refresh(player);
             if (_panelStockVersion == SupplyContainers.Version)
             {
                 _panelRebuildPending = false;
@@ -483,19 +522,16 @@ namespace Automatics.AutomaticSupply
 
         private static bool _panelRebuildPending;
 
-        // Opening the inventory builds the recipe list (with the current stock), so it counts as
-        // the rebuild for that stock. Vanilla also leaves the container panel of the last chest
-        // active after Hide, so it can fade out with the inventory, and only hides it in the
-        // Update after the next Show, so opening the inventory alone draws that stale panel for a
-        // frame or more. With no container shown the panel is hidden at Show; Hide and a real
-        // container are left entirely to vanilla.
+        // Vanilla leaves the container panel of the last chest active after Hide, so it can fade
+        // out with the inventory, and only hides it in the Update after the next Show, so opening
+        // the inventory alone draws that stale panel for a frame or more. With no container shown
+        // the panel is hidden at Show; Hide and a real container are left entirely to vanilla.
+        // The recipe list Show builds is recorded by the UpdateCraftingPanel postfix.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Show), typeof(Container), typeof(int))]
         private static void InventoryGui_Show_Postfix(InventoryGui __instance, Container container)
         {
             if (!Module.Running) return;
-            _panelStockVersion = SupplyContainers.Version;
-            _panelRebuildPending = false;
             if (container == null) HideStaleContainerPanel(__instance);
         }
 

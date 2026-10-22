@@ -56,6 +56,20 @@ namespace Automatics.SmokeTest
         private static readonly FieldInfo CraftUpgradeItem = AccessTools.Field(typeof(InventoryGui), "m_craftUpgradeItem");
         private static readonly FieldInfo MultiCrafting = AccessTools.Field(typeof(InventoryGui), "m_multiCrafting");
         private static readonly MethodInfo DoCrafting = AccessTools.Method(typeof(InventoryGui), "DoCrafting");
+        private static readonly MethodInfo UpdateRecipe = AccessTools.Method(typeof(InventoryGui), "UpdateRecipe");
+        private static readonly MethodInfo UpdateRecipeList = AccessTools.Method(typeof(InventoryGui), "UpdateRecipeList");
+        private static readonly FieldInfo SelectedRecipe = AccessTools.Field(typeof(InventoryGui), "m_selectedRecipe");
+        private static readonly FieldInfo SelectedVariant = AccessTools.Field(typeof(InventoryGui), "m_selectedVariant");
+        private static readonly MethodInfo SetRecipe = AccessTools.Method(typeof(InventoryGui), "SetRecipe");
+        private static readonly FieldInfo AvailableRecipes = AccessTools.Field(typeof(InventoryGui), "m_availableRecipes");
+        private static readonly FieldInfo InventoryAnimator = AccessTools.Field(typeof(InventoryGui), "m_animator");
+        private static readonly MethodInfo AnimatorGetBool = InventoryAnimator == null
+            ? null
+            : AccessTools.Method(InventoryAnimator.FieldType, "GetBool", new[] { typeof(string) });
+        private static readonly PropertyInfo PairRecipe =
+            SelectedRecipe == null ? null : AccessTools.Property(SelectedRecipe.FieldType, "Recipe");
+        private static readonly PropertyInfo PairCanCraft =
+            SelectedRecipe == null ? null : AccessTools.Property(SelectedRecipe.FieldType, "CanCraft");
         private static readonly MethodInfo SetupPieceInfo = AccessTools.Method(typeof(Hud), "SetupPieceInfo");
         private static readonly MethodInfo SmelterOnAddOre = AccessTools.Method(typeof(Smelter), "OnAddOre");
         private static readonly MethodInfo SmelterOnAddFuel = AccessTools.Method(typeof(Smelter), "OnAddFuel");
@@ -70,6 +84,13 @@ namespace Automatics.SmokeTest
         // local player's inventory for the watched name, after Automatic Supply's own postfix.
         private static string _watched;
         private static readonly List<KeyValuePair<int, int>> Recorded = new List<KeyValuePair<int, int>>();
+
+        // Recipe list rebuilds the observer saw (InventoryGui.UpdateRecipeList, which only the
+        // crafting panel's rebuild calls), and how many of them ran while Automatic Supply hid
+        // the containers from a craft's own requirement check.
+        private static bool _rebuildObserver;
+        private static int _rebuilds;
+        private static int _hiddenRebuilds;
 
         public static IEnumerator Run(FeatureRun run)
         {
@@ -161,6 +182,11 @@ namespace Automatics.SmokeTest
                 harmony.Patch(AccessTools.Method(typeof(Inventory), nameof(Inventory.CountItems),
                         new[] { typeof(string), typeof(int), typeof(bool) }),
                     postfix: new HarmonyMethod(typeof(SupplyFeatureSmoke), nameof(RecordCount)) { priority = Priority.Last });
+                if (UpdateRecipeList != null)
+                {
+                    harmony.Patch(UpdateRecipeList, prefix: new HarmonyMethod(typeof(SupplyFeatureSmoke), nameof(RecordRebuild)));
+                    _rebuildObserver = true;
+                }
                 InstallPlacementHooks(harmony);
 
                 var recipe = state.SelectRecipe(out var recipeReport);
@@ -194,7 +220,9 @@ namespace Automatics.SmokeTest
                         CheckPrimitives(run, state, recipe);
                         CheckCraft(run, state, recipe, false);
                         CheckCraft(run, state, recipe, true);
+                        CheckCraftPanelRebuild(run, state, recipe);
                         state.ClearStation();
+                        CheckChooseOneStockRefresh(run, state, state.Needs(recipe).Keys.First());
                     }
                 }
 
@@ -241,6 +269,7 @@ namespace Automatics.SmokeTest
             finally
             {
                 _watched = null;
+                _rebuildObserver = false;
                 _interceptPlacement = false;
                 _placementHooks = false;
                 try
@@ -316,6 +345,87 @@ namespace Automatics.SmokeTest
             if (_watched == null || name != _watched || !Player.m_localPlayer ||
                 !ReferenceEquals(__instance, Player.m_localPlayer.GetInventory())) return;
             Recorded.Add(new KeyValuePair<int, int>(quality, __result));
+        }
+
+        private static void RecordRebuild()
+        {
+            _rebuilds++;
+            if (SupplyScope.Suppressed) _hiddenRebuilds++;
+        }
+
+        // One crafting panel update, as InventoryGui.Update runs it every frame while the
+        // inventory is open. No time passes, so the stock refresh due time does not move either.
+        private static void UpdatePanel(Player player, int times)
+        {
+            for (var i = 0; i < times; i++) UpdateRecipe.Invoke(InventoryGui.instance, new object[] { player, 0f });
+        }
+
+        // Whether the inventory is open now, by the flag Show and Hide set: InventoryGui.IsVisible()
+        // stays true for a frame or two after Hide. The panel checks open the inventory with
+        // Show(null), which would close one the player has open and leave its chest in use.
+        private static bool InventoryOpen(InventoryGui gui)
+        {
+            if (gui.IsContainerOpen()) return true;
+            var animator = InventoryAnimator.GetValue(gui) as Object;
+            return animator && (bool)AnimatorGetBool.Invoke(animator, new object[] { "visible" });
+        }
+
+        // The result for a recipe made up for a check: an item whose recipe the player already
+        // knows. The crafting panel lists a recipe by its result's name, and the discovery of new
+        // recipes skips a result already known, so a made-up recipe teaches the player nothing.
+        private static ItemDrop KnownResult(Player player)
+        {
+            foreach (var recipe in ObjectDB.instance.m_recipes)
+            {
+                if (!recipe || !recipe.m_item || recipe.m_item.m_itemData.m_shared.m_dlc.Length > 0) continue;
+                if (player.IsRecipeKnown(recipe.m_item.m_itemData.m_shared.m_name)) return recipe.m_item;
+            }
+            return null;
+        }
+
+        // Adds a made-up recipe to the game's recipes, after the real ones, until RemoveRecipe.
+        private static Recipe AddRecipe(string name, ItemDrop result, CraftingStation station, int stationLevel,
+            bool chooseOne, Piece.Requirement[] resources)
+        {
+            var recipe = ScriptableObject.CreateInstance<Recipe>();
+            recipe.name = name;
+            recipe.m_item = result;
+            recipe.m_craftingStation = station;
+            recipe.m_minStationLevel = stationLevel;
+            recipe.m_requireOnlyOneIngredient = chooseOne;
+            recipe.m_resources = resources;
+            ObjectDB.instance.m_recipes.Add(recipe);
+            return recipe;
+        }
+
+        private static void RemoveRecipe(Recipe recipe)
+        {
+            if (!recipe) return;
+            if (ObjectDB.instance) ObjectDB.instance.m_recipes.Remove(recipe);
+            Object.Destroy(recipe);
+        }
+
+        // The index of recipe's row in the crafting panel's list, or -1.
+        private static int RowIndex(InventoryGui gui, Recipe recipe)
+        {
+            if (!(AvailableRecipes.GetValue(gui) is IList rows)) return -1;
+            for (var i = 0; i < rows.Count; i++)
+                if (ReferenceEquals(PairRecipe.GetValue(rows[i], null), recipe))
+                    return i;
+            return -1;
+        }
+
+        // Whether recipe's row shows it craftable, or null when it has no row.
+        private static bool? RowCraftable(InventoryGui gui, Recipe recipe)
+        {
+            var index = RowIndex(gui, recipe);
+            if (index < 0) return null;
+            return (bool)PairCanCraft.GetValue(((IList)AvailableRecipes.GetValue(gui))[index], null);
+        }
+
+        private static bool IsSelected(InventoryGui gui, Recipe recipe)
+        {
+            return ReferenceEquals(PairRecipe.GetValue(SelectedRecipe.GetValue(gui), null), recipe);
         }
 
         // -- Counting ---------------------------------------------------------------------------
@@ -568,6 +678,266 @@ namespace Automatics.SmokeTest
             {
                 state.ClearTestItems();
             }
+        }
+
+        // With the inventory open at the workbench and twice the materials in the chest, the craft
+        // rebuilds the recipe list once, with the chest counted: a recipe made up for the check
+        // from the same materials shows craftable from what the chest still holds, the inventory
+        // holding none of them. The panel updates after it rebuild nothing more: neither the next
+        // ones nor those once the stock refresh is due again, because that one rebuild already
+        // showed the stock the craft left. Opened and closed again within the frame, so the
+        // station set for the section holds.
+        private static void CheckCraftPanelRebuild(FeatureRun run, SectionState state, Recipe recipe)
+        {
+            const string name = "supply_craft_rebuilds_list_once";
+            if (UpdateRecipe == null || !_rebuildObserver || AvailableRecipes == null || PairRecipe == null ||
+                PairCanCraft == null || AnimatorGetBool == null || SelectedVariant == null)
+            {
+                run.Skip(name, "the crafting panel's list, its update or its rebuild could not be observed");
+                return;
+            }
+            var gui = InventoryGui.instance;
+            if (InventoryOpen(gui))
+            {
+                run.Skip(name, "close the inventory, then run it again");
+                return;
+            }
+            var result = KnownResult(state.Player);
+            if (!result)
+            {
+                run.Skip(name, "you know no recipe whose result a made-up recipe can show");
+                return;
+            }
+
+            var needs = state.Needs(recipe);
+            var twice = needs.ToDictionary(x => x.Key, x => x.Value * 2);
+            var output = recipe.m_item.m_itemData.m_shared.m_name;
+            var previousSelection = SelectedRecipe.GetValue(gui);
+            var previousVariant = SelectedVariant.GetValue(gui);
+            Recipe probe = null;
+            var opened = false;
+            var craftTab = false;
+            try
+            {
+                probe = AddRecipe("Automatics smoke probe recipe", result, recipe.m_craftingStation,
+                    recipe.m_minStationLevel, false, recipe.m_resources);
+                state.ClearTestItems();
+                state.FillChest(twice);
+                if (twice.Any(x => Count(state.ChestInventory, state.Shared(x.Key).m_name, -1) != x.Value))
+                {
+                    run.Skip(name, "the chest could not hold twice the recipe's materials");
+                    return;
+                }
+                if (state.Inventory.GetEmptySlots() < needs.Count + 1)
+                {
+                    run.Skip(name, $"needs {needs.Count + 1} free inventory slots");
+                    return;
+                }
+                gui.Show(null);
+                opened = true;
+                if (!InventoryGui.IsVisible())
+                {
+                    run.Skip(name, "the inventory did not open");
+                    return;
+                }
+                if (!gui.InCraftTab())
+                {
+                    gui.OnTabCraftPressed();
+                    craftTab = true;
+                }
+                if (RowCraftable(gui, probe) == null)
+                {
+                    run.Skip(name, "the made-up recipe was not listed at the workbench");
+                    return;
+                }
+                // Whatever opening the panel left to do is done before counting.
+                UpdatePanel(state.Player, 2);
+
+                var outputBefore = Count(state.Inventory, output, -1);
+                var previousRecipe = CraftRecipe.GetValue(gui);
+                var previousUpgrade = CraftUpgradeItem.GetValue(gui);
+                var previousMulti = MultiCrafting.GetValue(gui);
+                _rebuilds = 0;
+                _hiddenRebuilds = 0;
+                Exception thrown = null;
+                try
+                {
+                    CraftRecipe.SetValue(gui, recipe);
+                    CraftUpgradeItem.SetValue(gui, null);
+                    MultiCrafting.SetValue(gui, false);
+                    DoCrafting.Invoke(gui, new object[] { state.Player });
+                }
+                catch (TargetInvocationException e)
+                {
+                    thrown = e.InnerException ?? e;
+                }
+                finally
+                {
+                    CraftRecipe.SetValue(gui, previousRecipe);
+                    CraftUpgradeItem.SetValue(gui, previousUpgrade);
+                    MultiCrafting.SetValue(gui, previousMulti);
+                }
+                var inCraft = _rebuilds;
+                var hidden = _hiddenRebuilds;
+                var row = RowCraftable(gui, probe);
+                var held = needs.Keys.Sum(x => Count(state.Inventory, state.Shared(x).m_name, -1));
+                var left = needs.Keys.Select(x => $"{Count(state.ChestInventory, state.Shared(x).m_name, -1)}/{needs[x]}").ToArray();
+
+                UpdatePanel(state.Player, 3);
+                var afterUpdates = _rebuilds;
+                // As when the refresh interval has passed.
+                SupplyContainers.Invalidate();
+                UpdatePanel(state.Player, 3);
+                var afterRefresh = _rebuilds;
+
+                var crafted = Count(state.Inventory, output, -1) - outputBefore;
+                if (crafted > 0) state.CreatedByTest(output, crafted);
+                if (thrown != null)
+                {
+                    run.Fail(name, $"the craft threw {thrown.GetType().Name}: {thrown.Message}");
+                    return;
+                }
+                Check(run, name,
+                    crafted > 0 && inCraft == 1 && hidden == 0 && held == 0 && row == true && afterUpdates == 1 && afterRefresh == 1,
+                    $"crafted={crafted}, rebuilds in the craft={inCraft} (expected 1), of them with the containers hidden={hidden} (expected 0), made-up recipe craftable after it={RowText(row)} (expected True; materials in the inventory={held}, chest/one craft=[{string.Join(", ", left)}]), after three panel updates={afterUpdates} (expected 1), after a due stock refresh and three more={afterRefresh} (expected 1)");
+            }
+            finally
+            {
+                if (craftTab) gui.OnTabUpgradePressed();
+                if (opened) gui.Hide();
+                SelectedRecipe.SetValue(gui, previousSelection);
+                SelectedVariant.SetValue(gui, previousVariant);
+                RemoveRecipe(probe);
+                state.ClearTestItems();
+            }
+        }
+
+        // Two recipes made up for the check from one test material are listed with the inventory
+        // open and no station: one where the player chooses one ingredient, selected, and an
+        // ordinary one that needs one of it. The chest gains the ingredient with no craft. While
+        // the stock read in this frame holds, the panel updates rebuild nothing, the ordinary
+        // recipe stays uncraftable, and every count they make of the ingredient for the selected
+        // recipe is the inventory alone, as vanilla counts. Once the stock refresh is due, the
+        // list is rebuilt once with the chest counted: the ordinary recipe turns craftable and
+        // the selection stays on the other one. Your selection is put back afterwards.
+        private static void CheckChooseOneStockRefresh(FeatureRun run, SectionState state, GameObject material)
+        {
+            const string countName = "supply_choose_one_recipe_vanilla_count";
+            const string refreshName = "supply_recipe_list_follows_stock";
+            if (UpdateRecipe == null || !_rebuildObserver || SetRecipe == null || SelectedVariant == null ||
+                AvailableRecipes == null || PairRecipe == null || PairCanCraft == null || AnimatorGetBool == null)
+            {
+                run.Skip(countName, "the crafting panel's list, selection or update could not be driven");
+                run.Skip(refreshName, "the crafting panel's list, selection or update could not be driven");
+                return;
+            }
+            var gui = InventoryGui.instance;
+            if (InventoryOpen(gui))
+            {
+                run.Skip(countName, "close the inventory, then run it again");
+                run.Skip(refreshName, "close the inventory, then run it again");
+                return;
+            }
+            if (state.Player.GetCurrentCraftingStation())
+            {
+                run.Skip(countName, "a crafting station is still the current station");
+                run.Skip(refreshName, "a crafting station is still the current station");
+                return;
+            }
+            var result = KnownResult(state.Player);
+            if (!result)
+            {
+                run.Skip(countName, "you know no recipe whose result a made-up recipe can show");
+                run.Skip(refreshName, "you know no recipe whose result a made-up recipe can show");
+                return;
+            }
+
+            var shared = state.Shared(material);
+            var drop = material.GetComponent<ItemDrop>();
+            var previousSelection = SelectedRecipe.GetValue(gui);
+            var previousVariant = SelectedVariant.GetValue(gui);
+            Recipe single = null;
+            Recipe ordinary = null;
+            var opened = false;
+            try
+            {
+                single = AddRecipe("Automatics smoke choose-one recipe", result, null, 1, true,
+                    new[] { new Piece.Requirement { m_resItem = drop, m_amount = 1 } });
+                ordinary = AddRecipe("Automatics smoke ordinary recipe", result, null, 1, false,
+                    new[] { new Piece.Requirement { m_resItem = drop, m_amount = 1 } });
+
+                state.ClearTestItems();
+                gui.Show(null);
+                opened = true;
+                var index = RowIndex(gui, single);
+                if (!InventoryGui.IsVisible() || index < 0 || RowCraftable(gui, ordinary) == null)
+                {
+                    run.Skip(countName, "the inventory did not open with both made-up recipes listed");
+                    run.Skip(refreshName, "the inventory did not open with both made-up recipes listed");
+                    return;
+                }
+                SetRecipe.Invoke(gui, new object[] { index, false });
+                // Whatever opening the panel left to do is done before counting.
+                UpdatePanel(state.Player, 2);
+                var rowBefore = RowCraftable(gui, ordinary);
+                _rebuilds = 0;
+                _hiddenRebuilds = 0;
+
+                // The stock was read in this frame, when the panel opened, so the next refresh is
+                // not due yet.
+                if (!state.AddToChest(material, 1))
+                {
+                    run.Skip(countName, "could not put the ingredient in the chest");
+                    run.Skip(refreshName, "could not put the ingredient in the chest");
+                    return;
+                }
+                Recorded.Clear();
+                _watched = shared.m_name;
+                try
+                {
+                    UpdatePanel(state.Player, 3);
+                }
+                finally
+                {
+                    _watched = null;
+                }
+                var early = _rebuilds;
+                var rowEarly = RowCraftable(gui, ordinary);
+                var selected = IsSelected(gui, single);
+                var inChest = Count(state.ChestInventory, shared.m_name, -1);
+                var mismatches = Recorded.Where(x => x.Value != Count(state.Inventory, shared.m_name, x.Key))
+                    .Select(x => $"quality {x.Key}: counted {x.Value}, inventory {Count(state.Inventory, shared.m_name, x.Key)}")
+                    .ToArray();
+
+                // As when the refresh interval has passed.
+                SupplyContainers.Invalidate();
+                UpdatePanel(state.Player, 3);
+                var late = _rebuilds - early;
+                var rowAfter = RowCraftable(gui, ordinary);
+                var stillSelected = IsSelected(gui, single);
+
+                Check(run, countName, selected && inChest > 0 && Recorded.Count > 0 && mismatches.Length == 0,
+                    $"recipe selected={selected}, in the chest={inChest}, counts made={Recorded.Count}, mismatches=[{string.Join("; ", mismatches)}]");
+                Check(run, refreshName,
+                    rowBefore == false && early == 0 && rowEarly == false && late == 1 && _hiddenRebuilds == 0 &&
+                    rowAfter == true && stillSelected,
+                    $"ordinary recipe craftable before={RowText(rowBefore)} (expected False), rebuilds before the refresh was due={early} (expected 0) and craftable then={RowText(rowEarly)} (expected False), rebuilds after it={late} (expected 1) and craftable then={RowText(rowAfter)} (expected True), rebuilds with the containers hidden={_hiddenRebuilds} (expected 0), choose-one recipe still selected={stillSelected}");
+            }
+            finally
+            {
+                _watched = null;
+                if (opened) gui.Hide();
+                SelectedRecipe.SetValue(gui, previousSelection);
+                SelectedVariant.SetValue(gui, previousVariant);
+                RemoveRecipe(single);
+                RemoveRecipe(ordinary);
+                state.ClearTestItems();
+            }
+        }
+
+        private static string RowText(bool? craftable)
+        {
+            return craftable?.ToString() ?? "not listed";
         }
 
         // -- Placement --------------------------------------------------------------------------
@@ -1314,6 +1684,24 @@ namespace Automatics.SmokeTest
                     }
                 }
                 SupplyContainers.Invalidate();
+            }
+
+            // Adds units of a test item to the chest and leaves Automatic Supply's stock as it
+            // was read, as when another game or module changes the chest.
+            public bool AddToChest(GameObject prefab, int units)
+            {
+                if (ChestInventory == null || !Claim(prefab)) return false;
+                var name = Shared(prefab).m_name;
+                var before = Count(ChestInventory, name, -1);
+                try
+                {
+                    ChestInventory.AddItem(prefab, units);
+                }
+                finally
+                {
+                    CreatedByTest(name, Count(ChestInventory, name, -1) - before);
+                }
+                return Count(ChestInventory, name, -1) - before == units;
             }
 
             public void CreatedByTest(string name, int units)

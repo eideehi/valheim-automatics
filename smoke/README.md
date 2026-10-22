@@ -1791,6 +1791,9 @@ them. A check whose station or material cannot be found SKIPs and says why.
 | `supply_insertion_shortfall_returned` | The last free slot is filled from the chest's own change callback, between the removal from the chest and the insertion: nothing arrives, the full inventory is reported, and every unit is back in the chest |
 | `supply_craft_complete` | `InventoryGui.DoCrafting` with the materials only in the chest crafts the item, and the chest pays exactly the recipe cost |
 | `supply_craft_incomplete` | With room for one material only, `DoCrafting` crafts nothing, the chest ends unchanged and no material is left in the inventory |
+| `supply_craft_rebuilds_list_once` | With the inventory open at the workbench and twice the materials in the chest, `DoCrafting` crafts the item and rebuilds the recipe list (`InventoryGui.UpdateRecipeList`) once, with the chest counted (not while the containers are hidden from the craft's own requirement check): a recipe made up from the same materials shows craftable from what the chest still holds, with none of them left in the inventory. Three crafting panel updates (`InventoryGui.UpdateRecipe`) after it rebuild nothing, and neither do three more once the stock refresh is due again (the stock cache is dropped, as when the refresh interval has passed) |
+| `supply_choose_one_recipe_vanilla_count` | With a made-up recipe where the player chooses one ingredient listed and selected, the inventory open, no station, and its ingredient only in the chest, every count the panel update makes of that ingredient is the inventory alone, as vanilla counts |
+| `supply_recipe_list_follows_stock` | With that recipe selected, a made-up ordinary recipe that needs one of the ingredient listed, and no craft, the ingredient added to the chest (Supply's stock cache left as it was read) rebuilds nothing and leaves the ordinary recipe uncraftable in the three panel updates of the frame the stock was read; in the three updates after the stock refresh is due (the cache is dropped, as when the refresh interval has passed), the list is rebuilt once with the chest counted, the ordinary recipe shows craftable, and the selection stays on the choose-one recipe |
 | `supply_place_incomplete` | With a full inventory and the placement status held at Valid (vanilla's ghost update is skipped and a stand-in ghost is set, and `Player.PlacePiece` is intercepted and recorded instead of run), `Player.TryPlacePiece` inside the module's placement bracket returns false, the module's own rejection counter moves by one, `PlacePiece` is never reached, and nothing moves |
 | `supply_place_failed_refund` | With room, the placement takes every material, vanilla refuses the spot (the placement status is held at Invalid, so vanilla can never place the piece here), and closing the bracket returns everything to the chest |
 | `supply_fireplace_intake` | `Fireplace.Interact` takes one fuel from the chest; none is left in the inventory |
@@ -1805,9 +1808,16 @@ them. A check whose station or material cannot be found SKIPs and says why.
 | `supply_settings_restored` | Every setting the section changed is back at your value |
 
 The crafting checks run in one frame, because the player drops a station it is
-not using at its next update. The crafting skill and the cooking skill are put
-back afterwards. The section counts every unit of a test item it gives, puts in
-the chest or crafts, and never removes more than that. After each frame boundary
+not using at its next update. The three crafting panel checks open the inventory
+and close it again within that frame, and drive the panel update directly instead
+of waiting for frames. They SKIP when the inventory is open as they start (close
+it, then run the section again), because opening it over an open chest would
+leave that chest in use. The recipes they make up show the result of a recipe
+you already know, so they teach you nothing; they are in the game's recipe list
+only within that frame. Your selected recipe and crafting tab are restored. The
+crafting skill and the cooking skill are put back afterwards. The
+section counts every unit of a test item it gives, puts in the chest or crafts,
+and never removes more than that. After each frame boundary
 it records any test item already in your inventory or the chest as yours (a
 pickup while it waited) and stops with a SKIP; those units are never removed.
 When a count cannot be accounted for, nothing of that item is removed and

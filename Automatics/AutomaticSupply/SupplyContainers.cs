@@ -78,7 +78,12 @@ namespace Automatics.AutomaticSupply
             Invalidate();
         }
 
-        private static void Refresh(Player player)
+        /// <summary>
+        ///     Reads the stock of the eligible containers again, unless it was read for
+        ///     <paramref name="player" /> less than half a second ago and no transfer dropped it
+        ///     since; <see cref="Version" /> is raised when the stock differs.
+        /// </summary>
+        public static void Refresh(Player player)
         {
             var now = Time.time;
             if (ReferenceEquals(_stockPlayer, player) && now - _stockTime < RefreshSeconds &&
