@@ -156,6 +156,11 @@ falling; its fallen logs and its stump count as that tree. See
 [Add user-defined object to Automatics](add-user-defined-object.md) for a
 step-by-step example.
 
+A `User-defined Flora` that you add or change while the game runs also applies to
+plants that are already loaded, without a reload or turning the module off and on:
+Automatic mapping pins them once the flora is in `Allow Pinning Flora`, and
+Automatic farming's replanting follows the change.
+
 ### Display name and internal name matching
 
 Some options let you add targets by display name or internal name.
@@ -256,6 +261,13 @@ off does not close doors or otherwise change their current open state. Turning i
 back on attaches the automatic-door behavior to eligible loaded doors again,
 including doors that appeared or were inactive while it was off. See
 [Module disable options](#module-disable-options).
+
+In multiplayer, each door follows the settings of the player whose game currently
+owns it, and opens and closes for every player near it. Your game does nothing at
+doors that another player's game owns. Turning automatic door off in your game
+stops it for the doors your game owns; doors owned by another player keep being
+opened and closed with that player's settings. Dedicated servers are not
+supported, and automatic door is not guaranteed to work on one.
 
 If you had automatic door disabled, the first start of this version writes all of
 its settings to the configuration file, together with `custom_door` in the General
@@ -663,6 +675,12 @@ same container as the food; bonus food that does not fit there is not given. A
 player's skill can only be raised in their own game, so the builder gains these
 only while their game owns the piece. While another player's game owns it, and
 at pieces no player built, nobody gains them.
+
+Pieces that collect a product over time store what taking it out by hand gives,
+the world's resource rate included. The beehive and the sap extractor store it
+one whole unit at a time, and a unit that does not fit in a container stays in
+the piece. The wisp fountain stores the yield of one wisp into a single
+container; when no container has room for all of it, the wisp is lured as usual.
 
 In multiplayer, each processing piece follows the settings of the player whose
 game currently owns it. Turning automatic processing off in your game stops it
@@ -1084,8 +1102,9 @@ update never turns it on for you.
   nearest. Items taken for an action that does not use them go back to the
   container they came from; anything that cannot go back stays in your inventory.
   Nothing is dropped or created.
-- **Access.** Warded, private or group-restricted containers, containers another
-  player has open, containers on a wagon in use and graves are never used.
+- **Access.** Warded, private or group-restricted containers, containers in use
+  (including one you have open and one another player has open), containers on a
+  wagon in use and graves are never used.
 
 Recipes where you choose one of several ingredients work as in vanilla, and
 eating, ammunition, repair, the fermenter and items used directly from the
@@ -1228,6 +1247,9 @@ Supported types: `animal`, `container`, `door`, `dungeon`, `flora`, `mineral`,
 The result can include objects that feel unexpected for the selected type. For
 example, Flint can appear in the Flora search because Automatics can treat it as
 flora.
+
+On a multiplayer client, `dungeon` and `spot` list the locations loaded around
+you.
 
 When automatic mapping is not running, the mapping types (every type except
 `container` and `door`) start with a line saying so: fish, birds and ships are

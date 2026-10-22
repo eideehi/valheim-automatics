@@ -17,7 +17,7 @@
     "@config_object_element_preview": "$1 ($2)\nIdentifier: $3\nPattern: $4",
     "@config_system_section": "[ #1 System ]",
     "@config_system_enable_logging_name": "Logging",
-    "@config_system_enable_logging_description": "Specify whether to enable log output. System initialization logs for Automatics are always output regardless of the value of this option.",
+    "@config_system_enable_logging_description": "Specify whether to enable log output. System initialization logs for Automatics are always output regardless of the value of this option. A feature that fails to start, to turn on or to turn off, or that ends up faulted, is always written to the BepInEx log, even with this option off.",
     "@config_system_log_level_to_allow_logging_name": "Log Level To Allow Logging",
     "@config_system_log_level_to_allow_logging_description": "Specify the log level that allows logging.",
     "@config_general_section": "[ #2 General ]",

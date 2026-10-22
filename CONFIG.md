@@ -4,7 +4,7 @@ Every module is off on a new install; turn on the ones you want by setting their
 
 ## [ #1 System ] / [system]
 ### Logging / [enable_logging]
-Specify whether to enable log output. System initialization logs for Automatics are always output regardless of the value of this option.
+Specify whether to enable log output. System initialization logs for Automatics are always output regardless of the value of this option. A feature that fails to start, to turn on or to turn off, or that ends up faulted, is always written to the BepInEx log, even with this option off.
 
 - Default value: false
 

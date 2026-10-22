@@ -17,7 +17,7 @@
     "@config_object_element_preview": "$1 ($2)\n識別子: $3\nパターン: $4",
     "@config_system_section": "[ #1 システム ]",
     "@config_system_enable_logging_name": "ログ出力",
-    "@config_system_enable_logging_description": "ログ出力を有効にするかどうかを指定します。Automatics のシステム初期化ログはこのオプションの値に関係なく、常に出力されます。",
+    "@config_system_enable_logging_description": "ログ出力を有効にするかどうかを指定します。Automatics のシステム初期化ログはこのオプションの値に関係なく、常に出力されます。機能の開始、有効化、無効化に失敗した場合や、機能が異常状態になった場合は、このオプションがオフでも常に BepInEx ログに出力されます。",
     "@config_system_log_level_to_allow_logging_name": "ログ出力を許可するレベル",
     "@config_system_log_level_to_allow_logging_description": "ログの出力を許可するログレベルを指定します。",
     "@config_general_section": "[ #2 一般 ]",
