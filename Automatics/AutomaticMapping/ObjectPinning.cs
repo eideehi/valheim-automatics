@@ -126,6 +126,12 @@ namespace Automatics.AutomaticMapping
                              baseLabel == aimed.Name)),
                     includeInactive: true);
 
+            // A mineral deposit's saved pin stands where the scan pinned the deposit, which mining
+            // moves away from the object, so it is looked for as the scan looks for it. A pin the
+            // scan cannot assign yet stands in for it, so no second pin or marker is added beside it.
+            if (StaticObjectMapping.IsMineralDeposit(aimed.Component, out var mineralPin))
+                return mineralPin;
+
             // Any other saved automatic pin is outside the cache while the scan has not reached its
             // object: restored with the map and not scanned yet, or left when the object went out
             // of range. It stands at the object under the object's name. A pin held by another

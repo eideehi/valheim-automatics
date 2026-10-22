@@ -46,6 +46,8 @@ namespace Automatics.AutomaticMapping
         private static readonly Dictionary<MineRock5, Snapshot> Snapshots
             = new Dictionary<MineRock5, Snapshot>();
 
+        private static readonly Vector3[] ShapeCorners = new Vector3[8];
+
         public static void Register(MineRock5 rock5)
         {
             if (!rock5) return;
@@ -88,12 +90,7 @@ namespace Automatics.AutomaticMapping
 
             if (!rock5) return false;
 
-            if (!Snapshots.TryGetValue(rock5, out var snapshot))
-            {
-                snapshot = BuildSnapshot(rock5);
-                Snapshots[rock5] = snapshot;
-            }
-
+            var snapshot = GetOrBuildSnapshot(rock5);
             if (snapshot.ColliderCount == 0) return false;
 
             var healthData = GetHealthData(rock5);
@@ -116,9 +113,33 @@ namespace Automatics.AutomaticMapping
             }
         }
 
+        // The centre over all hit areas, mined or not. Mining does not move it, so the static pass
+        // looks for the rock's saved pin around it.
+        public static bool TryGetCenter(MineRock5 rock5, out Vector3 center)
+        {
+            center = Vector3.zero;
+            if (!rock5) return false;
+
+            var snapshot = GetOrBuildSnapshot(rock5);
+            if (snapshot.ColliderCount == 0) return false;
+
+            center = snapshot.Center;
+            return true;
+        }
+
         public static void Clear()
         {
             Snapshots.Clear();
+        }
+
+        private static Snapshot GetOrBuildSnapshot(MineRock5 rock5)
+        {
+            if (!Snapshots.TryGetValue(rock5, out var snapshot))
+            {
+                snapshot = BuildSnapshot(rock5);
+                Snapshots[rock5] = snapshot;
+            }
+            return snapshot;
         }
 
         private static string GetHealthData(MineRock5 rock5)
@@ -171,13 +192,29 @@ namespace Automatics.AutomaticMapping
             var maxHeights = new float[colliders.Length];
             for (var i = 0; i < colliders.Length; i++)
             {
-                var bounds = colliders[i].bounds;
+                var bounds = GetBounds(colliders[i]);
                 centers[i] = bounds.center;
                 maxHeights[i] = bounds.max.y;
                 sum += centers[i];
                 if (maxHeights[i] > max) max = maxHeights[i];
             }
             return new Snapshot(colliders, centers, maxHeights, sum / colliders.Length, max);
+        }
+
+        // A hit area mined before the snapshot is off: the rock's own Awake turns off those mined
+        // before it loaded. An inactive collider reports empty bounds at the origin, so these take
+        // their bounds from the collider's shape, and the centre over all hit areas is the same
+        // whenever the rock was mined.
+        private static Bounds GetBounds(Collider collider)
+        {
+            if ((collider.enabled && collider.gameObject.activeInHierarchy) ||
+                !PinTooltipContent.TryGetShapeCorners(collider, ShapeCorners))
+                return collider.bounds;
+
+            var bounds = new Bounds(ShapeCorners[0], Vector3.zero);
+            for (var i = 1; i < ShapeCorners.Length; i++)
+                bounds.Encapsulate(ShapeCorners[i]);
+            return bounds;
         }
 
         private static Collider[] GetHitAreaColliders(MineRock5 rock5)

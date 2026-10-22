@@ -20,10 +20,15 @@ namespace Automatics.AutomaticMapping
         private const int RetryTileBudgetPerFrame = 4;
         private const int MaxTileDepth = 4;
 
+        // Half the height of the column searched for the deposits that compete for a saved mineral
+        // pin. The pin goes to the nearest deposit across the ground, at whatever height, so the
+        // column is taller than the world, dungeon interiors 5000 m up included.
+        private const float RivalColumnHalfHeight = 10000f;
+
         // A-12: ColliderBuffer and StaticObjectCache are intentionally mutable
-        // (no `readonly`) so that the primary scan path can grow the buffer on
-        // saturation and swap the pending cache wholesale after a successful
-        // non-saturated pass.
+        // (no `readonly`) so that the primary scan path and the mineral rival
+        // query can grow the buffer on saturation and the scan can swap the
+        // pending cache wholesale after a successful non-saturated pass.
         private static Collider[] ColliderBuffer;
         private static Dictionary<Collider, ClassifiedStaticObject> StaticObjectCache;
         private static readonly Lazy<int> ObjectMaskLazy;
@@ -39,6 +44,16 @@ namespace Automatics.AutomaticMapping
         // only on the zone of the point). Cleared when a pass starts and never carried into the
         // next one, so a zone that finishes loading is mapped by the next pass.
         private static readonly Dictionary<Vector2s, bool> AreaReadinessThisPass;
+
+        // The mineral deposits a pass has mapped, so a deposit the cache holds once per hit-area
+        // collider is mapped once, and whether the player had a wishbone equipped, asked at most once.
+        // Both start over with each pass, so equipping or unequipping the wishbone counts from the next.
+        private static readonly HashSet<ZDOID> MineralsMappedThisPass;
+        private static bool? _wishboneEquippedThisPass;
+
+        // Scratch for the deposits around a mineral deposit that could own the same saved pin.
+        private static readonly List<Vector3> MineralRivalAnchors;
+        private static readonly HashSet<Component> MineralRivalsSeen;
 
         private static float _lastCacheUpdateTime;
         private static float _mappingTimer;
@@ -147,6 +162,9 @@ namespace Automatics.AutomaticMapping
             OwnedFloraPinsScratch = new HashSet<Minimap.PinData>();
             StaleRemovalScratch = new HashSet<Minimap.PinData>();
             AreaReadinessThisPass = new Dictionary<Vector2s, bool>();
+            MineralsMappedThisPass = new HashSet<ZDOID>();
+            MineralRivalAnchors = new List<Vector3>();
+            MineralRivalsSeen = new HashSet<Component>();
         }
 
         private static bool CanMapping(float delta, bool takeInput)
@@ -293,6 +311,8 @@ namespace Automatics.AutomaticMapping
             OwnedFloraPinsScratch.Clear();
             StaleRemovalScratch.Clear();
             AreaReadinessThisPass.Clear();
+            MineralsMappedThisPass.Clear();
+            _wishboneEquippedThisPass = null;
             PendingTiles.Clear();
             _tileFallbackSawTruncation = false;
             _pendingScanSnapshot = null;
@@ -453,7 +473,8 @@ namespace Automatics.AutomaticMapping
         }
 
         /// <summary>
-        /// Advances the Flora per-pass network guard and stamps the sweep
+        /// Advances the Flora per-pass network guard, starts the per-pass
+        /// mineral state over, and stamps the sweep
         /// generation that entries observed during this pass will be tagged
         /// with. While <see cref="_cacheIncomplete"/> is true the sweep
         /// generation is *not* advanced — the iteration still runs on whatever
@@ -466,6 +487,8 @@ namespace Automatics.AutomaticMapping
         {
             _currentPassId++;
             SeenNetworksThisPass.Clear();
+            MineralsMappedThisPass.Clear();
+            _wishboneEquippedThisPass = null;
             if (!_cacheIncomplete)
                 _currentSweepId++;
         }
@@ -887,11 +910,7 @@ namespace Automatics.AutomaticMapping
         /// </summary>
         private static ClassifiedStaticObject? ClassifyStaticObject(Collider collider)
         {
-            var component = collider.GetComponentInParent<IDestructible>() as Component;
-            if (!component)
-                component = collider.GetComponentInParent<Interactable>() as Component;
-            if (!component)
-                component = collider.GetComponentInParent<Hoverable>() as Component;
+            var component = GetStaticComponent(collider);
             if (!component) return null;
 
             var sourceToken = Objects.GetName(component);
@@ -925,6 +944,17 @@ namespace Automatics.AutomaticMapping
                 Position = component.transform.position,
                 SourceToken = sourceToken
             };
+        }
+
+        // The object a collider belongs to, as the static scan classifies it.
+        private static Component GetStaticComponent(Collider collider)
+        {
+            var component = collider.GetComponentInParent<IDestructible>() as Component;
+            if (!component)
+                component = collider.GetComponentInParent<Interactable>() as Component;
+            if (!component)
+                component = collider.GetComponentInParent<Hoverable>() as Component;
+            return component;
         }
 
         /// <summary>
@@ -1380,6 +1410,10 @@ namespace Automatics.AutomaticMapping
                 return true;
             }
 
+            // The static object cache lists a deposit once per hit-area collider; the first maps it
+            // for the pass.
+            if (!MineralsMappedThisPass.Add(uniqueId)) return true;
+
             if (ValheimObject.Mineral.GetName(data.Identifier, out var label))
                 name = label;
 
@@ -1387,35 +1421,171 @@ namespace Automatics.AutomaticMapping
             float maxHeight;
             if (!TryGetMineralPosition(component, out pos, out maxHeight)) return true;
 
-            if (TryFindAutomaticPin(pos, CreateTarget(component.gameObject, name), name, false,
-                    out var adopted))
+            // A saved pin is taken back whether or not the deposit is underground: only a new pin
+            // needs the wishbone. A deposit whose neighbours could not all be found waits for a
+            // later pass, so a pin it may own does not get a second one beside it.
+            if (!TryFindSavedMineralPin(component, data.Identifier, name, out var adopted)) return true;
+            if (adopted != null)
             {
                 CachePin(identify, adopted, PinKind.Mineral, data.Identifier, sourceToken,
                     PinSourceDomain.Component);
                 return true;
             }
 
+            if (Config.NeedToEquipWishboneForUndergroundMinerals && !IsWishboneEquipped() &&
+                maxHeight < ZoneSystem.instance.GetGroundHeight(pos))
+                return true;
+
             if (Map.GetClosestPin(pos,
                     includeInactive: true) != null)
                 return true;
 
-            if (Config.NeedToEquipWishboneForUndergroundMinerals)
-                if (maxHeight < ZoneSystem.instance.GetGroundHeight(pos))
-                {
-                    var items = Player.m_localPlayer.GetInventory().GetEquippedItems();
-                    var hasWishbone = false;
-                    for (var i = 0; i < items.Count; i++)
-                        if (items[i].m_shared.m_name == "$item_wishbone")
-                        {
-                            hasWishbone = true;
-                            break;
-                        }
-
-                    if (!hasWishbone) return true;
-                }
-
             AddPin(uniqueId, pos, name, CreateTarget(component.gameObject, name), PinKind.Mineral,
                 data.Identifier, sourceToken, PinSourceDomain.Component);
+            return true;
+        }
+
+        private static bool IsWishboneEquipped()
+        {
+            if (!_wishboneEquippedThisPass.HasValue)
+            {
+                var equipped = false;
+                var items = Player.m_localPlayer.GetInventory().GetEquippedItems();
+                for (var i = 0; i < items.Count; i++)
+                    if (items[i].m_shared.m_name == "$item_wishbone")
+                    {
+                        equipped = true;
+                        break;
+                    }
+
+                _wishboneEquippedThisPass = equipped;
+            }
+
+            return _wishboneEquippedThisPass.Value;
+        }
+
+        /// <summary>
+        ///     Whether the object is a mineral deposit, and if so the saved pin a static pass would
+        ///     take back for it (<see cref="TryFindSavedMineralPin" />), or null. While the deposits
+        ///     around it cannot all be found, it is the nearest saved pin that may be the deposit's.
+        ///     The pin and navigation keys look up an untracked deposit's pin through it, so they
+        ///     find the pin the scan would find and never add another beside a pin the scan has yet
+        ///     to assign.
+        /// </summary>
+        internal static bool IsMineralDeposit(Component component, out Minimap.PinData savedPin)
+        {
+            savedPin = null;
+            if (!component) return false;
+
+            var sourceToken = Objects.GetName(component);
+            if (!GetMineral(sourceToken, out var data)) return false;
+
+            var name = ValheimObject.Mineral.GetName(data.Identifier, out var label) ? label : sourceToken;
+            TryFindSavedMineralPin(component, data.Identifier, name, out savedPin);
+            return true;
+        }
+
+        // A mineral deposit's saved pin that this module no longer tracks, taken back under the
+        // rules of TryFindAutomaticPin: saved by Automatics, not held by another object, with the
+        // icon and the name the deposit's pin is added with. That pin stands where the deposit's
+        // hit areas were centred when it was added, which mining moves, so it is looked for around
+        // the deposit's anchor (see TryGetMineralAnchor), as far as the deposit's colliders reach. A
+        // pin there is this deposit's only when no other loaded deposit of the same kind is as
+        // close to it: a nearer one or a tie leaves it alone, so neighbouring deposits never take
+        // each other's pin, in whichever order they are mapped. The other deposits are looked for
+        // only once a pin passes the other rules. When they could not all be found, no pin is
+        // assigned for certain: the result is false, and pinData is the nearest pin that passes
+        // the other rules, which may be the deposit's.
+        private static bool TryFindSavedMineralPin(Component deposit, string identifier, string name,
+            out Minimap.PinData pinData)
+        {
+            pinData = null;
+            if (!TryGetMineralAnchor(deposit, out var anchor)) return true;
+
+            var transform = deposit.transform;
+            var radius = PinTooltipContent.MineralSearchRadius(deposit.gameObject, transform.rotation,
+                anchor - transform.position);
+            var type = IconPack.GetPinType(CreateTarget(deposit.gameObject, name));
+            var stored = Map.StoredPinName(name);
+            Predicate<Minimap.PinData> candidate = pin =>
+                pin.m_save && pin.m_type == type && pin.m_name == stored && !OwnsPin(pin) &&
+                !DynamicObjectMapping.OwnsPin(pin) && Map.IsAutomaticPin(pin);
+            var rivalsSought = false;
+            var rivalsFound = true;
+            pinData = Map.GetClosestPin(anchor, radius, pin =>
+            {
+                if (!candidate(pin)) return false;
+
+                if (!rivalsSought)
+                {
+                    rivalsSought = true;
+                    rivalsFound = FindRivalAnchors(deposit, identifier, anchor, radius);
+                }
+                if (!rivalsFound) return false;
+
+                var distance = Utils.DistanceXZ(pin.m_pos, anchor);
+                foreach (var rival in MineralRivalAnchors)
+                    if (Utils.DistanceXZ(pin.m_pos, rival) <= distance)
+                        return false;
+                return true;
+            }, includeInactive: true);
+            if (rivalsFound) return true;
+
+            pinData = Map.GetClosestPin(anchor, radius, candidate, includeInactive: true);
+            return false;
+        }
+
+        // The point a deposit's saved pin is looked for around, which mining does not move: the
+        // centre over all of a MineRock5's hit areas, mined or not, and a MineRock's own position.
+        // Other mineral shapes keep their colliders while they live, so their current centre is used.
+        private static bool TryGetMineralAnchor(Component component, out Vector3 anchor)
+        {
+            if (component is MineRock5 rock5)
+                return MineRock5Cache.TryGetCenter(rock5, out anchor);
+
+            if (component is MineRock rock)
+            {
+                anchor = rock.transform.position;
+                return true;
+            }
+
+            return TryGetMineralPosition(component, out anchor, out _);
+        }
+
+        // Collects in MineralRivalAnchors the anchors of the other loaded deposits of the same kind
+        // around a deposit. They are found through the physics scene, not the static cache, so the
+        // answer does not depend on which deposits a pass has already reached. A deposit as close
+        // to a pin within this deposit's footprint has its anchor within two footprints of this one
+        // across the ground, at any height, so the query is a column one footprint wider than that,
+        // to reach the colliders around such an anchor. A query that fills the collider buffer may
+        // have left some out: the buffer grows as the scan's does, up to the same ceiling, and the
+        // query runs again. False when it still fills the buffer at the ceiling.
+        private static bool FindRivalAnchors(Component deposit, string identifier, Vector3 anchor, float radius)
+        {
+            MineralRivalAnchors.Clear();
+            MineralRivalsSeen.Clear();
+            var halfExtents = new Vector3(radius * 3f, RivalColumnHalfHeight, radius * 3f);
+            var size = Physics.OverlapBoxNonAlloc(anchor, halfExtents, ColliderBuffer, Quaternion.identity,
+                ObjectMask);
+            while (size >= ColliderBuffer.Length && ColliderBuffer.Length < ColliderBufferMaxLength)
+            {
+                ColliderBuffer = new Collider[Mathf.Min(ColliderBuffer.Length * 2, ColliderBufferMaxLength)];
+                size = Physics.OverlapBoxNonAlloc(anchor, halfExtents, ColliderBuffer, Quaternion.identity,
+                    ObjectMask);
+            }
+            if (size >= ColliderBuffer.Length) return false;
+
+            for (var i = 0; i < size; i++)
+            {
+                var rival = GetStaticComponent(ColliderBuffer[i]);
+                if (!rival || rival == deposit || !MineralRivalsSeen.Add(rival)) continue;
+                if (!GetMineral(Objects.GetName(rival), out var data) || data.Identifier != identifier) continue;
+                if (!Objects.GetZdoid(rival, out _)) continue;
+                if (TryGetMineralAnchor(rival, out var rivalAnchor))
+                    MineralRivalAnchors.Add(rivalAnchor);
+            }
+
+            MineralRivalsSeen.Clear();
             return true;
         }
 

@@ -54,6 +54,8 @@ namespace Automatics.AutomaticMapping
             AccessTools.FieldRefAccess<MineRock, Collider[]>("m_hitAreas");
         private static readonly FieldInfo Rock5Areas = AccessTools.Field(typeof(MineRock5), "m_hitAreas");
         private static readonly FieldInfo Rock5Health = AccessTools.Field(Rock5Areas.FieldType.GetGenericArguments()[0], "m_health");
+        private static readonly List<Collider> FootprintColliders = new List<Collider>();
+        private static readonly Vector3[] FootprintCorners = new Vector3[8];
 
         internal static Content Build(Minimap.PinData pin, SavedObjects savedObjects = null)
         {
@@ -98,7 +100,7 @@ namespace Automatics.AutomaticMapping
                 }
                 var distance = category == PinCategory.Mineral ? Utils.DistanceXZ(zdo.GetPosition(), pin.m_pos) :
                     Vector3.Distance(zdo.GetPosition(), pin.m_pos);
-                var radius = category == PinCategory.Mineral ? MineralSearchRadius(prefab, zdo.GetRotation()) :
+                var radius = category == PinCategory.Mineral ? MineralSearchRadius(prefab, zdo.GetRotation(), Vector3.zero) :
                     Config.FloraPinMergeRange;
                 if (distance > radius || distance > nearest) continue;
                 result.Ids.Clear();
@@ -136,44 +138,62 @@ namespace Automatics.AutomaticMapping
                    (category == PinCategory.Flora || category == PinCategory.Mineral);
         }
 
-        private static float MineralSearchRadius(GameObject prefab, Quaternion rotation)
+        // A mineral deposit's footprint: how far across the ground, at least 4 m, its colliders reach
+        // from a point given as its offset from the deposit's position. The source is the deposit's
+        // prefab placed with the rotation given, or a live deposit with its own rotation. The tooltip
+        // looks for a saved pin's deposit within it, and the static pass for a deposit's saved pin.
+        internal static float MineralSearchRadius(GameObject source, Quaternion rotation, Vector3 anchorOffset)
         {
             var radius = 4f;
-            var relativeRotation = rotation * Quaternion.Inverse(prefab.transform.rotation);
+            var relativeRotation = rotation * Quaternion.Inverse(source.transform.rotation);
             // A live pin's collider centre stays within this footprint, even when only some sections remain.
             // Use shape bounds because inactive prefab colliders have no world-space physics bounds.
-            foreach (var collider in prefab.GetComponentsInChildren<Collider>(true))
+            source.GetComponentsInChildren(true, FootprintColliders);
+            foreach (var collider in FootprintColliders)
             {
-                Bounds bounds;
-                switch (collider)
+                if (!TryGetShapeCorners(collider, FootprintCorners)) continue;
+                foreach (var corner in FootprintCorners)
                 {
-                    case MeshCollider mesh when mesh.sharedMesh:
-                        bounds = mesh.sharedMesh.bounds;
-                        break;
-                    case BoxCollider box:
-                        bounds = new Bounds(box.center, box.size);
-                        break;
-                    case SphereCollider sphere:
-                        bounds = new Bounds(sphere.center, Vector3.one * sphere.radius * 2f);
-                        break;
-                    case CapsuleCollider capsule:
-                        var size = Vector3.one * capsule.radius * 2f;
-                        size[capsule.direction] = Mathf.Max(capsule.height, size[capsule.direction]);
-                        bounds = new Bounds(capsule.center, size);
-                        break;
-                    default:
-                        continue;
-                }
-                for (var corner = 0; corner < 8; corner++)
-                {
-                    var point = bounds.center + Vector3.Scale(bounds.extents, new Vector3(
-                        (corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f,
-                        (corner & 4) == 0 ? -1f : 1f));
-                    var offset = relativeRotation * (collider.transform.TransformPoint(point) - prefab.transform.position);
-                    radius = Mathf.Max(radius, Utils.DistanceXZ(Vector3.zero, offset));
+                    var offset = relativeRotation * (corner - source.transform.position);
+                    radius = Mathf.Max(radius, Utils.DistanceXZ(anchorOffset, offset));
                 }
             }
+            FootprintColliders.Clear();
             return radius;
+        }
+
+        // The eight world-space corners of a collider's shape bounds. Unlike Collider.bounds they are
+        // there while the collider is off, as on a prefab or a mined hit area; false for other shapes.
+        internal static bool TryGetShapeCorners(Collider collider, Vector3[] corners)
+        {
+            Bounds bounds;
+            switch (collider)
+            {
+                case MeshCollider mesh when mesh.sharedMesh:
+                    bounds = mesh.sharedMesh.bounds;
+                    break;
+                case BoxCollider box:
+                    bounds = new Bounds(box.center, box.size);
+                    break;
+                case SphereCollider sphere:
+                    bounds = new Bounds(sphere.center, Vector3.one * sphere.radius * 2f);
+                    break;
+                case CapsuleCollider capsule:
+                    var size = Vector3.one * capsule.radius * 2f;
+                    size[capsule.direction] = Mathf.Max(capsule.height, size[capsule.direction]);
+                    bounds = new Bounds(capsule.center, size);
+                    break;
+                default:
+                    return false;
+            }
+            for (var corner = 0; corner < 8; corner++)
+            {
+                var point = bounds.center + Vector3.Scale(bounds.extents, new Vector3(
+                    (corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f,
+                    (corner & 4) == 0 ? -1f : 1f));
+                corners[corner] = collider.transform.TransformPoint(point);
+            }
+            return true;
         }
 
         // Refresh details through existing associations or the ids captured when hover changed.

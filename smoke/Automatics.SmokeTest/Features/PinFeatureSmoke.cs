@@ -13,6 +13,78 @@ using MappingModule = Automatics.AutomaticMapping.Module;
 
 namespace Automatics.SmokeTest
 {
+    // The one rule every pin removal in this file follows: a check takes off the map only a pin it
+    // created, one that was not on the map when the check took this snapshot at its start. Any
+    // other pin, such as a saved pin of yours that a test object took as its own, or an automatic
+    // pin the pin key saved in place, stays on the map as the check found it: the hold Automatic
+    // Mapping's static cache took on it during the check is let go, the hold it had is given back,
+    // and its saved and automatic state is put back.
+    internal sealed class SmokePins
+    {
+        private static readonly System.Reflection.FieldInfo PinDataCacheField =
+            AccessTools.Field(typeof(StaticObjectMapping), "PinDataCache");
+
+        private static readonly System.Reflection.FieldInfo PinKeyCacheField =
+            AccessTools.Field(typeof(StaticObjectMapping), "PinKeyCache");
+
+        private sealed class Found
+        {
+            public bool Saved;
+            public bool Automatic;
+            public Dictionary<StaticObjectMapping.MapPinIdentify, PinCacheEntry> Hold;
+        }
+
+        private readonly Dictionary<Minimap.PinData, Found> _found = new Dictionary<Minimap.PinData, Found>();
+
+        public SmokePins()
+        {
+            var cache = PinDataCacheField?.GetValue(null) as Dictionary<StaticObjectMapping.MapPinIdentify, PinCacheEntry>;
+            foreach (var pin in Map.GetAllPins())
+            {
+                if (pin == null || _found.ContainsKey(pin)) continue;
+                var found = new Found { Saved = pin.m_save, Automatic = Map.IsAutomaticPin(pin) };
+                if (cache != null && StaticObjectMapping.TryGetPinKeys(pin, out var keys))
+                {
+                    found.Hold = new Dictionary<StaticObjectMapping.MapPinIdentify, PinCacheEntry>();
+                    foreach (var key in keys)
+                        if (cache.TryGetValue(key, out var entry)) found.Hold[key] = entry;
+                }
+                _found[pin] = found;
+            }
+        }
+
+        public bool Created(Minimap.PinData pin)
+        {
+            return pin != null && !_found.ContainsKey(pin);
+        }
+
+        public void Remove(Minimap map, Minimap.PinData pin)
+        {
+            if (pin == null) return;
+            if (!_found.TryGetValue(pin, out var found))
+            {
+                if (map) map.RemovePin(pin);
+                return;
+            }
+
+            StaticObjectMapping.OnRemovePin(pin);
+            pin.m_save = found.Saved;
+            if (found.Automatic) Map.TrackAutomaticPin(pin);
+            else Map.UntrackAutomaticPin(pin);
+            var cache = PinDataCacheField?.GetValue(null) as Dictionary<StaticObjectMapping.MapPinIdentify, PinCacheEntry>;
+            var keys = PinKeyCacheField?.GetValue(null) as Dictionary<Minimap.PinData, HashSet<StaticObjectMapping.MapPinIdentify>>;
+            if (found.Hold == null || cache == null || keys == null) return;
+            var held = new HashSet<StaticObjectMapping.MapPinIdentify>();
+            foreach (var pair in found.Hold)
+                if (!cache.ContainsKey(pair.Key))
+                {
+                    cache[pair.Key] = pair.Value;
+                    held.Add(pair.Key);
+                }
+            if (held.Count > 0) keys[pin] = held;
+        }
+    }
+
     // Runs synchronously once its first frame has passed: no map save, item update or player
     // input can occur between adding a test pin and removing it. The section waits that one
     // frame only after spawning the deposits of the destroyed-object checks, before any test pin
@@ -36,14 +108,13 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
+            var sectionPins = new SmokePins();
             var created = new List<Minimap.PinData>();
             var deposits = new List<TestDeposit>();
             Func<string, bool> cleanup = _ =>
             {
-                // The deposits' pins join the list as the deposits go.
-                if (deposits.Count > 0) RemoveDeposits(deposits, created);
-                foreach (var pin in created)
-                    if (map) map.RemovePin(pin);
+                if (deposits.Count > 0) RemoveDeposits(map, sectionPins, deposits);
+                foreach (var pin in created) sectionPins.Remove(map, pin);
                 return true;
             };
             SmokeSession.TrackHandBack(cleanup);
@@ -68,7 +139,7 @@ namespace Automatics.SmokeTest
                         yield break;
                     }
                     CheckDestroyedObjectPins(run, player, map, deposits, created);
-                    RemoveDeposits(deposits, created);
+                    RemoveDeposits(map, sectionPins, deposits);
                 }
 
                 Minimap.PinData objectPin = null;
@@ -115,6 +186,8 @@ namespace Automatics.SmokeTest
                 CheckSavedPinRecognition(run, player, map, created);
                 CheckUncachedAutomaticPin(run, player, map, created);
                 CheckLoadingAreaKeepsPin(run, player, map, created);
+                CheckMinedDeposit(run, player, map, created);
+                CheckDepositsSharingPin(run, player, map, created);
                 CheckLoadedLocationSpot(run, player, map, created);
             }
             finally
@@ -472,6 +545,7 @@ namespace Automatics.SmokeTest
             List<Minimap.PinData> created)
         {
             const string check = "pin_location_detached_piece";
+            var smokePins = new SmokePins();
             var camera = GameCamera.instance.transform;
             var locations = ExteriorLocations(camera.position);
             var worldPiece = SpawnTestPiece(camera.position + camera.forward * 4f + camera.up * 3f,
@@ -507,8 +581,8 @@ namespace Automatics.SmokeTest
                                 : "a detached piece with creator 0 saved the containing location's name, icon and position");
                         else
                             run.Fail(check, "the detached world-generated piece did not save exactly one location pin");
-                        // A location pin the key saved goes too; the static scan adds the automatic pin back.
-                        if (added != null) Minimap.instance.RemovePin(added);
+                        // A pin the key added goes; a location pin it saved in place is put back.
+                        smokePins.Remove(Minimap.instance, added);
                         break;
                     }
                     if (found == null)
@@ -527,6 +601,7 @@ namespace Automatics.SmokeTest
             KnownLocation location, List<Minimap.PinData> created)
         {
             const string check = "pin_location_player_piece";
+            var smokePins = new SmokePins();
             var piece = go ? go.GetComponent<Piece>() : null;
             if (!piece || !piece.IsPlacedByPlayer())
             {
@@ -565,7 +640,7 @@ namespace Automatics.SmokeTest
                     run.Pass(check, "a piece with a player creator inside the location's area saved the piece itself");
                 else
                     run.Fail(check, "the player-built piece inside the location did not save its own pin");
-                if (added != null) Minimap.instance.RemovePin(added);
+                smokePins.Remove(Minimap.instance, added);
             }
             finally
             {
@@ -578,6 +653,7 @@ namespace Automatics.SmokeTest
         // spawned non-persistent and removed before the next is spawned.
         private static void CheckObjectsInLocation(FeatureRun run, Player player, List<Minimap.PinData> created)
         {
+            var smokePins = new SmokePins();
             var checks = new[]
             {
                 new KeyValuePair<string, string[]>("pin_location_tree", new[] { "Beech1", "Birch1", "Oak1" }),
@@ -630,7 +706,7 @@ namespace Automatics.SmokeTest
                         run.Pass(check, $"{Objects.GetPrefabName(go)} inside the location's area saved its own pin '{added.m_name}'");
                     else
                         run.Fail(check, $"{Objects.GetPrefabName(go)} inside the location's area did not save its own pin");
-                    if (added != null) Minimap.instance.RemovePin(added);
+                    smokePins.Remove(Minimap.instance, added);
                 }
                 finally
                 {
@@ -644,6 +720,7 @@ namespace Automatics.SmokeTest
         private static void CheckInterior(FeatureRun run, Player player, List<Minimap.PinData> created)
         {
             const string check = "pin_location_interior";
+            var smokePins = new SmokePins();
             var origin = GameCamera.instance.transform.position;
             if (!Character.InInterior(origin))
             {
@@ -684,8 +761,8 @@ namespace Automatics.SmokeTest
                         : "an interior surface saved its zone location's name, icon and entrance position");
                 else
                     run.Fail(check, "the interior ray did not save exactly one pin for its zone location");
-                // A location pin the key saved goes too; the static scan adds the automatic pin back.
-                if (added != null) Minimap.instance.RemovePin(added);
+                // A pin the key added goes; a location pin it saved in place is put back.
+                smokePins.Remove(Minimap.instance, added);
                 return;
             }
             run.Skip(check, "no interior surface of a recognized early-content dungeon without an existing manual pin is in view; face a wall and retry");
@@ -746,6 +823,7 @@ namespace Automatics.SmokeTest
             List<Minimap.PinData> created, bool ground, ref bool navigationChecked)
         {
             var check = ground ? "pin_location_ground" : "pin_location_wall";
+            var smokePins = new SmokePins();
             var origin = GameCamera.instance.transform.position;
             var overlapping = false;
             foreach (var location in ExteriorLocations(origin))
@@ -821,8 +899,8 @@ namespace Automatics.SmokeTest
                     else
                         run.Fail(check, "the location ray did not add exactly one recognized location pin or allowed a duplicate");
                     // Let the other ray check exercise the same location without a test duplicate. A
-                    // location pin the key saved goes too; the static scan adds the automatic pin back.
-                    if (added != null) Minimap.instance.RemovePin(added);
+                    // pin the key added goes; a location pin it saved in place is put back.
+                    smokePins.Remove(Minimap.instance, added);
                     return;
                 }
             }
@@ -1154,6 +1232,7 @@ namespace Automatics.SmokeTest
                 return;
             }
 
+            var smokePins = new SmokePins();
             var go = SpawnTestObject(new[] { "rock4_copper" }, spot, Quaternion.identity, out var skip,
                 prefab => prefab.GetComponent<MineRock5>());
             Minimap.PinData pin = null;
@@ -1188,7 +1267,7 @@ namespace Automatics.SmokeTest
                     run.Skip(check, "the first static pass added no pin for the deposit; the mineral category or unexplored automatic pins may be hidden, or your simulation distance does not reach the zones around it");
                     return;
                 }
-                created.Add(pin);
+                if (smokePins.Created(pin)) created.Add(pin);
 
                 _loadingZone = loadingZone;
                 _loadingQueries = 0;
@@ -1234,7 +1313,12 @@ namespace Automatics.SmokeTest
             }
             finally
             {
-                if (pin != null && map) map.RemovePin(pin);
+                // Whatever pin the deposit holds goes by the rule before the deposit does, so the
+                // deposit's destruction cannot take a pin of yours that it took as its own.
+                if (go && Objects.GetZdoid(go.transform, out var id) &&
+                    StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(id), out var held))
+                    smokePins.Remove(map, held);
+                smokePins.Remove(map, pin);
                 RemoveTestObject(go);
             }
         }
@@ -1251,6 +1335,522 @@ namespace Automatics.SmokeTest
             _loadingQueries++;
             __result = false;
             return false;
+        }
+
+        private const string MinedDepositCheck = "pin_mined_deposit_one_pin";
+        private const string MinedDepositKeyCheck = "pin_key_mined_deposit_duplicate";
+        private const string NearestDepositCheck = "pin_adjacent_deposits_nearest_adopts";
+        private const string TiedDepositsCheck = "pin_tied_deposits_adopt_none";
+
+        // What the game does when it loads an object from its ZDO, and the static pass's mapping of
+        // one mineral deposit with what it keeps for the pass: the deposits it has mapped and
+        // whether a wishbone is equipped.
+        private static readonly System.Reflection.MethodInfo CreateObjectMethod =
+            AccessTools.Method(typeof(ZNetScene), "CreateObject", new[] { typeof(ZDO) });
+
+        private static readonly System.Reflection.MethodInfo MineralMappingMethod =
+            AccessTools.Method(typeof(StaticObjectMapping), "MineralMapping");
+
+        private static readonly System.Reflection.FieldInfo MineralsMappedField =
+            AccessTools.Field(typeof(StaticObjectMapping), "MineralsMappedThisPass");
+
+        private static readonly System.Reflection.FieldInfo WishboneField =
+            AccessTools.Field(typeof(StaticObjectMapping), "_wishboneEquippedThisPass");
+
+        // The copper deposits and the pins one deposit check creates, all taken away when it is
+        // disposed, before the next check runs; its pins also join the section's list, which
+        // retries a removal that fails. Every removal goes through the snapshot taken when the
+        // fixture is made (SmokePins), and each deposit lets go of its pin before it goes, so
+        // neither the cleanup nor a deposit's destruction can take a pin of yours off the map.
+        private sealed class DepositFixture : IDisposable
+        {
+            private readonly Minimap _map;
+            private readonly List<Minimap.PinData> _section;
+            private readonly SmokePins _pins = new SmokePins();
+            private readonly HashSet<Minimap.PinData> _created = new HashSet<Minimap.PinData>();
+            private readonly List<GameObject> _deposits = new List<GameObject>();
+            private readonly List<ZDOID> _ids = new List<ZDOID>();
+
+            public DepositFixture(Minimap map, List<Minimap.PinData> section)
+            {
+                _map = map;
+                _section = section;
+            }
+
+            public GameObject Spawn(Vector3 position, out string skip)
+            {
+                var go = SpawnTestObject(new[] { "rock4_copper" }, position, Quaternion.identity, out skip,
+                    prefab => prefab.GetComponent<MineRock5>());
+                if (!go) return null;
+                _deposits.Add(go);
+                if (Objects.GetZdoid(go.transform, out var id)) _ids.Add(id);
+                return go;
+            }
+
+            // Unloads the deposit as the game unloads an object whose zone leaves the active area,
+            // keeping its ZDO as a world object's persistent one stays, and loads it again from that
+            // ZDO at once, as the game loads it. A ZDO left without an instance is destroyed before
+            // the game could spawn the deposit from it again.
+            public GameObject Reload(GameObject go)
+            {
+                var nview = go.GetComponent<ZNetView>();
+                var zdo = nview.GetZDO();
+                var instances = (Dictionary<ZDO, ZNetView>)SceneInstancesField.GetValue(ZNetScene.instance);
+                nview.ResetZDO();
+                go.SetActive(false);
+                UnityEngine.Object.Destroy(go);
+                SmokeSession.ReleaseSpawn(go);
+                _deposits.Remove(go);
+                instances.Remove(zdo);
+                GameObject loaded = null;
+                try
+                {
+                    loaded = CreateObjectMethod.Invoke(ZNetScene.instance, new object[] { zdo }) as GameObject;
+                }
+                finally
+                {
+                    if (loaded)
+                    {
+                        SmokeSession.TrackSpawn(loaded);
+                        _deposits.Add(loaded);
+                    }
+                    else if (ZDOMan.instance.GetZDO(zdo.m_uid) != null)
+                    {
+                        if (!zdo.IsOwner()) zdo.SetOwner(ZDOMan.GetSessionID());
+                        ZDOMan.instance.DestroyZDO(zdo);
+                        SendDestroyedMethod?.Invoke(ZDOMan.instance, null);
+                    }
+                }
+                Physics.SyncTransforms();
+                return loaded;
+            }
+
+            // Runs the action and records every pin it adds to the map as the fixture's own.
+            public T Record<T>(Func<T> action)
+            {
+                var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+                try
+                {
+                    return action();
+                }
+                finally
+                {
+                    foreach (var pin in Map.GetAllPins())
+                        if (!before.Contains(pin)) Own(pin);
+                }
+            }
+
+            // A pin the check created becomes the fixture's; a pin that was already on the map does not.
+            public void Own(Minimap.PinData pin)
+            {
+                if (_pins.Created(pin) && _created.Add(pin)) _section.Add(pin);
+            }
+
+            public void Remove(Minimap.PinData pin)
+            {
+                _pins.Remove(_map, pin);
+            }
+
+            // Lets go of the pin each test deposit holds, by the rule; the one kept, a pin the check
+            // created, only leaves the static cache and stays on the map.
+            public void Release(Minimap.PinData kept = null)
+            {
+                foreach (var id in _ids)
+                {
+                    if (!StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(id), out var pin))
+                        continue;
+                    if (ReferenceEquals(pin, kept)) StaticObjectMapping.OnRemovePin(pin);
+                    else _pins.Remove(_map, pin);
+                }
+            }
+
+            public void Dispose()
+            {
+                try
+                {
+                    Release();
+                }
+                finally
+                {
+                    foreach (var pin in _created) _pins.Remove(_map, pin);
+                    foreach (var go in _deposits) RemoveTestObject(go);
+                }
+            }
+        }
+
+        // Why the deposit checks cannot run, or null: they map copper deposits, and their saved
+        // test pin needs a local platform user as its author.
+        private static string DepositPreflight(out PlatformUserID author)
+        {
+            var localUser = PlatformManager.DistributionPlatform?.LocalUser;
+            author = localUser != null ? localUser.PlatformUserID : PlatformUserID.None;
+            if (!MappingConfig.AllowPinningMineral.Contains("CopperDeposit"))
+                return "copper deposits are not in allow_pinning_mineral";
+            if (!author.IsValid)
+                return "no local platform user is available to author a saved pin";
+            return null;
+        }
+
+        // Two ground spots for the deposit checks, a spot and the one 4 m to its right as seen from
+        // you, the nearest first and in front of you first, from 7 m to 27 m out, the spot within
+        // maxDistance of you. No pin may be within 10 m of either, so that none takes part: neither
+        // a pin of yours nor one the section's earlier checks still hold, which the search moves
+        // away from.
+        private static bool TryFindDepositSpots(Player player, float maxDistance, out Vector3 spot,
+            out Vector3 beside)
+        {
+            var forward = Vector3.ProjectOnPlane(GameCamera.instance.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 0.01f) forward = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up);
+            forward.Normalize();
+            Vector3 Ground(Vector3 point)
+            {
+                point.y = ZoneSystem.instance.GetGroundHeight(point);
+                return point;
+            }
+
+            for (var distance = 7f; distance <= maxDistance && distance <= 27f; distance += 5f)
+            for (var i = 0; i < 8; i++)
+            {
+                var direction = Quaternion.Euler(0f, i * 45f, 0f) * forward;
+                spot = Ground(player.transform.position + direction * distance);
+                beside = Ground(spot + Vector3.Cross(Vector3.up, direction) * 4f);
+                if (Map.GetClosestPin(spot, 10f, includeInactive: true) == null &&
+                    Map.GetClosestPin(beside, 10f, includeInactive: true) == null)
+                    return true;
+            }
+            spot = beside = Vector3.zero;
+            return false;
+        }
+
+        private const string NoDepositSpot =
+            "every spot 7 to 27 m around you, within reach, has a pin within 10 m; move to open ground and retry";
+
+        // A deposit's pin stands where the deposit's hit areas were centred when the pin was added,
+        // and mining moves that centre. A non-persistent copper deposit is spawned at a spot no pin
+        // is near (TryFindDepositSpots), within the static range. A saved automatic pin under its
+        // name and icon is added where its centre is with the fewest of its hit areas mined that
+        // put the pin more than 1.5 m from the deposit's own position, where the key's ray resolves
+        // the deposit. More hit areas, nearest that position first, are then marked mined in the
+        // deposit's ZDO, until its centre is more than 1.5 m on from the pin, and the deposit is
+        // unloaded and loaded again from its ZDO, as the game loads a deposit mined in an earlier
+        // session: its mined hit areas are off from the start. The pin key, and then a static pass
+        // that starts with a fresh scan of the area, must take the saved pin as the deposit's own
+        // and add no second pin.
+        private static void CheckMinedDeposit(FeatureRun run, Player player, Minimap map,
+            List<Minimap.PinData> created)
+        {
+            var interval = MappingConfig.StaticObjectMappingInterval;
+            var range = MappingConfig.StaticObjectMappingRange;
+            var reason = DepositPreflight(out var author);
+            var spot = Vector3.zero;
+            if (!MappingConfig.EnableAutomaticMapping || interval <= 0f || range <= 0)
+                reason = "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, so no periodic static pass runs";
+            else if (CreateObjectMethod == null || SceneInstancesField == null)
+                reason = "ZNetScene.CreateObject or ZNetScene.m_instances was not found in this game version";
+            else if ((bool)AccessTools.Field(typeof(StaticObjectMapping), "_cacheIncomplete").GetValue(null))
+                reason = "the static scan here is incomplete, so a pass does not scan the area again; move away from dense builds and retry";
+            else if (reason == null && !TryFindDepositSpots(player, range - 1f, out spot, out _))
+                reason = NoDepositSpot + $" (static_object_mapping_range is {range} m)";
+            if (reason != null)
+            {
+                run.Skip(MinedDepositCheck, reason);
+                run.Skip(MinedDepositKeyCheck, reason);
+                return;
+            }
+
+            using (var fixture = new DepositFixture(map, created))
+            {
+                var go = fixture.Spawn(spot, out var skip);
+                if (go)
+                {
+                    Physics.SyncTransforms();
+                    var colliders = go.GetComponentsInChildren<Collider>();
+                    if (colliders.Length < 2 || !Objects.GetZNetView(go.transform, out var nview) ||
+                        nview.GetZDO() == null)
+                        skip = "the spawned deposit has fewer than two hit areas or no ZDO";
+                    else if (!PlanMining(go.transform.position, colliders, out var pinAt, out var mined,
+                                 out var minedCentre))
+                        skip = "mining the deposit's hit areas cannot move its centre 1.5 m from its position and then 1.5 m on from there";
+                    else
+                    {
+                        var package = new ZPackage();
+                        package.Write(mined.Length);
+                        var health = go.GetComponent<MineRock5>().m_health;
+                        foreach (var gone in mined) package.Write(gone ? 0f : health);
+                        var identify = new StaticObjectMapping.MapPinIdentify(nview.GetZDO().m_uid);
+                        nview.GetZDO().Set(ZDOVars.s_health, Convert.ToBase64String(package.GetArray()));
+
+                        var loaded = fixture.Reload(go);
+                        var deposit = loaded ? loaded.GetComponent<MineRock5>() : null;
+                        if (!deposit || deposit.GetComponentsInChildren<Collider>(true)
+                                .Count(x => !x.gameObject.activeInHierarchy) != mined.Count(x => x))
+                            skip = "the deposit loaded again from its ZDO did not come back with its mined hit areas off";
+                        else
+                        {
+                            var saved = fixture.Record(() => AddSavedDepositPin(map, loaded, pinAt, author));
+                            if (!Map.IsAutomaticPin(saved) || StaticObjectMapping.OwnsPin(saved) ||
+                                StaticObjectMapping.TryGetCachedPin(identify, out _))
+                            {
+                                const string precondition =
+                                    "precondition failed: the test pin is not an automatic pin outside the static cache";
+                                run.Fail(MinedDepositKeyCheck, precondition);
+                                run.Fail(MinedDepositCheck, precondition);
+                                return;
+                            }
+                            CheckMinedDepositKey(run, player, map, fixture, loaded, saved);
+                            CheckMinedDepositPass(run, player, interval, fixture, identify, saved, minedCentre);
+                            return;
+                        }
+                    }
+                }
+                run.Skip(MinedDepositKeyCheck, skip);
+                run.Skip(MinedDepositCheck, skip);
+            }
+        }
+
+        // The ray action at the mined deposit, through the first of its standing hit areas an
+        // unobstructed camera ray reaches.
+        private static void CheckMinedDepositKey(FeatureRun run, Player player, Minimap map, DepositFixture fixture,
+            GameObject deposit, Minimap.PinData saved)
+        {
+            var camera = GameCamera.instance.transform.position;
+            foreach (var collider in deposit.GetComponentsInChildren<Collider>())
+            {
+                var ray = new Ray(camera, collider.bounds.center - camera);
+                if (!FirstHit(player, ray, out var hit) || !hit.collider.transform.IsChildOf(deposit.transform) ||
+                    !ObjectPinning.TryResolveFromRay(player, ray, out var aimed) || aimed.Instance != deposit)
+                    continue;
+
+                var count = Map.GetAllPins().Count;
+                var added = fixture.Record(() => ObjectPinning.TryPinFromRay(player, ray));
+                var none = added == null && Map.GetAllPins().Count == count;
+                // A pin the key added must not stand beside the deposit during the static pass.
+                fixture.Remove(added);
+                if (none && ReferenceEquals(ObjectPinning.FindStaticPin(aimed), saved))
+                    run.Pass(MinedDepositKeyCheck,
+                        "the key reported the mined deposit's saved pin, more than 1.5 m from the deposit's position, as its pin");
+                else
+                    run.Fail(MinedDepositKeyCheck, !none
+                        ? "the key added a second pin beside the mined deposit's saved pin"
+                        : "the key added no pin, but the deposit's lookup did not return its saved pin");
+                return;
+            }
+            run.Skip(MinedDepositKeyCheck, "no unobstructed camera ray reaches the test deposit");
+        }
+
+        // A static pass that starts with a fresh scan of the area, through the entry point the
+        // minimap update calls, as pin_static_loading_area_kept runs it. It maps the real objects
+        // around you as any pass does, and their pins stay.
+        private static void CheckMinedDepositPass(FeatureRun run, Player player, float interval,
+            DepositFixture fixture, StaticObjectMapping.MapPinIdentify identify, Minimap.PinData saved,
+            Vector3 minedCentre)
+        {
+            var lastScan = AccessTools.Field(typeof(StaticObjectMapping), "_lastCacheUpdateTime");
+            var passId = AccessTools.Field(typeof(StaticObjectMapping), "_currentPassId");
+            lastScan.SetValue(null, 0f);
+            var before = (int)passId.GetValue(null);
+            var pins = new HashSet<Minimap.PinData>(Map.GetAllPins());
+            var beside = new List<Minimap.PinData>();
+            Minimap.PinData held = null;
+            try
+            {
+                global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player, interval, false);
+            }
+            finally
+            {
+                // A pin the pass gave the deposit is the fixture's.
+                beside.AddRange(Map.GetAllPins()
+                    .Where(x => !pins.Contains(x) && Utils.DistanceXZ(x.m_pos, minedCentre) <= 1f));
+                beside.ForEach(fixture.Own);
+                if (StaticObjectMapping.TryGetCachedPin(identify, out held)) fixture.Own(held);
+            }
+
+            if ((int)passId.GetValue(null) == before)
+                run.Skip(MinedDepositCheck,
+                    "the static pass did not run (the game is paused or the area around you is still loading); retry");
+            else if (ReferenceEquals(held, saved) && Map.GetAllPins().Contains(saved) && beside.Count == 0)
+                run.Pass(MinedDepositCheck,
+                    "the mined deposit, loaded again with its centre more than 1.5 m from its saved pin, took that pin as its own and got no second pin");
+            else
+                run.Fail(MinedDepositCheck, beside.Count > 0
+                    ? "the static pass added a second pin at the mined deposit's centre beside its saved pin"
+                    : "the static pass did not take the saved pin as the mined deposit's own");
+        }
+
+        // Hit areas to mark mined, nearest the deposit's position first, so the centre of the rest
+        // moves away from that position: where the centre is with the fewest of them mined that put
+        // it more than 1.5 m from the position, which hit areas must then be mined to move it more
+        // than 1.5 m on from there with at least one left, and where it then is.
+        private static bool PlanMining(Vector3 position, Collider[] colliders, out Vector3 pinAt,
+            out bool[] mined, out Vector3 minedCentre)
+        {
+            var centres = colliders.Select(x => x.bounds.center).ToArray();
+            var full = centres.Aggregate(Vector3.zero, (sum, x) => sum + x) / centres.Length;
+            var away = Vector3.ProjectOnPlane(full - position, Vector3.up);
+            if (away.sqrMagnitude < 0.01f)
+                away = Vector3.ProjectOnPlane(GameCamera.instance.transform.right, Vector3.up);
+            away.Normalize();
+            var order = Enumerable.Range(0, centres.Length)
+                .OrderBy(i => Vector3.Dot(centres[i] - full, away)).ToArray();
+            Vector3 CentreAfter(int count) =>
+                order.Skip(count).Aggregate(Vector3.zero, (sum, i) => sum + centres[i]) / (centres.Length - count);
+
+            pinAt = minedCentre = Vector3.zero;
+            mined = new bool[centres.Length];
+            var first = -1;
+            for (var count = 0; count < centres.Length - 1 && first < 0; count++)
+                if (Utils.DistanceXZ(CentreAfter(count), position) > 1.5f)
+                    first = count;
+            if (first < 0) return false;
+
+            pinAt = CentreAfter(first);
+            for (var count = first + 1; count < centres.Length; count++)
+            {
+                var centre = CentreAfter(count);
+                if (Utils.DistanceXZ(centre, pinAt) <= 1.5f) continue;
+                for (var i = 0; i < count; i++) mined[order[i]] = true;
+                minedCentre = centre;
+                return true;
+            }
+            return false;
+        }
+
+        // Which of two deposits of the same kind takes a saved pin must not depend on the order a
+        // static pass reaches them. Non-persistent copper deposits are spawned on the ground where
+        // no pin is near (TryFindDepositSpots), with a saved automatic pin under their name and
+        // icon. Both go through the static pass's mineral mapping, called directly in each order,
+        // one then the other and the other way round, each order starting with neither deposit
+        // mapped in the pass or holding a pin. First the deposits stand 4 m apart, and the pin
+        // 1.5 m from the centre of one towards the other: that deposit takes it in both orders, and
+        // the other never does. Then the two stand at one spot, so the pin, 0.5 m from their
+        // centre, is as close to one as to the other: neither takes it, in either order.
+        private static void CheckDepositsSharingPin(FeatureRun run, Player player, Minimap map,
+            List<Minimap.PinData> created)
+        {
+            if (MineralMappingMethod == null || MineralsMappedField == null || WishboneField == null)
+            {
+                const string missing = "the static pass has no mineral mapping, with its per-pass state, to call";
+                run.Fail(NearestDepositCheck, missing);
+                run.Fail(TiedDepositsCheck, missing);
+                return;
+            }
+            var reason = DepositPreflight(out var author);
+            var spot = Vector3.zero;
+            var beside = Vector3.zero;
+            if (reason == null && !TryFindDepositSpots(player, float.PositiveInfinity, out spot, out beside))
+                reason = NoDepositSpot;
+            if (reason != null)
+            {
+                run.Skip(NearestDepositCheck, reason);
+                run.Skip(TiedDepositsCheck, reason);
+                return;
+            }
+
+            CheckDepositPair(run, NearestDepositCheck, map, spot, beside, author, created);
+            CheckDepositPair(run, TiedDepositsCheck, map, spot, spot, author, created);
+        }
+
+        private static void CheckDepositPair(FeatureRun run, string check, Minimap map, Vector3 first,
+            Vector3 second, PlatformUserID author, List<Minimap.PinData> created)
+        {
+            var tied = check == TiedDepositsCheck;
+            using (var fixture = new DepositFixture(map, created))
+            {
+                var deposits = new GameObject[2];
+                deposits[0] = fixture.Spawn(first, out var skip);
+                if (deposits[0]) deposits[1] = fixture.Spawn(second, out skip);
+                if (!deposits[1])
+                {
+                    run.Skip(check, skip);
+                    return;
+                }
+                Physics.SyncTransforms();
+
+                var centres = deposits.Select(HitAreaCentre).ToArray();
+                var toward = Vector3.ProjectOnPlane(centres[1] - centres[0], Vector3.up);
+                if (!tied && toward.magnitude < 3.5f)
+                {
+                    run.Skip(check, "the two deposits' centres are less than 3.5 m apart");
+                    return;
+                }
+                var saved = fixture.Record(() => AddSavedDepositPin(map, deposits[0],
+                    centres[0] + (tied ? Vector3.right * 0.5f : toward.normalized * 1.5f), author));
+                if (!Map.IsAutomaticPin(saved) || StaticObjectMapping.OwnsPin(saved))
+                {
+                    run.Fail(check, "precondition failed: the test pin is not an automatic pin outside the static cache");
+                    return;
+                }
+
+                var rocks = deposits.Select(x => (Component)x.GetComponent<MineRock5>()).ToArray();
+                var forwards = MapInOrder(fixture, rocks, new[] { 0, 1 }, saved);
+                var backwards = MapInOrder(fixture, rocks, new[] { 1, 0 }, saved);
+                bool Correct(Minimap.PinData[] held) => tied
+                    ? !ReferenceEquals(held[0], saved) && !ReferenceEquals(held[1], saved)
+                    : ReferenceEquals(held[0], saved) && !ReferenceEquals(held[1], saved);
+                string Holder(Minimap.PinData[] held) => ReferenceEquals(held[0], saved)
+                    ? "the first deposit"
+                    : ReferenceEquals(held[1], saved) ? "the second deposit" : "neither deposit";
+                var detail = $"mapped first then second, {Holder(forwards)} took the pin; second then first, {Holder(backwards)} did";
+                if (Correct(forwards) && Correct(backwards))
+                    run.Pass(check, (tied
+                        ? "two deposits at one spot, with the pin as close to one as to the other: "
+                        : "two deposits 4 m apart, with the pin 1.5 m from the first: ") + detail);
+                else
+                    run.Fail(check, detail);
+            }
+        }
+
+        // Maps the deposits through the static pass's mineral mapping in the given order and
+        // returns the pin each then holds. Afterwards none holds a pin again, and the saved test pin
+        // stays on the map for the next order (see DepositFixture.Release). What the mapping keeps
+        // for the pass, the deposits it mapped and whether a wishbone is equipped, is put back as it
+        // was, also when the mapping throws.
+        private static Minimap.PinData[] MapInOrder(DepositFixture fixture, Component[] deposits, int[] order,
+            Minimap.PinData saved)
+        {
+            var mapped = (HashSet<ZDOID>)MineralsMappedField.GetValue(null);
+            var wishbone = WishboneField.GetValue(null);
+            var ids = deposits.Select(x => Objects.GetZdoid(x, out var id) ? id : ZDOID.None).ToArray();
+            var held = new Minimap.PinData[deposits.Length];
+            try
+            {
+                fixture.Record(() =>
+                {
+                    foreach (var i in order)
+                        MineralMappingMethod.Invoke(null, new object[] { deposits[i], Objects.GetName(deposits[i]) });
+                    return true;
+                });
+                for (var i = 0; i < ids.Length; i++)
+                    StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(ids[i]), out held[i]);
+            }
+            finally
+            {
+                fixture.Release(saved);
+                foreach (var id in ids) mapped.Remove(id);
+                WishboneField.SetValue(null, wishbone);
+            }
+            return held;
+        }
+
+        // A saved automatic pin under the name and icon a static pass gives the deposit, added
+        // through Minimap.AddPin as the game adds each saved pin back when it loads the map.
+        private static Minimap.PinData AddSavedDepositPin(Minimap map, GameObject deposit, Vector3 position,
+            PlatformUserID author)
+        {
+            var sourceToken = Objects.GetName(deposit.GetComponent<MineRock5>());
+            var label = ValheimObject.Mineral.GetIdentify(sourceToken, out var identifier) &&
+                        ValheimObject.Mineral.GetName(identifier, out var registered)
+                ? registered
+                : sourceToken;
+            var type = IconPack.GetPinType(new Target { name = label, prefabName = Objects.GetPrefabName(deposit) });
+            return map.AddPin(position, type, Map.StoredPinName(label), true, false, 0L, author);
+        }
+
+        // The centre of a deposit's hit areas, all of them standing.
+        private static Vector3 HitAreaCentre(GameObject deposit)
+        {
+            var colliders = deposit.GetComponentsInChildren<Collider>();
+            return colliders.Aggregate(Vector3.zero, (sum, x) => sum + x.bounds.center) / colliders.Length;
         }
 
         // A multiplayer client has no world location list (the game keeps
@@ -1445,14 +2045,15 @@ namespace Automatics.SmokeTest
             return true;
         }
 
-        // The deposits' pins, whichever pass added them, are removed with the section's own pins.
-        private static void RemoveDeposits(List<TestDeposit> deposits, List<Minimap.PinData> created)
+        // Each deposit lets go of its pin by the section's rule (SmokePins) before it goes: a pin
+        // the section's pass added for it goes with it, and a pin of yours it took stays on the
+        // map, so the deposit's destruction cannot take it off.
+        private static void RemoveDeposits(Minimap map, SmokePins smokePins, List<TestDeposit> deposits)
         {
             foreach (var deposit in deposits)
             {
-                if (StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(deposit.Id), out var pin) &&
-                    !created.Contains(pin))
-                    created.Add(pin);
+                if (StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(deposit.Id), out var pin))
+                    smokePins.Remove(map, pin);
                 RemoveTestObject(deposit.Go);
             }
             deposits.Clear();
@@ -1475,6 +2076,7 @@ namespace Automatics.SmokeTest
             var passId = AccessTools.Field(typeof(StaticObjectMapping), "_currentPassId");
             lastScan.SetValue(null, 0f);
             var before = (int)passId.GetValue(null);
+            var smokePins = new SmokePins();
             global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player,
                 MappingConfig.StaticObjectMappingInterval, false);
             if ((int)passId.GetValue(null) == before)
@@ -1484,17 +2086,31 @@ namespace Automatics.SmokeTest
                 return;
             }
 
+            // A pin the pass added for a deposit is the section's own. A deposit can also take a
+            // saved pin that was already on the map as its own; that pin is put back by the rule at
+            // once, and the checks, which take the deposits' pins off the map, do not run.
             var pins = new Minimap.PinData[deposits.Count];
+            var missing = false;
+            var taken = false;
             for (var i = 0; i < deposits.Count; i++)
             {
                 if (!StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(deposits[i].Id),
                         out pins[i]))
+                    missing = true;
+                else if (smokePins.Created(pins[i]))
+                    created.Add(pins[i]);
+                else
                 {
-                    SkipDestroyedObjectChecks(run,
-                        "the static pass added no pin for a test deposit; the mineral category or unexplored automatic pins may be hidden, or your simulation distance does not reach the zones around it");
-                    return;
+                    taken = true;
+                    smokePins.Remove(map, pins[i]);
                 }
-                created.Add(pins[i]);
+            }
+            if (missing || taken)
+            {
+                SkipDestroyedObjectChecks(run, missing
+                    ? "the static pass added no pin for a test deposit; the mineral category or unexplored automatic pins may be hidden, or your simulation distance does not reach the zones around it"
+                    : "a test deposit took a saved pin that was already on the map as its own; move away from your saved deposit pins and retry");
+                return;
             }
 
             CheckUsedUpDeposit(run, map, deposits[0].Go, deposits[0].Id, pins[0], created);
@@ -1708,6 +2324,7 @@ namespace Automatics.SmokeTest
 
             var original = Navigation.CaptureTarget();
             var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
+            var smokePins = new SmokePins();
             var added = new List<Minimap.PinData>();
             var createdMarkers = new HashSet<Minimap.PinData>();
             var creatureId = ZDOID.None;
@@ -1726,10 +2343,9 @@ namespace Automatics.SmokeTest
             Func<string, bool> handBack = _ =>
             {
                 Navigation.ClearTarget();
-                foreach (var pin in createdMarkers) if (map) map.RemovePin(pin);
-                foreach (var pin in added) if (map) map.RemovePin(pin);
-                var creaturePin = DynamicObjectMapping.GetCachedPin(creatureId);
-                if (creaturePin != null && map) map.RemovePin(creaturePin);
+                foreach (var pin in createdMarkers) smokePins.Remove(map, pin);
+                foreach (var pin in added) smokePins.Remove(map, pin);
+                smokePins.Remove(map, DynamicObjectMapping.GetCachedPin(creatureId));
                 if (map) Navigation.RestoreTarget(original);
                 return true;
             };
@@ -1810,7 +2426,7 @@ namespace Automatics.SmokeTest
                     character.transform.position -= camera.up * 2f;
                     Physics.SyncTransforms();
                     Validate();
-                    map.RemovePin(automatic);
+                    smokePins.Remove(map, automatic);
                     Check(run, "navhotkey_removed_pin_kept", Navigation.CaptureTarget().CreatureId == id &&
                         MarkerCount(before, added) == 1 && Vector3.Distance(Navigation.TargetPosition, character.transform.position) < 0.01f,
                         $"removing a tracked creature's dynamic pin leaves a temporary destination; {mapClickDetail}");
@@ -1875,7 +2491,7 @@ namespace Automatics.SmokeTest
                         Navigation.TemporaryMarker == null && !Map.GetAllPins().Contains(followMarker) &&
                         MarkerCount(before, added) == 0 && Navigation.CaptureTarget().CreatureId == id,
                         "the creature's new automatic pin replaces the marker that followed it, which is removed");
-                    map.RemovePin(adopted);
+                    smokePins.Remove(map, adopted);
                     Validate();
                     Check(run, "navhotkey_marker_returns", Navigation.TemporaryMarker != null &&
                         MarkerCount(before, added) == 1 && Navigation.CaptureTarget().CreatureId == id &&
@@ -2008,6 +2624,7 @@ namespace Automatics.SmokeTest
                 }
                 settings.Add(setting);
             }
+            var smokePins = new SmokePins();
             Minimap.PinData automatic = null;
             try
             {
@@ -2045,7 +2662,7 @@ namespace Automatics.SmokeTest
             finally
             {
                 Navigation.ClearTarget();
-                if (automatic != null) map.RemovePin(automatic);
+                smokePins.Remove(map, automatic);
                 foreach (var setting in settings)
                     if (!SmokeSession.WriteSetting(run.RunId, setting, setting.Original, out var refusal))
                         run.Fail("navhotkey_hidden_category_settings", "filter restoration failed: " + refusal);
