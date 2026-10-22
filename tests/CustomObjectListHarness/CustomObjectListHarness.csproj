@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <!-- The LitJSON build the plugin ships (see Automatics/Automatics.csproj), taken from the
+       package folder that the plugin build restores; NuGet.config lists no package source. -->
+  <ItemGroup>
+    <PackageReference Include="LitJson" Version="0.18.0" GeneratePathProperty="true" ExcludeAssets="all" />
+    <Reference Include="LitJSON">
+      <HintPath>$(PkgLitJson)\lib\net45\LitJSON.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Automatics/Valheim/ValheimObjects.cs" Link="ValheimObjects.cs" />
+    <Compile Include="../../Automatics/Libraries/mod-utils/ModUtils/Json.cs" Link="Json.cs" />
+  </ItemGroup>
+</Project>

@@ -220,6 +220,12 @@ namespace Automatics.Valheim
 
         private static string EscapeForToml(string json)
         {
+            // A '$' only occurs inside JSON strings, so each one is written as its JSON unicode
+            // escape. The value then holds '$' only in the "$$" pairs that stand for a backslash,
+            // and UnescapeToml reads it back exactly; a literal '$' followed by another '$' or by
+            // a backslash would read back as different text.
+            json = json.Replace("$", "\\u0024");
+
             var sb = new StringBuilder();
             var backslash = false;
             foreach (var c in json.ToCharArray())
