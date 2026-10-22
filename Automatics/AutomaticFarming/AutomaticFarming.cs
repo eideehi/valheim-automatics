@@ -53,6 +53,17 @@ namespace Automatics.AutomaticFarming
 
         public static bool ClaimsCrop(Player player, Pickable pickable)
         {
+            return ClaimsCrop(player, pickable, new CropClaimSnapshot());
+        }
+
+        /// <summary>
+        /// The same answer as <see cref="ClaimsCrop(Player, Pickable)"/>, with the farming
+        /// containers it needs taken from <paramref name="snapshot"/>: a pass that asks about
+        /// many crops resolves them once, when the first crop gets past the cheap gates,
+        /// instead of once per crop.
+        /// </summary>
+        public static bool ClaimsCrop(Player player, Pickable pickable, CropClaimSnapshot snapshot)
+        {
             if (!Module.Running) return false;
             if (!pickable) return false;
             if (!Config.EnableAutomaticFarming) return false;
@@ -74,26 +85,41 @@ namespace Automatics.AutomaticFarming
             if (Config.SeedSource == SeedSource.Inventory)
                 return Vector3.Distance(player.transform.position, position) <= range;
 
-            var containers = FarmingContainers.Resolve(player);
+            var playerCentred = Config.SeedSource == SeedSource.PlayerContainers;
+            if (playerCentred && Vector3.Distance(player.transform.position, position) > range)
+                return false;
+
+            var containers = snapshot.Get(player);
             if (containers.OwnedStorage.Count == 0 &&
                 containers.OwnedCultivation.Count == 0 &&
                 containers.OwnedSeedHarvest.Count == 0)
                 return false;
 
-            if (Config.SeedSource == SeedSource.PlayerContainers)
-            {
-                if (Vector3.Distance(player.transform.position, position) > range) return false;
-            }
-            else if (!TryNearestAnchorDistance(containers, position, range, out _))
-            {
+            if (!playerCentred && !TryNearestAnchorDistance(containers, position, range, out _))
                 return false;
-            }
 
             // A crop is harvested only when a box near it can take the yield.
             var boxRange = Config.ContainerSearchRange;
             var isSeed = ValheimObject.Flora.HasTag(identifier, "seed");
-            return containers.StorageNear(position, boxRange).Count > 0 ||
-                   containers.MatchingPlantingNear(isSeed, position, boxRange).Count > 0;
+            return containers.HasStorageNear(position, boxRange) ||
+                   containers.HasMatchingPlantingNear(isSeed, position, boxRange);
+        }
+
+        /// <summary>
+        /// The farming containers a run of <see cref="ClaimsCrop(Player, Pickable, CropClaimSnapshot)"/>
+        /// calls shares, resolved the first time one of them needs it. A snapshot belongs to one
+        /// synchronous pass and is dropped when it ends, since a later frame can see other
+        /// owners, uses and roles.
+        /// </summary>
+        internal sealed class CropClaimSnapshot
+        {
+            private FarmingContainers _containers;
+
+            public FarmingContainers Get(Player player)
+            {
+                if (_containers == null) _containers = FarmingContainers.Resolve(player);
+                return _containers;
+            }
         }
 
         // ---- Inventory mode (player-centric, unchanged behavior) ----------------
@@ -304,8 +330,8 @@ namespace Automatics.AutomaticFarming
                 // Only where a box near the spot can take the grown crop's yield, so farming can
                 // harvest what it sows instead of leaving it to pickup.
                 var sown = SowGrid(player, sapling, plant, seedPool, origin, reserve,
-                    pos => containers.StorageNear(pos, boxRange).Count > 0 ||
-                           containers.MatchingPlantingNear(plantSeedProducing, pos, boxRange).Count > 0);
+                    pos => containers.HasStorageNear(pos, boxRange) ||
+                           containers.HasMatchingPlantingNear(plantSeedProducing, pos, boxRange));
                 if (sown > 0)
                 {
                     var cropId = identifier;

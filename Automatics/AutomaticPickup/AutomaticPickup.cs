@@ -292,8 +292,7 @@ namespace Automatics.AutomaticPickup
 
                 if (byInterval)
                 {
-                    PickupAllNearby(_player,
-                        (Pickable x) => !AutomaticFarming.AutomaticFarming.ClaimsCrop(_player, x));
+                    PickupUnclaimedPickables(_player);
                     yield return null;
                     if (!Alive) yield break;
                     if (!Live) continue;
@@ -372,6 +371,15 @@ namespace Automatics.AutomaticPickup
         private static string GetItemDropName(ItemDrop itemDrop)
         {
             return itemDrop.m_itemData.m_shared.m_name;
+        }
+
+        // The farming containers the claims need are resolved once for the pass. The snapshot is a
+        // local of this synchronous call, so it is gone before the coroutine yields.
+        private static void PickupUnclaimedPickables(Player player)
+        {
+            var claims = new AutomaticFarming.AutomaticFarming.CropClaimSnapshot();
+            PickupAllNearby(player,
+                (Pickable x) => !AutomaticFarming.AutomaticFarming.ClaimsCrop(player, x, claims));
         }
 
         private static void PickupAllNearby(Player player, Predicate<PickableItem> predicate)

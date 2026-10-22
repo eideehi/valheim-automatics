@@ -196,6 +196,35 @@ namespace Automatics.AutomaticFarming
             return isSeed ? SeedHarvestNear(position, range) : CultivationNear(position, range);
         }
 
+        /// <summary>
+        /// Whether <see cref="StorageNear"/> would return a box: a storage-role container this
+        /// peer can mutate within <paramref name="range"/> of <paramref name="position"/>.
+        /// </summary>
+        public bool HasStorageNear(Vector3 position, float range)
+        {
+            return AnyNear(OwnedStorage, position, range);
+        }
+
+        /// <summary>
+        /// Whether <see cref="MatchingPlantingNear"/> would return a box.
+        /// </summary>
+        public bool HasMatchingPlantingNear(bool isSeed, Vector3 position, float range)
+        {
+            return AnyNear(isSeed ? OwnedSeedHarvest : OwnedCultivation, position, range);
+        }
+
+        // The presence test of Near, without collecting or sorting the hits.
+        private static bool AnyNear(List<DesignatedContainer> source, Vector3 position,
+            float range)
+        {
+            var rangeSqr = range * range;
+            foreach (var designated in source)
+                if ((designated.Position - position).sqrMagnitude <= rangeSqr)
+                    return true;
+
+            return false;
+        }
+
         // Called several times per crop per farming pass, so this stays LINQ-free:
         // the query chain allocated an anonymous-type object per container plus
         // enumerators and sort buffers for every call.
