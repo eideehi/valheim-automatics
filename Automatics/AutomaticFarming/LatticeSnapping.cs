@@ -55,6 +55,18 @@ namespace Automatics.AutomaticFarming
 
         private static GhostUpdate _update;
 
+        // Vanilla turns a piece being placed in steps of this many degrees (Player.m_placeRotationDegrees),
+        // so a crop planted by hand, or by this mod, stands at a whole number of steps. Growing
+        // randomizes a crop's yaw by up to half a step either way (Plant.Grow), so the step nearest
+        // to a grown crop's yaw is the yaw it was planted with.
+        private const float PlacementStep = 22.5f;
+
+        // The yaw, in degrees, rounded to the nearest placement step.
+        internal static float PlantedYaw(float yaw)
+        {
+            return Mathf.Round(yaw / PlacementStep) * PlacementStep;
+        }
+
         // The search radius, in lattice cells, around the aimed point: one grid width. A grid laid
         // edge to edge with an earlier one has its centre about half a grid plus one cell from the
         // earlier grid's nearest crop, so aiming there, or up to about half a grid further out,
@@ -189,7 +201,9 @@ namespace Automatics.AutomaticFarming
             if (!TryFindAnchor(PrefabHash(selected.gameObject), rawPoint,
                     SearchRadius(spacing, Config.GridPlantingSize), out var anchor)) return false;
 
-            var anchorYaw = anchor.transform.rotation.eulerAngles.y;
+            // A sapling replanted by an earlier version carries its grown crop's randomized yaw;
+            // the rows it belongs to run along the planted yaw.
+            var anchorYaw = PlantedYaw(anchor.transform.rotation.eulerAngles.y);
             var lattice = Quaternion.Euler(0f, anchorYaw, 0f);
             var local = Quaternion.Inverse(lattice) * (rawPoint - anchor.transform.position);
             point = anchor.transform.position + lattice * new Vector3(
@@ -209,7 +223,7 @@ namespace Automatics.AutomaticFarming
             if (!TryFindAnchor(PrefabHash(prefab), centre, radius, out var anchor)) return false;
 
             origin = anchor.transform.position;
-            rotation = Quaternion.Euler(0f, anchor.transform.rotation.eulerAngles.y, 0f);
+            rotation = Quaternion.Euler(0f, PlantedYaw(anchor.transform.rotation.eulerAngles.y), 0f);
             return true;
         }
 

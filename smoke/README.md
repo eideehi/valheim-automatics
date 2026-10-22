@@ -1563,7 +1563,8 @@ SKIPs stops it, the section runs one read-only check:
 
 For the length of the section it sets `Player With Containers` mode, a farming
 interval of 0, a farming range of 4 m, a container search range of 8 m, the
-chosen crop as the only allowed crop and a spacing factor of 2.5, then restores
+chosen crop as the only allowed crop and a spacing factor of 2.5 (and, for the
+snapping check, grid planting on with a 3×3 grid), then restores
 them. It spawns two chests beside you and gives them the Storage and
 Cultivation roles through the real designation path, puts seeds into the
 Cultivation chest, and runs one farming pass per check (the two sowing checks
@@ -1573,7 +1574,9 @@ share one pass):
 | --- | --- |
 | `farming_player_containers_harvest` | A ripe crop of that kind spawned on a free cell is picked, its yield goes into the Storage chest, it is replanted at the same spot with one seed from the Cultivation chest, and your inventory is unchanged |
 | `farming_replant_below_reserve` | With `Seed Reserve` above the seeds held and sowing on, the harvested spot is still replanted and nothing is sown on the free cells left |
-| `farming_sow_rotated_lattice` | Beside a growing crop of that kind turned 30°, and with a growing crop of another early kind half a metre from you (nearer than the turned one, so only a crop of the same kind may anchor the lattice; left out when no other early crop has a sapling), every crop sown lies on the turned crop's lattice and turned with it (SKIP when no lattice cell beside it is plantable) |
+| `farming_replant_keeps_row_yaw` | A ripe crop standing at 194.5° (a planting yaw of 202.5° turned by 8° as growing does) is harvested and replanted at the same spot with a yaw of 202.5°, the planting yaw, not the grown crop's own |
+| `farming_snap_follows_row_yaw` | Beside a growing crop of that kind planted at 22.5° and standing 7° off it (as a sapling replanted by an earlier version does), the grid-planting pose (`LatticeSnapping.TryLatticePose`) for a point aimed a cell and a bit past it, with a player rotation 100° from 22.5°, is the next cell of the rows turned 22.5° (within 2 cm) with a yaw of 112.5°, the nearest quarter turn |
+| `farming_sow_rotated_lattice` | Beside a growing crop of that kind planted at 22.5° and standing 7° off it, and with a growing crop of another early kind half a metre from you (nearer than the turned one, so only a crop of the same kind may anchor the lattice; left out when no other early crop has a sapling), every crop sown lies on the lattice of the planting yaw (22.5°) and is turned with it (SKIP when no lattice cell beside it is plantable) |
 | `farming_sow_exactly_plantable_cells` | In that same pass, the crops sown are exactly the cells worked out before it: the turned crop's lattice cells within Farming Range of you, walked as the sowing grid walks them, that are cultivated, within Container Search Range of one of the two chests, and pass build access, `CropPlanting.CanPlantAt` (biome, cultivation, temperature, grow space, roof) and, for a crop that refuses tilting ground, the slope limit. The Cultivation chest is given seeds for every such cell first, so running out never ends the pass early. A FAIL lists the cells not sown and the crops sown elsewhere, relative to you (SKIP when no such cell exists or the chest cannot take the seeds) |
 | `farming_deposit_full_box_untouched` | With the Storage chest full of the crop's yield, the harvest deposit (`PickableHarvester.HarvestToContainers`, called directly on a ripe crop with the Storage chest as its only target) leaves the crop standing, and the chest gets nothing, no add call, no save and no warning |
 | `farming_deposit_all_or_nothing` | With room for one in the Storage chest and the crop's yield set to two, the deposit still puts nothing in and leaves the crop standing, again without an add call, a save or a warning |

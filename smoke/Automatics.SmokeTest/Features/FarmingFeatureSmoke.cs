@@ -13,14 +13,16 @@ using Farming = Automatics.AutomaticFarming.AutomaticFarming;
 using FarmingConfig = Automatics.AutomaticFarming.Config;
 using FarmingModule = Automatics.AutomaticFarming.Module;
 using Planting = Automatics.AutomaticFarming.CropPlanting;
+using Snapping = Automatics.AutomaticFarming.LatticeSnapping;
 using Object = UnityEngine.Object;
 
 namespace Automatics.SmokeTest
 {
     // Drives one Automatic Farming pass at a time in Player With Containers mode, next to an empty
     // cultivated plot the player stands beside: a harvest goes into the role containers and is
-    // replanted from them (also below Seed Reserve, which holds back only sowing), and sowing
-    // continues the rows of a rotated crop, on exactly the cells the planting rules allow.
+    // replanted from them (also below Seed Reserve, which holds back only sowing) at the yaw the
+    // crop was planted with, and sowing continues the rows of a rotated crop, on exactly the cells
+    // the planting rules allow.
     // Everything runs synchronously on objects the section spawns; the containers, crops and their
     // contents are removed afterwards and no terrain is changed. A harvest may raise the pick
     // skill, as a harvest by hand does. First, and without changing anything, it checks that the
@@ -30,7 +32,15 @@ namespace Automatics.SmokeTest
         private const string Label = "farming feature smoke";
         private const int FarmingRange = 4;
         private const int ContainerRange = 8;
-        private const float LatticeYaw = 30f;
+        // A yaw vanilla placement can give (a whole number of 22.5° steps), not a quarter turn.
+        private const float LatticeYaw = 22.5f;
+        // How far off its planting yaw the anchor crop stands, as a sapling replanted by an earlier
+        // version did after its grown crop's random turn (up to 11.25° either way).
+        private const float LegacyYawJitter = 7f;
+        // The planting yaw of the crop replanted in the yaw check, and the random turn its grown
+        // crop carries.
+        private const float ReplantRowYaw = 202.5f;
+        private const float GrowthYawJitter = -8f;
         // As in the planting section: at a factor of 1 a crop's own collider fills its neighbours' grow space.
         private const float SpacingFactor = 2.5f;
         private const Heightmap.Biome EarlyBiomes = Heightmap.Biome.Meadows | Heightmap.Biome.BlackForest |
@@ -119,6 +129,11 @@ namespace Automatics.SmokeTest
                 if (!Set(run, "_seedReserve", 999) || !Set(run, "_enableProactiveSowing", true)) yield break;
                 CheckHarvest(run, "farming_replant_below_reserve", player, crop, cells[1], storage, cultivation,
                     created, freeBuild, cells.Skip(2).ToList());
+
+                cultivation.GetComponent<Container>().GetInventory().AddItem(crop.SeedPrefab, 3, 1, 0, 0L, "", false);
+                _ownSeeds += 3;
+                CheckHarvest(run, "farming_replant_keeps_row_yaw", player, crop, cells[2], storage, cultivation,
+                    created, freeBuild, cells.Skip(3).ToList(), ReplantRowYaw + GrowthYawJitter, ReplantRowYaw);
 
                 // The replanted crops would anchor the lattice; the rotated one below must be the
                 // only growing crop of its kind in range.
@@ -347,9 +362,10 @@ namespace Automatics.SmokeTest
         }
 
         private static void CheckHarvest(FeatureRun run, string name, Player player, Crop crop, Vector3 cell,
-            GameObject storage, GameObject cultivation, List<GameObject> created, bool freeBuild, List<Vector3> free)
+            GameObject storage, GameObject cultivation, List<GameObject> created, bool freeBuild, List<Vector3> free,
+            float grownYaw = 0f, float plantedYaw = 0f)
         {
-            var ripe = Object.Instantiate(crop.Grown, cell, Quaternion.identity);
+            var ripe = Object.Instantiate(crop.Grown, cell, Quaternion.Euler(0f, grownYaw, 0f));
             created.Add(ripe);
             SmokeSession.TrackSpawn(ripe);
             if (Objects.GetZNetView(ripe.transform, out var view) && view && view.IsValid())
@@ -372,22 +388,27 @@ namespace Automatics.SmokeTest
             var seedsAfter = cultivation.GetComponent<Container>().GetInventory().CountItems(crop.SeedName);
             var plants = created.Skip(before).Where(x => x && x.GetComponent<Plant>()).ToList();
             var replanted = plants.Count == 1 && Flat(plants[0].transform.position - cell) < 0.05f;
+            // The sapling goes back at the yaw the crop was planted with, not the grown crop's own.
+            var yawKept = plants.Count == 1 &&
+                          Mathf.Abs(Mathf.DeltaAngle(plants[0].transform.eulerAngles.y, plantedYaw)) < 0.5f;
             var expectedSeeds = freeBuild ? seeds : seeds - crop.SeedAmount;
             var inventoryKept = player.GetInventory().CountItems(crop.YieldName) == playerYield &&
                                 player.GetInventory().CountItems(crop.SeedName) == playerSeeds;
             // With sowing on, a free cell was left for it, so a sow that ignored the reserve shows.
-            var sowingHeld = !FarmingConfig.EnableProactiveSowing || sowable > 0;
-            Check(run, name, picked && storedAfter > stored && replanted && seedsAfter == expectedSeeds && inventoryKept &&
-                             sowingHeld,
+            var sowingHeld = !FarmingConfig.EnableProactiveSowing || free.Count == 0 || sowable > 0;
+            Check(run, name, picked && storedAfter > stored && replanted && yawKept && seedsAfter == expectedSeeds &&
+                             inventoryKept && sowingHeld,
                 $"picked={picked}, storage {stored}->{storedAfter}, cultivation seeds {seeds}->{seedsAfter} " +
-                $"(expected {expectedSeeds}), new plants {plants.Count} (at the spot {replanted}), " +
+                $"(expected {expectedSeeds}), new plants {plants.Count} (at the spot {replanted}, " +
+                $"yaw {(plants.Count == 1 ? plants[0].transform.eulerAngles.y.ToString("F1") : "none")} " +
+                $"for a crop turned {grownYaw:F1}, expected {plantedYaw:F1}: {yawKept}), " +
                 $"inventory unchanged {inventoryKept}, free cells left for sowing {sowable}, " +
                 (freeBuild ? "free-build world so seed use is not checked, " : "") + $"reserve {FarmingConfig.SeedReserve}, sowing {FarmingConfig.EnableProactiveSowing}");
         }
 
-        // One sowing pass beside a growing crop of the section's kind turned 30°, with a growing crop
-        // of another kind nearer to you, which must not anchor the lattice. The crops sown must lie
-        // on the turned crop's lattice, and they must be exactly the cells that the rules a sown
+        // One sowing pass beside a growing crop of the section's kind turned off its planting yaw of
+        // 22.5° by a few degrees, with a growing crop of another kind nearer to you, which must not
+        // anchor the lattice. The crops sown must lie on the lattice of the planting yaw, and they must be exactly the cells that the rules a sown
         // cell passes allow, worked out before the pass.
         private static void CheckSowing(FeatureRun run, Player player, Crop crop, List<Vector3> cells,
             GameObject storage, GameObject cultivation, List<GameObject> created)
@@ -426,7 +447,8 @@ namespace Automatics.SmokeTest
             }
 
             var before = created.Count;
-            var go = Object.Instantiate(crop.Sapling.gameObject, anchor.Value, rotation);
+            var go = Object.Instantiate(crop.Sapling.gameObject, anchor.Value,
+                Quaternion.Euler(0f, LatticeYaw + LegacyYawJitter, 0f));
             if (!created.Contains(go))
             {
                 created.Add(go);
@@ -459,6 +481,8 @@ namespace Automatics.SmokeTest
             inventory.AddItem(crop.SeedPrefab, seeds, 1, 0, 0L, "", false);
             _ownSeeds += seeds;
 
+            CheckSnapPose(run, crop, anchor.Value);
+
             Farming.TryFarming(player);
 
             var sown = created.Skip(before).Where(x => x && x != go && x != other && x.GetComponent<Plant>()).ToList();
@@ -473,7 +497,7 @@ namespace Automatics.SmokeTest
                     off.Add($"({local.x:F2}, {local.z:F2}) yaw {plant.transform.eulerAngles.y:F1}");
             }
             Check(run, onLattice, sown.Count > 0 && off.Count == 0,
-                $"{sown.Count} sown beside a crop turned {LatticeYaw}°" +
+                $"{sown.Count} sown beside a crop planted at {LatticeYaw}° and standing {LegacyYawJitter}° off it" +
                 (other ? ", with a crop of another kind nearer to you" : ", no other crop kind has a sapling to stand nearer") +
                 ", off the lattice: " + (off.Count == 0 ? "none" : string.Join(", ", off.ToArray())));
 
@@ -489,6 +513,26 @@ namespace Automatics.SmokeTest
             Check(run, plantable, missed.Count == 0 && extra.Count == 0 && sown.Count == expected.Count,
                 $"{sown.Count} sown, {expected.Count} lattice cell(s) within {FarmingRange} m pass the planting rules; " +
                 $"not sown: {Offsets(missed, origin)}; sown on no such cell: {Offsets(extra, origin)}");
+        }
+
+        // The grid-planting pose beside the anchor standing slightly off its planting yaw: aimed a
+        // cell and a bit past it, with a player rotation 100° from the planting yaw, the pose is the
+        // next lattice cell along the planting yaw's rows, turned by the nearest quarter turn to the
+        // player's rotation.
+        private static void CheckSnapPose(FeatureRun run, Crop crop, Vector3 anchor)
+        {
+            const string name = "farming_snap_follows_row_yaw";
+            var rows = Quaternion.Euler(0f, LatticeYaw, 0f);
+            var raw = anchor + rows * new Vector3(1.35f * crop.Step, 0f, 0.2f * crop.Step);
+            raw.y = ZoneSystem.instance.GetGroundHeight(raw);
+            if (!Set(run, "_enableGridPlanting", true) || !Set(run, "_gridPlantingSize", 3)) return;
+            var snapped = Snapping.TryLatticePose(crop.Sapling, true, raw, LatticeYaw + 100f, out var pose, out var yaw);
+            var expected = anchor + rows * new Vector3(crop.Step, 0f, 0f);
+            var off = Flat(pose - expected);
+            var turn = Mathf.DeltaAngle(yaw, LatticeYaw + 90f);
+            Check(run, name, snapped && off < 0.02f && Mathf.Abs(turn) < 0.5f,
+                $"snapped={snapped}, {off:F3} m from the next cell of the rows turned {LatticeYaw}°, " +
+                $"yaw {yaw:F1} (expected {LatticeYaw + 90f:F1})");
         }
 
         // A sapling of another early crop, half a metre from you on the side away from the turned
@@ -532,7 +576,8 @@ namespace Automatics.SmokeTest
         {
             var origin = player.transform.position;
             var latticeOrigin = anchor.transform.position;
-            var lattice = Quaternion.Euler(0f, anchor.transform.rotation.eulerAngles.y, 0f);
+            // The anchor stands slightly off its planting yaw; its rows run along the planting yaw.
+            var lattice = Quaternion.Euler(0f, LatticeYaw, 0f);
             var step = crop.Plant.m_growRadius * FarmingConfig.SowingSpacingFactor;
             var range = (float)FarmingConfig.FarmingRange;
             var rangeSqr = range * range;

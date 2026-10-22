@@ -463,6 +463,10 @@ namespace Automatics.AutomaticFarming
                 return;
             }
 
+            // The grown crop stands at its planted yaw plus a random turn; the sapling goes back
+            // at the planted yaw, so its row keeps its orientation from one harvest to the next.
+            rot = Quaternion.Euler(0f, LatticeSnapping.PlantedYaw(rot.eulerAngles.y), 0f);
+
             // Replanting only puts back what was harvested, so it does not keep the reserve;
             // the reserve holds planting input back from new ground only.
             if (CropPlanting.TryPlant(player, sapling, seedPool, pos, rot, 0,

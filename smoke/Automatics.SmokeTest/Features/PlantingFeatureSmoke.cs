@@ -142,7 +142,9 @@ namespace Automatics.SmokeTest
                     run.Skip("planting_section", "needs enough current stamina to plant eight saplings");
                     yield break;
                 }
-                var rotation = Quaternion.Euler(0f, player.transform.eulerAngles.y + 25f, 0f);
+                // A yaw the game's placement can produce (a multiple of its 22.5 degree step), as the
+                // row snapping rounds an anchor's yaw to that step.
+                var rotation = Quaternion.Euler(0f, Mathf.Round((player.transform.eulerAngles.y + 25f) / 22.5f) * 22.5f, 0f);
                 var plant = piece.GetComponent<Plant>();
                 var spacing = plant.m_growRadius * SpacingFactor;
                 if (!FindPatch(player, piece, plant, rotation, spacing, out var centre, out var cells, out var patchReport))
