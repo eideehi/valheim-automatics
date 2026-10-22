@@ -164,6 +164,10 @@ namespace Automatics.AutomaticMapping
                 h => ValheimObject.RegistryChanged -= h,
                 PinCategories.OnRegistryChanged);
             scope.Subscribe<Action<ValheimObject>>(
+                h => ValheimObject.RegistryChanged += h,
+                h => ValheimObject.RegistryChanged -= h,
+                OnFloraRegistryChanged);
+            scope.Subscribe<Action<ValheimObject>>(
                 h => Config.StaticAllowlistChanged += h,
                 h => Config.StaticAllowlistChanged -= h,
                 StaticObjectMapping.OnStaticAllowlistChanged);
@@ -292,6 +296,32 @@ namespace Automatics.AutomaticMapping
             if (!ValheimObject.Flora.IsDefined(Objects.GetName(pickable))) return;
 
             CurrentScope.TryAttach<FloraNode>(pickable.gameObject, out _);
+        }
+
+        /// <summary>
+        ///     A flora added to the registry while the module runs, such as a User-defined Flora,
+        ///     reaches the pickables that are already loaded instead of waiting for them to load
+        ///     again: each one whose name is now a configured flora gets its node the way
+        ///     <see cref="AttachFlora" /> gives it to a new pickable. One that already has its node
+        ///     keeps that one.
+        /// </summary>
+        private static void OnFloraRegistryChanged(ValheimObject registry)
+        {
+            if (!Discovering || !ReferenceEquals(registry, ValheimObject.Flora)) return;
+
+            try
+            {
+                PickableCache.Fill(PickableBuffer);
+                for (var i = 0; i < PickableBuffer.Count; i++)
+                {
+                    var pickable = PickableBuffer[i];
+                    if (pickable) AttachFlora(pickable);
+                }
+            }
+            finally
+            {
+                PickableBuffer.Clear();
+            }
         }
 
         /// <summary>

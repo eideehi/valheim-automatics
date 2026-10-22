@@ -191,6 +191,8 @@ namespace Automatics.SmokeTest
                 CheckLoadedLocationSpot(run, player, map, created);
                 CheckDungeonWaitsForLocation(run, player, map, created);
                 CheckStaticClassificationFollowsObject(run, player);
+                CheckFloraPatchGrouping(run, player);
+                CheckRuntimeFloraPinsLoadedPlant(run, player, map, created);
             }
             finally
             {
@@ -2275,6 +2277,389 @@ namespace Automatics.SmokeTest
                 catch (Exception e)
                 {
                     run.Fail(check + "_cleanup", "the scan that drops the test collider failed: " + e.Message);
+                }
+            }
+        }
+
+        private static readonly System.Reflection.MethodInfo FloraNetworkConstructionMethod =
+            AccessTools.Method(typeof(FloraNode), "NetworkConstruction");
+
+        // A flora patch is every plant of one name that a chain of plants, each within
+        // flora_pins_merge_range of the next, links together, and nothing else. A plant looks for
+        // its patch only among the plants of its name in the cells around it, so every pair the
+        // range test accepts has to be found there. Plants of two flora names are spawned 60 m
+        // above you, out of reach of every other plant: a chain of one name along a diagonal, its
+        // plants 0.9 of the range apart and more than two of the largest range long on each axis,
+        // so linked plants stand in different cells; a plant of the chain's name 1.1 of the range
+        // past its end; a plant of the other name half the range beside it; and a pair of the
+        // chain's name, half the range apart, 1.1 of the range above its first plant. As the game
+        // can move or rename a plant right after it appears, two more come last: one of the
+        // chain's name set up 60 m away and moved at once to half the range from the pair, and
+        // one of the other name set up half the range beside the plant past the chain's end and
+        // given the chain's name at once. Each plant's network is built at once, as the game
+        // builds it a second or two after the plant appears, the chain's two ends first so that
+        // its middle joins two networks, and the moved and renamed plants after the plants they
+        // link to. The networks must be the groups that linking every two plants of one name
+        // within the range gives. The plants are removed before the next check.
+        private static void CheckFloraPatchGrouping(FeatureRun run, Player player)
+        {
+            const string check = "pin_flora_patches_group_plants_in_range";
+            const float chainSpanPerAxis = 33f;
+            var range = MappingConfig.FloraPinMergeRange;
+            if (range < 4)
+            {
+                run.Skip(check, $"flora_pins_merge_range is {range} m; the test chain needs 4 m or more");
+                return;
+            }
+            if (FloraNetworkConstructionMethod == null)
+            {
+                run.Fail(check, "the flora node has no network construction to call");
+                return;
+            }
+
+            // The first two flora prefabs with different names.
+            var kinds = new List<string>();
+            var kindNames = new List<string>();
+            foreach (var prefabName in new[]
+                         { "Pickable_Mushroom", "Pickable_Dandelion", "Pickable_Thistle", "RaspberryBush", "BlueberryBush" })
+            {
+                var prefab = ZNetScene.instance.GetPrefab(prefabName);
+                var pickable = prefab ? prefab.GetComponent<Pickable>() : null;
+                var name = pickable ? Objects.GetName(pickable) : "";
+                if (string.IsNullOrEmpty(name) || !ValheimObject.Flora.IsDefined(name) || kindNames.Contains(name))
+                    continue;
+                kinds.Add(prefabName);
+                kindNames.Add(name);
+                if (kinds.Count == 2) break;
+            }
+            if (kinds.Count < 2)
+            {
+                run.Skip(check, "fewer than two flora prefabs with different names are available");
+                return;
+            }
+
+            var spacing = 0.9f * range;
+            var diagonal = new Vector3(1f, 0f, 1f).normalized;
+            var beside = new Vector3(1f, 0f, -1f).normalized;
+            var chainCount = Mathf.CeilToInt(chainSpanPerAxis * Mathf.Sqrt(2f) / spacing) + 1;
+            var origin = player.transform.position + Vector3.up * 60f;
+            var above = origin + Vector3.up * (1.1f * range);
+            var pastEnd = origin + diagonal * ((chainCount - 1) * spacing + 1.1f * range);
+            var movedTo = above - diagonal * (0.5f * range);
+            // Each plant: its prefab, where it is set up, where it is moved to and the name it is
+            // given right after (null for none).
+            var layout = new List<(string Prefab, Vector3 At, Vector3? MovedTo, string Rename)>();
+            for (var i = 0; i < chainCount; i++)
+                layout.Add((kinds[0], origin + diagonal * (i * spacing), null, null));
+            layout.Add((kinds[0], pastEnd, null, null));
+            layout.Add((kinds[1], origin + diagonal * (chainCount / 2 * spacing) + beside * (0.5f * range), null, null));
+            layout.Add((kinds[0], above, null, null));
+            layout.Add((kinds[0], above + beside * (0.5f * range), null, null));
+            var moved = layout.Count;
+            layout.Add((kinds[0], movedTo + Vector3.left * 60f, movedTo, null));
+            var renamed = layout.Count;
+            layout.Add((kinds[1], pastEnd + beside * (0.5f * range), null, kindNames[0]));
+
+            var spawned = new List<GameObject>();
+            try
+            {
+                var nodes = new List<FloraNode>();
+                foreach (var plant in layout)
+                {
+                    var go = SpawnTestObject(new[] { plant.Prefab }, plant.At, Quaternion.identity, out var skip,
+                        prefab => prefab.GetComponent<Pickable>());
+                    if (!go)
+                    {
+                        run.Skip(check, skip);
+                        return;
+                    }
+                    spawned.Add(go);
+                    var node = go.GetComponent<FloraNode>();
+                    if (!node || node.ScopeGeneration != MappingModule.Generation)
+                    {
+                        run.Fail(check, $"a spawned {plant.Prefab} got no flora node from the running module");
+                        return;
+                    }
+                    nodes.Add(node);
+                    if (plant.MovedTo.HasValue) go.transform.position = plant.MovedTo.Value;
+                    if (plant.Rename != null) go.GetComponent<Pickable>().m_overrideName = plant.Rename;
+                }
+
+                var reach = (range + 1f) * (range + 1f);
+                var fixture = new HashSet<FloraNode>(nodes);
+                foreach (var pickable in PickableCache.GetAllInstance())
+                {
+                    var other = pickable ? pickable.GetComponent<FloraNode>() : null;
+                    if (!other || fixture.Contains(other)) continue;
+                    if (nodes.Any(node => (node.Position - other.Position).sqrMagnitude <= reach))
+                    {
+                        run.Skip(check, "another flora plant is within reach of the test plants 60 m above you; move away from cliffs and retry");
+                        return;
+                    }
+                }
+
+                var order = new List<FloraNode> { nodes[0], nodes[chainCount - 1] };
+                order.AddRange(nodes.Where((node, i) => i != 0 && i != chainCount - 1));
+                foreach (var node in order) FloraNetworkConstructionMethod.Invoke(node, null);
+
+                // The groups, from every two plants of one name within the range.
+                var rangeSqr = (float)range * range;
+                var group = Enumerable.Range(0, nodes.Count).ToArray();
+                int Root(int i)
+                {
+                    while (group[i] != i) i = group[i];
+                    return i;
+                }
+                for (var i = 0; i < nodes.Count; i++)
+                for (var j = i + 1; j < nodes.Count; j++)
+                {
+                    var a = spawned[i];
+                    var b = spawned[j];
+                    if (Objects.GetName(a.GetComponent<Pickable>()) != Objects.GetName(b.GetComponent<Pickable>())) continue;
+                    if ((a.transform.position - b.transform.position).sqrMagnitude > rangeSqr) continue;
+                    group[Root(j)] = Root(i);
+                }
+                if (Enumerable.Range(0, nodes.Count).Select(Root).Distinct().Count() != 4 ||
+                    Enumerable.Range(0, chainCount).Any(i => Root(i) != Root(0)) ||
+                    Root(moved) != Root(chainCount + 2) || Root(renamed) != Root(chainCount))
+                {
+                    run.Skip(check, "the test plants did not stand where they were placed or take the name they were given");
+                    return;
+                }
+
+                string failure = null;
+                for (var i = 0; i < nodes.Count && failure == null; i++)
+                {
+                    var network = nodes[i].Network;
+                    var size = Enumerable.Range(0, nodes.Count).Count(j => Root(j) == Root(i));
+                    if (network == null)
+                        failure = $"plant {i + 1} of {nodes.Count} is in no flora network";
+                    else if (network.NodeCount != size)
+                        failure = $"plant {i + 1}'s network holds {network.NodeCount} plant(s), but {size} test plant(s) link to it";
+                    for (var j = i + 1; j < nodes.Count && failure == null; j++)
+                        if (ReferenceEquals(nodes[i].Network, nodes[j].Network) != (Root(i) == Root(j)))
+                            failure = Root(i) == Root(j)
+                                ? $"plants {i + 1} and {j + 1} link through plants within {range} m but are in different networks"
+                                : $"plants {i + 1} and {j + 1} do not link but share a network";
+                }
+
+                if (failure == null)
+                    run.Pass(check, $"{nodes.Count} plants formed the four patches linking gives: a chain of {chainCount} plants {spacing:0.#} m apart, the plant {1.1f * range:0.#} m past its end with the plant renamed beside it, the plant of the other name beside the chain, and the pair above it with the plant moved next to it");
+                else
+                    run.Fail(check, failure);
+            }
+            finally
+            {
+                foreach (var go in spawned) RemoveTestObject(go);
+            }
+        }
+
+        // A flora you add to custom_flora while Automatic Mapping runs reaches the plants that are
+        // already loaded, without a reload or a module toggle. A pickable that is no flora (the
+        // first of the flint, stone and branch pickables that qualifies) is spawned on the ground
+        // beside you and gets no flora node. It is given a name of its own, so the flora entry the
+        // check adds to custom_flora for that name, as the config screen's object editor adds one,
+        // matches it and no plant of the world. The plant then gets its node from the running
+        // activation, while every other plant keeps the one node it had. With the entry's
+        // identifier added to allow_pinning_flora, the node's network is built at once, as the
+        // game builds it a second or two later, and a static pass that starts with a fresh scan of
+        // the area pins the plant. The plant and its pin are removed, and both settings put back,
+        // before the next check.
+        private static void CheckRuntimeFloraPinsLoadedPlant(FeatureRun run, Player player, Minimap map,
+            List<Minimap.PinData> created)
+        {
+            const string check = "pin_runtime_flora_pins_loaded_plant";
+            const string restoredCheck = "pin_runtime_flora_settings_restored";
+            const string identifier = "AutomaticsSmokeRuntimeFlora";
+            const string plantName = "AutomaticsSmokeRuntimeFloraPlant";
+            var interval = MappingConfig.StaticObjectMappingInterval;
+            var range = MappingConfig.StaticObjectMappingRange;
+            if (!MappingConfig.EnableAutomaticMapping || interval <= 0f || range <= 0)
+            {
+                run.Skip(check, "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, so no periodic static pass runs");
+                return;
+            }
+            if (FloraNetworkConstructionMethod == null || ClassifyTokenMethod == null || StaticCacheField == null)
+            {
+                run.Fail(check, "the flora node has no network construction, or the static scan no token classifier or cache, to observe");
+                return;
+            }
+            var cacheIncomplete = AccessTools.Field(typeof(StaticObjectMapping), "_cacheIncomplete");
+            var lastScan = AccessTools.Field(typeof(StaticObjectMapping), "_lastCacheUpdateTime");
+            var passId = AccessTools.Field(typeof(StaticObjectMapping), "_currentPassId");
+            if ((bool)cacheIncomplete.GetValue(null))
+            {
+                run.Skip(check, "the static scan here is incomplete, so it may not reach the test plant; move away from dense builds and retry");
+                return;
+            }
+            var entries = global::Automatics.Automatics.Plugin?.Config.Select(x => x.Value).ToList();
+            var customFlora = entries?.FirstOrDefault(x =>
+                x.Definition.Key == "custom_flora" && x.SettingType == typeof(List<ObjectElement>));
+            var allowFlora = entries?.FirstOrDefault(x =>
+                x.Definition.Key == "allow_pinning_flora" && x.SettingType == typeof(StringList));
+            if (customFlora == null || allowFlora == null)
+            {
+                run.Fail(check, "the custom_flora or allow_pinning_flora entry is not bound");
+                return;
+            }
+            if (ValheimObject.Flora.IsDefined(identifier) || ValheimObject.Flora.IsDefined(plantName) ||
+                (bool)ClassifyTokenMethod.Invoke(null, new object[] { plantName, null, null }))
+            {
+                run.Skip(check, $"the test identifier {identifier} or the test plant's name {plantName} is already known to a registry; remove it and retry");
+                return;
+            }
+
+            // A pickable that is no flora, so it gets no flora node when it appears.
+            string prefabName = null;
+            foreach (var candidate in new[] { "Pickable_Flint", "Pickable_Stone", "Pickable_Branch" })
+            {
+                var prefab = ZNetScene.instance.GetPrefab(candidate);
+                var pickable = prefab ? prefab.GetComponent<Pickable>() : null;
+                if (!pickable || ValheimObject.Flora.IsDefined(Objects.GetName(pickable))) continue;
+                prefabName = candidate;
+                break;
+            }
+            if (prefabName == null)
+            {
+                run.Skip(check, "no flint, stone or branch pickable that is no flora is available");
+                return;
+            }
+
+            var forward = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
+            var spot = player.transform.position + forward * 3f + player.transform.right * 3f;
+            spot.y = ZoneSystem.instance.GetGroundHeight(spot);
+            if (Map.GetClosestPin(spot, 8f, includeInactive: true) != null)
+            {
+                run.Skip(check, "a pin is within 8 m of the test spot beside you; move and retry");
+                return;
+            }
+            if (!MappingConfig.SaveStaticObjectPins && Map.ShouldSuppressTransientAutomaticPin(spot))
+            {
+                run.Skip(check, "the map filters unsaved automatic pins at the test spot, for example because unexplored automatic pins are hidden");
+                return;
+            }
+
+            var smokePins = new SmokePins();
+            var go = SpawnTestObject(new[] { prefabName }, spot, Quaternion.identity, out var spawnSkip,
+                prefab => prefab.GetComponent<Pickable>());
+            Minimap.PinData pin = null;
+            try
+            {
+                if (!go)
+                {
+                    run.Skip(check, spawnSkip);
+                    return;
+                }
+                Physics.SyncTransforms();
+                if (!Objects.GetZdoid(go.transform, out var id) ||
+                    !go.GetComponentsInChildren<Collider>().Any(x => x.enabled))
+                {
+                    run.Skip(check, "the spawned plant has no ZDO or no enabled collider");
+                    return;
+                }
+                if (go.GetComponent<FloraNode>())
+                {
+                    run.Fail(check, "precondition failed: the plant has a flora node before its name is a flora");
+                    return;
+                }
+                var plant = go.GetComponent<Pickable>();
+                plant.m_overrideName = plantName;
+                if (Objects.GetName(plant) != plantName)
+                {
+                    run.Skip(check, $"the spawned {prefabName} does not go by the name it was given");
+                    return;
+                }
+
+                if (!SmokeSession.BeginSetting(run.RunId, customFlora, out var floraSetting, out var refusal) ||
+                    !SmokeSession.BeginSetting(run.RunId, allowFlora, out var allowSetting, out refusal))
+                {
+                    run.Skip(check, refusal);
+                    return;
+                }
+                if (!ObjectElementList.TryCopyWithElement(
+                        customFlora.BoxedValue as List<ObjectElement> ?? new List<ObjectElement>(), identifier,
+                        "Automatics smoke runtime flora", plantName, out var withFlora))
+                {
+                    run.Fail(check, "precondition failed: the flora entry could not be made");
+                    return;
+                }
+                if (!SmokeSession.WriteSetting(run.RunId, floraSetting, withFlora, out refusal))
+                {
+                    run.Skip(check, $"{customFlora.Definition.Key} could not be changed: {refusal}");
+                    return;
+                }
+
+                var nodes = go.GetComponents<FloraNode>();
+                var node = nodes.Length == 1 ? nodes[0] : null;
+                var doubled = PickableCache.GetAllInstance().Count(x => x && x.GetComponents<FloraNode>().Length > 1);
+                if (!node || node.ScopeGeneration != MappingModule.Generation || FloraNode.Find(id) != node ||
+                    doubled > 0)
+                {
+                    run.Fail(check, $"after the flora was added the plant has {nodes.Length} flora node(s), " +
+                                    $"owned by the running activation={node && node.ScopeGeneration == MappingModule.Generation}, " +
+                                    $"found by its ZDO={node && FloraNode.Find(id) == node}, and {doubled} plant(s) have more than one");
+                    return;
+                }
+
+                if (!SmokeSession.WriteSetting(run.RunId, allowSetting,
+                        new StringList(MappingConfig.AllowPinningFlora) { identifier }, out refusal))
+                {
+                    run.Skip(check, $"{allowFlora.Definition.Key} could not be changed: {refusal}");
+                    return;
+                }
+                FloraNetworkConstructionMethod.Invoke(node, null);
+                if (node.Network == null)
+                {
+                    run.Fail(check, "the plant's flora node built no network");
+                    return;
+                }
+
+                // A cleared scan time makes the pass scan the area again, as a classifier change does.
+                lastScan.SetValue(null, 0f);
+                var before = (int)passId.GetValue(null);
+                global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player, interval, false);
+                if ((int)passId.GetValue(null) == before || (bool)cacheIncomplete.GetValue(null))
+                {
+                    run.Skip(check, "the static pass did not run or did not finish its scan (the game is paused, the area around you is still loading, or the scan's collider buffer is full); retry");
+                    return;
+                }
+                if (StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(id), out pin) &&
+                    Map.GetAllPins().Contains(pin))
+                {
+                    if (smokePins.Created(pin)) created.Add(pin);
+                    run.Pass(check, $"a {prefabName} loaded before its name became a flora got its node and its pin '{pin.m_name}' from the next static pass");
+                    return;
+                }
+
+                var cache = (Dictionary<Collider, ClassifiedStaticObject>)StaticCacheField.GetValue(null);
+                if (!cache.Any(pair => pair.Key && pair.Key.transform.IsChildOf(go.transform) &&
+                                       pair.Value.Kind == PinKind.Flora && pair.Value.Identifier == identifier))
+                    run.Skip(check, "the plant got its flora node, but the static scan did not classify its collider as the new flora; its collider may be on a layer the scan does not read");
+                else
+                    run.Fail(check, "the plant got its flora node and was classified as the new flora, but the static pass added no pin for it");
+            }
+            finally
+            {
+                // Whatever pin the plant holds goes by the rule before the plant does.
+                if (go && Objects.GetZdoid(go.transform, out var heldId) &&
+                    StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(heldId), out var held))
+                    smokePins.Remove(map, held);
+                smokePins.Remove(map, pin);
+                RemoveTestObject(go);
+
+                var results = SmokeSession.RestoreSettings(run.RunId);
+                if (results.Count > 0)
+                {
+                    var detail = string.Join("; ", results.Select(x => x.Value));
+                    if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
+                        run.Fail(restoredCheck, detail);
+                    else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
+                                              x.Key == SmokeSession.ToggleOutcome.NotThisRun))
+                        run.Skip(restoredCheck, "restoration skipped: " + detail);
+                    else if (ValheimObject.Flora.IsDefined(identifier))
+                        run.Fail(restoredCheck, "the settings were put back, but the test flora is still defined: " + detail);
+                    else
+                        run.Pass(restoredCheck, detail);
                 }
             }
         }
