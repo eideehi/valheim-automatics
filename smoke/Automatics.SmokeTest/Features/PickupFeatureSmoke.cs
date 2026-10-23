@@ -26,8 +26,8 @@ namespace Automatics.SmokeTest
     // value, or to its default, 0.5 s, when that is 0. The settings go through SmokeSession: the
     // change is recorded before it is made, and put back afterwards unless the user changed the
     // setting meanwhile. Before any drop is spawned, the player is moved to clear ground when an
-    // item drop of their own lies within reach of a pass, or a pickable that yields Wood or
-    // Stone; and items are put aside when the inventory has no room for what the checks pick up.
+    // item drop, a pickable or a pickable item lies within reach of a pass; and items are put
+    // aside when the inventory has no room for what the checks pick up.
     // The player and the items go back when the section ends.
     //
     // The key pass is requested through AutomaticPickup.RequestKeyPickup, the call Update makes
@@ -249,21 +249,24 @@ namespace Automatics.SmokeTest
             while (interval.MoveNext()) yield return interval.Current;
         }
 
-        // A site where the checks can tell their test items from the user's: no item drop within
-        // reach of a pass, and no pickable that yields Wood or Stone within the range, since the
-        // interval's part of a pass picks pickables too.
+        // A site where the checks can tell their test items from the user's: nothing within reach
+        // of a pass that a pass could collect - no item drop, and no pickable or pickable item,
+        // which the interval's part of a pass harvests before it looks at drops. A harvest could
+        // add Wood or Stone to the counts, or fill the slots the checks need for their own items.
         private static string ClearOfOwnItems(Vector3 site)
         {
-            var drop = SmokeSetup.Clearance(SectionRange + DropMargin, SmokeSetup.SiteKinds.Drops)(site);
+            const float radius = SectionRange + DropMargin;
+            var drop = SmokeSetup.Clearance(radius, SmokeSetup.SiteKinds.Drops)(site);
             if (drop != null) return drop;
 
-            foreach (var collider in Physics.OverlapSphere(site, SectionRange, ~0, QueryTriggerInteraction.Collide))
+            // Trigger colliders count here: an interactable's collider may be one.
+            foreach (var collider in Physics.OverlapSphere(site, radius, ~0, QueryTriggerInteraction.Collide))
             {
-                var pickable = collider ? collider.GetComponentInParent<Pickable>() : null;
-                if (!pickable || !pickable.m_itemPrefab) continue;
-                var name = pickable.m_itemPrefab.name;
-                if (name == WoodPrefab || name == StonePrefab)
-                    return $"pickable '{Objects.GetName(pickable)}', which yields {name}, within {SectionRange:0} m";
+                if (!collider) continue;
+                var pickable = collider.GetComponentInParent<Pickable>();
+                if (pickable) return $"pickable '{Objects.GetName(pickable)}' within {radius:0} m";
+                var pickableItem = collider.GetComponentInParent<PickableItem>();
+                if (pickableItem) return $"pickable item '{Objects.GetPrefabName(pickableItem.gameObject)}' within {radius:0} m";
             }
 
             return null;

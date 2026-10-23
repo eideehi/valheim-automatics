@@ -1325,10 +1325,11 @@ console commands*:
   that no pass of the timer's can take the drop a check watches. For the last
   check it is set back to your value, or, when it is 0, to its default, 0.5,
   because that check is about the timer.
-- Before any drop is spawned, you are moved to a clear site when an item drop
-  lies within 6 m of you, or a pickable that yields Wood or Stone within 4 m:
-  passes with an interval part pick those up too, and Wood or Stone of your own
-  would make a check inconclusive. You are moved back when the section ends.
+- Before any drop is spawned, you are moved to a clear site when an item drop,
+  a pickable or a pickable item lies within 6 m of you: passes with an interval
+  part pick those up too, and what they pick could make a check inconclusive or
+  fill the inventory room the checks need. You are moved back when the section
+  ends.
 - When your inventory has fewer than two free slots, or too little carry weight
   for two Wood or two fish, items are put aside for the section and put back
   afterwards.
