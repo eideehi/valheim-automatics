@@ -2511,6 +2511,11 @@ namespace Automatics.SmokeTest
                 // Awake adds it to the game's list of loaded locations.
                 go.AddComponent<Location>();
                 var spawned = MapDungeon(out var handledSpawned);
+                // The warning is the mod's own line, so the log does not tell it from a real
+                // dungeon's without this note.
+                if (warnings.Messages.Any(x => x.Contains("has no entrance")))
+                    FeaturesSmokeCommand.Emit(null, BepInEx.Logging.LogLevel.Info,
+                        $"[Automatics Smoke] {check}: the \"has no entrance\" warning just logged is for the check's test dungeon, not a dungeon of your world; it is not a problem");
                 pin = spawned.FirstOrDefault();
                 var expectedType = IconPack.GetPinType(new Target { name = label, prefabName = dungeon });
                 if (spawned.Count != 1 || !handledSpawned || Utils.DistanceXZ(pin.m_pos, position) > 0.01f ||
