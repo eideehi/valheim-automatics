@@ -1257,7 +1257,10 @@ namespace Automatics.SmokeTest
 
                 // On the fish out of water: that fish is taken, the one in water stays.
                 fishMayBeLeft = true;
+                var interacted = Time.time - Reflections.GetField<float>(player, "m_lastHoverInteractTime");
                 component.RequestKeyPickup(landed.gameObject);
+                // Whether the request was taken, for the reason of a pass that did not take the fish.
+                var accepted = Reflections.GetField<bool>(component, "_keyRequested");
                 // Read only while the fish in water is still there: a fixture that breaks after it
                 // was taken cannot explain that it was taken.
                 broken = null;
@@ -1310,7 +1313,10 @@ namespace Automatics.SmokeTest
                         run.Skip(FishCheck, "inconclusive: the game was paused during the pass");
                     else
                         run.Fail(FishCheck,
-                            $"a key pass requested on a fish out of water did not take it within {KeyPassTimeoutSeconds:0.#}s{notes}");
+                            $"a key pass requested on a fish out of water did not take it within {KeyPassTimeoutSeconds:0.#}s " +
+                            $"(the request was {(accepted ? "taken" : "refused")}, {interacted:0.00}s after the last interaction; " +
+                            $"the fish is {Distance(player, landed):0.00} m away, {player.transform.position.y - landed.transform.position.y:0.00} m below you, range {range:0.#} m, " +
+                            $"{(landedFish.IsOutOfWater() ? "out of" : "in")} water, {(landed.CanPickup() ? "" : "not ")}pickable{(landed.InTar() ? ", in tar" : "")}){notes}");
                     yield break;
                 }
 
