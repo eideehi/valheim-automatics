@@ -9,6 +9,8 @@ using HarmonyLib;
 using ModUtils;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using Held = System.Collections.Generic.Dictionary<BepInEx.Configuration.ConfigEntryBase,
+    Automatics.SmokeTest.SmokeSession.SettingRestoration>;
 using DoorComponent = Automatics.AutomaticDoor.AutomaticDoor;
 using DoorModule = Automatics.AutomaticDoor.Module;
 using DoorPatches = Automatics.AutomaticDoor.Patches;
@@ -60,14 +62,24 @@ namespace Automatics.SmokeTest
     // A module adds what only it can show as extra checks, at the request, while off or after the
     // enable. Each extra reports PASS, FAIL or SKIP on its own.
     //
-    // It spawns nothing and writes only the setting, through SmokeSession, under the lifecycle
-    // command's rules. It only ever turns a module off and back on: when the module is off in the
-    // user's settings, every check SKIPs and nothing is written. A descriptor marked EnableWhenOff
-    // (a module that is off by default) is the exception: it is turned on first, and the recorded
-    // setting puts it back off at the end, on a throw and at any hand-back trigger.
+    // Before the baseline the run sets up what the descriptor says its checks need, so that each
+    // probe and check has something to see: settings written for the run, the module's tool taken
+    // out of the player's hands, a test object placed when the scene has none of the objects the
+    // probes count, and a module that is off in the user's settings turned on. Everything goes
+    // through SmokeSession under the lifecycle command's rules: the settings and the module
+    // setting are put back at the end, on a throw and at any hand-back trigger, the tools go back
+    // into the player's hands and the test object is removed.
     internal static partial class LifecycleSmokeCommand
     {
         private const int ModuleCycles = 3;
+
+        // How far ahead of the player a test object is placed: beyond Door's largest opening
+        // distance (8 m), so the module never opens the test door, and clear of the player.
+        private const float TestObjectDistance = 12f;
+
+        // How many frames the run waits before the baseline for a module to hold what its first
+        // cycle's cleanup checks look for, such as an interval timer.
+        private const int WarmFrames = 30;
 
         // The migrated modules this runner takes, by the argument that names them. A descriptor is
         // built only when its argument is run, so a module whose types cannot be read stops its own
@@ -132,6 +144,17 @@ namespace Automatics.SmokeTest
                     Probe.Components<DoorComponent>(CountEligibleDoors),
                     Probe.Counter("RegisteredDoorCount", () => DoorComponent.RegisteredDoorCount,
                         OffExpectation.Zero, 0, CountActiveDoorComponents)
+                },
+                // A door on open ground has no support, so it is kept from wearing for that while
+                // the check runs.
+                Spawn = new TestObject
+                {
+                    Prefab = "wood_door", Seen = CountEligibleDoors,
+                    Prepare = go =>
+                    {
+                        var wear = go.GetComponent<WearNTear>();
+                        if (wear) wear.m_noSupportWear = false;
+                    }
                 },
                 Precondition = null,
                 Extras = new[]
@@ -235,9 +258,10 @@ namespace Automatics.SmokeTest
         // and attaches no component.
         // Automatic Pickup asks its crop claim before it collects a crop, so the claim has to let go
         // at the disable request and come back after the enable. The check harvests, plants and
-        // designates nothing and changes no Farming or Pickup setting; its precondition keeps it
-        // from running where Automatic Pickup could collect, while farming is off, a crop farming
-        // would have replanted.
+        // designates nothing itself. It turns Pickup's reach down to its least for the run, and its
+        // precondition keeps it from running where Automatic Pickup could still collect, while
+        // farming is off, a crop farming would have replanted. Farming is turned on, on an
+        // interval, so that its interval timer can be seen.
         private static ModuleDescriptor DescribeFarming()
         {
             var claimedBeforeDisable = -1;
@@ -280,6 +304,14 @@ namespace Automatics.SmokeTest
                     Probe.Counter("farming.designated_containers", CountDesignatedContainers,
                         OffExpectation.BelowBaseline, 0)
                 },
+                Settings = () => new[]
+                {
+                    Setting(PickupConfig.AutomaticPickupRangeEntry, "AutomaticPickup.Config.AutomaticPickupRangeEntry",
+                        _ => 1f),
+                    Setting<bool>(typeof(FarmingConfig), "_enableAutomaticFarming", _ => true),
+                    Setting<float>(typeof(FarmingConfig), "_farmingInterval", OnAnInterval)
+                },
+                Warm = () => FarmingModule.FarmingTimerCount > 0,
                 Precondition = FarmingPrecondition,
                 Extras = new[]
                 {
@@ -414,7 +446,7 @@ namespace Automatics.SmokeTest
 
             if (!PickupModule.Running || !HasCropOrPlantInPickupReach(player)) return null;
 
-            return "Automatic Pickup is running and a crop Automatic Farming harvests, or a growing plant, is within its range + 1 m; stand farther from your fields and run the check again";
+            return $"Automatic Pickup is running and a crop Automatic Farming harvests, or a growing plant, is within its range + 1 m ({PickupConfig.AutomaticPickupRange + 1f:0.#} m, with automatic_pickup_range turned down for the run); stand farther from your fields and run the check again";
         }
 
         // Every crop farming would claim, whether or not farming runs right now - the check asks
@@ -475,9 +507,10 @@ namespace Automatics.SmokeTest
         }
 
         // Automatic Feeding owns one patch and one component on every Tameable with a ZDO, and no
-        // hook subscription, so the four hook counts stay where they were throughout. The check
-        // spawns no animal and no food and changes no Feeding setting: a component only acts when a
-        // hungry animal already finds food, as it would with the module left on.
+        // hook subscription, so the four hook counts stay where they were throughout. With no
+        // animal loaded the check places a tamed test boar; it spawns no food and changes no
+        // Feeding setting: a component only acts when a hungry animal already finds food, as it
+        // would with the module left on.
         private static ModuleDescriptor DescribeFeeding()
         {
             return new ModuleDescriptor
@@ -498,6 +531,16 @@ namespace Automatics.SmokeTest
                     // compared with the tameables loaded at that moment rather than with the count
                     // before the run, and a scene with none is inconclusive.
                     Probe.Components<FeedingComponent>(CountEligibleTameables)
+                },
+                // Tamed, so the boar leaves the player alone.
+                Spawn = new TestObject
+                {
+                    Prefab = "Boar", Seen = CountEligibleTameables,
+                    Prepare = go =>
+                    {
+                        var character = go.GetComponent<Character>();
+                        if (character) character.SetTamed(true);
+                    }
                 },
                 Precondition = null,
                 Extras = new[]
@@ -543,8 +586,10 @@ namespace Automatics.SmokeTest
         private const int MiningTimerFrames = 30;
 
         // Automatic Mining owns one patch, three hook subscriptions and one component on every
-        // supported destructible with a ZDO. The precondition keeps normal mining from firing in
-        // an on interval without changing any of the user's inner settings.
+        // supported destructible with a ZDO. The run turns mining on, on an interval, so that its
+        // timer can be seen, and keeps it from striking anything in an on interval by taking the
+        // pickaxes out of the player's hands with need_to_equip_pickaxe on; the precondition
+        // checks that this held.
         private static ModuleDescriptor DescribeMining()
         {
             var timerCountBeforeDisable = -1;
@@ -575,6 +620,17 @@ namespace Automatics.SmokeTest
                     Probe.Counter("AllInstance.Count", () => MiningComponent.AllInstanceCount,
                         OffExpectation.Zero, 0, CountActiveMiningComponents)
                 },
+                Settings = () => new[]
+                {
+                    Setting<bool>(typeof(MiningConfig), "_needToEquipPickaxe", _ => true),
+                    Setting(MiningConfig.EnableAutomaticMiningEntry, "AutomaticMining.Config.EnableAutomaticMiningEntry",
+                        _ => true),
+                    Setting<float>(typeof(MiningConfig), "_miningInterval", OnAnInterval)
+                },
+                Unequip = Skills.SkillType.Pickaxes,
+                // The copper deposit prefab that carries the MineRock5 on its root.
+                Spawn = new TestObject { Prefab = "rock4_copper_frac", Seen = CountEligibleMinerals },
+                Warm = () => MiningModule.MiningTimerCount > 0,
                 Precondition = MiningPrecondition,
                 Extras = new[]
                 {
@@ -702,7 +758,7 @@ namespace Automatics.SmokeTest
 
             if (!HasUsablePickaxe(player) || !HasNearbyAllowedMineral(player)) return null;
 
-            return "unequip or remove the pickaxe, or move away from rocks and run the check again";
+            return "a pickaxe the passes could use is still there, although the run took the pickaxes out of your hands and turned need_to_equip_pickaxe on, and an allowed mineral is near; unequip the pickaxe and run the check again";
         }
 
         private static bool HasUsablePickaxe(Player player)
@@ -810,6 +866,8 @@ namespace Automatics.SmokeTest
                         () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(RepairModule), "OnPlayerFixedUpdate"),
                         OffExpectation.Zero, 0, () => 1)
                 },
+                Warm = () => ReadRepairState(typeof(RepairModule), "ItemRepairTimers") > 0 &&
+                             ReadRepairState(typeof(RepairModule), "PieceRepairTimers") > 0,
                 Precondition = null,
                 Extras = extras.ToArray()
             };
@@ -817,15 +875,12 @@ namespace Automatics.SmokeTest
 
         // Automatic Supply owns its requirement, consumption and station intake patches and one
         // hook subscription, and no component. While it is off nothing counts container stock and
-        // no action that took items is left open. Nothing is spawned and no item moves. It is off
-        // by default, so when it is off in your settings the run turns it on first and puts it
-        // back off at the end.
+        // no action that took items is left open. Nothing is spawned and no item moves.
         private static ModuleDescriptor DescribeSupply()
         {
             return new ModuleDescriptor
             {
                 Argument = "supply",
-                EnableWhenOff = true,
                 Module = SupplyModule.Instance,
                 Active = () => SupplyModule.Active,
                 Running = () => SupplyModule.Running,
@@ -861,16 +916,16 @@ namespace Automatics.SmokeTest
 
         // Automatic Woodcutting owns the patches that attach its component and those of area
         // woodcutting, three hook subscriptions, one tree data subscription and one component on
-        // every tree, log and tree stump with a ZDO. It is off by default, so when it is off in your settings the run turns
-        // it on first and puts it back off at the end. The precondition keeps it from hitting a
-        // tree in an on interval: without a usable axe a pass hits nothing.
+        // every tree, log and tree stump with a ZDO. The run turns woodcutting on, on an interval,
+        // so that its timer can be seen, and keeps it from hitting a tree in an on interval by
+        // taking the axes out of the player's hands with need_to_equip_axe on: without a usable
+        // axe a pass hits nothing. The precondition checks that this held.
         private static ModuleDescriptor DescribeWoodcutting()
         {
             var timerCountBeforeDisable = -1;
             return new ModuleDescriptor
             {
                 Argument = "woodcutting",
-                EnableWhenOff = true,
                 Module = WoodcuttingModule.Instance,
                 Active = () => WoodcuttingModule.Active,
                 Running = () => WoodcuttingModule.Running,
@@ -901,6 +956,18 @@ namespace Automatics.SmokeTest
                     Probe.Counter("AllInstance.Count", () => WoodcuttingComponent.AllInstanceCount,
                         OffExpectation.Zero, 0, CountActiveWoodcuttingComponents)
                 },
+                Settings = () => new[]
+                {
+                    Setting(WoodcuttingConfig.NeedToEquipAxeEntry, "AutomaticWoodcutting.Config.NeedToEquipAxeEntry",
+                        _ => true),
+                    Setting(WoodcuttingConfig.EnableAutomaticWoodcuttingEntry,
+                        "AutomaticWoodcutting.Config.EnableAutomaticWoodcuttingEntry", _ => true),
+                    Setting(WoodcuttingConfig.WoodcuttingIntervalEntry,
+                        "AutomaticWoodcutting.Config.WoodcuttingIntervalEntry", OnAnInterval)
+                },
+                Unequip = Skills.SkillType.Axes,
+                Spawn = new TestObject { Prefab = "Beech1", Seen = CountEligibleTrees },
+                Warm = () => WoodcuttingModule.WoodcuttingTimerCount > 0,
                 Precondition = WoodcuttingPrecondition,
                 Extras = new[]
                 {
@@ -1029,7 +1096,8 @@ namespace Automatics.SmokeTest
         }
 
         // Every pass needs an axe in the right hand or, with need_to_equip_axe off, anywhere in
-        // the inventory. Such an axe refuses the run, so the module never has one while the check
+        // the inventory. The run turns that setting on and takes the axes out of the player's
+        // hands; an axe still there refuses the run, so the module never has one while the check
         // turns it on.
         private static string WoodcuttingPrecondition()
         {
@@ -1040,9 +1108,7 @@ namespace Automatics.SmokeTest
             var items = WoodcuttingConfig.NeedToEquipAxe ? inventory.GetEquippedItems() : inventory.GetAllItems();
             if (!items.Any(x => x != null && x.m_shared.m_skillType == Skills.SkillType.Axes)) return null;
 
-            return WoodcuttingConfig.NeedToEquipAxe
-                ? "unequip the axe and run the check again"
-                : "need_to_equip_axe is off, so an axe anywhere in the inventory is used; move your axes to a chest and run the check again";
+            return "an axe the passes could use is still there, although the run took the axes out of your hands and turned need_to_equip_axe on; unequip the axe and run the check again";
         }
 
         private static void AddRepairCleanupCheck(List<ExtraCheck> extras, Type owner, string field)
@@ -1126,7 +1192,7 @@ namespace Automatics.SmokeTest
             var run = new ModuleRun(runId, runner, descriptor);
 
             Emit(context, LogLevel.Info,
-                $"[Automatics Smoke] {runner} started: {descriptor.Module.ConfigSection}/module is turned off and on {ModuleCycles} times through its setting, nothing is spawned, and the setting is restored");
+                $"[Automatics Smoke] {runner} started: {descriptor.Module.ConfigSection}/module is turned off and on {ModuleCycles} times through its setting, and the setting and whatever the run sets up for its checks are restored");
 
             var steps = Contain(run.Execute(), (_, message) => run.Stopped(message), "");
             while (steps.MoveNext()) yield return steps.Current;
@@ -1198,10 +1264,32 @@ namespace Automatics.SmokeTest
 
             public ExtraCheck[] Extras;
 
-            // True for a module that is off by default: when it is off in the user's settings the
-            // run turns it on first, through the same recorded setting, and puts it back off at
-            // the end. Every other module is only ever turned off and back on.
-            public bool EnableWhenOff;
+            // The settings the run writes for itself before the precondition is asked, each with
+            // the value its checks need. Null when it needs none.
+            public Func<IEnumerable<RunSetting>> Settings;
+
+            // The kind of tool the run takes out of the player's hands before the precondition is
+            // asked, and puts back at the end; None when it takes none.
+            public Skills.SkillType Unequip = Skills.SkillType.None;
+
+            // The test object the run places before the baseline when the scene holds none of the
+            // objects the probes count; null when it needs none.
+            public TestObject Spawn;
+
+            // Holds once the module has run long enough for the first cycle's cleanup checks to
+            // see what it holds, such as an interval timer; the run waits up to WarmFrames for it
+            // before the baseline. Null when there is nothing to wait for.
+            public Func<bool> Warm;
+        }
+
+        // A test object placed TestObjectDistance ahead of the player. Seen counts the objects of
+        // its kind the probes count; it is spawned only when that is 0. Prepare readies it in the
+        // frame it is spawned.
+        private sealed class TestObject
+        {
+            public string Prefab;
+            public Func<int> Seen;
+            public Action<GameObject> Prepare;
         }
 
         // What a probe should read while the module is off: nothing at all, its value before the
@@ -1402,6 +1490,13 @@ namespace Automatics.SmokeTest
                 if (!_settled.ContainsKey(name)) _settled[name] = new CheckResult(status, name, message);
             }
 
+            // For a result that is known only at the end of the run, such as the settings put
+            // back after a run that stopped early: it takes the place of whatever was settled.
+            public void Replace(CheckResult result)
+            {
+                _settled[result.Name] = result;
+            }
+
             public void Cycle(string name, int cycle, bool passed, string pass, string failure)
             {
                 if (_settled.ContainsKey(name)) return;
@@ -1480,9 +1575,17 @@ namespace Automatics.SmokeTest
             private readonly string _onPatches;
             private readonly string _onProbes;
             private readonly string _restored;
+            private readonly string _settingsRestored;
             private readonly string _noErrors;
 
+            private readonly Held _held = new Held();
+            private readonly List<string> _setup = new List<string>();
+            private readonly List<GameObject> _spawned = new List<GameObject>();
+            private WoodcuttingFeatureSmoke.PlayerState _playerState;
+            private Func<string, bool> _playerHandBack;
+
             private ConfigEntry<AutomaticsModule> _toggle;
+            private AutomaticsModule _initialValue;
             private string _moduleName;
             private string _section;
             private string _harmonyId;
@@ -1508,6 +1611,7 @@ namespace Automatics.SmokeTest
                 _onPatches = prefix + "_on_patches_applied";
                 _onProbes = prefix + "_on_probes_at_baseline";
                 _restored = prefix + "_restored_initial_state";
+                _settingsRestored = descriptor.Settings == null ? null : prefix + "_settings_restored";
                 _noErrors = prefix + "_no_errors_logged";
 
                 // The order the checks are recorded in, which is also the order they are reported
@@ -1520,9 +1624,12 @@ namespace Automatics.SmokeTest
                 order.AddRange(ExtraNames(Phase.WhileOff));
                 order.AddRange(new[] { _onState, _onRunning, _onPatches, _onProbes });
                 order.AddRange(ExtraNames(Phase.AfterOn));
-                order.AddRange(new[] { _restored, _noErrors });
+                order.Add(_restored);
+                if (_settingsRestored != null) order.Add(_settingsRestored);
+                order.Add(_noErrors);
 
                 var once = new HashSet<string>(StringComparer.Ordinal) { _settled, _restored, _noErrors };
+                if (_settingsRestored != null) once.Add(_settingsRestored);
                 _record = new CycleRecorder(prefix, ModuleCycles, order, order.Where(x => !once.Contains(x)));
 
                 _errors = new ErrorObserver("AutomaticsObserverProbe-" + prefix, runner);
@@ -1568,26 +1675,7 @@ namespace Automatics.SmokeTest
                 }
 
                 _harmonyId = global::Automatics.Automatics.GetHarmonyId(_moduleName);
-
-                // Asked before anything is written, so a module the check cannot use is left as it is.
-                var precondition = _descriptor.Precondition?.Invoke();
-                if (precondition != null)
-                {
-                    _record.SkipAll(precondition);
-                    yield break;
-                }
-
-                // The check only ever turns the module off and back on. Turning it on for the user
-                // would let it act in their world, so when it is off it stays off - unless the
-                // descriptor is for a module that is off by default, which is turned on for the
-                // run and put back off afterwards.
-                _turnedOn = _toggle.Value != AutomaticsModule.Enabled && _descriptor.EnableWhenOff;
-                if (_toggle.Value != AutomaticsModule.Enabled && !_turnedOn)
-                {
-                    _record.SkipAll(
-                        $"{_section}/module is off in your settings, so the check changed nothing. It only ever turns the module off and back on; turn it on yourself if you want this check, then run it again.");
-                    yield break;
-                }
+                _initialValue = _toggle.Value;
 
                 // From here on any write to the setting that is not the check's own is the user
                 // taking it back.
@@ -1601,17 +1689,53 @@ namespace Automatics.SmokeTest
                 SmokeSession.TrackHandBack(_observerHandBack);
                 _errors.Start();
 
+                // The settings and the player are set up before the precondition is asked, which
+                // then only fails when that did not take; Finish puts back whatever was set up.
+                var problem = WriteSettings(RunId, _held, _descriptor.Settings?.Invoke() ?? new RunSetting[0], _setup) ??
+                              TakeTools();
+                if (problem != null)
+                {
+                    _record.SkipAll(problem);
+                    yield break;
+                }
+
+                // Asked before the module is turned on or the test object placed, so a module the
+                // check cannot use is never let act.
+                var precondition = _descriptor.Precondition?.Invoke();
+                if (precondition != null)
+                {
+                    _record.SkipAll(precondition);
+                    yield break;
+                }
+
+                problem = PlaceTestObject();
+                if (problem != null)
+                {
+                    _record.SkipAll(problem);
+                    yield break;
+                }
+
+                // A module that is off in the user's settings is turned on for the run, through the
+                // same recorded setting, and put back off at the end.
+                _turnedOn = _initialValue != AutomaticsModule.Enabled;
                 if (_turnedOn && !SmokeSession.WriteToggle(RunId, AutomaticsModule.Enabled, out refusal))
                 {
                     _record.SkipAll("inconclusive: the module could not be turned on for the run: " + refusal);
                     yield break;
                 }
 
+                if (_turnedOn) _setup.Insert(0, "turned on for the run");
+
                 // The registry has to agree with the setting before anything is asked of it, or a
                 // transition still pending from before the command would be read as this one's.
                 var settle = Await(ModuleState.Enabled, true, true);
                 while (settle.MoveNext()) yield return settle.Current;
-                if (!RecordWait(_settled, 0, "nothing was changed")) yield break;
+                if (!RecordWait(_settled, 0, _setup.Count == 0 ? "nothing was changed" : string.Join("; ", _setup)))
+                    yield break;
+
+                if (_descriptor.Warm != null)
+                    for (var frame = 0; frame < WarmFrames && !_descriptor.Warm() && SmokeSession.IsCurrent(RunId); frame++)
+                        yield return null;
 
                 if (_descriptor.Probes.Length == 0)
                 {
@@ -1646,12 +1770,22 @@ namespace Automatics.SmokeTest
                 }
             }
 
-            // Puts the setting back and waits for the registry to follow, then judges the log.
+            // Removes the test object, puts the settings back and waits for the registry to follow,
+            // gives the player back their tools, then judges the log.
             public IEnumerator Finish()
             {
+                foreach (var go in _spawned) RemoveTestObject(go);
+                _spawned.Clear();
+
                 if (_toggleOwned)
                 {
-                    var outcome = SmokeSession.RestoreToggle(RunId, out var detail);
+                    var outcome = RestoreAll(RunId, _toggle, out var detail, out var settings);
+                    if (_settingsRestored != null)
+                    {
+                        var result = SettingsResult(_settingsRestored, settings);
+                        if (result != null) _record.Replace(result);
+                    }
+
                     switch (outcome)
                     {
                         case SmokeSession.ToggleOutcome.NothingWritten:
@@ -1670,16 +1804,57 @@ namespace Automatics.SmokeTest
                         default:
                             // A fault is not final here: putting the value back is also what asks
                             // the registry to recover, so the wait gives it the full bound.
-                            var original = _turnedOn ? AutomaticsModule.Disabled : AutomaticsModule.Enabled;
-                            var wait = Await(_turnedOn ? ModuleState.Disabled : ModuleState.Enabled, false, false, original);
+                            var wait = Await(_turnedOn ? ModuleState.Disabled : ModuleState.Enabled, false, false,
+                                _initialValue);
                             while (wait.MoveNext()) yield return wait.Current;
                             RecordWait(_restored, 0, detail);
                             break;
                     }
                 }
 
+                // Only now, with the module and its settings back as they were, so no pass the run
+                // let run can use the tools.
+                if (_playerState != null && _playerState.Restore()) SmokeSession.ReleaseHandBack(_playerHandBack);
+
                 if (_errors.Started) JudgeLog();
                 SmokeSession.ReleaseHandBack(_observerHandBack);
+            }
+
+            // Takes the descriptor's kind of tool out of the player's hands; PlayerState puts the
+            // equipment back at the end, and through its hand-back when the run is cut short.
+            private string TakeTools()
+            {
+                var skill = _descriptor.Unequip;
+                var player = Player.m_localPlayer;
+                if (skill == Skills.SkillType.None) return null;
+                if (!player) return "the local player went away before the run could take its tools";
+
+                var tools = player.GetInventory().GetEquippedItems()
+                    .Where(x => x != null && x.m_shared.m_skillType == skill).ToList();
+                if (tools.Count == 0) return null;
+
+                _playerState = new WoodcuttingFeatureSmoke.PlayerState(player, Enumerable.Empty<Skills.SkillType>());
+                _playerHandBack = _ => _playerState.Restore();
+                SmokeSession.TrackHandBack(_playerHandBack);
+                foreach (var tool in tools) player.UnequipItem(tool, false);
+                _setup.Add($"unequipped {string.Join(", ", tools.Select(x => Localization.instance.Localize(x.m_shared.m_name)))}");
+                return null;
+            }
+
+            // Places the descriptor's test object when the scene holds none of the objects its
+            // probes count. Null when that was not needed or it was placed, or why it could not be.
+            private string PlaceTestObject()
+            {
+                var spawn = _descriptor.Spawn;
+                if (spawn == null || spawn.Seen() > 0) return null;
+
+                var go = SpawnAhead(spawn.Prefab, TestObjectDistance, out var problem);
+                if (!go) return problem + "; without it the probes have no object to count";
+
+                _spawned.Add(go);
+                spawn.Prepare?.Invoke(go);
+                _setup.Add($"no object the probes count was loaded, so a test {spawn.Prefab} was placed {TestObjectDistance:0} m ahead");
+                return null;
             }
 
             // The step that was running fails; the ones after it were not reached.

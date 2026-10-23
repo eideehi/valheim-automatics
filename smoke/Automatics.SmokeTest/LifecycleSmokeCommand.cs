@@ -14,6 +14,8 @@ using PickupComponent = Automatics.AutomaticPickup.AutomaticPickup;
 using PickupConfig = Automatics.AutomaticPickup.Config;
 using PickupModule = Automatics.AutomaticPickup.Module;
 using PickupPatches = Automatics.AutomaticPickup.Patches;
+using Held = System.Collections.Generic.Dictionary<BepInEx.Configuration.ConfigEntryBase,
+    Automatics.SmokeTest.SmokeSession.SettingRestoration>;
 
 namespace Automatics.SmokeTest
 {
@@ -763,6 +765,148 @@ namespace Automatics.SmokeTest
             var parameters = string.Join(",",
                 method.GetParameters().Select(p => p.ParameterType.Name).ToArray());
             return $"{method.DeclaringType?.Name}.{method.Name}({parameters})";
+        }
+
+        // -- What the mapping run and the module runner set up for themselves ---------
+
+        // A setting a run writes for itself, with the value its checks need. Name is what a
+        // setting that was not found is called: the config class's field or accessor.
+        private sealed class RunSetting
+        {
+            public string Name;
+            public ConfigEntryBase Entry;
+            public object Value;
+        }
+
+        // A setting without an accessor, found by its config class's private field.
+        private static RunSetting Setting<T>(Type config, string field, Func<ConfigEntry<T>, T> value)
+        {
+            return Setting(SmokeSetup.Field<T>(config, field), $"{config.FullName}.{field}", value);
+        }
+
+        private static RunSetting Setting<T>(ConfigEntry<T> entry, string name, Func<ConfigEntry<T>, T> value)
+        {
+            return new RunSetting { Name = name, Entry = entry, Value = entry == null ? null : (object)value(entry) };
+        }
+
+        // An interval a module keeps a timer for: the user's own when it is above 0, otherwise
+        // the setting's default.
+        private static float OnAnInterval(ConfigEntry<float> entry)
+        {
+            return entry.Value > 0f ? entry.Value : (float)entry.DefaultValue;
+        }
+
+        // Writes each setting through the session, once per run (held). Null when all were
+        // written, or why one was not; setup gets one line naming them, for the run's setup note.
+        private static string WriteSettings(int runId, Held held, IEnumerable<RunSetting> settings,
+            List<string> setup)
+        {
+            var written = new List<string>();
+            foreach (var setting in settings)
+            {
+                if (setting.Entry == null)
+                    return $"{setting.Name} was not found, so it could not be set for the run";
+
+                var key = setting.Entry.Definition.Key;
+                if (!SmokeSetup.Write(runId, held, setting.Entry, setting.Value, out var refusal))
+                    return $"{key} could not be set for the run: {refusal}";
+
+                written.Add($"{key}={setting.Entry.GetSerializedValue()}");
+            }
+
+            if (written.Count > 0) setup.Add($"set {string.Join(", ", written)} for the run");
+            return null;
+        }
+
+        // SmokeSession.RestoreToggle and RestoreSettings each put back every setting the run holds,
+        // so a run that wrote other settings besides its toggle puts them all back in one call and
+        // tells the toggle's result apart by its name, which every result's detail starts with.
+        // others holds the rest; a run that is no longer current gets NotThisRun for both.
+        private static SmokeSession.ToggleOutcome RestoreAll(int runId, ConfigEntryBase toggle,
+            out string detail, out List<KeyValuePair<SmokeSession.ToggleOutcome, string>> others)
+        {
+            var name = $"{toggle.Definition.Section}/{toggle.Definition.Key} ";
+            var outcome = SmokeSession.ToggleOutcome.NothingWritten;
+            detail = "";
+            others = new List<KeyValuePair<SmokeSession.ToggleOutcome, string>>();
+            foreach (var result in SmokeSession.RestoreSettings(runId))
+            {
+                if (result.Key == SmokeSession.ToggleOutcome.NotThisRun)
+                {
+                    detail = result.Value;
+                    others.Add(result);
+                    return result.Key;
+                }
+
+                if (outcome == SmokeSession.ToggleOutcome.NothingWritten &&
+                    result.Value.StartsWith(name, StringComparison.Ordinal))
+                {
+                    outcome = result.Key;
+                    detail = result.Value;
+                }
+                else
+                {
+                    others.Add(result);
+                }
+            }
+
+            return outcome;
+        }
+
+        // The settings the run wrote besides its toggle, put back, as SmokeSetup.ReportSettings
+        // reports them: PASS when each is back, SKIP when one was left to the user or the run was
+        // abandoned, FAIL when one could not be put back. Null when none was written.
+        private static CheckResult SettingsResult(string name,
+            List<KeyValuePair<SmokeSession.ToggleOutcome, string>> results)
+        {
+            if (results.Count == 0) return null;
+
+            var detail = string.Join("; ", results.Select(x => x.Value));
+            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
+                return new CheckResult(CheckStatus.Fail, name, detail);
+            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
+                                 x.Key == SmokeSession.ToggleOutcome.NotThisRun))
+                return new CheckResult(CheckStatus.Skip, name, "restoration skipped: " + detail);
+            return new CheckResult(CheckStatus.Pass, name, detail);
+        }
+
+        // A test object on the ground ahead of the player, facing them: recorded with the session
+        // before the first frame boundary and left out of every world save. Null, with the
+        // reason, when it could not be spawned.
+        private static GameObject SpawnAhead(string prefabName, float distance, out string problem)
+        {
+            problem = null;
+            var player = Player.m_localPlayer;
+            var prefab = ZNetScene.instance ? ZNetScene.instance.GetPrefab(prefabName) : null;
+            if (!player || !prefab)
+            {
+                problem = $"the test {prefabName} could not be spawned: its prefab is not available";
+                return null;
+            }
+
+            var forward = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up);
+            forward = forward.sqrMagnitude < 0.01f ? Vector3.forward : forward.normalized;
+            var position = player.transform.position + forward * distance;
+            position.y = ZoneSystem.instance.GetGroundHeight(position);
+
+            var go = Object.Instantiate(prefab, position, Quaternion.LookRotation(-forward));
+            SmokeSession.TrackSpawn(go);
+            if (!Objects.GetZNetView(go.transform, out var nview) || nview == null || !nview.IsValid() ||
+                nview.GetZDO() == null)
+            {
+                problem = $"the test {prefabName} could not be spawned: it has no valid ZNetView/ZDO";
+                RemoveTestObject(go);
+                return null;
+            }
+
+            nview.GetZDO().Persistent = false;
+            return go;
+        }
+
+        // Kept with the session when the removal fails, so a later trigger retries it.
+        private static void RemoveTestObject(GameObject go)
+        {
+            if (SmokeSession.DestroyTestObject(go, 0, CommandName)) SmokeSession.ReleaseSpawn(go);
         }
 
         // -- Reporting (private copy mirroring SmokePlugin's shapes) ---------------

@@ -28,6 +28,8 @@ using MineRock5CacheBinding = Automatics.AutomaticMapping.MineRock5CacheBinding;
 using ShipCache = Automatics.AutomaticMapping.ShipCache;
 using StaticObjectMapping = Automatics.AutomaticMapping.StaticObjectMapping;
 using ValheimObject = Automatics.Valheim.ValheimObject;
+using Held = System.Collections.Generic.Dictionary<BepInEx.Configuration.ConfigEntryBase,
+    Automatics.SmokeTest.SmokeSession.SettingRestoration>;
 
 namespace Automatics.SmokeTest
 {
@@ -50,10 +52,13 @@ namespace Automatics.SmokeTest
     // A vehicle pin is a saved pin that follows its vehicle, and a disable moves it to where its
     // vehicle is, so the saved-pin comparison leaves the position of the vehicle pins out.
     //
-    // It spawns no world object and records the
-    // module toggle, aimed-bar, compass and filter settings through SmokeSession. It only ever turns
-    // Automatic Mapping off and back on: when the module is
-    // off in the user's settings, every check SKIPs and nothing is written.
+    // Before the baseline it sets up what its checks need: the static scan on, on its own interval,
+    // its pins left unsaved and the navigation guide on, written for the run; a test copper deposit
+    // placed ahead of the player when no MineRock5 is loaded near, for the components to attach to
+    // and the looked-at label to find; and the module turned on when it is off in the user's
+    // settings. It records the module toggle and every setting it writes (these, and the
+    // aimed-bar, compass and filter settings) through SmokeSession and puts them back at the end,
+    // on a throw and at any hand-back trigger; the deposit is removed.
     internal static partial class LifecycleSmokeCommand
     {
         private const int MappingCycles = 3;
@@ -75,12 +80,16 @@ namespace Automatics.SmokeTest
         private const string AimedOverlayName = "AutomaticsAimedObjectOverlay";
         private const string NavigationGuideName = "AutomaticsNavigationGuide";
 
+        // How near the player a loaded MineRock5 has to be for the run to use it rather than place
+        // its own test deposit: well within the looked-at label's range, which the run sets to 50 m.
+        private const float DepositReach = 20f;
+
         private static IEnumerator RunMapping(Terminal context, int runId, string runner)
         {
             var run = new MappingRun(runId, runner);
 
             Emit(context, LogLevel.Info,
-                $"[Automatics Smoke] {runner} started: automatic_mapping/module is turned off and on {MappingCycles} times through its setting, nothing is spawned, and the setting is restored");
+                $"[Automatics Smoke] {runner} started: automatic_mapping/module is turned off and on {MappingCycles} times through its setting, and the setting and whatever the run sets up for its checks are restored");
 
             var steps = Contain(run.Execute(), (_, message) => run.Stopped(message), "");
             while (steps.MoveNext()) yield return steps.Current;
@@ -118,6 +127,7 @@ namespace Automatics.SmokeTest
             private const string OnSavedPins = "mapping_on_saved_pins_kept";
             private const string OnRecognizedPins = "mapping_on_saved_automatic_pins_recognized";
             private const string Restored = "mapping_restored_initial_state";
+            private const string SettingsRestored = "mapping_settings_restored";
             private const string NoErrors = "mapping_no_errors_logged";
 
             // The order the checks are recorded in within a cycle, which is also the order they
@@ -128,7 +138,7 @@ namespace Automatics.SmokeTest
                 OffTooltip, OffSavedPins, OffUnsavedPins,
                 OnState, OnFilterSearch, OnPatches, OnAwakeHandlers, OnComponents, OnBaseline, OnResumed, OnSavedPins,
                 OnRecognizedPins, OnCompassOption,
-                Restored, NoErrors
+                Restored, SettingsRestored, NoErrors
             };
 
             // Recorded once per cycle, and a PASS only when every cycle passed.
@@ -156,6 +166,8 @@ namespace Automatics.SmokeTest
             private readonly Dictionary<string, int> _passes = new Dictionary<string, int>(StringComparer.Ordinal);
             private readonly Dictionary<string, string> _passNotes = new Dictionary<string, string>(StringComparer.Ordinal);
             private readonly StateWait _wait = new StateWait();
+            private readonly Held _held = new Held();
+            private readonly List<string> _setup = new List<string>();
             private readonly ErrorObserver _errors;
             private readonly Func<string, bool> _observerHandBack;
             private readonly string _runner;
@@ -164,6 +176,8 @@ namespace Automatics.SmokeTest
             private string _moduleName;
             private string _harmonyId;
             private bool _toggleOwned;
+            private bool _turnedOn;
+            private GameObject _deposit;
             private bool _proceed;
             private int _cycle;
             private Baseline _baseline;
@@ -233,14 +247,7 @@ namespace Automatics.SmokeTest
                 _moduleName = MappingModule.Instance.Name;
                 _harmonyId = global::Automatics.Automatics.GetHarmonyId(_moduleName);
 
-                // The check only ever turns Automatic Mapping off and back on. Turning it on for
-                // the user would add and remove pins on their map, so when it is off it stays off.
-                if (_toggle.Value != AutomaticsModule.Enabled)
-                {
-                    SkipAll(
-                        "Automatic Mapping is off in your settings, so the check changed nothing. It only ever turns the module off and back on; turn it on yourself if you want this check, then run it again.");
-                    yield break;
-                }
+                _turnedOn = _toggle.Value != AutomaticsModule.Enabled;
 
                 // From here on any write to the setting that is not the check's own is the user
                 // taking it back.
@@ -254,11 +261,45 @@ namespace Automatics.SmokeTest
                 SmokeSession.TrackHandBack(_observerHandBack);
                 _errors.Start();
 
+                // The static scan runs on its own, so its resume can be seen, and a pin it adds
+                // while the run goes on, the test deposit's included, stays unsaved, so the saved
+                // pins stay the ones compared. The guide shows a swarm for the temporary target, so
+                // a held swarm can be made.
+                var problem = WriteSettings(RunId, _held, new[]
+                {
+                    Setting<bool>(typeof(MappingConfig), "_enableAutomaticMapping", _ => true),
+                    Setting<int>(typeof(MappingConfig), "_staticObjectMappingRange",
+                        x => x.Value > 0 ? x.Value : (int)x.DefaultValue),
+                    Setting<float>(typeof(MappingConfig), "_staticObjectMappingInterval", OnAnInterval),
+                    Setting<bool>(typeof(MappingConfig), "_saveStaticObjectPins", _ => false),
+                    Setting(MappingConfig.EnableNavigationGuideEntry, "AutomaticMapping.Config.EnableNavigationGuideEntry",
+                        _ => true)
+                }, _setup) ?? PlaceDeposit();
+                if (problem != null)
+                {
+                    SkipAll(problem);
+                    yield break;
+                }
+
+                // A module that is off in the user's settings is turned on for the run, through the
+                // same recorded setting, and put back off at the end.
+                if (_turnedOn)
+                {
+                    if (!SmokeSession.WriteToggle(RunId, AutomaticsModule.Enabled, out refusal))
+                    {
+                        SkipAll("inconclusive: Automatic Mapping could not be turned on for the run: " + refusal);
+                        yield break;
+                    }
+
+                    _setup.Insert(0, "turned on for the run");
+                }
+
                 // The registry has to agree with the setting before anything is asked of it, or a
                 // transition still pending from before the command would be read as this one's.
                 var settle = Await(ModuleState.Enabled, true, true);
                 while (settle.MoveNext()) yield return settle.Current;
-                if (!RecordWait(Settled, 0, "nothing was changed")) yield break;
+                if (!RecordWait(Settled, 0, _setup.Count == 0 ? "nothing was changed" : string.Join("; ", _setup)))
+                    yield break;
 
                 // Taken once the component counts agree, for the reason given at
                 // ComponentSettleFrames.
@@ -279,9 +320,11 @@ namespace Automatics.SmokeTest
                 _originalNavigation = Navigation.CaptureTarget();
                 _originalSearch = MapFilter.SearchText;
                 _originalSearchPinned = MapFilter.SearchPinned;
+                // Once a module the run turned on is off again, there is nothing of its own to put
+                // back: the target and search were taken right after it was turned on.
                 _navigationHandBack = _ =>
                 {
-                    if (!MappingModule.Running || !Minimap.instance) return false;
+                    if (!MappingModule.Running || !Minimap.instance) return _turnedOn;
                     Navigation.RestoreTarget(_originalNavigation);
                     if (MappingConfig.EnableMapEnhancements && (_originalSearch.Length != 0 || _originalSearchPinned))
                     {
@@ -342,15 +385,40 @@ namespace Automatics.SmokeTest
                 }
 
                 Settle(CheckStatus.Skip, OffHeldSwarm,
-                    $"no guide swarm was shown just before any of the {MappingCycles} disable requests (for example enable_navigation_guide is off, or the looked-at label found no object to show for), so no held swarm was made");
+                    $"no guide swarm was shown just before any of the {MappingCycles} disable requests (the looked-at label found no object to show for, so the guide was never updated for the temporary target), so no held swarm was made");
             }
 
-            // Puts the setting back and waits for the registry to follow, then judges the log.
+            // Places a test copper deposit ahead of the player when no MineRock5 is loaded near:
+            // the module's components attach to it and the looked-at label finds it. Null when that
+            // was not needed or it was placed, or why it could not be.
+            private string PlaceDeposit()
+            {
+                var player = Player.m_localPlayer;
+                var near = FindAll<MineRock5>().Where(x =>
+                    Vector3.Distance(x.transform.position, player.transform.position) <= DepositReach);
+                if (WithZdo(near) > 0) return null;
+
+                // The copper deposit prefab that carries the MineRock5 on its root.
+                _deposit = SpawnAhead("rock4_copper_frac", TestObjectDistance, out var problem);
+                if (!_deposit) return problem;
+
+                _setup.Add($"no MineRock5 was loaded within {DepositReach:0} m, so a test copper deposit was placed {TestObjectDistance:0} m ahead");
+                return null;
+            }
+
+            // Removes the test deposit, puts the settings back and waits for the registry to
+            // follow, then judges the log.
             public IEnumerator Finish()
             {
+                RemoveTestObject(_deposit);
+                _deposit = null;
+
                 if (_toggleOwned)
                 {
-                    var outcome = SmokeSession.RestoreToggle(RunId, out var detail);
+                    var outcome = RestoreAll(RunId, _toggle, out var detail, out var settings);
+                    var result = SettingsResult(SettingsRestored, settings);
+                    if (result != null) _settled[SettingsRestored] = result;
+
                     switch (outcome)
                     {
                         case SmokeSession.ToggleOutcome.NothingWritten:
@@ -368,7 +436,9 @@ namespace Automatics.SmokeTest
                         default:
                             // A fault is not final here: putting the value back is also what asks
                             // the registry to recover, so the wait gives it the full bound.
-                            var wait = Await(ModuleState.Enabled, false, false, AutomaticsModule.Enabled);
+                            var original = _turnedOn ? AutomaticsModule.Disabled : AutomaticsModule.Enabled;
+                            var wait = Await(_turnedOn ? ModuleState.Disabled : ModuleState.Enabled, false, false,
+                                original);
                             while (wait.MoveNext()) yield return wait.Current;
                             RecordWait(Restored, 0, detail);
                             break;
@@ -380,12 +450,6 @@ namespace Automatics.SmokeTest
                 if (_filterHandBack != null && _filterHandBack("mapping lifecycle smoke"))
                     SmokeSession.ReleaseHandBack(_filterHandBack);
                 AimedObjectBar.Cleanup();
-                var aimedRestored = SmokeSession.RestoreSettings(RunId);
-                var aimedFailures = aimedRestored.Where(x => x.Key != SmokeSession.ToggleOutcome.Restored &&
-                    x.Key != SmokeSession.ToggleOutcome.AlreadyOriginal &&
-                    x.Key != SmokeSession.ToggleOutcome.NothingWritten).ToList();
-                if (aimedFailures.Count > 0)
-                    Settle(CheckStatus.Fail, Restored, string.Join("; ", aimedFailures.Select(x => x.Value)));
                 if (_errors.Started) JudgeLog();
                 SmokeSession.ReleaseHandBack(_observerHandBack);
             }

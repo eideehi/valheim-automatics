@@ -351,24 +351,38 @@ A failing check names what it saw, for example:
 
 #### `automatics_smoke_lifecycle mapping`
 
-Takes `automatic_mapping / module` from `Enabled` through three off → on cycles
-by writing the setting, the way a user does, and makes sure it ends at its
-starting value. It spawns nothing. It turns `enable_compass` on for the run and
-puts it back at the end, as it does for the looked-at object bar and map filter
-settings it uses. Before the first cycle it records a baseline: the saved pins
-and which of them are recognized as automatic, the handler counts, the component
-counts and the minimap's icon tables.
+Takes `automatic_mapping / module` through three off → on cycles by writing the
+setting, the way a user does, and makes sure it ends at its starting value. When
+the module is off in your settings, the run turns it on first.
+
+Before the baseline it sets up what its checks need, and puts it back at the end:
+
+- It writes, for the run: `enable_automatic_mapping` on, and
+  `static_object_mapping_range` and `static_object_mapping_interval` at their
+  defaults when they are 0, so the static scan runs on its own;
+  `save_static_object_pins` off, so a pin the scan adds during the run stays out
+  of the saved pins the checks compare; and `enable_navigation_guide` on, so a
+  guide swarm shows for the temporary target.
+- When no `MineRock5` is loaded within 20 m of you, it places a test copper
+  deposit 12 m ahead of you, on the ground, for the module's components to attach
+  to and the looked-at label to find, and removes it at the end.
+
+It also turns `enable_compass` on for the run, as it does for the looked-at
+object bar and map filter settings it uses. `mapping_initial_state_settled`'s
+note lists what was set up. Before the first cycle it records a baseline: the
+saved pins and which of them are recognized as automatic, the handler counts, the
+component counts and the minimap's icon tables.
 
 | Check | Asserts |
 |---|---|
-| `mapping_initial_state_settled` | The registry reports `Enabled` before anything is changed |
+| `mapping_initial_state_settled` | The registry reports `Enabled` once the setup is done, before any check changes anything |
 | `mapping_initial_player_awake_handlers_none` | Before anything is changed, no handler on `Hooks.OnPlayerAwake` or `Hooks.OnLocalPlayerAwake` is declared by a type of Automatic Mapping (a nested type or closure included), whatever the method is called |
 | `mapping_off_state_disabled` | The registry reports `Disabled` after the disable request |
 | `mapping_off_stopped_at_request` | Right after the disable request the module is still applied but no longer running, which is what every entry point checks, and the static scan's pass counter does not move until `Disabled`: the stop takes hold at the request, not at the teardown |
 | `mapping_off_patches_removed` | No patch is left under Mapping's Harmony id (SKIP when runtime patch removal is unavailable) |
 | `mapping_off_player_awake_handlers_none` | The same after the disable: Mapping declares no handler on either player-awake hook |
 | `mapping_off_components_removed` | No `FishCache`, `BirdCache`, `ShipCache`, `MineRock5CacheBinding`, `FloraNode`, `AutomaticsNavigationOverlay` or `AutomaticsNavigationGuide` is left in the scene, and no handler of Navigation or of the destroyed-object pin removal is left on the current world's `ZDOMan.m_onZDODestroyed` (each counted by the type that declares it) |
-| `mapping_off_held_swarm_removed` | Once in the run, just before the first disable request at which a guide swarm is shown for the temporary target, that swarm is hidden and held the way a map click that clears navigation holds it. PASS when the held swarm is that swarm and no `AutomaticsNavigationGuide` is left after that disable; FAIL when no held swarm was made from the shown swarm or a guide object is left. Checked once, not per cycle (SKIP, with the reason, when no swarm was shown before any disable, for example with `enable_navigation_guide` off) |
+| `mapping_off_held_swarm_removed` | Once in the run, just before the first disable request at which a guide swarm is shown for the temporary target, that swarm is hidden and held the way a map click that clears navigation holds it. PASS when the held swarm is that swarm and no `AutomaticsNavigationGuide` is left after that disable; FAIL when no held swarm was made from the shown swarm or a guide object is left. Checked once, not per cycle (SKIP, with the reason, when no swarm was shown before any disable, which happens when the looked-at label finds no object to show for) |
 | `mapping_off_compass_removed` | The compass, seen on the small map before the large map is opened for the filter checks, is gone in the frame of the disable request once the compass update of the player's frame has run there, and no `AutomaticsCompass` is left once the module is `Disabled` |
 | `mapping_off_saved_pins_kept` | The saved pins are the ones there were before the run: type, name, position to 0.1 m, owner and checked flag. A vehicle pin's position is left out, because it follows its vehicle |
 | `mapping_off_unsaved_pins_removed` | None of the unsaved pins the module held just before the disable is on the map (SKIP when it held none) |
@@ -377,16 +391,17 @@ counts and the minimap's icon tables.
 | `mapping_on_player_awake_handlers_none` | The same with the module running again |
 | `mapping_on_components_attached` | Every fish, bird, ship and `MineRock5` with a ZDO, and every pickable that is a configured flora, carries its component from the running generation, and there is no other (SKIP, inconclusive, when the scene has none of them) |
 | `mapping_on_counts_at_baseline` | The handler counts of the hooks, caches and registries Mapping subscribes to, the component counts, and the lengths of `Minimap.m_icons` and `m_visibleIconTypes` are what they were before the run. The counts include the `ZDOMan.m_onZDODestroyed` handlers of Navigation and of the destroyed-object pin removal, which the running module subscribes again on its own, without being enabled for it |
-| `mapping_on_scans_resumed` | Within 10 s the static scan has run again and, if it held pins before the run, it holds one again (SKIP when a setting keeps the static scan from running on its own, such as `static_object_mapping_key`) |
+| `mapping_on_scans_resumed` | Within 10 s the static scan has run again and, if it held pins before the run, it holds one again (SKIP when `enable_automatic_mapping` is off or `static_object_mapping_range` or `static_object_mapping_interval` is 0, which the run's own settings rule out unless one is changed while it runs) |
 | `mapping_on_saved_pins_kept` | 4 s after the enable, once the flora pins are placed again, the saved pins are still the ones there were before the run |
 | `mapping_on_saved_automatic_pins_recognized` | As soon as the registry reports `Enabled`, every saved pin that was recognized as automatic before the run and is still on the map is recognized as automatic again (SKIP when no saved pin was recognized before the run, or none of them is on the map) |
 | `mapping_on_compass_option_off_removed` | With the module running, the compass is shown on the small map, is gone in the frame `enable_compass` is turned off and is not left in the scene two frames later; the option is then turned back on for the next cycle |
+| `mapping_restored_initial_state` | The setting is back at its starting value and the registry reports the matching state |
+| `mapping_settings_restored` | Every other setting the run wrote is back at its starting value (SKIP when one was left as you changed it during the run; FAIL when one could not be put back) |
+| `mapping_no_errors_logged` | No error or exception was logged while the check ran |
 
 The component counts are sampled again for up to 10 frames before a mismatch is
 reported, because an object the game spawns or despawns in the same frame has
 its component attached or removed a moment later.
-| `mapping_restored_initial_state` | The setting is back at `Enabled` and the registry reports it |
-| `mapping_no_errors_logged` | No error or exception was logged while the check ran |
 
 The checks between the restore and the settle are made in every cycle, and pass
 only when all three cycles pass; a FAIL names the cycle. The run stops at the
@@ -398,9 +413,10 @@ entry …`, which is expected in `LogOutput.log` and is not an error.
 
 Safety, on top of the rules above:
 
-- The check only ever pauses Automatic Mapping, never turns it on for you. If
-  `automatic_mapping / module` is not `Enabled` when it starts, every check SKIPs
-  and nothing is written.
+- When `automatic_mapping / module` is off in your settings, the run turns it on
+  and puts it back off at the end, unless you changed it meanwhile. While it is
+  on, it adds pins to your map as it normally would; they are not saved, and go
+  when it is off again.
 - Each disable removes the unsaved pins Mapping added and each enable adds them
   back as the scans reach their objects, so the map looks the same afterwards.
   Saved pins are never removed; vehicle pins are moved to where their vehicles
@@ -409,13 +425,13 @@ Safety, on top of the rules above:
 A passing run looks like this:
 
 ```text
-[Automatics Smoke] automatics_smoke_lifecycle mapping started: automatic_mapping/module is turned off and on 3 times through its setting, nothing is spawned, and the setting is restored
-[Automatics Smoke] PASS mapping_initial_state_settled: nothing was changed
+[Automatics Smoke] automatics_smoke_lifecycle mapping started: automatic_mapping/module is turned off and on 3 times through its setting, and the setting and whatever the run sets up for its checks are restored
+[Automatics Smoke] PASS mapping_initial_state_settled: set enable_automatic_mapping=true, static_object_mapping_range=32, static_object_mapping_interval=0.25, save_static_object_pins=false, enable_navigation_guide=true for the run
 [Automatics Smoke] PASS mapping_off_state_disabled: all 3 cycles
 [Automatics Smoke] PASS mapping_off_stopped_at_request: all 3 cycles; right after the disable request the module was still applied but no longer running, and the static scan's pass counter stayed at 41 until the registry reported Disabled
 ...
 [Automatics Smoke] PASS mapping_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
-[Automatics Smoke] Summary: total=15 passed=15 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[Automatics Smoke] Summary: total=27 passed=27 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 #### `automatics_smoke_lifecycle storage`: the module runner
@@ -427,15 +443,28 @@ it applies, the numbers it changes (its probes), a precondition that is asked
 before anything is written, and the checks only that module can make. Each
 descriptor is one more argument of the command.
 
-The runner takes the module's `module` setting from `Enabled` through three
-off → on cycles by writing it, the way a user does, and makes sure it ends at its
-starting value. It spawns nothing and changes no other setting. Before the first
-cycle it reads every probe, again on each frame until two frames in a row agree
-(at most 10), and keeps that as the baseline.
+The runner takes the module's `module` setting through three off → on cycles by
+writing it, the way a user does, and makes sure it ends at its starting value; a
+module that is off in your settings is turned on for the run first. Before that it
+sets up what the descriptor says the module's checks need, and puts it all back
+at the end, on a throw and at any hand-back trigger:
+
+- settings written for the run, reported by `<module>_settings_restored`;
+- the module's tool taken out of your hands, and put back once the module and its
+  settings are back as they were;
+- a test object placed 12 m ahead of you, on the ground and facing you, when no
+  object of the kind the probes count is loaded, and removed at the end.
+
+`<module>_initial_state_settled`'s note lists what was set up. A module that
+keeps an interval timer then gets up to 30 frames to take it up, so the first
+cycle's timer check has one to see. Automatic Storage needs none of this: the run
+spawns nothing and changes no other setting. Before the first cycle the runner
+reads every probe, again on each frame until two frames in a row agree (at most
+10), and keeps that as the baseline.
 
 | Check | Asserts |
 |---|---|
-| `storage_initial_state_settled` | The registry reports `Enabled` before anything is changed |
+| `storage_initial_state_settled` | The registry reports `Enabled` once the setup is done, before any check changes anything |
 | `storage_off_stopped_at_request` | In the frame of the disable request the module is still applied but no longer running, which is what its entry points check: the stop takes hold at the request, not at the teardown |
 | `storage_off_state_disabled` | The registry reports `Disabled` after the disable request |
 | `storage_off_patches_removed` | No patch is left under the module's Harmony id (SKIP when runtime patch removal is unavailable) |
@@ -444,8 +473,13 @@ cycle it reads every probe, again on each frame until two frames in a row agree
 | `storage_on_running` | The module is applied and running again |
 | `storage_on_patches_applied` | The patches under the module's Harmony id are exactly the (target, patch method) pairs its patch classes declare. Automatic Storage declares none, so there must be none (SKIP when runtime patch removal is unavailable) |
 | `storage_on_probes_at_baseline` | Every probe is back at its baseline |
-| `storage_restored_initial_state` | The setting is back at `Enabled` and the registry reports it |
+| `storage_restored_initial_state` | The setting is back at its starting value and the registry reports the matching state |
 | `storage_no_errors_logged` | No error or exception was logged while the check ran |
+
+A module the run writes settings for also reports `<module>_settings_restored`
+after `<module>_restored_initial_state`: every setting the run wrote is back at
+its starting value (SKIP when one was left as you changed it during the run; FAIL
+when one could not be put back).
 
 The checks between the settle and the restore are made in every cycle, and pass
 only when all three cycles pass; a FAIL names the cycle. The probes are read
@@ -479,12 +513,12 @@ session state alone is not checked in game.
 
 Safety, on top of the rules above:
 
-- The check only ever pauses the module, never turns it on for you. If its
-  `module` setting is not `Enabled` when it starts, or its precondition does not
-  hold, every check SKIPs and nothing is written. The exceptions are `supply` and
-  `woodcutting`: Automatic Supply and Automatic Woodcutting are off by default, so
-  the run turns the module on first and puts the recorded setting back off
-  afterwards.
+- A module that is off in your settings is turned on for the run, and the
+  recorded setting is put back off at the end, unless you changed it meanwhile.
+  While it is on, it acts in your world as it normally would.
+- A precondition is asked after the setup and before the module is turned on or
+  a test object placed. If it does not hold, every check SKIPs and what was set up
+  is put back.
 - Automatic Storage moves items only when `Store Items` is pressed, and the
   check never presses it, so no item moves.
 - The handler counts are shared with other modules, so turning another module on
@@ -494,7 +528,7 @@ Safety, on top of the rules above:
 A passing run looks like this:
 
 ```text
-[Automatics Smoke] automatics_smoke_lifecycle storage started: automatic_storage/module is turned off and on 3 times through its setting, nothing is spawned, and the setting is restored
+[Automatics Smoke] automatics_smoke_lifecycle storage started: automatic_storage/module is turned off and on 3 times through its setting, and the setting and whatever the run sets up for its checks are restored
 [Automatics Smoke] PASS storage_initial_state_settled: nothing was changed
 [Automatics Smoke] PASS storage_off_stopped_at_request: all 3 cycles; right after the disable request the module was still applied but no longer running
 ...
@@ -505,8 +539,8 @@ A passing run looks like this:
 #### `automatics_smoke_lifecycle door`
 
 `door` uses the same descriptor-driven runner for `automatic_door / module`. It
-takes an enabled module through three off → on cycles, changes no other setting,
-spawns nothing and restores the setting afterwards.
+takes the module through three off → on cycles, changes no other setting and
+restores the setting afterwards.
 
 In addition to the runner's state, patch and error checks, the Door descriptor
 checks:
@@ -522,8 +556,10 @@ checks:
 | `door_on_probes_at_baseline` | All four handlers are restored, every currently eligible Door has a component, the registration count matches the active components rather than a stale baseline, and each Door-owned handler's own occurrence in its hook is back at one |
 | `door_components_current_generation` | Every eligible Door, including inactive objects, has an `AutomaticDoor` component stamped with the current activation generation |
 
-The scene must contain at least one loaded Door with a readable ZDO; otherwise the
-positive-control check fails. Inactive Doors count as eligible components, but do
+The checks need at least one loaded Door with a readable ZDO. When there is none,
+the run places a test wooden door 12 m ahead of you, beyond the largest opening
+distance, so the module never opens it, kept from wearing for lack of support,
+and removes it at the end. Inactive Doors count as eligible components, but do
 not count as registered until Unity activates them and runs their `Awake` method.
 Turning the module off starts no new opening or closing, allows an operation already
 in progress to finish, and completes the switch over the next few frames. It does
@@ -532,23 +568,26 @@ that appeared or remained inactive while it was off.
 
 #### `automatics_smoke_lifecycle mining`
 
-`mining` uses the descriptor-driven runner for `automatic_mining / module`. It
-takes an enabled module through three off → on cycles, spawns nothing, changes no
-Mining setting and restores the module setting afterwards.
+`mining` uses the descriptor-driven runner for `automatic_mining / module`. For
+the run it turns `need_to_equip_pickaxe` and `enable_automatic_mining` on, sets
+`mining_interval` to its default when it is 0, so the interval timer can be seen,
+and takes every pickaxe out of your hands; all of it goes back at the end. When
+no mineral object is loaded it places a test copper deposit 12 m ahead of you and
+removes it at the end.
 
-Before anything is written, and again immediately before every re-enable, the runner
-requires a local player and a condition in which normal automatic mining cannot
+After that setup, before the module is turned on, and again immediately before
+every re-enable, the runner requires a local player and a condition in which normal automatic mining cannot
 start during an on interval: either the player has no usable pickaxe (none equipped
 when `Need To Equip Pickaxe For Mining` is on, or none in the inventory when it is
 off), or no eligible allowed mineral is within the product's full candidate radius
 (`Mining Range`, or 32 when it is 0, plus the 24 meter root-pivot margin and 2
 meters of smoke-test clearance). This scan does not depend on the scoped component,
-which is absent while the module is off. If the initial check
-fails, nothing is written and every check SKIPs. If a later check fails, that cycle
-and the remaining on-side checks SKIP without the normal re-enable write, and the
-existing restoration path puts the original enabled setting back. It never changes
-the inner Mining settings for you. Do not move or equip a pickaxe while the command
-is running.
+which is absent while the module is off. The setup makes the
+first condition hold, so the check fails only when a pickaxe is equipped again. If
+the initial check fails, every check SKIPs and what was set up is put back. If a
+later check fails, that cycle and the remaining on-side checks SKIP without the
+normal re-enable write, and the existing restoration path puts the original
+setting back. Do not move or equip a pickaxe while the command is running.
 
 In addition to the runner's state, patch and error checks, the Mining descriptor
 checks:
@@ -576,11 +615,10 @@ or create a drop.
 #### `automatics_smoke_lifecycle feeding`
 
 `feeding` uses the descriptor-driven runner for `automatic_feeding / module`. It
-takes an enabled module through three off → on cycles, spawns nothing (no animal
-and no food), changes no Feeding setting and restores the module setting
-afterwards. Run it where some of your animals are loaded: the component checks
-need at least one loaded `Tameable` with a ZDO, and SKIP as inconclusive without
-one.
+takes the module through three off → on cycles, changes no Feeding setting and
+restores the module setting afterwards. The component checks need at least one
+loaded `Tameable` with a ZDO: when none is loaded, the run places a tamed test
+boar 12 m ahead of you and removes it at the end. It spawns no food.
 
 In addition to the runner's state, patch and error checks, the Feeding descriptor
 checks:
@@ -604,20 +642,23 @@ itself moves no item.
 #### `automatics_smoke_lifecycle farming`
 
 `farming` uses the descriptor-driven runner for `automatic_farming / module`. It
-takes an enabled module through three off → on cycles, spawns nothing, harvests,
-plants and designates nothing, changes no Farming or Pickup setting and restores
-the module setting afterwards.
+takes the module through three off → on cycles, spawns nothing, harvests, plants
+and designates nothing itself, and restores the module setting afterwards. For the
+run it sets `automatic_pickup_range` to 1, its least, turns
+`enable_automatic_farming` on and sets `farming_interval` to its default when it
+is 0, so the interval timer can be seen; the settings go back at the end.
 
 While Automatic Farming is off, Automatic Pickup collects the crops Farming would
-have harvested and replanted, and nothing replants them. So before anything is
-written, and again immediately before every re-enable, the runner requires a
-local player and refuses to run while Automatic Pickup is running and any crop in
+have harvested and replanted, and nothing replants them. So after that setup,
+before the module is turned on, and again immediately before every re-enable, the
+runner requires a local player and refuses to run while Automatic Pickup is running and any crop in
 `Allow Farming Crop`, or any growing plant (which can ripen while the check
-runs), is within `automatic_pickup_range` + 1 m of you. If the initial check
-fails, nothing is written and every check SKIPs; a SKIP for this reason is not a
-pass, so move and run it again. If a later check fails, that cycle and the
-remaining on-side checks SKIP without the re-enable write, and the restoration
-puts the original enabled setting back.
+runs), is within `automatic_pickup_range` + 1 m of you: 2 m, with the run's range
+of 1. If the initial check fails, every check SKIPs and the settings are put
+back; a SKIP for this reason is not a pass, so step away from your crops and run
+it again. If a later check fails, that cycle and the remaining on-side checks
+SKIP without the re-enable write, and the restoration puts the original setting
+back.
 
 Stand 10 to 30 m from a field of grown crops, outside both Pickup's and Farming's
 range but close enough that the field stays loaded: the claim checks need at least
@@ -654,31 +695,36 @@ range as it normally would; the check itself moves no item.
 and panels, the inventory counts, the removal overloads it measures, crafting,
 placement and the station intakes), its one `OnLocalPlayerAwake` subscription and
 named handler, and, while off, that no counting scope, suppression or open action
-is left (`supply_session_idle_while_off`). It spawns nothing and moves no item.
-Automatic Supply is off by default, so unlike the other modules it is turned on
-for the run when it is off in your settings: the write is recorded through the
-session before it is made, and the setting is put back off at the end, on a
-throw and at any hand-back trigger, unless you changed it meanwhile.
-
-#### `automatics_smoke_lifecycle woodcutting`
-
-`woodcutting` uses the descriptor-driven runner for three off/on cycles of
-`automatic_woodcutting / module`. It spawns nothing and changes no other setting.
-Automatic Woodcutting is off by default, so, as with `supply`, it is turned on for
+is left (`supply_session_idle_while_off`). It spawns nothing, changes no other
+setting and moves no item. Like every module the runner takes, it is turned on for
 the run when it is off in your settings: the write is recorded through the session
 before it is made, and the setting is put back off at the end, on a throw and at
 any hand-back trigger, unless you changed it meanwhile.
 
-Before anything is written, and again immediately before every re-enable, the
-runner requires a local player with no axe the passes could use: none equipped
-while `Need To Equip Axe For Woodcutting` is on, and none anywhere in the
-inventory while it is off. Every woodcutting pass needs such an axe, so while the
-module is on for the check it cannot hit a tree, log or stump. The check never
-swings, so area woodcutting has nothing to expand. With such an axe nothing is
-written and every check SKIPs, asking you to unequip it or move it to a chest; if
-one turns up later, that cycle and the remaining on-side checks SKIP without the
-re-enable write, and the existing restoration path puts the setting back. Do not
-equip or pick up an axe while the command is running.
+#### `automatics_smoke_lifecycle woodcutting`
+
+`woodcutting` uses the descriptor-driven runner for three off/on cycles of
+`automatic_woodcutting / module`. For the run it turns `need_to_equip_axe` and
+`enable_automatic_woodcutting` on, sets `woodcutting_interval` to its default when
+it is 0, so the interval timer can be seen, and takes every axe out of your hands;
+all of it goes back at the end. When no tree, log or stump is loaded it places a
+test beech 12 m ahead of you and removes it at the end. Like every module the
+runner takes, it is turned on for the run when it is off in your settings: the
+write is recorded through the session before it is made, and the setting is put
+back off at the end, on a throw and at any hand-back trigger, unless you changed
+it meanwhile.
+
+After that setup, before the module is turned on, and again immediately before
+every re-enable, the runner requires a local player with no axe the passes could
+use: none equipped while `Need To Equip Axe For Woodcutting` is on, and none
+anywhere in the inventory while it is off. Every woodcutting pass needs such an
+axe, so while the module is on for the check it cannot hit a tree, log or stump.
+The check never swings, so area woodcutting has nothing to expand. The setup makes
+this hold, so it fails only when an axe is equipped again: then every check SKIPs
+and what was set up is put back; if one turns up later, that cycle and the
+remaining on-side checks SKIP without the re-enable write, and the existing
+restoration path puts the setting back. Do not equip or pick up an axe while the
+command is running.
 
 In addition to the runner's state, patch and error checks, the Woodcutting
 descriptor checks:
@@ -711,7 +757,10 @@ both timer dictionaries, all item/piece/collider buffers and the
 radius-lookup failure flag. It calls the three repair entries only while off,
 with null arguments. It spawns nothing, damages or repairs nothing itself, and
 changes no internal Repair setting. Normal repairs can continue while Repair is
-enabled. A module already disabled in your settings is left untouched and SKIPs.
+enabled. A module that is off in your settings is turned on for the run and put
+back off at the end. Before the baseline the run gives the module up to 30 frames
+to take up both repair timers, so the first cycle's timer cleanup has something
+to see.
 
 Each retained state has `<field>_observed` and `<field>_cleared` checks, prefixed
 with `repair_`. The first reads the state immediately before disabling in each
