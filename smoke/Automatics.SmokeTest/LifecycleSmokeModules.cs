@@ -845,6 +845,7 @@ namespace Automatics.SmokeTest
             AddRepairCleanupCheck(extras, typeof(RepairPieces), "PieceSet");
             AddRepairCleanupCheck(extras, typeof(RepairPieces), "ColliderBuffer");
             AddRepairCleanupCheck(extras, typeof(RepairPieces), "_skipRadiusMethodLookup");
+            extras.Add(new ExtraCheck("timers_resumed", Phase.AfterOn, RepairTimersResumed));
 
             return new ModuleDescriptor
             {
@@ -866,11 +867,37 @@ namespace Automatics.SmokeTest
                         () => CountHandlersOf(Hooks.OnPlayerFixedUpdate, typeof(RepairModule), "OnPlayerFixedUpdate"),
                         OffExpectation.Zero, 0, () => 1)
                 },
-                Warm = () => ReadRepairState(typeof(RepairModule), "ItemRepairTimers") > 0 &&
-                             ReadRepairState(typeof(RepairModule), "PieceRepairTimers") > 0,
+                Warm = RepairTimersHeld,
                 Precondition = null,
                 Extras = extras.ToArray()
             };
+        }
+
+        private static bool RepairTimersHeld()
+        {
+            return ReadRepairState(typeof(RepairModule), "ItemRepairTimers") > 0 &&
+                   ReadRepairState(typeof(RepairModule), "PieceRepairTimers") > 0;
+        }
+
+        // Repair clears both timer tables on the enable too, and the next cycle's disable can come
+        // before another physics step has run its hook, which would leave that cycle's cleanup
+        // checks nothing to see. So after every enable the run waits for the running module to
+        // take both timers up again.
+        private static IEnumerator RepairTimersResumed(CycleRecorder record, int cycle)
+        {
+            var name = record.Check("timers_resumed");
+            for (var frame = 0; frame < WarmFrames && !RepairTimersHeld(); frame++)
+                yield return null;
+
+            if (!RepairTimersHeld() && Game.IsPaused())
+            {
+                record.CycleSkip(name, cycle, "the game is paused, so the physics step that takes up the repair timers does not run");
+                yield break;
+            }
+
+            record.Cycle(name, cycle, RepairTimersHeld(),
+                "the running module took up both repair timers again",
+                $"the running module did not take up both repair timers within {WarmFrames} frames of the enable: ItemRepairTimers={ReadRepairState(typeof(RepairModule), "ItemRepairTimers")}, PieceRepairTimers={ReadRepairState(typeof(RepairModule), "PieceRepairTimers")}");
         }
 
         // Automatic Supply owns its requirement, consumption and station intake patches and one

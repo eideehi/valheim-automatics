@@ -264,9 +264,13 @@ namespace Automatics.SmokeTest
                 // The static scan runs on its own, so its resume can be seen, and a pin it adds
                 // while the run goes on, the test deposit's included, stays unsaved, so the saved
                 // pins stay the ones compared. The guide shows a swarm for the temporary target, so
-                // a held swarm can be made.
+                // a held swarm can be made. The looked-at label resolves its object with a ray as long
+                // as pin_object_range, so that reaches as far as the label's own 50 m and the test
+                // deposit is found.
                 var problem = WriteSettings(RunId, _held, new[]
                 {
+                    Setting(MappingConfig.PinObjectRangeEntry, "AutomaticMapping.Config.PinObjectRangeEntry",
+                        x => Mathf.Max(x.Value, 50f)),
                     Setting<bool>(typeof(MappingConfig), "_enableAutomaticMapping", _ => true),
                     Setting<int>(typeof(MappingConfig), "_staticObjectMappingRange",
                         x => x.Value > 0 ? x.Value : (int)x.DefaultValue),

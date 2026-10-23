@@ -402,8 +402,9 @@ Before the baseline it sets up what its checks need, and puts it back at the end
   `static_object_mapping_range` and `static_object_mapping_interval` at their
   defaults when they are 0, so the static scan runs on its own;
   `save_static_object_pins` off, so a pin the scan adds during the run stays out
-  of the saved pins the checks compare; and `enable_navigation_guide` on, so a
-  guide swarm shows for the temporary target.
+  of the saved pins the checks compare; `enable_navigation_guide` on, so a
+  guide swarm shows for the temporary target; and `pin_object_range` at least
+  50 m, so the looked-at label's ray reaches as far as the label's own range.
 - When no `MineRock5` is loaded within 20 m of you, it places a test copper
   deposit 12 m ahead of you, on the ground, for the module's components to attach
   to and the looked-at label to find, and removes it at the end.
@@ -467,7 +468,7 @@ A passing run looks like this:
 
 ```text
 [Automatics Smoke] automatics_smoke_lifecycle mapping started: automatic_mapping/module is turned off and on 3 times through its setting, and the setting and whatever the run sets up for its checks are restored
-[Automatics Smoke] PASS mapping_initial_state_settled: set enable_automatic_mapping=true, static_object_mapping_range=32, static_object_mapping_interval=0.25, save_static_object_pins=false, enable_navigation_guide=true for the run
+[Automatics Smoke] PASS mapping_initial_state_settled: set pin_object_range=100, enable_automatic_mapping=true, static_object_mapping_range=32, static_object_mapping_interval=0.25, save_static_object_pins=false, enable_navigation_guide=true for the run
 [Automatics Smoke] PASS mapping_off_state_disabled: all 3 cycles
 [Automatics Smoke] PASS mapping_off_stopped_at_request: all 3 cycles; right after the disable request the module was still applied but no longer running, and the static scan's pass counter stayed at 41 until the registry reported Disabled
 ...
@@ -799,9 +800,12 @@ radius-lookup failure flag. It calls the three repair entries only while off,
 with null arguments. It spawns nothing, damages or repairs nothing itself, and
 changes no internal Repair setting. Normal repairs can continue while Repair is
 enabled. A module that is off in your settings is turned on for the run and put
-back off at the end. Before the baseline the run gives the module up to 30 frames
-to take up both repair timers, so the first cycle's timer cleanup has something
-to see.
+back off at the end. Repair clears both timer tables when it is turned off and
+again when it is turned on, so before the baseline, and after every enable
+(`repair_timers_resumed`), the run gives the module up to 30 frames to take both
+timers up again; each cycle's timer cleanup then has something to see.
+`repair_timers_resumed` FAILs when the running module does not take them up, and
+SKIPs while the game is paused.
 
 Each retained state has `<field>_observed` and `<field>_cleared` checks, prefixed
 with `repair_`. The first reads the state immediately before disabling in each
