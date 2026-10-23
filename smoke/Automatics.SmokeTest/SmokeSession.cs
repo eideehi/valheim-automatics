@@ -118,13 +118,16 @@ namespace Automatics.SmokeTest
         // TryBegin refuses meanwhile. So TryBegin is asked again until it accepts, the player the
         // command started with is gone, or BeginTimeoutSeconds pass; begin.RunId is 0 unless it
         // accepted, and begin.Refusal says why. Once a second, not every frame: each attempt runs
-        // the hand-backs again, and one that keeps failing logs a warning each time.
+        // the hand-backs again, and one that keeps failing logs a warning each time. The first
+        // attempt waits one frame: the case before destroys its test objects at the end of the
+        // frame it ended in, and the next case's layout checks would still find them.
         public static IEnumerator AwaitBegin(string command, Player player, BeginResult begin)
         {
             var deadline = Time.realtimeSinceStartup + BeginTimeoutSeconds;
+            yield return null;
             while (true)
             {
-                if (ZNetScene.instance == null || !player || Player.m_localPlayer != player)
+                if (ZNetScene.instance == null || !player || Player.m_localPlayer != player || player.IsDead())
                 {
                     begin.Refusal =
                         "the player the command started with is no longer in the world (a logout or a death)";
