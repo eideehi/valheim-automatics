@@ -158,7 +158,6 @@ namespace Automatics.SmokeTest
                         restored = false;
                 return restored;
             };
-            SmokeSession.TrackHandBack(handBack);
             SmokeSetup.InventoryStash stash = null;
             try
             {
@@ -167,6 +166,10 @@ namespace Automatics.SmokeTest
                 // put aside goes back at the end.
                 var seedName = piece.m_resources.First(r => r.m_resItem && r.GetAmount(0) > 0).m_resItem.m_itemData.m_shared.m_name;
                 stash = SmokeSetup.Stash(player, 3, 0f, x => x.m_shared.m_name == seedName);
+                // Registered after the stash's own hand-back and before anything it undoes is
+                // changed: hand-backs run in reverse order, so a run cut short removes the test
+                // items before the stash puts your items back into their slots.
+                SmokeSession.TrackHandBack(handBack);
                 var freeSlots = inventory.GetEmptySlots();
                 var carried = inventory.CountItems(seedName);
                 if (freeSlots < 3 || carried != 0)
