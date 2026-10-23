@@ -154,6 +154,16 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
+                // Before the first frame passes too: Automatic Mining's timer could wear a pickaxe
+                // of yours and raise your Pickaxes skill while the setup below waits, before your
+                // skills are recorded.
+                if (!PauseAutomaticMining(run, held))
+                {
+                    run.Skip(SectionCheck,
+                        "enable_automatic_mining could not be turned off for the run, and Automatic Mining could wear a pickaxe of yours while the section runs");
+                    yield break;
+                }
+
                 var setup = new List<string>();
                 var module = new SmokeSetup.SetupResult();
                 var steps = SmokeSetup.EnableModule(run.RunId, held, WoodcuttingConfig.ModuleEntry,

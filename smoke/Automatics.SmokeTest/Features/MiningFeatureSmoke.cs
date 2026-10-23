@@ -84,6 +84,7 @@ namespace Automatics.SmokeTest
             var rocks = new List<GameObject>();
             SmokeSetup.InventoryStash stash = null;
             Func<string, bool> handBack = _ => state.Restore();
+            Func<string, bool> toolsBack = null;
             SmokeSession.TrackHandBack(handBack);
             try
             {
@@ -167,6 +168,10 @@ namespace Automatics.SmokeTest
                 while (steps.MoveNext()) yield return steps.Current;
 
                 stash = SmokeSetup.Stash(player, 2);
+                // Hand-backs run newest first: this one takes the test tools out before the
+                // stash's own puts your items back, so they find their slots free.
+                toolsBack = _ => state.Restore();
+                SmokeSession.TrackHandBack(toolsBack);
                 if (player.GetInventory().GetEmptySlots() < 2)
                 {
                     run.Skip("mining_section",
@@ -270,7 +275,11 @@ namespace Automatics.SmokeTest
                 {
                     try
                     {
-                        if (state.Restore()) SmokeSession.ReleaseHandBack(handBack);
+                        if (state.Restore())
+                        {
+                            SmokeSession.ReleaseHandBack(handBack);
+                            if (toolsBack != null) SmokeSession.ReleaseHandBack(toolsBack);
+                        }
                         else run.Fail("mining_player_restored", "the previously equipped items could not all be equipped again; it is retried at the next hand-back");
                     }
                     finally
