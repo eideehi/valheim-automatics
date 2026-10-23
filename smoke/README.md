@@ -2396,6 +2396,10 @@ objects in between. The section:
   `piece_search_range` and `crafting_station_search_range` to 4, through the
   session like every setting a section changes; it SKIPs only when one of these
   fails;
+- when a crafting station stands within 5 m of you, moves you with a short
+  teleport to the first clear, dry and fairly level spot on rings 15 to 45 m
+  away before it spawns anything (see *Safety of the console commands*;
+  `repair_relocated`), and moves you back at the end of the section;
 - lifts your own no-cost toggle (`nocost`) for the section and turns it back on
   afterwards (`repair_no_cost_lifted`), also through the session hand-back when
   the run is cut short;
@@ -2430,6 +2434,7 @@ objects in between. The section:
 | Check | Asserts |
 |---|---|
 | `repair_no_cost_lifted` | Reported when your no-cost toggle was on and was lifted for the section |
+| `repair_relocated` | Reported when a crafting station stood within 5 m: you were moved to a clear spot |
 | `repair_setup` | The module, the two ranges and the free slots are set up; the note says whether the module was turned on and what was put aside |
 | `repair_piece_damaged_only` | A pass repairs two damaged test pieces. An undamaged stationless piece and an undamaged wood wall cause no repair call, no ward access check and no station lookup (SKIP when the observer sees no access check at the damaged pieces) |
 | `repair_piece_ward_no_flash` | A control check with flashing on is denied and seen by the observer; then a pass flashes the test ward no time, leaves the damaged piece inside the ward alone and repairs the damaged piece outside it (SKIP when the ward grants you access or the control flash is not seen) |
@@ -2445,10 +2450,10 @@ objects in between. The section:
 | `repair_item_interaction_unusable_station_excluded` | At an unusable station the interaction repairs and raises nothing |
 | `repair_settings_restored` | Every setting the section changed (the two ranges, and the module toggle and the interaction setting when it changed them) is back at your value |
 
-The periodic item checks SKIP when a crafting station of yours is within 4 m of
-you (`crafting_station_search_range` as the section sets it), because the pass
-would let it repair the test items before the test workbenches do; stand farther
-from it. The exclusion of
+The periodic item checks SKIP when a crafting station of yours is still within
+4 m of you (`crafting_station_search_range` as the section sets it) because the
+move to clear ground failed, and name why, because the pass would let it repair
+the test items before the test workbenches do. The exclusion of
 station-requiring pieces is only seen where no build station is in range of you:
 when one is, `repair_piece_station_lookup_once` expects the walls to be repaired.
 Repairing a piece sends the module's usual animation trigger, so your character may

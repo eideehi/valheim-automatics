@@ -47,8 +47,10 @@ namespace Automatics.SmokeTest
     // The section sets up what it needs for the run: Automatic Repair is turned on when it is
     // off, piece_search_range and crafting_station_search_range are set to RequiredRange (so a
     // station of yours farther away is out of the item pass's reach), the player's no-cost
-    // toggle is lifted, and items are put aside until two inventory slots are free. All of it is
-    // put back at the end or by the session's hand-back.
+    // toggle is lifted, and items are put aside until two inventory slots are free. When a
+    // crafting station of yours stands within that range, the player is first moved to clear
+    // ground and returned at the end of the section. All of it is put back at the end or by the
+    // session's hand-back.
     internal static class RepairFeatureSmoke
     {
         private const string Label = "repair feature smoke";
@@ -78,6 +80,22 @@ namespace Automatics.SmokeTest
         private static readonly FieldInfo NoPlacementCost = AccessTools.Field(typeof(Player), "m_noPlacementCost");
 
         public static IEnumerator Run(FeatureRun run)
+        {
+            var steps = Checks(run);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+
+            // Back to where the section started when it moved the player; otherwise the
+            // command's hand-back does it at its end.
+            var back = new SmokeSetup.SetupResult();
+            steps = SmokeSetup.ReturnToStart(run.RunId, back);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!back.Ok)
+                FeaturesSmokeCommand.Warn(
+                    $"[Automatics Smoke] {Label}: the player was not moved back yet ({back.Reason}); the command's hand-back tries again at its end");
+        }
+
+        private static IEnumerator Checks(FeatureRun run)
         {
             var player = Player.m_localPlayer;
             if (!run.IsCurrent || !player || !ZNetScene.instance || !ObjectDB.instance ||
@@ -157,6 +175,23 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
+                // Away from crafting stations of yours before anything is spawned, so the item
+                // pass reaches only the test workbenches. Only the item checks need it, so a
+                // failed move leaves them to SKIP with its reason.
+                string stationsLeft = null;
+                var near = StationsNear(player.transform.position);
+                if (near != null)
+                {
+                    var moved = new SmokeSetup.SetupResult();
+                    steps = SmokeSetup.Relocate(run.RunId, StationsNear, moved);
+                    while (steps.MoveNext()) yield return steps.Current;
+                    if (!run.IsCurrent) yield break;
+                    if (moved.Ok)
+                        run.Pass("repair_relocated", $"{near}, so the player {moved.Reason}; returned at the end of the section");
+                    else
+                        stationsLeft = $"{near}; {moved.Reason}";
+                }
+
                 state = new WoodcuttingFeatureSmoke.PlayerState(player,
                     new[] { Skills.SkillType.Crafting });
                 handBack = _ =>
@@ -231,7 +266,7 @@ namespace Automatics.SmokeTest
 
                 CheckInRangeStation(run, player, state, tool, stationed, spawned, stations[0],
                     player.transform.position);
-                CheckItems(run, held, player, state, stations);
+                CheckItems(run, held, player, state, stations, stationsLeft);
             }
             finally
             {
@@ -539,7 +574,7 @@ namespace Automatics.SmokeTest
 
         private static void CheckItems(FeatureRun run,
             Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held, Player player,
-            WoodcuttingFeatureSmoke.PlayerState state, List<CraftingStation> stations)
+            WoodcuttingFeatureSmoke.PlayerState state, List<CraftingStation> stations, string stationsLeft)
         {
             var first = stations[0];
             var second = stations[1];
@@ -553,7 +588,9 @@ namespace Automatics.SmokeTest
             var foreign = ForeignStationInRange(player, stations);
             if (foreign != null)
             {
-                var reason = $"a crafting station of yours is within {RepairConfig.CraftingStationSearchRange} m of you, the crafting_station_search_range set for the run; stand farther from it";
+                var reason = stationsLeft != null
+                    ? $"a crafting station of yours is within {RepairConfig.CraftingStationSearchRange} m of you, and the move to clear ground failed: {stationsLeft}"
+                    : $"a crafting station of yours is within {RepairConfig.CraftingStationSearchRange} m of you, the crafting_station_search_range set for the run; stand farther from it";
                 foreach (var periodic in new[]
                          {
                              "repair_item_none_worn_touches_no_station", "repair_item_periodic_raises_crafting",
@@ -787,6 +824,16 @@ namespace Automatics.SmokeTest
         private static void Wear(ItemDrop.ItemData item)
         {
             item.m_durability = item.GetMaxDurability() * WornFraction;
+        }
+
+        // Why a spot will not do for the item checks: a crafting station within the station
+        // search range set for the run, and a metre more. Null when none is; the test stations
+        // do not exist yet when it is asked.
+        private static string StationsNear(Vector3 site)
+        {
+            var all = Reflections.GetStaticField<CraftingStation, List<CraftingStation>>("m_allStations");
+            var count = all?.Count(x => x && Vector3.Distance(site, x.transform.position) <= RequiredRange + 1f) ?? 0;
+            return count == 0 ? null : $"{count} crafting station(s) within {RequiredRange + 1} m";
         }
 
         // A station of yours, not one of the test stations, within the module's search range.
