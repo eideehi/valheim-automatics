@@ -386,9 +386,9 @@ namespace Automatics.SmokeTest
             var stoneMayBeLeft = false;
             try
             {
-                first = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, origin, false);
-                second = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, origin + transform.forward * spacing, false);
-                other = FeaturesSmokeCommand.SpawnTestDrop(stonePrefab, origin - transform.forward * spacing, false);
+                first = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, AboveGround(origin), false);
+                second = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, AboveGround(origin + transform.forward * spacing), false);
+                other = FeaturesSmokeCommand.SpawnTestDrop(stonePrefab, AboveGround(origin - transform.forward * spacing), false);
                 if (first == null || second == null || other == null)
                 {
                     if (!overlap) run.Skip(HoverCheck, "a test drop could not be set up");
@@ -450,7 +450,7 @@ namespace Automatics.SmokeTest
                 var distances = $"first {Distance(player, first):0.00} m, second {Distance(player, second):0.00} m, stone {Distance(player, other):0.00} m, range {range:0.#} m";
                 if (Distance(player, first) > range - 0.1f || Distance(player, second) > range - 0.1f)
                 {
-                    run.Skip(check, $"inconclusive: a Wood drop rolled out of automatic_pickup_range before the pass ({distances})");
+                    run.Skip(check, $"inconclusive: a Wood drop left automatic_pickup_range before the pass ({distances})");
                     yield break;
                 }
 
@@ -641,7 +641,7 @@ namespace Automatics.SmokeTest
             var woodMayBeLeft = false;
             try
             {
-                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, position, true);
+                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, AboveGround(position), true);
                 if (drop == null)
                 {
                     run.Skip(IntervalCheck, "the test drop could not be set up");
@@ -751,16 +751,12 @@ namespace Automatics.SmokeTest
             var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
             var transform = player.transform;
             var position = transform.position + Vector3.up * 0.3f - transform.right * distance;
-            // The check waits seconds for vanilla to allow the drop. Placed at your height where the
-            // ground there is higher, it would start inside the terrain, fall through it and be
-            // metres under it by the later pass, so it starts just above the ground there.
-            position.y = ZoneSystem.instance.GetGroundHeight(position) + 0.3f;
 
             ItemDrop drop = null;
             var woodMayBeLeft = false;
             try
             {
-                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, position, true);
+                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, AboveGround(position), true);
                 if (drop == null)
                 {
                     run.Skip(WaitsCheck, "the test drop could not be set up");
@@ -980,7 +976,7 @@ namespace Automatics.SmokeTest
             var woodMayBeLeft = false;
             try
             {
-                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, position, false);
+                drop = FeaturesSmokeCommand.SpawnTestDrop(woodPrefab, AboveGround(position), false);
                 if (drop == null)
                 {
                     run.Skip(KeyNotYetPickableCheck, "the test drop could not be set up");
@@ -1462,6 +1458,15 @@ namespace Automatics.SmokeTest
             }
 
             return null;
+        }
+
+        // A Wood or Stone test drop starts 0.3 m above the ground at its spot. Placed at your height
+        // where the ground there is higher, it would start inside the terrain and fall through it,
+        // out of Automatic Pickup's range within a second.
+        private static Vector3 AboveGround(Vector3 point)
+        {
+            point.y = ZoneSystem.instance.GetGroundHeight(point) + 0.3f;
+            return point;
         }
 
         private static float Distance(Player player, ItemDrop drop)
