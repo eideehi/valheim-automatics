@@ -1544,27 +1544,40 @@ The smoke project is optional developer tooling. The data checks under
 
 #### `planting`
 
-Requires a single-player world and the Farming module with `enable_grid_planting`
-on. It walks the cultivator's own piece table in order and uses the first piece
-with a `Plant` that needs no cultivated ground, has no terrain modifier, takes
-one kind of seed that you do not carry, and grows in your current biome (all
-read at runtime). A piece whose seed you carry is passed over for the next one.
-It SKIPs if no piece is usable, fewer than three inventory slots are free, the
-world's free-build key for the piece is set (the SKIP names the key; world
-modifiers are never changed), stamina is insufficient, or no patch around you is plantable. It tries grid
+Requires a single-player world. It sets up the rest itself: the Farming module and
+`enable_grid_planting` are turned on for the section when they are off (and put
+back with the other settings). It walks the cultivator's own piece table in order
+and uses the first piece with a `Plant` that needs no cultivated ground, has no
+terrain modifier, takes one kind of seed, and grows in your current biome (all
+read at runtime). It then puts aside the inventory items in the way, as described
+under the safety rules above: every stack of that piece's seed you carry, so the
+seed accounting counts only the section's own, and enough unequipped items for
+three free slots. With the test cultivator equipped it teaches your character the
+sapling piece when it is not known yet (kept by the character), and sets your
+stamina to its maximum; the hand-back puts back the stamina you had. It tries grid
 centres in eight directions around your facing at about 4, 8 and 12 m (farther
 when the grid is wide) and uses the first one where every cell passes the rules
 the mod applies before planting: build access, biome, cultivation, roof, grow
 space (grass has no collider and never blocks) and, for crops that refuse
-tilting ground, a slope limit. The SKIP lists each tried centre with how many
-cells passed and the first failing reason. A slot or piece SKIP names the free
-slot count, the biome and each plant piece's verdict (allowed biomes, carried seed count); pieces that grow
-only in biomes from the Mistlands update onward are counted, not named. No
-terrain is modified. If only your own no-cost toggle (`nocost`) is on, the
-section turns it off for its synchronous checks and turns it back on afterwards,
-also through the session hand-back; stamina and durability are charged the same
-either way, as in vanilla. God mode is lifted and restored the same way, because the
-Debug build of Automatics skips stamina use while god mode is on.
+tilting ground, a slope limit. When none passes, it moves you to the nearest clear
+site (see the safety rules above) around which one does, keeping your facing, and
+moves you back when the section ends. A `planting_setup` PASS lists what was set
+up. If only your own no-cost toggle (`nocost`) is on, the section turns it off for
+its synchronous checks and turns it back on afterwards, also through the session
+hand-back; stamina and durability are charged the same either way, as in vanilla.
+God mode is lifted and restored the same way, because the Debug build of
+Automatics skips stamina use while god mode is on. No terrain is modified.
+
+It still SKIPs, naming what failed, when the module does not start, no piece is
+usable in your biome (the SKIP names the biome and each plant piece's verdict
+with its allowed biomes; pieces that grow only in biomes from the Mistlands update
+onward are counted, not named), the items cannot be put aside, even full stamina
+is not enough for eight saplings, or no site within 45 m has a plantable patch
+(the SKIP lists each centre tried at your spot with how many cells passed and the
+first failing reason, and why the move failed). Left to you: the world's
+free-build key for the piece must be unset (the SKIP names the key; world
+modifiers are never changed), and you must not be dead, attacking or in the middle
+of a grid placement when it starts.
 The first grid's centre is 4 to 12 m from you (farther when the grid is wide), and
 the snapping checks use ground up to about five cells from that centre, which is
 about 25 m for a tree sapling's 5 m spacing. Rocks, trees and pieces within a
@@ -1599,7 +1612,7 @@ position plus the rotated lattice offsets), not taken from the mod. It checks:
   the first grid's rotation, is a whole number of cells (within 5 cm), and a yaw
   when it differs from the grid's by whole quarter turns
 - the real `Player.UpdatePlacementGhost`: the section selects the test sapling in
-  the cultivator table (SKIP when its recipe is unknown), points the camera
+  the cultivator table (SKIP when the table still does not offer it), points the camera
   straight down at an aimed point and widens the player's placement reach. With
   the unbound key it checks that the ghost lies on the free lattice cell on the
   ground with a lattice yaw, that vanilla's placement status is Valid (SKIP when
@@ -1645,21 +1658,44 @@ The extra crops do not raise the Farming skill or the build statistics; only the
 hand-placed crop does, by design, so the section does not check either.
 
 Plants created during these calls are tracked, made non-persistent and removed
-before the frame ends. Only the added inventory items are removed. Stamina, its
-regeneration delay and the test cultivator's durability are restored within the
-same synchronous check. The
+before the frame ends. Only the added inventory items are removed, and the items
+put aside go back afterwards. Stamina, its regeneration delay and the test
+cultivator's durability are restored within the same synchronous check, and the
+stamina you had before the section when it ends. The
 real cultivator key input and vanilla manual placement remain a separate in-game
 check; this section drives the request path after a successful manual placement.
 
 #### `farming`
 
-Run `automatics_smoke_features farming` in a single-player world with the Farming
-module on, standing beside an empty cultivated plot (about 3×3 m or larger). It
-uses the first crop in `Allow Farming Crop` that grows from one kind of seed on
-cultivated ground in your biome and has no growing or ripe plant of its kind
-within 6 m; crops from the Mistlands update onward are counted, not named. It
-SKIPs when a container with a farming role is within 13 m, or when fewer than
-three empty cultivated cells lie within 3 m of you.
+Run `automatics_smoke_features farming` in a single-player world. The section
+prepares its own plot:
+
+- It sets a farming interval of 0 (no periodic passes) and turns the Farming
+  module on for the section when it is off.
+- It takes its candidate crops from the Flora registry, not from `Allow Farming
+  Crop`: every crop that grows from one kind of seed on cultivated ground into a
+  crop with a pickable yield. Crops from the Mistlands update onward are counted,
+  not named.
+- It needs a spot whose biome one of those crops grows in, with the same biome and
+  ground within 1 m of the spot's height 4.5 m out, no plant or pickable within
+  6 m and no container with a farming role within 13 m. When the spot you stand on
+  is not one, it moves you to the nearest clear site that is (see the safety rules
+  above), keeping your facing, and moves you back when the section ends.
+- It uses the first candidate crop that grows in that biome and has no growing or
+  ripe plant of its kind within 6 m, and makes it the only allowed crop.
+- It cultivates the ground within 4.5 m of the spot as the cultivator does: the
+  cultivator's own build piece whose terrain operation paints cultivated ground
+  is placed on a grid of 1 to 1.5 m (no item, stamina or durability is used), and
+  the section waits until the ground within 4 m reads as cultivated. This is a
+  lasting change to the world's terrain; whether the operation also levels or
+  smooths the ground is the game's, and its settings are logged and named in the
+  setup note. Nothing is done when that ground is cultivated already.
+
+A `farming_setup` PASS says what was set up. The section still SKIPs, naming what
+failed, when the module does not start, no candidate crop exists, no site within
+45 m suits the plot (the SKIP lists the sites tried and why each failed, such as
+a biome where no candidate crop grows), the ground cannot be cultivated, or fewer
+than three plantable cells lie within 3 m of you on the plot.
 
 Before it looks for a crop, a plot or role containers, so that none of those
 SKIPs stops it, the section runs one read-only check:
@@ -1668,11 +1704,10 @@ SKIPs stops it, the section runs one read-only check:
 | --- | --- |
 | `farming_default_crops_have_saplings` | For every Flora identifier (custom flora objects included), the sapling lookup that farming replants with (`CropPlanting.TryResolveSapling`) finds a sapling exactly when the identifier is in the default value of `Allow Farming Crop`. A pass gives only the counts; a FAIL names each identifier from before the Mistlands update that differs and says which way, and counts the later ones, which it names in the BepInEx log file only |
 
-For the length of the section it sets `Player With Containers` mode, a farming
-interval of 0, a farming range of 4 m, a container search range of 8 m, the
-chosen crop as the only allowed crop and a spacing factor of 2.5 (and, for the
-snapping check, grid planting on with a 3×3 grid), then restores
-them. It spawns two chests beside you and gives them the Storage and
+For the length of the section it also sets `Player With Containers` mode, a
+farming range of 4 m, a container search range of 8 m and a spacing factor of 2.5
+(and, for the snapping check, grid planting on with a 3×3 grid), then restores
+them with the interval, the module and the allowed crop. It spawns two chests beside you and gives them the Storage and
 Cultivation roles through the real designation path, puts seeds into the
 Cultivation chest, and runs one farming pass per check (the two sowing checks
 share one pass):
@@ -1689,7 +1724,7 @@ share one pass):
 | `farming_deposit_full_box_untouched` | With the Storage chest full of the crop's yield, the harvest deposit (`PickableHarvester.HarvestToContainers`, called directly on a ripe crop with the Storage chest as its only target) leaves the crop standing, and the chest gets nothing, no add call, no save and no warning |
 | `farming_deposit_all_or_nothing` | With room for one in the Storage chest and the crop's yield set to two, the deposit still puts nothing in and leaves the crop standing, again without an add call, a save or a warning |
 | `farming_deposit_competing_yields_untouched` | With one empty slot in the Storage chest and no room in the yield's stacks, the crop's yield set to one and one extra drop of another early item the chest holds none of given to it, two yields compete for the one slot that each would fit alone: the deposit puts nothing in and leaves the crop standing, without an add call, a save or a warning |
-| `farming_settings_restored` | Every changed setting is put back |
+| `farming_settings_restored` | Every changed setting is put back, the module toggle too when the section turned it on |
 
 The three deposit checks fill the Storage chest with the section's own yield
 (never with an add that does not fit), and run with the container observer of
@@ -1704,8 +1739,8 @@ patch the game. The ripe crop they use is removed right after them.
 
 Everything runs synchronously. Crops it plants are tracked and removed. The section takes out
 only the seeds it added and the yield it harvested or used as filler; a chest
-that still holds anything else is left in the world and the log says where. No
-terrain is modified. A harvest may raise the pick skill, as a harvest by hand
+that still holds anything else is left in the world and the log says where. The
+cultivated plot stays. A harvest may raise the pick skill, as a harvest by hand
 does.
 
 #### `guide`

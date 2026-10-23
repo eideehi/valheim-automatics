@@ -11,11 +11,16 @@ using FarmingPatches = Automatics.AutomaticFarming.Patches;
 using Grid = Automatics.AutomaticFarming.GridPlanting;
 using Planting = Automatics.AutomaticFarming.CropPlanting;
 using Snapping = Automatics.AutomaticFarming.LatticeSnapping;
+using Held = System.Collections.Generic.Dictionary<BepInEx.Configuration.ConfigEntryBase,
+    Automatics.SmokeTest.SmokeSession.SettingRestoration>;
 
 namespace Automatics.SmokeTest
 {
     // All planting and accounting happen synchronously. Only seeds absent from the player's
-    // inventory are used, and every added item is tracked by reference. No terrain is changed.
+    // inventory are used (the player's own are put aside for the section), and every added item
+    // is tracked by reference. No terrain is changed. Before that the section turns the module and
+    // grid planting on for the run when they are off, teaches the player the sapling piece, fills
+    // their stamina and, when no patch around them is plantable, moves them to one that is.
     // The extra crops raise no Farming skill and no build stats by design, so neither is checked.
     internal static class PlantingFeatureSmoke
     {
@@ -27,6 +32,8 @@ namespace Automatics.SmokeTest
         private static readonly System.Reflection.FieldInfo Stamina = AccessTools.Field(typeof(Player), "m_stamina");
         private static readonly System.Reflection.FieldInfo StaminaDelay = AccessTools.Field(typeof(Player), "m_staminaRegenTimer");
         private static readonly System.Reflection.FieldInfo NoPlacementCost = AccessTools.Field(typeof(Player), "m_noPlacementCost");
+        private static readonly System.Reflection.MethodInfo AddKnownPiece = AccessTools.Method(typeof(Player), "AddKnownPiece");
+        private static readonly System.Reflection.MethodInfo UpdateAvailablePieces = AccessTools.Method(typeof(Player), "UpdateAvailablePiecesList");
 
         private enum Limit
         {
@@ -38,7 +45,29 @@ namespace Automatics.SmokeTest
             ToolSwapped
         }
 
+        // The settings go back and are reported when the section ends however it ends, and the
+        // player is then moved back to where the command started when the section moved them.
         public static IEnumerator Run(FeatureRun run)
+        {
+            var steps = Section(run);
+            try
+            {
+                while (steps.MoveNext()) yield return steps.Current;
+            }
+            finally
+            {
+                (steps as IDisposable)?.Dispose();
+                SmokeSetup.ReportSettings(run, "planting_settings_restored");
+            }
+
+            var home = new SmokeSetup.SetupResult();
+            var back = SmokeSetup.ReturnToStart(run.RunId, home);
+            while (back.MoveNext()) yield return back.Current;
+            if (!home.Ok)
+                FeaturesSmokeCommand.Warn($"[Automatics Smoke] {Label}: {home.Reason}; the run's hand-back moves you back");
+        }
+
+        private static IEnumerator Section(FeatureRun run)
         {
             var player = Player.m_localPlayer;
             if (!run.IsCurrent || !player || !ZNetScene.instance || !ZoneSystem.instance ||
@@ -47,12 +76,24 @@ namespace Automatics.SmokeTest
                 run.Skip("planting_section", "requires a loaded single-player world");
                 yield break;
             }
-            if (!FarmingModule.Running || !FarmingConfig.EnableGridPlanting)
+
+            var held = new Held();
+            var setup = new List<string>();
+            var module = new SmokeSetup.SetupResult();
+            var enable = SmokeSetup.EnableModule(run.RunId, held, FarmingConfig.ModuleEntry, () => FarmingModule.Running, module);
+            while (enable.MoveNext()) yield return enable.Current;
+            if (!module.Ok)
             {
-                run.Skip("planting_section", "enable the Farming module and enable_grid_planting");
+                run.Skip("planting_section", module.Reason);
                 yield break;
             }
-            if (Grid.HasPending || player.IsDead() || player.InAttack() || Stamina == null || StaminaDelay == null)
+            setup.Add("module " + module.Reason);
+            if (!FarmingConfig.EnableGridPlanting)
+            {
+                if (!Set(run, held, "_enableGridPlanting", true, out _)) yield break;
+                setup.Add("enable_grid_planting turned on for the run");
+            }
+            if (!player || Grid.HasPending || player.IsDead() || player.InAttack() || Stamina == null || StaminaDelay == null)
             {
                 run.Skip("planting_section", "player state is not ready or stamina fields could not be resolved");
                 yield break;
@@ -61,16 +102,12 @@ namespace Automatics.SmokeTest
             var cultivator = ObjectDB.instance.GetItemPrefab("Cultivator")?.GetComponent<ItemDrop>();
             var table = cultivator?.m_itemData.m_shared.m_buildPieces;
             var biome = Heightmap.FindBiome(player.transform.position);
-            var piece = SelectSapling(player, table, biome, out var candidates);
+            var piece = SelectSapling(table, biome, out var candidates);
             var nonPlant = table?.m_pieces.Where(x => x).Select(x => x.GetComponent<Piece>())
                 .FirstOrDefault(x => x && !x.GetComponent<Plant>());
-            var freeSlots = player.GetInventory().GetEmptySlots();
-            if (!piece || freeSlots < 3)
+            if (!piece)
             {
-                var reasons = new List<string>();
-                if (freeSlots < 3) reasons.Add($"needs 3 free inventory slots, has {freeSlots}");
-                if (!piece) reasons.Add($"no usable tree sapling in biome {biome}: {candidates}");
-                run.Skip("planting_section", string.Join("; ", reasons.ToArray()));
+                run.Skip("planting_section", $"no usable tree sapling in biome {biome}: {candidates}");
                 yield break;
             }
             // A world modifier is never changed; the player's own no-cost toggle is lifted for the
@@ -97,12 +134,19 @@ namespace Automatics.SmokeTest
             var created = new List<GameObject>();
             var initialStamina = (float)Stamina.GetValue(player);
             var initialDelay = (float)StaminaDelay.GetValue(player);
+            var staminaBack = false;
             var harmony = new Harmony("net.eidee.valheim.automatics.smoke.planting");
             Func<string, bool> handBack = _ =>
             {
                 if (!player) return true;
                 if (originalNoCost) NoPlacementCost.SetValue(player, true);
                 if (originalGodMode) player.SetGodMode(true);
+                if (!staminaBack)
+                {
+                    Stamina.SetValue(player, initialStamina);
+                    StaminaDelay.SetValue(player, initialDelay);
+                    staminaBack = true;
+                }
                 foreach (var item in added)
                 {
                     if (player.IsItemEquiped(item)) player.UnequipItem(item, false);
@@ -115,8 +159,24 @@ namespace Automatics.SmokeTest
                 return restored;
             };
             SmokeSession.TrackHandBack(handBack);
+            SmokeSetup.InventoryStash stash = null;
             try
             {
+                // Room for the test cultivators and seed stacks, and none of the sapling's seed in
+                // the inventory, so the accounting below counts only the section's own. What is
+                // put aside goes back at the end.
+                var seedName = piece.m_resources.First(r => r.m_resItem && r.GetAmount(0) > 0).m_resItem.m_itemData.m_shared.m_name;
+                stash = SmokeSetup.Stash(player, 3, 0f, x => x.m_shared.m_name == seedName);
+                var freeSlots = inventory.GetEmptySlots();
+                var carried = inventory.CountItems(seedName);
+                if (freeSlots < 3 || carried != 0)
+                {
+                    run.Skip("planting_section", $"could not put items aside: needs 3 free inventory slots, has {freeSlots}; " +
+                        $"needs none of {seedName}, carries {carried}");
+                    yield break;
+                }
+                setup.Add(stash.Report);
+
                 if (originalNoCost)
                 {
                     NoPlacementCost.SetValue(player, false);
@@ -127,8 +187,8 @@ namespace Automatics.SmokeTest
                     player.SetGodMode(false);
                     run.Pass("planting_god_mode_lifted", "god mode is off for this section (the Debug build skips stamina use in god mode) and restored afterwards");
                 }
-                if (!Set(run, "_gridPlantingSize", Size, out _) || !Set(run, "_sowingSpacingFactor", SpacingFactor, out _) ||
-                    !Set(run, "_gridPlantingKey", new KeyboardShortcut(KeyCode.LeftAlt), out var keySetting)) yield break;
+                if (!Set(run, held, "_gridPlantingSize", Size, out _) || !Set(run, held, "_sowingSpacingFactor", SpacingFactor, out _) ||
+                    !Set(run, held, "_gridPlantingKey", new KeyboardShortcut(KeyCode.LeftAlt), out var keySetting)) yield break;
                 var tool = inventory.AddItem("Cultivator", 1, 1, 0, 0L, "", false);
                 if (tool != null) added.Add(tool);
                 if (tool == null || !player.EquipItem(tool, false))
@@ -136,23 +196,51 @@ namespace Automatics.SmokeTest
                     run.Skip("planting_section", "could not add and equip the test cultivator");
                     yield break;
                 }
-                var cost = (float)AccessTools.Method(typeof(Player), "GetBuildStamina").Invoke(player, null);
-                if (cost <= 0f || Game.m_staminaRate <= 0f || initialStamina <= cost * 8f * Mathf.Max(1f, Game.m_staminaRate))
+                // The build table offers only known pieces, and the real-ghost check selects the
+                // sapling there. Learning it is kept by the character, which the test character
+                // accepts.
+                if (!player.IsRecipeKnown(piece.m_name) && AddKnownPiece != null && UpdateAvailablePieces != null)
                 {
-                    run.Skip("planting_section", "needs enough current stamina to plant eight saplings");
+                    AddKnownPiece.Invoke(player, new object[] { piece });
+                    UpdateAvailablePieces.Invoke(player, null);
+                    setup.Add($"learned the piece {piece.name}");
+                }
+                var cost = (float)AccessTools.Method(typeof(Player), "GetBuildStamina").Invoke(player, null);
+                var maxStamina = player.GetMaxStamina();
+                if (cost <= 0f || Game.m_staminaRate <= 0f || maxStamina <= cost * 8f * Mathf.Max(1f, Game.m_staminaRate))
+                {
+                    run.Skip("planting_section", $"even full stamina ({maxStamina:F0}) is not enough to plant eight saplings");
                     yield break;
                 }
+                // Full stamina for the grids; the hand-back puts back what you had.
+                Stamina.SetValue(player, maxStamina);
+                setup.Add($"stamina set to its maximum {maxStamina:F0} and put back afterwards");
                 // A yaw the game's placement can produce (a multiple of its 22.5 degree step), as the
                 // row snapping rounds an anchor's yaw to that step.
                 var rotation = Quaternion.Euler(0f, Mathf.Round((player.transform.eulerAngles.y + 25f) / 22.5f) * 22.5f, 0f);
                 var plant = piece.GetComponent<Plant>();
                 var spacing = plant.m_growRadius * SpacingFactor;
-                if (!FindPatch(player, piece, plant, rotation, spacing, out var centre, out var cells, out var patchReport))
+                var yaw = player.transform.eulerAngles.y;
+                if (!FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, out var centre, out var cells, out var patchReport))
                 {
-                    run.Skip("planting_section", $"no patch around the player where all {Size * Size - 1} cells are plantable " +
-                        $"(spacing {spacing:F2} m): {patchReport}");
-                    yield break;
+                    // No patch around the player: move to a spot that has one, then search again.
+                    var site = new SmokeSetup.SetupResult();
+                    var relocate = SmokeSetup.Relocate(run.RunId,
+                        p => FindPatch(p, yaw, piece, plant, rotation, spacing, out _, out _, out _) ? null : "no plantable patch around it",
+                        site);
+                    while (relocate.MoveNext()) yield return relocate.Current;
+                    var here = patchReport;
+                    if (!site.Ok || !player ||
+                        !FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, out centre, out cells, out patchReport))
+                    {
+                        run.Skip("planting_section", $"no patch around the player where all {Size * Size - 1} cells are plantable " +
+                            $"(spacing {spacing:F2} m): {here}; " +
+                            (site.Ok ? $"nor after the player {site.Reason}: {patchReport}" : "relocation: " + site.Reason));
+                        yield break;
+                    }
+                    setup.Add(site.Reason);
                 }
+                run.Pass("planting_setup", string.Join("; ", setup.ToArray()));
                 run.Pass("planting_patch_found", patchReport);
                 run.Pass("planting_sapling_verified", $"{piece.name} in biome {biome}; candidates: {candidates}");
 
@@ -218,25 +306,10 @@ namespace Automatics.SmokeTest
                     }
                     finally
                     {
-                        if (player)
-                        {
-                            Stamina.SetValue(player, initialStamina);
-                            StaminaDelay.SetValue(player, initialDelay);
-                        }
-                        try
-                        {
-                            if (handBack(Label)) SmokeSession.ReleaseHandBack(handBack);
-                            else run.Fail("planting_equipment_restored", "previous equipment could not be restored; hand-back will retry");
-                        }
-                        finally
-                        {
-                            var results = SmokeSession.RestoreSettings(run.RunId);
-                            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
-                                run.Fail("planting_settings_restored", string.Join("; ", results.Select(x => x.Value)));
-                            else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser || x.Key == SmokeSession.ToggleOutcome.NotThisRun))
-                                run.Skip("planting_settings_restored", "a setting was edited by the user and kept");
-                            else run.Pass("planting_settings_restored");
-                        }
+                        // The added items go first, so what was put aside has its room back.
+                        if (handBack(Label)) SmokeSession.ReleaseHandBack(handBack);
+                        else run.Fail("planting_equipment_restored", "previous equipment could not be restored; hand-back will retry");
+                        stash?.Restore();
                     }
                 }
             }
@@ -249,10 +322,9 @@ namespace Automatics.SmokeTest
                                                    Heightmap.Biome.Plains;
 
         // Walks the cultivator's own piece table in order and takes the first Plant piece that
-        // needs no cultivated ground, has no terrain modifier, takes one kind of seed the player
-        // does not carry, and grows in the player's biome. Every Plant piece's verdict is
-        // described so a SKIP names what failed.
-        private static Piece SelectSapling(Player player, PieceTable table, Heightmap.Biome biome, out string report)
+        // needs no cultivated ground, has no terrain modifier, takes one kind of seed, and grows in
+        // the player's biome. Every Plant piece's verdict is described so a SKIP names what failed.
+        private static Piece SelectSapling(PieceTable table, Heightmap.Biome biome, out string report)
         {
             var notes = new List<string>();
             Piece chosen = null;
@@ -276,8 +348,6 @@ namespace Automatics.SmokeTest
                 if (prefab.GetComponentsInChildren<TerrainModifier>(true).Length != 0 ||
                     prefab.GetComponentsInChildren<TerrainOp>(true).Length != 0) problems.Add("has a terrain modifier");
                 if (seeds.Count != 1) problems.Add($"{seeds.Count} seed kinds");
-                if (seeds.Any(r => player.GetInventory().CountItems(r.m_resItem.m_itemData.m_shared.m_name) != 0))
-                    problems.Add("seed already carried");
                 if ((biome & plant.m_biome) == 0) problems.Add("wrong biome");
                 if (problems.Count == 0 && !chosen) chosen = candidate;
                 if ((plant.m_biome & EarlyBiomes) == 0 && chosen != candidate)
@@ -285,8 +355,7 @@ namespace Automatics.SmokeTest
                     laterOnly++;
                     continue;
                 }
-                var carried = seeds.Select(r => $"{r.m_resItem.m_itemData.m_shared.m_name} carried {player.GetInventory().CountItems(r.m_resItem.m_itemData.m_shared.m_name)}");
-                notes.Add($"{prefab.name} (biomes {plant.m_biome}; {string.Join(", ", carried.ToArray())}): " +
+                notes.Add($"{prefab.name} (biomes {plant.m_biome}): " +
                           (problems.Count == 0 ? (chosen == candidate ? "chosen" : "usable") : string.Join(", ", problems.ToArray())));
             }
             if (plants == 0)
@@ -296,10 +365,11 @@ namespace Automatics.SmokeTest
             return chosen;
         }
 
-        // Candidate grid centres: eight directions around the player's facing, near to far, so the
-        // nearest cell stays at least 1.5 m from the player and the farthest centre is 12 m out.
-        // The first centre whose every cell passes the product's own rules is used.
-        private static bool FindPatch(Player player, Piece piece, Plant plant, Quaternion rotation, float spacing,
+        // Candidate grid centres: eight directions around a facing (yaw) from a spot the player
+        // stands on or may be moved to, near to far, so the nearest cell stays at least 1.5 m from
+        // the spot and the farthest centre is 12 m out. The first centre whose every cell passes
+        // the product's own rules is used.
+        private static bool FindPatch(Vector3 origin, float yaw, Piece piece, Plant plant, Quaternion rotation, float spacing,
             out Vector3 centre, out List<Vector3> cells, out string report)
         {
             var notes = new List<string>();
@@ -310,8 +380,8 @@ namespace Automatics.SmokeTest
             for (var step = 0; step < 8; step++)
             {
                 var angle = step * 45f;
-                var direction = Quaternion.Euler(0f, player.transform.eulerAngles.y + angle, 0f) * Vector3.forward;
-                centre = player.transform.position + direction * distance;
+                var direction = Quaternion.Euler(0f, yaw + angle, 0f) * Vector3.forward;
+                centre = origin + direction * distance;
                 centre.y = ZoneSystem.instance.GetGroundHeight(centre);
                 cells = ExpectedCells(centre, rotation, Size, spacing);
                 var passed = 0;
@@ -1115,13 +1185,17 @@ namespace Automatics.SmokeTest
             }
         }
 
-        private static bool Set<T>(FeatureRun run, string field, T value, out SmokeSession.SettingRestoration setting)
+        private static bool Set<T>(FeatureRun run, Held held, string field, T value, out SmokeSession.SettingRestoration setting)
         {
             setting = null;
-            var entry = AccessTools.Field(typeof(FarmingConfig), field)?.GetValue(null) as ConfigEntry<T>;
-            if (entry != null && SmokeSession.BeginSetting(run.RunId, entry, out setting, out var refusal) &&
-                SmokeSession.WriteSetting(run.RunId, setting, value, out refusal)) return true;
-            run.Skip("planting_section", "could not record and apply test setting " + field);
+            var entry = SmokeSetup.Field<T>(typeof(FarmingConfig), field);
+            var refusal = "the setting is not bound";
+            if (entry != null && SmokeSetup.Write(run.RunId, held, entry, value, out refusal))
+            {
+                setting = held[entry];
+                return true;
+            }
+            run.Skip("planting_section", $"could not record and apply test setting {field}: {refusal}");
             return false;
         }
 

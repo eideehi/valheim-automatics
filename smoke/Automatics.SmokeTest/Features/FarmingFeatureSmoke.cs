@@ -15,6 +15,8 @@ using FarmingModule = Automatics.AutomaticFarming.Module;
 using Planting = Automatics.AutomaticFarming.CropPlanting;
 using Snapping = Automatics.AutomaticFarming.LatticeSnapping;
 using Object = UnityEngine.Object;
+using Held = System.Collections.Generic.Dictionary<BepInEx.Configuration.ConfigEntryBase,
+    Automatics.SmokeTest.SmokeSession.SettingRestoration>;
 
 namespace Automatics.SmokeTest
 {
@@ -23,15 +25,34 @@ namespace Automatics.SmokeTest
     // replanted from them (also below Seed Reserve, which holds back only sowing) at the yaw the
     // crop was planted with, and sowing continues the rows of a rotated crop, on exactly the cells
     // the planting rules allow.
-    // Everything runs synchronously on objects the section spawns; the containers, crops and their
-    // contents are removed afterwards and no terrain is changed. A harvest may raise the pick
-    // skill, as a harvest by hand does. First, and without changing anything, it checks that the
-    // default crop list holds exactly the crops with a sapling.
+    // The section prepares the plot itself: it turns the module on for the run when it is off,
+    // moves the player to clear, level ground when the spot they stand on will not do, and
+    // cultivates the ground around them as the cultivator does (a lasting terrain change, which
+    // the test world accepts). The checks then run synchronously on objects the section spawns;
+    // the containers, crops and their contents are removed afterwards. A harvest may raise the
+    // pick skill, as a harvest by hand does. First, and without changing anything, it checks
+    // that the default crop list holds exactly the crops with a sapling.
     internal static class FarmingFeatureSmoke
     {
         private const string Label = "farming feature smoke";
         private const int FarmingRange = 4;
         private const int ContainerRange = 8;
+        // The plot: a disk this wide is cultivated around the spot, which takes in Farming Range
+        // and the lattice cells next to it. No plant or pickable may stand within ClearRange of
+        // the spot, and no container with a farming role within RoleContainerRange.
+        private const float PlotRadius = 4.5f;
+        private const float ClearRange = FarmingRange + 2f;
+        private const float RoleContainerRange = FarmingRange + ContainerRange + 1f;
+        // The plot's ground may differ by this much in height from the centre to its rim
+        // (unverified: the first in-game run shows whether it is too strict).
+        private const float PlotHeightSpread = 1f;
+        // The cultivation operations stand at most this far apart, closer when the operation
+        // paints a smaller disk, but never closer than a metre.
+        private const float MaxOpSpacing = 1.5f;
+        private const float MinOpSpacing = 1f;
+        // A heightmap shows a terrain change when it is redrawn, in the LateUpdate of the frame
+        // the change was made in; this many frames is a wide margin (unverified).
+        private const int CultivateFrames = 120;
         // A yaw vanilla placement can give (a whole number of 22.5° steps), not a quarter turn.
         private const float LatticeYaw = 22.5f;
         // How far off its planting yaw the anchor crop stands, as a sapling replanted by an earlier
@@ -50,7 +71,29 @@ namespace Automatics.SmokeTest
         private static List<GameObject> _created;
         private static string _saplingName;
 
+        // The settings go back and are reported when the section ends however it ends, and the
+        // player is then moved back to where the command started when the section moved them.
         public static IEnumerator Run(FeatureRun run)
+        {
+            var steps = Section(run);
+            try
+            {
+                while (steps.MoveNext()) yield return steps.Current;
+            }
+            finally
+            {
+                (steps as IDisposable)?.Dispose();
+                SmokeSetup.ReportSettings(run, "farming_settings_restored");
+            }
+
+            var home = new SmokeSetup.SetupResult();
+            var back = SmokeSetup.ReturnToStart(run.RunId, home);
+            while (back.MoveNext()) yield return back.Current;
+            if (!home.Ok)
+                FeaturesSmokeCommand.Warn($"[Automatics Smoke] {Label}: {home.Reason}; the run's hand-back moves you back");
+        }
+
+        private static IEnumerator Section(FeatureRun run)
         {
             var player = Player.m_localPlayer;
             if (!run.IsCurrent || !player || !ZNetScene.instance || !ZoneSystem.instance || !ObjectDB.instance ||
@@ -59,28 +102,67 @@ namespace Automatics.SmokeTest
                 run.Skip("farming_section", "requires a loaded single-player world");
                 yield break;
             }
-            if (!FarmingModule.Running)
+
+            // Periodic passes off first, so a module turned on for the run farms only when a check
+            // asks it to.
+            if (!Set(run, "_farmingInterval", 0f)) yield break;
+            var module = new SmokeSetup.SetupResult();
+            var enable = SmokeSetup.EnableModule(run.RunId, HeldSettings(run), FarmingConfig.ModuleEntry,
+                () => FarmingModule.Running, module);
+            while (enable.MoveNext()) yield return enable.Current;
+            if (!module.Ok)
             {
-                run.Skip("farming_section", "enable the Farming module");
+                run.Skip("farming_section", module.Reason);
                 yield break;
             }
 
             CheckDefaultCrops(run);
 
+            var crops = Candidates(out var candidateReport);
+            if (crops.Count == 0)
+            {
+                run.Skip("farming_section", candidateReport);
+                yield break;
+            }
+
+            var site = new SmokeSetup.SetupResult();
+            var relocate = SmokeSetup.Relocate(run.RunId, x => SiteProblem(x, crops), site);
+            while (relocate.MoveNext()) yield return relocate.Current;
+            if (!site.Ok || !player)
+            {
+                run.Skip("farming_section", "no spot for the test plot: " + site.Reason);
+                yield break;
+            }
+
             var origin = player.transform.position;
-            if (!SelectCrop(origin, out var crop, out var cropReport))
+            if (!SelectCrop(origin, crops, out var crop, out var cropReport))
             {
                 run.Skip("farming_section", cropReport);
                 yield break;
             }
             var foreign = ContainerCache.GetAllInstance().Count(x => x && ContainerRoles.GetRole(x) != ContainerRole.None &&
-                Vector3.Distance(x.transform.position, origin) <= FarmingRange + ContainerRange + 1f);
+                Vector3.Distance(x.transform.position, origin) <= RoleContainerRange);
             if (foreign > 0)
             {
                 run.Skip("farming_section", $"{foreign} container(s) with a farming role within " +
-                    $"{FarmingRange + ContainerRange + 1} m; stand where none is so the section uses only its own");
+                    $"{RoleContainerRange:0} m of the spot the relocation chose");
                 yield break;
             }
+
+            var plot = new SmokeSetup.SetupResult();
+            var cultivate = Cultivate(origin, plot);
+            while (cultivate.MoveNext()) yield return cultivate.Current;
+            if (!run.IsCurrent || !player)
+            {
+                run.Skip("farming_section", "the run ended while the plot was being cultivated");
+                yield break;
+            }
+            if (!plot.Ok)
+            {
+                run.Skip("farming_section", "could not cultivate the test plot: " + plot.Reason);
+                yield break;
+            }
+            run.Pass("farming_setup", $"module {module.Reason}; {site.Reason}; {plot.Reason}");
 
             CheckFloraChangeRebuildsLookup(run, crop);
 
@@ -91,7 +173,7 @@ namespace Automatics.SmokeTest
             var harmony = new Harmony("net.eidee.valheim.automatics.smoke.farming");
             try
             {
-                if (!Set(run, "_farmingInterval", 0f) || !Set(run, "_seedSource", SeedSource.PlayerContainers) ||
+                if (!Set(run, "_seedSource", SeedSource.PlayerContainers) ||
                     !Set(run, "_farmingRange", FarmingRange) || !Set(run, "_containerSearchRange", ContainerRange) ||
                     !Set(run, "_allowFarmingCrop", new StringList(new[] { crop.Identifier })) ||
                     !Set(run, "_sowingSpacingFactor", SpacingFactor) || !Set(run, "_enableProactiveSowing", false) ||
@@ -111,8 +193,8 @@ namespace Automatics.SmokeTest
                 var cells = FindCells(player, crop, storage, cultivation);
                 if (cells.Count < 3)
                 {
-                    run.Skip("farming_section", $"found {cells.Count} of 3 empty cultivated cells within " +
-                        $"{FarmingRange - 1} m; stand beside an empty cultivated plot of at least 3 x 3 m");
+                    run.Skip("farming_section", $"found {cells.Count} of 3 plantable cells within " +
+                        $"{FarmingRange - 1} m on the cultivated plot (something takes their grow space)");
                     yield break;
                 }
                 run.Pass("farming_patch_found", $"{crop.Identifier} on {cells.Count} free cells, spacing {crop.Step:F2} m");
@@ -159,22 +241,9 @@ namespace Automatics.SmokeTest
                 }
                 finally
                 {
-                    try
-                    {
-                        EmptyOwnItems(storage, crop.YieldName, _ownYield);
-                        EmptyOwnItems(cultivation, crop.SeedName, _ownSeeds);
-                        RemoveObjects(created.Where(x => x && !KeptChest(x)));
-                    }
-                    finally
-                    {
-                        var results = SmokeSession.RestoreSettings(run.RunId);
-                        if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
-                            run.Fail("farming_settings_restored", string.Join("; ", results.Select(x => x.Value)));
-                        else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
-                                                  x.Key == SmokeSession.ToggleOutcome.NotThisRun))
-                            run.Skip("farming_settings_restored", "a setting was edited by the user and kept");
-                        else run.Pass("farming_settings_restored");
-                    }
+                    EmptyOwnItems(storage, crop.YieldName, _ownYield);
+                    EmptyOwnItems(cultivation, crop.SeedName, _ownSeeds);
+                    RemoveObjects(created.Where(x => x && !KeptChest(x)));
                 }
             }
         }
@@ -268,16 +337,16 @@ namespace Automatics.SmokeTest
             }
         }
 
-        // The first allowed crop that grows from seeds on cultivated ground in this biome, has no
-        // growing or ripe plant within reach, and predates the Mistlands (later crops are counted,
-        // not named).
-        private static bool SelectCrop(Vector3 origin, out Crop crop, out string report)
+        // The crops the section can use, from the crop registry rather than Allow Farming Crop
+        // (which the section then writes): every Flora identifier whose sapling grows from one kind
+        // of seed on cultivated ground into a crop with a pickable yield, in registry order, and
+        // only those that predate the Mistlands (later crops are counted, not named).
+        private static List<Crop> Candidates(out string report)
         {
-            crop = null;
-            var biome = Heightmap.FindBiome(origin);
+            var crops = new List<Crop>();
             var notes = new List<string>();
             var later = 0;
-            foreach (var identifier in FarmingConfig.AllowFarmingCrops)
+            foreach (var identifier in ValheimObject.Flora.GetAllElements().Select(x => x.identifier).Distinct())
             {
                 if (ValheimObject.Flora.HasTag(identifier, "seed")) continue;
                 if (!Planting.TryResolveSapling(identifier, out var sapling)) continue;
@@ -289,11 +358,6 @@ namespace Automatics.SmokeTest
                     later++;
                     continue;
                 }
-                if ((plant.m_biome & biome) == 0)
-                {
-                    notes.Add($"{identifier}: not in {biome}");
-                    continue;
-                }
                 var grown = plant.m_grownPrefabs?.FirstOrDefault(x => x && x.GetComponent<Pickable>());
                 var pickable = grown ? grown.GetComponent<Pickable>() : null;
                 var yieldDrop = pickable && pickable.m_itemPrefab ? pickable.m_itemPrefab.GetComponent<ItemDrop>() : null;
@@ -303,22 +367,8 @@ namespace Automatics.SmokeTest
                     notes.Add($"{identifier}: not a one-seed crop with a pickable yield");
                     continue;
                 }
-                var nearby = Physics.OverlapSphere(origin, FarmingRange + 2f)
-                    .Select(c => c.GetComponentInParent<Plant>() ? c.GetComponentInParent<Plant>().gameObject
-                        : c.GetComponentInParent<Pickable>() ? c.GetComponentInParent<Pickable>().gameObject : null)
-                    .Where(go => go)
-                    .Select(go => Objects.GetPrefabName(go))
-                    .Count(name => name == sapling.name || name == grown.name);
-                nearby += PickableCache.GetAllInstance().Count(x => x && !x.GetPicked() &&
-                    Vector3.Distance(x.transform.position, origin) <= FarmingRange + 2f &&
-                    ValheimObject.Flora.GetIdentify(Objects.GetName(x), out var id) && id == identifier);
-                if (nearby > 0)
-                {
-                    notes.Add($"{identifier}: {nearby} growing or ripe within {FarmingRange + 2} m");
-                    continue;
-                }
 
-                crop = new Crop
+                crops.Add(new Crop
                 {
                     Identifier = identifier,
                     Sapling = sapling,
@@ -329,14 +379,156 @@ namespace Automatics.SmokeTest
                     SeedName = requirement.m_resItem.m_itemData.m_shared.m_name,
                     SeedAmount = requirement.GetAmount(0),
                     Step = plant.m_growRadius * SpacingFactor
-                };
+                });
+            }
+
+            report = "no crop in the Flora registry grows from one kind of seed on cultivated ground in an early biome" +
+                     (notes.Count > 0 ? ": " + string.Join("; ", notes.ToArray()) : "") +
+                     (later > 0 ? $"; {later} later-area crop(s) not used" : "");
+            return crops;
+        }
+
+        // What a spot lacks for the test plot, beyond the relocation's own ground filters, or null:
+        // one biome across the plot that one of the crops grows in, ground within PlotHeightSpread
+        // of the centre's height, no plant or pickable within ClearRange and no container with a
+        // farming role within RoleContainerRange.
+        private static string SiteProblem(Vector3 site, List<Crop> crops)
+        {
+            var biome = Heightmap.FindBiome(site);
+            if (!crops.Any(x => (x.Plant.m_biome & biome) != 0)) return $"none of the crops grows in {biome}";
+            for (var i = 0; i < 8; i++)
+            {
+                var rim = site + Quaternion.Euler(0f, i * 45f, 0f) * Vector3.forward * PlotRadius;
+                var other = Heightmap.FindBiome(rim);
+                if (other != biome) return $"the plot reaches into {other}";
+                var rise = ZoneSystem.instance.GetGroundHeight(rim) - site.y;
+                if (Mathf.Abs(rise) > PlotHeightSpread) return $"the plot's ground rises {rise:+0.0;-0.0} m at its rim";
+            }
+
+            var plants = Physics.OverlapSphere(site, ClearRange)
+                .Select(c => c.GetComponentInParent<Plant>() ? c.GetComponentInParent<Plant>().gameObject
+                    : c.GetComponentInParent<Pickable>() ? c.GetComponentInParent<Pickable>().gameObject : null)
+                .Where(go => go)
+                .Concat(PickableCache.GetAllInstance()
+                    .Where(x => x && Vector3.Distance(x.transform.position, site) <= ClearRange)
+                    .Select(x => x.gameObject))
+                .Distinct()
+                .Count();
+            if (plants > 0) return $"{plants} plant(s) or pickable(s) within {ClearRange:0} m";
+
+            var roles = ContainerCache.GetAllInstance().Count(x => x && ContainerRoles.GetRole(x) != ContainerRole.None &&
+                Vector3.Distance(x.transform.position, site) <= RoleContainerRange);
+            return roles > 0 ? $"{roles} container(s) with a farming role within {RoleContainerRange:0} m" : null;
+        }
+
+        // The first of the crops that grows in this biome and has no growing or ripe plant of its
+        // kind within reach.
+        private static bool SelectCrop(Vector3 origin, List<Crop> crops, out Crop crop, out string report)
+        {
+            crop = null;
+            var biome = Heightmap.FindBiome(origin);
+            var notes = new List<string>();
+            foreach (var candidate in crops)
+            {
+                var identifier = candidate.Identifier;
+                if ((candidate.Plant.m_biome & biome) == 0)
+                {
+                    notes.Add($"{identifier}: not in {biome}");
+                    continue;
+                }
+                var nearby = Physics.OverlapSphere(origin, ClearRange)
+                    .Select(c => c.GetComponentInParent<Plant>() ? c.GetComponentInParent<Plant>().gameObject
+                        : c.GetComponentInParent<Pickable>() ? c.GetComponentInParent<Pickable>().gameObject : null)
+                    .Where(go => go)
+                    .Select(go => Objects.GetPrefabName(go))
+                    .Count(name => name == candidate.Sapling.name || name == candidate.Grown.name);
+                nearby += PickableCache.GetAllInstance().Count(x => x && !x.GetPicked() &&
+                    Vector3.Distance(x.transform.position, origin) <= ClearRange &&
+                    ValheimObject.Flora.GetIdentify(Objects.GetName(x), out var id) && id == identifier);
+                if (nearby > 0)
+                {
+                    notes.Add($"{identifier}: {nearby} growing or ripe within {ClearRange:0} m");
+                    continue;
+                }
+
+                crop = candidate;
                 report = identifier;
                 return true;
             }
 
-            report = "no usable crop in Allow Farming Crop: " + string.Join("; ", notes.ToArray()) +
-                     (later > 0 ? $"; {later} later-area crop(s) not used" : "");
+            report = "no usable crop at the chosen spot: " + string.Join("; ", notes.ToArray());
             return false;
+        }
+
+        // Cultivates the ground within PlotRadius of the centre the way the cultivator does: the
+        // cultivator's own build piece whose terrain operation paints cultivated ground is
+        // instantiated, as Player.PlacePiece instantiates it, on a grid over the disk at ground
+        // height. Its TerrainOp applies itself to the terrain in Awake and destroys its object;
+        // no item, stamina or durability is used. Whether the operation also levels or smooths is
+        // the game's; its settings are read here, logged and named in the result. Nothing is done
+        // when the ground within Farming Range is cultivated already.
+        private static IEnumerator Cultivate(Vector3 centre, SmokeSetup.SetupResult result)
+        {
+            var samples = new List<Vector3>();
+            for (float x = -FarmingRange; x <= FarmingRange; x += 0.5f)
+            for (float z = -FarmingRange; z <= FarmingRange; z += 0.5f)
+                if (new Vector2(x, z).magnitude <= FarmingRange)
+                    samples.Add(centre + new Vector3(x, 0f, z));
+            Func<Vector3, bool> cultivated = p =>
+            {
+                var heightmap = Heightmap.FindHeightmap(p);
+                return heightmap && heightmap.IsCultivated(p);
+            };
+            if (samples.All(cultivated))
+            {
+                result.Ok = true;
+                result.Reason = "the plot was cultivated already";
+                yield break;
+            }
+
+            var table = ObjectDB.instance.GetItemPrefab("Cultivator")?.GetComponent<ItemDrop>()?.m_itemData.m_shared.m_buildPieces;
+            var prefab = table?.m_pieces?.FirstOrDefault(x => x && x.GetComponent<Piece>() &&
+                x.GetComponentsInChildren<TerrainOp>(true).Any(op => op.m_settings.m_paintType == TerrainModifier.PaintType.Cultivate));
+            if (!prefab)
+            {
+                result.Reason = "the cultivator has no build piece whose terrain operation paints cultivated ground";
+                yield break;
+            }
+
+            var s = prefab.GetComponentsInChildren<TerrainOp>(true)
+                .First(op => op.m_settings.m_paintType == TerrainModifier.PaintType.Cultivate).m_settings;
+            var settings = $"{prefab.name}: level {s.m_level} (radius {s.m_levelRadius:0.0}, offset {s.m_levelOffset:0.00}), " +
+                           $"smooth {s.m_smooth} (radius {s.m_smoothRadius:0.0}), raise {s.m_raise}, " +
+                           $"paint radius {s.m_paintRadius:0.0}, height check {s.m_paintHeightCheck}";
+            Log.LogInfo($"{Label}: the cultivation operation {settings}");
+
+            var spacing = Mathf.Clamp(s.m_paintRadius, MinOpSpacing, MaxOpSpacing);
+            var steps = Mathf.CeilToInt(PlotRadius / spacing);
+            var ops = 0;
+            for (var i = -steps; i <= steps; i++)
+            for (var j = -steps; j <= steps; j++)
+            {
+                if (new Vector2(i, j).magnitude * spacing > PlotRadius) continue;
+                var pos = centre + new Vector3(i * spacing, 0f, j * spacing);
+                pos.y = ZoneSystem.instance.GetGroundHeight(pos);
+                Object.Instantiate(prefab, pos, Quaternion.identity);
+                ops++;
+            }
+
+            for (var frame = 0; frame < CultivateFrames && !samples.All(cultivated); frame++)
+                yield return null;
+
+            var done = samples.Count(cultivated);
+            if (done < samples.Count)
+            {
+                result.Reason = $"{done} of {samples.Count} points within {FarmingRange} m were cultivated " +
+                                $"{CultivateFrames} frames after {ops} operation(s) of {settings}";
+                yield break;
+            }
+
+            result.Ok = true;
+            result.Changed = true;
+            result.Reason = $"cultivated {PlotRadius} m around the spot with {ops} operation(s) of {settings}";
         }
 
         private static GameObject SpawnChest(Player player, Vector3 offset, List<GameObject> created)
@@ -475,8 +667,8 @@ namespace Automatics.SmokeTest
             }
             if (anchor == null)
             {
-                SkipBoth("no cell with two free cells of a rotated lattice beside it; " +
-                    "stand beside a larger empty cultivated plot");
+                SkipBoth("no cell with two plantable cells of a rotated lattice beside it; " +
+                    "something on the cultivated plot takes their grow space");
                 return;
             }
 
@@ -499,7 +691,7 @@ namespace Automatics.SmokeTest
             if (neighbours == 0)
             {
                 SkipBoth("no lattice cell beside the rotated crop is plantable once it stands; " +
-                    "stand beside a larger empty cultivated plot");
+                    "something on the cultivated plot takes their grow space");
                 return;
             }
 
@@ -884,29 +1076,26 @@ namespace Automatics.SmokeTest
 
         private static bool Set<T>(FeatureRun run, string field, T value)
         {
-            var entry = AccessTools.Field(typeof(FarmingConfig), field)?.GetValue(null) as ConfigEntry<T>;
-            var setting = entry == null ? null : FindSetting(run, entry);
-            string refusal = null;
-            if (entry != null && setting == null && SmokeSession.BeginSetting(run.RunId, entry, out setting, out refusal))
-                Settings[entry] = setting;
-            if (setting != null && SmokeSession.WriteSetting(run.RunId, setting, value, out refusal)) return true;
+            var entry = SmokeSetup.Field<T>(typeof(FarmingConfig), field);
+            var refusal = "the setting is not bound";
+            if (entry != null && SmokeSetup.Write(run.RunId, HeldSettings(run), entry, value, out refusal)) return true;
             run.Skip("farming_section", $"could not record and apply test setting {field}: {refusal}");
             return false;
         }
 
-        private static readonly Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> Settings =
-            new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
+        private static readonly Held Settings = new Held();
         private static int _settingsRun = -1;
 
-        // A setting written twice in one run keeps its first restoration record.
-        private static SmokeSession.SettingRestoration FindSetting(FeatureRun run, ConfigEntryBase entry)
+        // The settings this run holds; a setting written twice in one run keeps its first
+        // restoration record.
+        private static Held HeldSettings(FeatureRun run)
         {
             if (_settingsRun != run.RunId)
             {
                 Settings.Clear();
                 _settingsRun = run.RunId;
             }
-            return Settings.TryGetValue(entry, out var setting) ? setting : null;
+            return Settings;
         }
 
         private static void Check(FeatureRun run, string name, bool ok, string detail)
