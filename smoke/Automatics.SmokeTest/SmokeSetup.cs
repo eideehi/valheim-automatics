@@ -492,9 +492,10 @@ namespace Automatics.SmokeTest
             var p = point;
             ZoneSystem.instance.GetGroundData(ref p, out var normal, out _, out _, out var heightmap);
             if (!heightmap) return "no ground";
-            // Level ground can still be lava (the heightmap's mask, which the game reads the same
-            // way for its heat damage).
-            if (heightmap.IsLava(p)) return "lava";
+            // Level ground can still be lava. The game's heat damage grows from a lava mask of
+            // about 0.1 (Character smooths GetLava from 0.1 to 1), well below IsLava's 0.6 cutoff,
+            // so any noticeable mask is refused.
+            if (heightmap.GetLava(p) > 0.05f) return "lava";
             var aboveWater = p.y - ZoneSystem.instance.m_waterLevel;
             if (aboveWater < WaterMargin) return $"under water or on the shore ({aboveWater:+0.0;-0.0} m from the water level)";
             if (normal.y < SlopeLimit) return $"sloped ({Mathf.Acos(normal.y) * Mathf.Rad2Deg:0}°)";
