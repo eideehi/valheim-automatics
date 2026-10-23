@@ -256,9 +256,26 @@ namespace Automatics.SmokeTest
                         var ghostReport = site.Ok ? $"after the player {site.Reason}: {patchReport}" : "relocation: " + site.Reason;
                         if (!FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, false, out centre, out cells, out patchReport))
                         {
-                            run.Skip("planting_section", $"no patch around the player where all {Size * Size - 1} cells are plantable " +
-                                $"(spacing {spacing:F2} m): {patchReport}; with the real-ghost cells: {here}; {ghostReport}");
-                            yield break;
+                            // Nor a patch of the grid's own cells here: move to a site that has one.
+                            var plain = new SmokeSetup.SetupResult();
+                            var retry = SmokeSetup.Relocate(run.RunId,
+                                p => FindPatch(p, yaw, piece, plant, rotation, spacing, false, out _, out _, out _) ? null : "no plantable patch around it",
+                                plain);
+                            while (retry.MoveNext()) yield return retry.Current;
+                            if (!player)
+                            {
+                                run.Skip("planting_section", "the local player went away during the setup");
+                                yield break;
+                            }
+                            if (!plain.Ok ||
+                                !FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, false, out centre, out cells, out patchReport))
+                            {
+                                run.Skip("planting_section", $"no patch around the player where all {Size * Size - 1} cells are plantable " +
+                                    $"(spacing {spacing:F2} m): {patchReport}; with the real-ghost cells: {here}; {ghostReport}; " +
+                                    $"relocation for the grid's cells alone: {(plain.Ok ? patchReport : plain.Reason)}");
+                                yield break;
+                            }
+                            site = plain;
                         }
                         ghostSite = $"no site was found where the cells of the real-ghost checks are plantable ({here}; {ghostReport})";
                         if (site.Ok) setup.Add(site.Reason);
