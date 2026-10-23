@@ -21,7 +21,7 @@ namespace Automatics.SmokeTest
     // The section sets up what the world checks need, through SmokeSetup: Automatic Pickup is
     // turned on for the run when it is off; an unset Pickup All Nearby key is bound to its
     // default, Left Shift + E; automatic_pickup_range is set to 3.5 m for the two Wood pass
-    // checks and to 4 m for the rest; a periodic interval above 0 is set to 0 from the start, so
+    // checks and to 6 m for the rest; a periodic interval above 0 is set to 0 from the start, so
     // only the checks' own requests make passes, and the last check sets it back to the user's
     // value, or to its default, 0.5 s, when that is 0. The settings go through SmokeSession: the
     // change is recorded before it is made, and put back afterwards unless the user changed the
@@ -70,12 +70,14 @@ namespace Automatics.SmokeTest
         private const string FishPrefab = "Fish1";
 
         // automatic_pickup_range for the run. The overlap check places its drops 2.5 m away
-        // (vanilla's 2 m reach and half a metre) and needs a metre to spare; the other checks
-        // place theirs up to 3 m away and need half a metre. The smaller range for the two Wood
-        // pass checks keeps their passes, which take every Wood drop or every allowed drop in
-        // range, off as much of the surroundings as possible.
+        // (vanilla's 2 m reach and half a metre) and needs a metre to spare. The smaller range
+        // for the two Wood pass checks keeps their passes, which take every Wood drop or every
+        // allowed drop in range, off as much of the surroundings as possible. The other checks
+        // place their drops up to 3 m away and get 3 m to spare: a drop spawned 0.3 m up can
+        // roll more than a metre when it lands, and one that rolls out of range can be taken by
+        // no pass.
         private const float PassRange = 3.5f;
-        private const float SectionRange = 4f;
+        private const float SectionRange = 6f;
 
         // How far beyond the range the site is kept free of item drops: a drop of the user's can
         // roll or be thrown into the range while the section runs.
@@ -201,7 +203,7 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            // The rest place their drops up to 3 m away.
+            // The rest place their drops up to 3 m away and keep 3 m to spare for a roll.
             SmokeSetup.Write(run, held, PickupConfig.AutomaticPickupRangeEntry, SectionRange);
 
             var waits = FeaturesSmokeCommand.Contain(
@@ -253,13 +255,14 @@ namespace Automatics.SmokeTest
         // of a pass that a pass could collect - no item drop, and no pickable or pickable item,
         // which the interval's part of a pass harvests before it looks at drops. A harvest could
         // add Wood or Stone to the counts, or fill the slots the checks need for their own items.
+        // Only drops move, so only they are looked for beyond the range.
         private static string ClearOfOwnItems(Vector3 site)
         {
-            const float radius = SectionRange + DropMargin;
-            var drop = SmokeSetup.Clearance(radius, SmokeSetup.SiteKinds.Drops)(site);
+            var drop = SmokeSetup.Clearance(SectionRange + DropMargin, SmokeSetup.SiteKinds.Drops)(site);
             if (drop != null) return drop;
 
             // Trigger colliders count here: an interactable's collider may be one.
+            const float radius = SectionRange;
             foreach (var collider in Physics.OverlapSphere(site, radius, ~0, QueryTriggerInteraction.Collide))
             {
                 if (!collider) continue;
@@ -850,11 +853,24 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
+                // The drop falls and can roll while the check waits. One that has left Automatic
+                // Pickup's range could not be taken by any pass, so the check cannot tell anything.
+                range = PickupConfig.AutomaticPickupRange;
+                var where = $"the drop {Distance(player, drop):0.00} m away, range {range:0.#} m";
+                if (Distance(player, drop) > range - 0.1f)
+                {
+                    run.Skip(WaitsCheck, $"inconclusive: the drop rolled out of automatic_pickup_range before the later pass ({where})");
+                    yield break;
+                }
+
                 component.RequestIntervalPickup();
                 started = Time.realtimeSinceStartup;
                 while (run.IsCurrent && player && !FeaturesSmokeCommand.IsConsumed(drop) &&
                        Time.realtimeSinceStartup - started < KeyPassTimeoutSeconds)
+                {
                     yield return null;
+                    if (Game.IsPaused()) paused = true;
+                }
 
                 if (!player)
                 {
@@ -872,7 +888,7 @@ namespace Automatics.SmokeTest
                             "inconclusive: the run was abandoned or the game was paused while the check waited");
                     else
                         run.Fail(WaitsCheck,
-                            $"a later pass did not pick up the drop within {KeyPassTimeoutSeconds:0.#}s of vanilla allowing it");
+                            $"a later pass did not pick up the drop within {KeyPassTimeoutSeconds:0.#}s of vanilla allowing it (at the request {where})");
                     yield break;
                 }
 
