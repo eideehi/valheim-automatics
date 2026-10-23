@@ -1828,9 +1828,14 @@ centres in eight directions around your facing at about 4, 8 and 12 m (farther
 when the grid is wide) and uses the first one where every cell passes the rules
 the mod applies before planting: build access, biome, cultivation, roof, grow
 space (grass has no collider and never blocks) and, for crops that refuse
-tilting ground, a slope limit. When none passes, it moves you to the nearest clear
-site (see the safety rules above) around which one does, keeping your facing, and
-moves you back when the section ends. A `planting_setup` PASS lists what was set
+tilting ground, a slope limit, and where the cells the real-ghost checks plant at
+beside the grid pass them too: the free lattice cell, the corner the ghost moves
+on to beside the first grid, and the corners of the free cell's lattice square.
+When none passes, it moves you to the nearest clear site (see the safety rules
+above) around which one does, keeping your facing, and moves you back when the
+section ends. When no such site is found, it uses a centre around you where the
+grid's own cells pass, and the real-ghost checks whose cells fail SKIP with that
+cell's reason and the failed move. A `planting_setup` PASS lists what was set
 up. If only your own no-cost toggle (`nocost`) is on, the section turns it off for
 its synchronous checks and turns it back on afterwards, also through the session
 hand-back; stamina and durability are charged the same either way, as in vanilla.
@@ -1841,8 +1846,8 @@ It still SKIPs, naming what failed, when the module does not start, no piece is
 usable in your biome (the SKIP names the biome and each plant piece's verdict
 with its allowed biomes; pieces that grow only in biomes from the Mistlands update
 onward are counted, not named), the items cannot be put aside, even full stamina
-is not enough for eight saplings, or no site within 45 m has a plantable patch
-(the SKIP lists each centre tried at your spot with how many cells passed and the
+is not enough for eight saplings, or neither your spot nor a site within 45 m has
+a plantable patch (the SKIP lists each centre tried at your spot with how many cells passed and the
 first failing reason, and why the move failed). Left to you: the world's
 free-build key for the piece must be unset (the SKIP names the key; world
 modifiers are never changed), and you must not be dead, attacking or in the middle

@@ -27,6 +27,12 @@ namespace Automatics.SmokeTest
         private const string Label = "planting feature smoke";
         private const int Size = 3;
         private const float SpacingFactor = 2.5f;
+        // Where the real-ghost checks aim, in cells from the first grid's centre along its axes:
+        // past its +x edge, off the free lattice cell by a fraction of a cell; and beside its +x
+        // edge cell, whose crop sends the ghost on to the nearest free corner.
+        private static readonly Vector2Int FreeCell = new Vector2Int(Size / 2 + 2, 0);
+        private static readonly Vector2 FreeAim = new Vector2(FreeCell.x + 0.35f, 0.3f);
+        private static readonly Vector2 OccupiedAim = new Vector2(Size / 2 + 0.3f, 0.25f);
         private static List<GameObject> _created;
         private static string _prefabName;
         private static readonly System.Reflection.FieldInfo Stamina = AccessTools.Field(typeof(Player), "m_stamina");
@@ -224,24 +230,40 @@ namespace Automatics.SmokeTest
                 var plant = piece.GetComponent<Plant>();
                 var spacing = plant.m_growRadius * SpacingFactor;
                 var yaw = player.transform.eulerAngles.y;
-                if (!FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, out var centre, out var cells, out var patchReport))
+                // A patch whose cells, and the cells the real-ghost checks use beside it, are all
+                // plantable. When no site has one, a patch whose own cells are plantable is used, and
+                // ghostSite says why in the SKIPs of the real-ghost checks.
+                string ghostSite = null;
+                if (!FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, true, out var centre, out var cells, out var patchReport))
                 {
-                    // No patch around the player: move to a spot that has one, then search again.
+                    // No such patch around the player: move to a spot that has one, then search again.
                     var site = new SmokeSetup.SetupResult();
                     var relocate = SmokeSetup.Relocate(run.RunId,
-                        p => FindPatch(p, yaw, piece, plant, rotation, spacing, out _, out _, out _) ? null : "no plantable patch around it",
+                        p => FindPatch(p, yaw, piece, plant, rotation, spacing, true, out _, out _, out _) ? null : "no plantable patch around it",
                         site);
                     while (relocate.MoveNext()) yield return relocate.Current;
                     var here = patchReport;
-                    if (!site.Ok || !player ||
-                        !FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, out centre, out cells, out patchReport))
+                    if (!player)
                     {
-                        run.Skip("planting_section", $"no patch around the player where all {Size * Size - 1} cells are plantable " +
-                            $"(spacing {spacing:F2} m): {here}; " +
-                            (site.Ok ? $"nor after the player {site.Reason}: {patchReport}" : "relocation: " + site.Reason));
+                        run.Skip("planting_section", "the local player went away during the setup");
                         yield break;
                     }
-                    setup.Add(site.Reason);
+                    if (site.Ok &&
+                        FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, true, out centre, out cells, out patchReport))
+                        setup.Add(site.Reason);
+                    else
+                    {
+                        var ghostReport = site.Ok ? $"after the player {site.Reason}: {patchReport}" : "relocation: " + site.Reason;
+                        if (!FindPatch(player.transform.position, yaw, piece, plant, rotation, spacing, false, out centre, out cells, out patchReport))
+                        {
+                            run.Skip("planting_section", $"no patch around the player where all {Size * Size - 1} cells are plantable " +
+                                $"(spacing {spacing:F2} m): {patchReport}; with the real-ghost cells: {here}; {ghostReport}");
+                            yield break;
+                        }
+                        ghostSite = $"no site was found where the cells of the real-ghost checks are plantable ({here}; {ghostReport})";
+                        if (site.Ok) setup.Add(site.Reason);
+                        setup.Add(ghostSite + ", so those checks may SKIP");
+                    }
                 }
                 run.Pass("planting_setup", string.Join("; ", setup.ToArray()));
                 run.Pass("planting_patch_found", patchReport);
@@ -291,7 +313,7 @@ namespace Automatics.SmokeTest
                 var requirement = piece.m_resources.First(r => r.m_resItem && r.GetAmount(0) > 0);
                 foreach (var limit in new[] { Limit.None, Limit.Seeds, Limit.Blocked, Limit.Stamina, Limit.Durability, Limit.ToolSwapped })
                     CheckGrid(run, player, piece, tool, requirement, added, created, cells, centre, rotation, limit);
-                CheckLatticeSnapping(run, player, piece, tool, requirement, added, created, centre, rotation, spacing, keySetting, harmony);
+                CheckLatticeSnapping(run, player, piece, tool, requirement, added, created, centre, rotation, spacing, keySetting, harmony, ghostSite);
             }
             finally
             {
@@ -371,9 +393,9 @@ namespace Automatics.SmokeTest
         // Candidate grid centres: eight directions around a facing (yaw) from a spot the player
         // stands on or may be moved to, near to far, so the nearest cell stays at least 1.5 m from
         // the spot and the farthest centre is 12 m out. The first centre whose every cell passes
-        // the product's own rules is used.
+        // the product's own rules, and with ghost every cell the real-ghost checks use too, is used.
         private static bool FindPatch(Vector3 origin, float yaw, Piece piece, Plant plant, Quaternion rotation, float spacing,
-            out Vector3 centre, out List<Vector3> cells, out string report)
+            bool ghost, out Vector3 centre, out List<Vector3> cells, out string report)
         {
             var notes = new List<string>();
             var reach = spacing * 1.42f + 1.5f;
@@ -397,6 +419,7 @@ namespace Automatics.SmokeTest
                     if (reason == null) passed++;
                     else if (failure == null) failure = reason;
                 }
+                if (failure == null && ghost) failure = GhostCellProblem(piece, plant, centre, rotation, spacing);
                 if (failure == null)
                 {
                     report = $"{angle:F0}° from facing at {distance:F1} m";
@@ -408,6 +431,29 @@ namespace Automatics.SmokeTest
             cells = null;
             report = string.Join("; ", notes.ToArray());
             return false;
+        }
+
+        // The cells the real-ghost checks plant at beyond the first grid, as they pick them: the
+        // free lattice cell; the nearest corner outside the first grid of the square aimed beside
+        // its edge cell, where the ghost moves on to; and the corners of the free cell's square,
+        // the first square the blocker checks try. A world object taking their grow space would
+        // make those checks SKIP.
+        private static string GhostCellProblem(Piece piece, Plant plant, Vector3 centre, Quaternion rotation, float spacing)
+        {
+            Func<Vector2, Vector3> point = offset =>
+            {
+                var pos = centre + rotation * new Vector3(offset.x * spacing, 0f, offset.y * spacing);
+                pos.y = ZoneSystem.instance.GetGroundHeight(pos);
+                return pos;
+            };
+            var moved = SquareCorners(point(OccupiedAim), centre, rotation, spacing)
+                .First(c => Mathf.Abs(c.x) > Size / 2 || Mathf.Abs(c.y) > Size / 2);
+            foreach (var cell in new[] { FreeCell, moved }.Concat(SquareCorners(point(FreeAim), centre, rotation, spacing)).Distinct())
+            {
+                var problem = CellProblem(piece, plant, point(cell));
+                if (problem != null) return $"real-ghost cell {cell}: {problem}";
+            }
+            return null;
         }
 
         // The rules CropPlanting.TryPlant applies before it places a crop, in its order: the ground
@@ -642,7 +688,8 @@ namespace Automatics.SmokeTest
         // removed and the same aim must no longer snap. The key is unbound (always active) on entry.
         private static void CheckLatticeSnapping(FeatureRun run, Player player, Piece piece, ItemDrop.ItemData tool,
             Piece.Requirement requirement, List<ItemDrop.ItemData> added, List<GameObject> created,
-            Vector3 centre, Quaternion rotation, float spacing, SmokeSession.SettingRestoration keySetting, Harmony harmony)
+            Vector3 centre, Quaternion rotation, float spacing, SmokeSession.SettingRestoration keySetting, Harmony harmony,
+            string ghostSite)
         {
             var inventory = player.GetInventory();
             var seedName = requirement.m_resItem.m_itemData.m_shared.m_name;
@@ -675,8 +722,8 @@ namespace Automatics.SmokeTest
                 // Aimed past the first grid's +x edge and off the lattice by a fraction of a cell, with
                 // a player rotation that is not a quarter turn from the grid's.
                 var edge = Size / 2;
-                var expectedCell = new Vector2Int(edge + 2, 0);
-                var raw = centre + rotation * new Vector3((expectedCell.x + 0.35f) * spacing, 0f, 0.3f * spacing);
+                var expectedCell = FreeCell;
+                var raw = centre + rotation * new Vector3(FreeAim.x * spacing, 0f, FreeAim.y * spacing);
                 raw.y = ZoneSystem.instance.GetGroundHeight(raw);
                 var playerYaw = rotation.eulerAngles.y + 100f;
                 var snapped = Snapping.TryLatticePose(piece, true, raw, playerYaw, out var pose, out var yaw);
@@ -699,7 +746,8 @@ namespace Automatics.SmokeTest
                     !farSnapped && nearest > Snapping.SearchRadius(spacing, Size),
                     $"snapped={farSnapped}, nearest crop {nearest:F2} m, radius {Snapping.SearchRadius(spacing, Size):F2} m");
 
-                var ghostPose = CheckRealGhost(run, player, piece, harmony, keySetting, raw, centre, rotation, spacing, expectedCell, first);
+                var ghostPose = CheckRealGhost(run, player, piece, harmony, keySetting, raw, centre, rotation, spacing, expectedCell, first,
+                    ghostSite);
                 var secondCentre = ghostPose.HasValue ? ghostPose.Value.Key : pose;
                 var secondYaw = ghostPose.HasValue ? ghostPose.Value.Value : yaw;
                 if (snapped)
@@ -757,11 +805,13 @@ namespace Automatics.SmokeTest
         // Player.TryPlacePiece is driven at the free cell, the moved ghost and the refused one with
         // PlacePiece intercepted. Nothing renders in between: the camera, the reach, the piece
         // selection and the rotation step are put back and the blockers removed in the same frame.
-        // Returns the snapped ghost pose, or null when the path could not be driven.
+        // Returns the snapped ghost pose, or null when the path could not be driven. ghostSite says
+        // why the setup found no site where the cells used here are plantable, when it did not.
         private static KeyValuePair<Vector3, float>? CheckRealGhost(FeatureRun run, Player player, Piece piece,
             Harmony harmony, SmokeSession.SettingRestoration keySetting, Vector3 raw, Vector3 centre,
-            Quaternion rotation, float spacing, Vector2Int expectedCell, List<GameObject> first)
+            Quaternion rotation, float spacing, Vector2Int expectedCell, List<GameObject> first, string ghostSite)
         {
+            Func<string, string> unplantable = reason => ghostSite == null ? reason : $"{reason}; {ghostSite}";
             const string name = "planting_lattice_real_ghost";
             var table = BuildPiecesField?.GetValue(player) as PieceTable;
             var camera = GameCamera.instance ? GameCamera.instance.transform : null;
@@ -836,8 +886,8 @@ namespace Automatics.SmokeTest
                     if (status == "NoRayHits") run.Skip(name, "the camera ray hit nothing at the aimed point");
                     else if (problem != null)
                     {
-                        run.Skip(name, "the free lattice cell is not plantable here: " + problem);
-                        run.Skip(name + "_try_place", "the free lattice cell is not plantable here");
+                        run.Skip(name, unplantable("the free lattice cell is not plantable here: " + problem));
+                        run.Skip(name + "_try_place", unplantable("the free lattice cell is not plantable here"));
                     }
                     else
                     {
@@ -866,7 +916,7 @@ namespace Automatics.SmokeTest
                     var occupiedCell = new Vector2Int(Size / 2, 0);
                     Func<Vector2Int, bool> occupied = cell => first.Any(x =>
                         x && OnLattice(x.transform.position, centre, rotation, spacing, out var c) && c == cell);
-                    var aimed = ground(centre + rotation * new Vector3((occupiedCell.x + 0.3f) * spacing, 0f, 0.25f * spacing));
+                    var aimed = ground(centre + rotation * new Vector3(OccupiedAim.x * spacing, 0f, OccupiedAim.y * spacing));
                     var aimedSquare = SquareCorners(aimed, centre, rotation, spacing);
                     var movedCell = aimedSquare.First(c => !occupied(c));
                     var movedProblem = CellProblem(piece, plant, cellPoint(movedCell));
@@ -874,7 +924,7 @@ namespace Automatics.SmokeTest
                     if (!occupied(occupiedCell))
                         occupiedSkip = "the first grid has no crop in the cell next to the aim";
                     else if (movedProblem != null)
-                        occupiedSkip = $"the nearest free corner {movedCell} of the aimed square is not plantable here: {movedProblem}";
+                        occupiedSkip = unplantable($"the nearest free corner {movedCell} of the aimed square is not plantable here: {movedProblem}");
                     else if ((status = aim(aimed, squareReach(aimedSquare))) == "NoRayHits")
                         occupiedSkip = "the camera ray hit nothing at the aimed point";
                     if (occupiedSkip != null)
@@ -936,8 +986,8 @@ namespace Automatics.SmokeTest
                     }
                     var squareProblem = squareFound
                         ? null
-                        : $"none of the {candidateAims.Count} lattice squares tried near the first grid has four plantable corners (first: " +
-                          string.Join("; ", squareProblems.Take(3)) + ")";
+                        : unplantable($"none of the {candidateAims.Count} lattice squares tried near the first grid has four plantable corners (first: " +
+                                      string.Join("; ", squareProblems.Take(3)) + ")");
                     var low = new Vector2Int(square.Min(c => c.x), square.Min(c => c.y));
                     // True when the blocker took the grow space of the corner.
                     Func<Vector2Int, bool> block = corner =>
