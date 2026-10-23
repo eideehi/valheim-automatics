@@ -820,33 +820,31 @@ namespace Automatics.SmokeTest
 
         // SmokeSession.RestoreToggle and RestoreSettings each put back every setting the run holds,
         // so a run that wrote other settings besides its toggle puts them all back in one call and
-        // tells the toggle's result apart by its name, which every result's detail starts with.
-        // others holds the rest; a run that is no longer current gets NotThisRun for both.
+        // tells the toggle's result apart by its setting. others holds the rest; a run that is no
+        // longer current gets NotThisRun for both.
         private static SmokeSession.ToggleOutcome RestoreAll(int runId, ConfigEntryBase toggle,
             out string detail, out List<KeyValuePair<SmokeSession.ToggleOutcome, string>> others)
         {
-            var name = $"{toggle.Definition.Section}/{toggle.Definition.Key} ";
             var outcome = SmokeSession.ToggleOutcome.NothingWritten;
             detail = "";
             others = new List<KeyValuePair<SmokeSession.ToggleOutcome, string>>();
-            foreach (var result in SmokeSession.RestoreSettings(runId))
+            foreach (var result in SmokeSession.RestoreEachSetting(runId))
             {
-                if (result.Key == SmokeSession.ToggleOutcome.NotThisRun)
+                if (result.Outcome == SmokeSession.ToggleOutcome.NotThisRun)
                 {
-                    detail = result.Value;
-                    others.Add(result);
-                    return result.Key;
+                    detail = result.Detail;
+                    others.Add(new KeyValuePair<SmokeSession.ToggleOutcome, string>(result.Outcome, result.Detail));
+                    return result.Outcome;
                 }
 
-                if (outcome == SmokeSession.ToggleOutcome.NothingWritten &&
-                    result.Value.StartsWith(name, StringComparison.Ordinal))
+                if (ReferenceEquals(result.Entry, toggle))
                 {
-                    outcome = result.Key;
-                    detail = result.Value;
+                    outcome = result.Outcome;
+                    detail = result.Detail;
                 }
                 else
                 {
-                    others.Add(result);
+                    others.Add(new KeyValuePair<SmokeSession.ToggleOutcome, string>(result.Outcome, result.Detail));
                 }
             }
 

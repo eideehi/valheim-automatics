@@ -383,16 +383,25 @@ namespace Automatics.SmokeTest
         // run that is no longer current leaves them to whichever trigger handed them back.
         public static List<KeyValuePair<ToggleOutcome, string>> RestoreSettings(int runId)
         {
+            return RestoreEachSetting(runId)
+                .Select(x => new KeyValuePair<ToggleOutcome, string>(x.Outcome, x.Detail))
+                .ToList();
+        }
+
+        // RestoreSettings with the setting each result belongs to, for a run that judges one of
+        // them apart from the rest. The one NotThisRun result names no setting.
+        public static List<(ConfigEntryBase Entry, ToggleOutcome Outcome, string Detail)> RestoreEachSetting(
+            int runId)
+        {
             if (!IsCurrent(runId))
-                return new List<KeyValuePair<ToggleOutcome, string>>
+                return new List<(ConfigEntryBase Entry, ToggleOutcome Outcome, string Detail)>
                 {
-                    new KeyValuePair<ToggleOutcome, string>(ToggleOutcome.NotThisRun,
-                        "the run was abandoned, so the smoke plugin handled its settings")
+                    (null, ToggleOutcome.NotThisRun, "the run was abandoned, so the smoke plugin handled its settings")
                 };
 
             return DischargeAll()
                 .Where(x => x.Outcome != ToggleOutcome.NothingWritten)
-                .Select(x => new KeyValuePair<ToggleOutcome, string>(x.Outcome, x.Detail))
+                .Select(x => (x.Setting.Entry, x.Outcome, x.Detail))
                 .ToList();
         }
 
