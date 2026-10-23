@@ -138,32 +138,39 @@ the commands cannot prove that something is their own, they leave it.
   object that was marked non-persistent is made persistent again, so what it
   holds is saved with the world.
 
-The commands set up what their checks need themselves, through shared helpers
-(`SmokeSetup.cs`), and each of these is undone the same way as above: at the
-end of the run, and at every hand-back trigger when the run is cut short.
+Shared helpers (`SmokeSetup.cs`) let a command set up what its checks need
+instead of asking you to; a command or section that uses one says so where its
+checks are described. Each of these is undone the same way as above: at the end
+of the run, and at every hand-back trigger when the run is cut short, the later
+obligation before the earlier one.
 
 - A module a check needs that is off is turned on for the run, through the
   same recorded setting change, and the run waits (up to 600 frames) until the
   module reports running; the setting goes back with the others.
 - A check that needs clear ground around the player may move the player: it
-  tries the spot the player stands on, then rings 15, 30 and 45 m out, 12
-  bearings each from the direction the player faces, and takes the first that
-  is loaded, on dry and fairly level ground, outside every location and free of
-  whatever the check names (building pieces, containers, creatures, drops,
-  pickables, other destructibles, map pins). The move is a short teleport,
-  the kind a dungeon entrance makes. The spot the command started from is
-  recorded at the first move, and the player is returned there when the command
-  ends or is cut short; the return is a teleport too, so it can take a couple of
-  seconds after the Summary line, and a command started during it is refused
-  once. A check that teleports elsewhere (a location, say) may turn god mode
-  and ghost mode on for the trip, and both are turned off again afterwards.
+  tries the spot the player stands on (only when they stand on the ground
+  itself), then rings 15, 30 and 45 m out, 12 bearings each from the direction
+  the player faces, and takes the first that is loaded, on dry, safe and fairly
+  level ground, outside every location and free of whatever the check names
+  (building pieces, containers, creatures, drops, pickables, other
+  destructibles, map pins). The move is a short teleport, the kind a dungeon
+  entrance makes; one that does not finish is cancelled, and the player is put
+  back where it started. The spot the command started from is recorded at the
+  first move, and the player is returned there when the command ends or is cut
+  short; the return is a teleport too, retried on its own until the player has
+  arrived or two attempts have failed (then a warning says where they are), so
+  it can end a few seconds after the Summary line, and a command started
+  meanwhile is refused once. A check that teleports elsewhere (a location, say)
+  may turn god mode and ghost mode on for the trip, and both are turned off
+  again afterwards.
 - A check that needs free inventory slots, free carry weight or none of some
   item in the inventory puts the items in the way aside - never an equipped one
-  - and puts the same items back afterwards, into the slots they came from when
-  those are free, elsewhere in the inventory otherwise, and dropped at the
-  player's feet (with a log line) when nothing fits. They are lost only when the
-  game stops before that, or when the character is saved while they are aside
-  - a logout mid-run does that - which the dedicated test character accepts.
+  - and puts the same stacks back afterwards, never merged into another stack:
+  into the slots they came from when those are free, into other free slots
+  otherwise, and dropped at the player's feet (with a log line) when nothing
+  fits. They are lost only when the game stops before that, or when the
+  character is saved while they are aside - a logout mid-run does that - which
+  the dedicated test character accepts.
 
 ### World smoke command
 

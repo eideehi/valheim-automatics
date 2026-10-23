@@ -144,7 +144,10 @@ namespace Automatics.SmokeTest
                     Log.LogWarning($"[Automatics Smoke] {reason}: {result.Detail}");
 
             PendingSpawns.RemoveAll(spawn => DestroyTestObject(spawn.Go, spawn.DropStack, reason));
-            foreach (var handBack in PendingHandBacks.ToArray())
+            // The later obligation first: a later step may sit on what an earlier one made room
+            // for - a test item in a slot that items put aside had freed, say - so it is undone
+            // before that is put back.
+            foreach (var handBack in PendingHandBacks.ToArray().Reverse())
                 if (RunHandBack(handBack, reason))
                     PendingHandBacks.Remove(handBack);
             _runner = null;

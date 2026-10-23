@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Automatics.AutomaticMapping;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -27,6 +28,15 @@ namespace Automatics.SmokeTest
     {
         private static readonly ManualLogSource Log =
             BepInEx.Logging.Logger.CreateLogSource("Automatics Smoke Setup");
+
+        private static MonoBehaviour _host;
+
+        // From SmokePlugin.Start: the component whose coroutines drive a return to the command's
+        // starting spot after the command itself has ended (see Excursion).
+        internal static void EnsureRegistered(MonoBehaviour host)
+        {
+            _host = host;
+        }
 
         // -- Settings --------------------------------------------------------------------------
 
@@ -208,10 +218,26 @@ namespace Automatics.SmokeTest
             }
 
             result.Position = player.transform.position;
-            if (player.IsTeleporting())
-                result.Reason = $"the teleport to {Format(position)} did not end within {timeout:0} s (the area around it may not be ready)";
-            else if (global::Utils.DistanceXZ(result.Position, position) > ArrivalTolerance)
+            if (!SmokeSession.IsCurrent(runId))
+                result.Reason = "the run was abandoned";
+            else if (player.IsTeleporting())
+            {
+                // Left alone, the teleport would hold the player until the area is ready, and
+                // TeleportTo would refuse every move meanwhile, the return included.
+                var cancelled = CancelTeleport(player);
+                result.Position = player.transform.position;
+                result.Reason =
+                    $"the teleport to {Format(position)} did not end within {timeout:0} s (the area around it did not become ready); " +
+                    (cancelled
+                        ? $"the player is back at {Format(result.Position)}"
+                        : "the teleport could not be cancelled, so the player stays in it until the area is ready");
+            }
+            else if (Vector3.Distance(result.Position, position) > ArrivalTolerance)
+            {
+                // A short hop that found no floor put the player back where it started, which can
+                // be straight below the target; so the height counts as much as the distance.
                 result.Reason = $"the game found no floor at {Format(position)} and left the player at {Format(result.Position)}";
+            }
             else
             {
                 result.Ok = true;
@@ -220,11 +246,45 @@ namespace Automatics.SmokeTest
             }
         }
 
+        // Ends a teleport that does not end on its own, the way UpdateTeleport ends a short hop
+        // that finds no floor: the player goes back to where the teleport started, and the
+        // teleport is over, so TeleportTo accepts the next move once the 2 s cooldown has passed.
+        // The fields are Player's private ones, reached by name. Returns false when they could not
+        // be. Only the timeouts here call it; whether a cancelled teleport leaves the player in a
+        // clean state is for the first in-game run that hits one (unverified).
+        private static readonly FieldInfo TeleportingField = AccessTools.Field(typeof(Player), "m_teleporting");
+        private static readonly FieldInfo TeleportTimerField = AccessTools.Field(typeof(Player), "m_teleportTimer");
+        private static readonly FieldInfo TeleportFromPosField = AccessTools.Field(typeof(Player), "m_teleportFromPos");
+        private static readonly FieldInfo TeleportFromRotField = AccessTools.Field(typeof(Player), "m_teleportFromRot");
+        private static readonly FieldInfo MaxAirAltitudeField = AccessTools.Field(typeof(Character), "m_maxAirAltitude");
+
+        private static bool CancelTeleport(Player player)
+        {
+            if (TeleportingField == null || TeleportTimerField == null || TeleportFromPosField == null ||
+                TeleportFromRotField == null || MaxAirAltitudeField == null)
+                return false;
+
+            player.transform.rotation = (Quaternion)TeleportFromRotField.GetValue(player);
+            player.transform.position = (Vector3)TeleportFromPosField.GetValue(player);
+            MaxAirAltitudeField.SetValue(player, player.transform.position.y);
+            TeleportTimerField.SetValue(player, 0f);
+            TeleportingField.SetValue(player, false);
+            player.ResetCloth();
+            return true;
+        }
+
         // Moves the player back to where the command started, when a move was made this run, so a
         // command can end with the player home before its Summary line; the run's hand-back then
         // finds nothing to do. Ok with nothing done when no move was made.
         public static IEnumerator ReturnToStart(int runId, SetupResult result)
         {
+            // A teleport still in its first 2 s has not moved the player yet, so their position
+            // says nothing until it has ended.
+            var player = Player.m_localPlayer;
+            var deadline = Time.time + DistantTimeout;
+            while (player && player.IsTeleporting() && Time.time <= deadline && SmokeSession.IsCurrent(runId))
+                yield return null;
+
             var excursion = Excursion.Current(runId);
             if (excursion == null || !excursion.AwayFromStart())
             {
@@ -274,6 +334,10 @@ namespace Automatics.SmokeTest
 
         // How many of the rejected sites a failed search names.
         private const int ReportedSites = 12;
+
+        // The spot the player stands on counts as clear only when they stand on the tested
+        // ground, within this of its height, and not on a building or a rock above it.
+        private const float StandingTolerance = 1f;
 
         // The default site predicate: nothing of the kinds within radius of the site, and no map
         // pin within it either. Returns why not, or null. The player's own colliders do not count.
@@ -357,7 +421,7 @@ namespace Automatics.SmokeTest
             {
                 tried++;
                 var point = candidate.Key;
-                var reason = SiteProblem(ref point) ?? problem(point);
+                var reason = SiteProblem(ref point) ?? Standing(player, candidate.Value, point) ?? problem(point);
                 if (reason == null)
                 {
                     site = point;
@@ -371,6 +435,18 @@ namespace Automatics.SmokeTest
             site = Vector3.zero;
             where = null;
             return false;
+        }
+
+        // Null for every site but the spot the player stands on (where is null), and for that one
+        // when they stand on its ground; the clearance is tested around the ground, not around a
+        // tower they stand on above it.
+        private static string Standing(Player player, string where, Vector3 ground)
+        {
+            if (where != null) return null;
+            var above = player.transform.position.y - ground.y;
+            return Mathf.Abs(above) > StandingTolerance
+                ? $"you stand {above:0.0} m above the tested ground"
+                : null;
         }
 
         private static IEnumerable<KeyValuePair<Vector3, string>> Candidates(Player player)
@@ -416,6 +492,9 @@ namespace Automatics.SmokeTest
             var p = point;
             ZoneSystem.instance.GetGroundData(ref p, out var normal, out _, out _, out var heightmap);
             if (!heightmap) return "no ground";
+            // Level ground can still be lava (the heightmap's mask, which the game reads the same
+            // way for its heat damage).
+            if (heightmap.IsLava(p)) return "lava";
             var aboveWater = p.y - ZoneSystem.instance.m_waterLevel;
             if (aboveWater < WaterMargin) return $"under water or on the shore ({aboveWater:+0.0;-0.0} m from the water level)";
             if (normal.y < SlopeLimit) return $"sloped ({Mathf.Acos(normal.y) * Mathf.Rad2Deg:0}°)";
@@ -472,10 +551,11 @@ namespace Automatics.SmokeTest
         // Takes items out of the player's inventory for the run: enough unequipped ones for
         // freeSlots empty slots and freeWeight of carry weight, and every unequipped one match
         // accepts. Restore puts the same ItemData instances back, each into the slot it came from
-        // when that is free, else wherever the inventory has room, else dropped at the player's
-        // feet; nothing is lost short of the process ending, and a logout saves the character
-        // without them (the test character accepts that). Restore is registered as a hand-back;
-        // the caller also calls it in its finally, and may call it again.
+        // when that is free, else into a free slot elsewhere, else dropped at the player's feet;
+        // nothing is lost short of the process ending, and a logout saves the character without
+        // them (the test character accepts that). Restore is registered as a hand-back before
+        // anything is taken; the caller also calls it in its finally, after it has removed its
+        // own test items, and may call it again.
         //
         // Equipped items are never taken: taking a tool or armour off has side effects of its
         // own, and no check needs it. An equipped item match accepts is named in Left, so the
@@ -484,13 +564,23 @@ namespace Automatics.SmokeTest
             Predicate<ItemDrop.ItemData> match = null)
         {
             var stash = new InventoryStash(player);
-            stash.Take(freeSlots, freeWeight, match);
             SmokeSession.TrackHandBack(_ => stash.Restore());
+            stash.Take(freeSlots, freeWeight, match);
             return stash;
         }
 
         internal sealed class InventoryStash
         {
+            // Inventory keeps its item list private, and every public way in merges a stackable
+            // item into a stack of the same kind first (AddItem, MoveItemToThis). A stack a check
+            // added for itself and removes afterwards would then take the merged units with it,
+            // so the instance itself is put back through the list, and Changed is called as
+            // AddItem calls it. Without the two, nothing is put aside.
+            private static readonly FieldInfo ItemList = AccessTools.Field(typeof(Inventory), "m_inventory");
+
+            private static readonly MethodInfo Changed =
+                AccessTools.Method(typeof(Inventory), "Changed", new[] { typeof(bool), typeof(bool) });
+
             private readonly Player _player;
             private readonly List<ItemDrop.ItemData> _taken = new List<ItemDrop.ItemData>();
             private readonly List<string> _left = new List<string>();
@@ -506,12 +596,16 @@ namespace Automatics.SmokeTest
             public IReadOnlyList<string> Left => _left;
 
             // What was taken, for a PASS note.
-            public string Report => _taken.Count == 0
-                ? "nothing had to be put aside"
-                : $"put aside {_taken.Count} stack(s): {string.Join(", ", _taken.Select(x => $"{x.m_shared.m_name} x{x.m_stack}"))}";
+            public string Report => _taken.Count > 0
+                ? $"put aside {_taken.Count} stack(s): {string.Join(", ", _taken.Select(x => $"{x.m_shared.m_name} x{x.m_stack}"))}"
+                : ItemList != null && Changed != null
+                    ? "nothing had to be put aside"
+                    : "nothing was put aside: the inventory's item list could not be reached";
 
             internal void Take(int freeSlots, float freeWeight, Predicate<ItemDrop.ItemData> match)
             {
+                if (ItemList == null || Changed == null) return;
+
                 var inventory = _player.GetInventory();
                 var items = inventory.GetAllItems();
                 _left.AddRange(items.Where(x => match != null && match(x) && _player.IsItemEquiped(x))
@@ -530,14 +624,15 @@ namespace Automatics.SmokeTest
                     var room = inventory.GetEmptySlots() < freeSlots ||
                                _player.GetMaxCarryWeight() - inventory.GetTotalWeight() < freeWeight;
                     if (!wanted && !room) break;
-                    if (inventory.RemoveItem(item)) _taken.Add(item);
+
+                    // Owned before the removal: RemoveItem takes the item out of the list and then
+                    // tells the player, and a listener that throws must not leave it unowned.
+                    _taken.Add(item);
+                    if (!inventory.RemoveItem(item)) _taken.Remove(item);
                 }
             }
 
-            // Safe to call again: each item goes back once. Inventory.AddItem first merges a
-            // stackable item's units into a stack of the same kind with room, so such an item can
-            // come back as units in another stack rather than as its own instance; the count is
-            // the same either way.
+            // Safe to call again: each item goes back once.
             public bool Restore()
             {
                 if (_taken.Count == 0) return true;
@@ -552,13 +647,33 @@ namespace Automatics.SmokeTest
                 var inventory = _player.GetInventory();
                 foreach (var item in _taken.ToArray())
                 {
-                    if (!inventory.ContainsItem(item) && !inventory.AddItem(item, item.m_gridPos) &&
-                        !inventory.AddItem(item) && !Drop(item))
-                        continue;
+                    if (!inventory.ContainsItem(item) && !Insert(inventory, item) && !Drop(item)) continue;
                     _taken.Remove(item);
                 }
 
                 return _taken.Count == 0;
+            }
+
+            // The instance into its old slot when that is free, else into the lowest free slot
+            // (the hotbar is the top row). False when the inventory is full.
+            private static bool Insert(Inventory inventory, ItemDrop.ItemData item)
+            {
+                var slot = item.m_gridPos;
+                if (slot.x < 0 || slot.x >= inventory.GetWidth() || slot.y < 0 || slot.y >= inventory.GetHeight() ||
+                    inventory.GetItemAt(slot.x, slot.y) != null)
+                {
+                    slot = new Vector2i(-1, -1);
+                    for (var y = inventory.GetHeight() - 1; y >= 0 && slot.x < 0; y--)
+                    for (var x = 0; x < inventory.GetWidth() && slot.x < 0; x++)
+                        if (inventory.GetItemAt(x, y) == null)
+                            slot = new Vector2i(x, y);
+                    if (slot.x < 0) return false;
+                }
+
+                item.m_gridPos = slot;
+                ((List<ItemDrop.ItemData>)ItemList.GetValue(inventory)).Add(item);
+                Changed.Invoke(inventory, new object[] { false, false });
+                return true;
             }
 
             private bool Drop(ItemDrop.ItemData item)
@@ -580,14 +695,21 @@ namespace Automatics.SmokeTest
         // Where the command started, which the player is returned to at the end of the command
         // (plan decision D2), and the god and ghost mode a protected teleport turned on. One per
         // run, made at the first move and registered with the session then, so a run cut short in
-        // or after a move still has them handed back. The hand-back turns the modes off at once;
-        // the return it starts ends on its own 2 s or more later, so it reports done only once
-        // the player is no longer teleporting, and the next trigger finds it done.
+        // or after a move still has them handed back. The hand-back turns the modes off at once.
+        // The return cannot end inside it: a teleport takes 2 s or more, and TeleportTo refuses
+        // one while another runs - the outbound move itself, when the run was cut short in its
+        // first 2 s, before the player has moved - and for 2 s after one. So the return is driven
+        // by a coroutine on the plugin, across frames and with retries, until the player is home
+        // or it gives up after ReturnAttempts with a warning; the hand-back reports done then
+        // either way, so the next run is not refused for good over a position.
         private sealed class Excursion
         {
             // A player this close to the start is home: the command returned them itself, or
             // never moved them.
             private const float ReturnTolerance = 1f;
+
+            // How often the return is tried before the player is left where they are.
+            private const int ReturnAttempts = 2;
 
             private static Excursion _current;
 
@@ -595,7 +717,7 @@ namespace Automatics.SmokeTest
             private readonly Player _player;
             private bool _godSet;
             private bool _ghostSet;
-            private bool _returnStarted;
+            private bool _driving;
             private bool _done;
 
             private Excursion(int runId, Player player)
@@ -675,33 +797,71 @@ namespace Automatics.SmokeTest
                 }
 
                 Unprotect();
-                if (!_returnStarted)
+                if (_driving) return false;
+
+                // A teleport still running may be the outbound move, which has not moved the
+                // player yet; only a player who is home and not moving is done.
+                if (!_player.IsTeleporting() && !AwayFromStart())
                 {
-                    if (!AwayFromStart())
-                    {
-                        _done = true;
-                        return true;
-                    }
-
-                    if (!_player.TeleportTo(Start, StartRotation, StartIsFar()))
-                    {
-                        Log.LogWarning(
-                            $"[Automatics Smoke] {reason}: the player could not be moved back to the command's starting spot {Format(Start)} yet (a teleport is running, or one ended less than 2 s ago); it is tried again at the next opportunity");
-                        return false;
-                    }
-
-                    _returnStarted = true;
+                    _done = true;
+                    return true;
                 }
 
-                if (_player.IsTeleporting())
+                if (_host && _host.isActiveAndEnabled)
                 {
-                    Log.LogWarning(
-                        $"[Automatics Smoke] {reason}: the player is on the way back to the command's starting spot {Format(Start)}; the next opportunity confirms the arrival");
+                    _driving = true;
+                    _host.StartCoroutine(Drive(reason));
                     return false;
                 }
 
+                // The plugin is being disabled or destroyed, so nothing can run across frames:
+                // one attempt now, and the rest is left to the user.
+                if (!_player.IsTeleporting() && _player.TeleportTo(Start, StartRotation, StartIsFar()))
+                    Log.LogWarning(
+                        $"[Automatics Smoke] {reason}: the player is on the way back to the command's starting spot {Format(Start)}, and nothing is left to confirm the arrival");
+                else
+                    Log.LogWarning(
+                        $"[Automatics Smoke] {reason}: the player could not be moved back to the command's starting spot {Format(Start)} (a teleport is running, or one ended less than 2 s ago), and nothing is left to try again; walk back yourself");
                 _done = true;
                 return true;
+            }
+
+            // Each attempt first waits out whatever teleport runs - the outbound move of a run
+            // cut short, or the previous attempt - and cancels one that does not end, so that
+            // TeleportTo can accept the return; then it starts the return and waits for it.
+            private IEnumerator Drive(string reason)
+            {
+                for (var attempt = 0; attempt < ReturnAttempts && _player; attempt++)
+                {
+                    var deadline = Time.time + DistantTimeout;
+                    while (_player && _player.IsTeleporting() && Time.time <= deadline) yield return null;
+                    if (!_player) break;
+                    if (_player.IsTeleporting() && !CancelTeleport(_player)) break;
+                    if (!AwayFromStart()) break;
+
+                    deadline = Time.time + TeleportAcceptTimeout;
+                    var accepted = false;
+                    while (_player && Time.time <= deadline)
+                    {
+                        accepted = _player.TeleportTo(Start, StartRotation, StartIsFar());
+                        if (accepted) break;
+                        yield return null;
+                    }
+
+                    if (!accepted) continue;
+                    deadline = Time.time + (StartIsFar() ? DistantTimeout : ShortHopTimeout);
+                    while (_player && _player.IsTeleporting() && Time.time <= deadline) yield return null;
+                }
+
+                _driving = false;
+                _done = true;
+                if (!_player) yield break;
+                if (_player.IsTeleporting()) CancelTeleport(_player);
+                if (AwayFromStart())
+                    Log.LogWarning(
+                        $"[Automatics Smoke] {reason}: the player could not be moved back to the command's starting spot {Format(Start)} in {ReturnAttempts} attempts and is at {Format(_player.transform.position)}; walk back yourself");
+                else
+                    Log.LogInfo($"[Automatics Smoke] {reason}: the player is back at the command's starting spot {Format(Start)}");
             }
         }
 
