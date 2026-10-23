@@ -584,8 +584,9 @@ namespace Automatics
         // 1.8.0 fresh default, and what revision 2 and the Flax rename make of CropDefaults.
         private const string CropRevision2Defaults = "Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flax, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr, Lingonberries, BlueMushroom";
 
-        // The wild plants revision 3 takes out of CropRevision2Defaults: no sapling grows them.
-        private const string WildCrops = "Dandelion, Mushroom, Raspberries, Blueberries, YellowMushroom, Thistle, Cloudberries, Fiddlehead, SmokePuff, Lingonberries, BlueMushroom";
+        // The identifiers revision 3 takes out of CropRevision2Defaults: the wild plants, and a seed
+        // item no planted crop yields. No sapling grows them.
+        private const string WildCrops = "Dandelion, Mushroom, Raspberries, Blueberries, YellowMushroom, Thistle, Cloudberries, Fiddlehead, SmokePuff, Lingonberries, BlueMushroom, VineberrySeeds";
 
         // 1.6.0/1.7.0 and 5d5cc7f^ fresh defaults (module Config.cs and object JSON).
         // The 1.4.x–1.5.1 defaults plus current MigrationFor160 yield this set too.
@@ -720,8 +721,8 @@ namespace Automatics
         }
 
         // Revision 3. A crop list still equal to CropRevision2Defaults, read after revision 2 and
-        // the Flax rename of the same run, loses the wild plants; the other elements keep their
-        // order. Like revision 2, it compares raw elements as a set, ordinally.
+        // the Flax rename of the same run, loses the wild plants and that seed item; the other
+        // elements keep their order. Like revision 2, it compares raw elements as a set, ordinally.
         private static void RemoveWildCrops(List<string> lines, string section, string key)
         {
             if (!ReadEntries(lines).TryGetValue((section, key), out var entry)) return;

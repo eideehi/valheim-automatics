@@ -122,7 +122,7 @@ namespace Automatics
                 {
                     "Dandelion, Mushroom, Raspberries, Blueberries, Carrot, CarrotSeeds, YellowMushroom, Thistle, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Cloudberries, Flex, JotunPuffs, Magecap, Fiddlehead, SmokePuff, Vineberry, VineberrySeeds",
                 },
-                AfterRevision3 = "Carrot, CarrotSeeds, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Flax, JotunPuffs, Magecap, Vineberry, VineberrySeeds, Kale, KaleSeeds, Oat, Poteitr"
+                AfterRevision3 = "Carrot, CarrotSeeds, Turnip, TurnipSeeds, Onion, OnionSeeds, Barley, Flax, JotunPuffs, Magecap, Vineberry, Kale, KaleSeeds, Oat, Poteitr"
             },
             new ObjectListFixture
             {

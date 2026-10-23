@@ -65,13 +65,13 @@ namespace Automatics.AutomaticFarming
             _farmingInterval = config.Bind("farming_interval", 1.5f, (0f, 4f));
             _farmingRange = config.Bind("farming_range", 8, (1, 64));
             _containerSearchRange = config.Bind("container_search_range", 8, (1, 64));
-            // Wild plants the cultivator cannot plant are left out; a user may still add them,
-            // and farming then only harvests them.
+            // Wild plants the cultivator cannot plant, and a seed item no planted crop yields, are
+            // left out; a user may still add them, and farming then only harvests them.
             _allowFarmingCrop = config.BindValheimObjectList("allow_farming_crop", ValheimObject.Flora,
                 excludes: new[]
                 {
                     "Dandelion", "Mushroom", "Raspberries", "Blueberries", "YellowMushroom", "Thistle",
-                    "Cloudberries", "Fiddlehead", "SmokePuff", "Lingonberries", "BlueMushroom"
+                    "Cloudberries", "Fiddlehead", "SmokePuff", "Lingonberries", "BlueMushroom", "VineberrySeeds"
                 });
             _seedReserve = config.Bind("seed_reserve", 10, (0, 999));
             _seedSource = config.Bind("seed_source", SeedSource.Inventory);
