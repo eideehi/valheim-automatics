@@ -149,6 +149,17 @@ namespace Automatics.SmokeTest
 
                 var steps = Contain(section.Value(run), run, $"{section.Key}_section");
                 while (steps.MoveNext()) yield return steps.Current;
+
+                // A section that moved the player returns them at its end, but one that threw
+                // never got there; the next section starts where the command did either way.
+                // Nothing moves when the player is already there.
+                if (!run.IsCurrent) continue;
+                var back = new SmokeSetup.SetupResult();
+                steps = SmokeSetup.ReturnToStart(runId, back);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!back.Ok)
+                    Warn(
+                        $"[Automatics Smoke] {section.Key}: the player was not moved back to the command's starting spot yet ({back.Reason}); the run's hand-back tries again when the command ends");
             }
 
             Report(context, run.Results);
