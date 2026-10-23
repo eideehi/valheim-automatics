@@ -751,6 +751,10 @@ namespace Automatics.SmokeTest
             var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
             var transform = player.transform;
             var position = transform.position + Vector3.up * 0.3f - transform.right * distance;
+            // The check waits seconds for vanilla to allow the drop. Placed at your height where the
+            // ground there is higher, it would start inside the terrain, fall through it and be
+            // metres under it by the later pass, so it starts just above the ground there.
+            position.y = ZoneSystem.instance.GetGroundHeight(position) + 0.3f;
 
             ItemDrop drop = null;
             var woodMayBeLeft = false;
@@ -861,13 +865,13 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
-                // The drop falls and can roll while the check waits. One that has left Automatic
-                // Pickup's range could not be taken by any pass, so the check cannot tell anything.
+                // The drop falls while the check waits. One that has left Automatic Pickup's range
+                // could not be taken by any pass, so the check cannot tell anything.
                 range = PickupConfig.AutomaticPickupRange;
-                var where = $"the drop {Distance(player, drop):0.00} m away, range {range:0.#} m";
+                var where = $"the drop {Distance(player, drop):0.00} m away, {player.transform.position.y - drop.transform.position.y:0.00} m below you, range {range:0.#} m";
                 if (Distance(player, drop) > range - 0.1f)
                 {
-                    run.Skip(WaitsCheck, $"inconclusive: the drop rolled out of automatic_pickup_range before the later pass ({where})");
+                    run.Skip(WaitsCheck, $"inconclusive: the drop left automatic_pickup_range before the later pass ({where})");
                     yield break;
                 }
 
