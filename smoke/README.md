@@ -1461,23 +1461,41 @@ passing run looks like this:
 
 #### `pin`
 
-Run `automatics_smoke_features pin` outdoors in a single-player world with
-Automatic Mapping enabled. This section uses the current `pin_object_range`
-and does not require a bound key. It changes settings for single checks only,
-and puts each back before the next check:
-`hide_unexplored_automatic_mapping_pins` is turned on for `pin_not_hidden` when
-it is off, and `pin_runtime_flora_pins_loaded_plant` adds a test entry to
-`custom_flora` and its identifier to `allow_pinning_flora`. It calls the same ray pinning
-action as the shortcut, bypassing the physical key and its input gate because
-the console is open.
+Run `automatics_smoke_features pin` outdoors in a single-player world. This
+section uses the current `pin_object_range` and does not require a bound key.
+It sets up what its checks need itself and puts everything back at its end,
+reported by `pin_settings_restored`: Automatic Mapping is turned on for the
+section when it is off (`pin_setup` says so); `enable_automatic_mapping` is
+turned on, `static_object_mapping_interval` set to 0.25 s when it is 0,
+`static_object_mapping_range` raised to 16 m when it is below that (the test
+spots stand up to 12 m out), `remove_pins_of_destroyed_object` turned on,
+`flora_pins_merge_range` set to 4 m when it is below that,
+`hide_unexplored_automatic_mapping_pins` turned off and
+`map_filter_hidden_categories` cleared, so that no unsaved test pin is hidden;
+copper and tin deposits are added to `allow_pinning_mineral`, and an
+early-content spot and dungeon to `allow_pinning_spot` and
+`allow_pinning_dungeon` when the lists hold none. Single checks change more:
+`hide_unexplored_automatic_mapping_pins` is turned on for `pin_not_hidden` and
+off again right after, `navhotkey_location` binds `navigate_to_aimed_object_key`
+to F8, `pin_static_loading_area_kept` raises `static_object_mapping_range` to
+reach its spot across the zone border, and
+`pin_runtime_flora_pins_loaded_plant` adds a test entry to `custom_flora` and
+its identifier to `allow_pinning_flora`. A setting the session refuses to
+change (its record could not be written, or you changed it meanwhile) is logged,
+and the checks that need it SKIP naming it. The section's drops and its piece
+are spawned at the first of several spots beside the camera's line of sight that
+a camera ray reaches unobstructed and that no saved pin of yours is within 2 m
+of. It calls the same ray pinning action as the shortcut, bypassing the physical
+key and its input gate because the console is open.
 
 | Check | Asserts |
 |---|---|
+| `pin_setup` | Reported only when Automatic Mapping was off: it was turned on for the section and is put back afterwards |
 | `pin_object_saved` | A camera ray to a spawned non-persistent Wood drop adds exactly one saved, unauthored pin with the localized name and icon-pack type. Both automatic-pin classification and unexplored-pin hiding return false |
 | `pin_duplicate` | A second ray to that drop, in the same frame, adds nothing: the duplicate check also sees a pin that has no minimap marker yet |
-| `pin_not_hidden` | With `hide_unexplored_automatic_mapping_pins` on, the manual pin from `pin_object_saved` is not hidden as an automatic pin (SKIP when `enable_automatic_mapping` is off or the setting could not be turned on) |
-| `pin_settings_restored` | Reported only when `pin_not_hidden` changed the setting: it is back at your value |
+| `pin_not_hidden` | With `hide_unexplored_automatic_mapping_pins` on, the manual pin from `pin_object_saved` is not hidden as an automatic pin (SKIP when `enable_automatic_mapping` is off and could not be turned on for the section, or the setting could not be turned on) |
 | `pin_piece_name` | A camera ray to a spawned non-persistent wood wall (a workbench when the wall prefab is missing) adds one saved pin named after the localized piece name, not the prefab name and without `$`, with the icon-pack type for the piece's name |
+| `pin_location_excursion` | The section went to the nearest early-content location for the location checks and came back: PASS names the location, its distance and whether its interior was entered; SKIP names the step that failed (no such location in the world, the teleport, the location not loading, or the return) |
 | `pin_location_wall` | A ray at an existing early-content location’s static structure (under its `Location`, not a piece) saves its recognized location name, icon and position once; the repeat adds nothing |
 | `pin_location_detached_piece` | A separately spawned non-persistent piece whose creator is never set (creator 0), with no location parent and moved inside a loaded location’s area, saves the location name, icon and position |
 | `pin_location_player_piece` | The `pin_piece_name` piece, whose player creator is set explicitly and verified, moved inside the same area, saves the piece’s own name, icon and position |
@@ -1485,31 +1503,57 @@ the console is open.
 | `pin_location_tree` | A spawned non-persistent tree inside a location’s area saves its own pin at the tree, not the location |
 | `pin_location_deposit` | The same for a spawned non-persistent mineable deposit |
 | `pin_location_creature` | The same for a spawned non-persistent creature |
-| `pin_location_interior` | With the camera inside a dungeon interior, a ray at an interior surface saves the pin of the location in that zone at its entrance position (SKIP outdoors: interiors are out of pin range from outside) |
+| `pin_location_interior` | With the camera inside the dungeon's interior, which the section entered through the entrance, a ray at an interior surface saves the pin of the location in that zone at its entrance position (SKIP when the section could not get inside: the location has no interior, no entrance was found, the hop through it failed, or the camera did not follow; the reason names the step) |
 | `pin_bare_ground` | A camera ray to bare terrain outside loaded location areas adds an unnamed saved `Icon3` pin at the hit point |
 | `pin_no_hit` | A camera ray with nothing within range adds nothing |
 | `pin_saved_automatic_recognized` | A saved pin with no owner and your platform user as its author, added through `Minimap.AddPin` as the game adds each saved pin back when it loads the map, is recognized as an automatic pin (SKIP when no local platform user is available) |
 | `pin_saved_manual_not_recognized` | The same kind of pin without an author, as a pin you placed or saved by clicking is stored, is not recognized as automatic |
 | `pin_shared_not_recognized` | The same kind of pin with your author but an owner, as a shared pin is stored, is not recognized as automatic |
 | `pin_saved_automatic_uncached_duplicate` | A ray to a spawned non-persistent Stone drop that has a recognized saved automatic pin at its position, under its stored name, and no static cache entry adds nothing: the action reports the duplicate, and the object's pin lookup (which the navigation key shares) returns that saved pin |
-| `pin_static_loading_area_kept` | A non-persistent copper deposit spawned 2 m past the zone border nearest to you, within `static_object_mapping_range`, gets its pin from a static pass that starts with a fresh scan of the area. A second static pass, run while the game reports that zone, and only that zone, as still loading, asks whether the zone has loaded and keeps the deposit's pin on the map and in the static cache (SKIP when `enable_automatic_mapping` is off, the static interval or range is 0, copper deposits are not in `allow_pinning_mineral`, this Harmony build cannot remove patches at runtime, no point across a zone border is in range, a pin is within 8 m of the spot, the static scan is incomplete there, a pass does not run, or the first pass adds no pin, for example because the mineral category or unexplored automatic pins are hidden, or your simulation distance does not reach the zones around the deposit) |
+| `pin_static_loading_area_kept` | A non-persistent copper deposit spawned past a border of your zone - the four borders nearest first, each 2 and 6 m past and slid up to 16 m along either way, at the first spot with no pin within 8 m; `static_object_mapping_range` is raised for the check when the spot is beyond it - gets its pin from a static pass that starts with a fresh scan of the area. A second static pass, run while the game reports that zone, and only that zone, as still loading, asks whether the zone has loaded and keeps the deposit's pin on the map and in the static cache (SKIP when `enable_automatic_mapping` is off or the static interval or range is 0 and could not be changed for the section, copper deposits are not in `allow_pinning_mineral` and could not be added, this Harmony build cannot remove patches at runtime, every spot past the borders has a pin within 8 m, the range could not be raised, the static scan is incomplete there, a pass does not run, or the first pass adds no pin, for example because your simulation distance does not reach the zones around the deposit) |
 | `pin_key_mined_deposit_duplicate` | A non-persistent copper deposit spawned on the ground at the first spot 7 to 27 m around you (nearest first, in front of you first, within `static_object_mapping_range`) with no pin within 10 m of it or of the point 4 m to its right gets a saved automatic pin under its name and icon, added through `Minimap.AddPin`, where the centre of its hit areas is with the fewest of them mined that put the pin more than 1.5 m from the deposit's own position. More hit areas, nearest that position first, are then marked mined in the deposit's ZDO until its centre is more than 1.5 m on from the pin, and the deposit is unloaded and loaded again from its ZDO (`ZNetScene.CreateObject`), as the game loads a deposit mined in an earlier session, so its mined hit areas are off from the start. A camera ray to one of its standing hit areas adds nothing: the action reports the duplicate, and the object's pin lookup returns the saved pin, although the ray resolves the deposit at its own position |
-| `pin_mined_deposit_one_pin` | A static pass over that deposit, run right after through the entry point the minimap update calls and starting with a fresh scan of the area, takes the saved pin as the deposit's own (it is then the deposit's pin in the static cache) and adds no pin within 1 m of the deposit's current centre (both checks SKIP when `enable_automatic_mapping` is off, the static interval or range is 0, copper deposits are not in `allow_pinning_mineral`, no local platform user is available, a game method they use is missing, the static scan is incomplete there, no such spot is found, mining cannot move the deposit's centre that far, the reloaded deposit does not come back with its mined hit areas off, or the pass does not run; the key check also SKIPs when no unobstructed camera ray reaches the deposit) |
+| `pin_mined_deposit_one_pin` | A static pass over that deposit, run right after through the entry point the minimap update calls and starting with a fresh scan of the area, takes the saved pin as the deposit's own (it is then the deposit's pin in the static cache) and adds no pin within 1 m of the deposit's current centre (both checks SKIP when `enable_automatic_mapping` is off or the static interval or range is 0 and could not be changed for the section, copper deposits are not in `allow_pinning_mineral` and could not be added, no local platform user is available, a game method they use is missing, the static scan is incomplete there, no such spot is found, mining cannot move the deposit's centre that far, the reloaded deposit does not come back with its mined hit areas off, or the pass does not run; the key check also SKIPs when no unobstructed camera ray reaches the deposit) |
 | `pin_adjacent_deposits_nearest_adopts` | Two non-persistent copper deposits spawned on the ground 4 m apart, at the first spot found as for the mined deposit and the point 4 m to its right, and a saved automatic pin under their name and icon 1.5 m from the centre of the first towards the second, so it lies within both deposits' areas. Both deposits go through the static pass's mineral mapping, called directly in each order (first then second, and second then first), each order starting with neither deposit mapped in the current pass or holding a pin. In both orders the first deposit takes the saved pin and the second does not |
-| `pin_tied_deposits_adopt_none` | The same with the two deposits at one spot, so the saved pin, 0.5 m from their centre, is as close to one as to the other: in neither order does either deposit take it (both checks SKIP when copper deposits are not in `allow_pinning_mineral`, no local platform user is available, no such spot is found, or a deposit cannot be spawned, and `pin_adjacent_deposits_nearest_adopts` also when the two deposits' centres are less than 3.5 m apart; both FAIL when the static pass has no mineral mapping, with its record of the deposits mapped in the pass and of the wishbone, to call) |
-| `pin_loaded_location_spot` | The static pass's mapping of loaded locations, which a multiplayer client uses because only the server keeps the world's location list, is called directly for one test location: a bare `Location` component on a new GameObject with no network view, named as the game names a spawned spot (the first early-content spot in `allow_pinning_spot`, with `(Clone)` appended), 6 m beside you, with a 1 m range so no real location is mapped. It adds exactly one spot pin with the spot's name and icon at the location's position, held in the static cache under that position; mapping it again adds nothing and keeps that pin. The test location is destroyed and its pin removed before the next check (SKIP when no early-content spot is in `allow_pinning_spot`, every test spot 6 m around you has a pin or a location within 2 m, or the map filters unsaved automatic pins there, for example because unexplored automatic pins are hidden) |
-| `pin_dungeon_waits_for_location` | The static pass's dungeon mapping for a location instance, which a single-player world lists whether or not the game has spawned its `Location` object, is called directly for one test instance in no world list: the first early-content dungeon in `allow_pinning_dungeon`, 6 m beside you, with a 2 m radius. With no `Location` object at that position it adds no pin, caches none and logs no no-entrance warning (the entrance belongs to the `Location` object the game spawns later). With a bare `Location` component on a new GameObject there, which has no entrance, it adds exactly one pin with the dungeon's name and icon at the position, held in the static cache under it, and logs the no-entrance warning; the warning is checked only when the log settings write warnings. The test location is destroyed and its pin removed before the next check (SKIP when no early-content dungeon is in `allow_pinning_dungeon`, every test spot 6 m around you has a pin, a dungeon entrance or a location within 2 m, or the map filters unsaved automatic pins there, for example because unexplored automatic pins are hidden) |
+| `pin_tied_deposits_adopt_none` | The same with the two deposits at one spot, so the saved pin, 0.5 m from their centre, is as close to one as to the other: in neither order does either deposit take it (both checks SKIP when copper deposits are not in `allow_pinning_mineral` and could not be added for the section, no local platform user is available, no such spot is found, or a deposit cannot be spawned, and `pin_adjacent_deposits_nearest_adopts` also when the two deposits' centres are less than 3.5 m apart; both FAIL when the static pass has no mineral mapping, with its record of the deposits mapped in the pass and of the wishbone, to call) |
+| `pin_loaded_location_spot` | The static pass's mapping of loaded locations, which a multiplayer client uses because only the server keeps the world's location list, is called directly for one test location: a bare `Location` component on a new GameObject with no network view, named as the game names a spawned spot (the first early-content spot in `allow_pinning_spot`, with `(Clone)` appended), 6 m beside you, with a 1 m range so no real location is mapped. It adds exactly one spot pin with the spot's name and icon at the location's position, held in the static cache under that position; mapping it again adds nothing and keeps that pin. The test location is destroyed and its pin removed before the next check (SKIP when no early-content spot is in `allow_pinning_spot` and none could be added for the section, every test spot 6 m around you has a pin or a location within 2 m, or the map filters unsaved automatic pins there, for example because unexplored automatic pins are hidden) |
+| `pin_dungeon_waits_for_location` | The static pass's dungeon mapping for a location instance, which a single-player world lists whether or not the game has spawned its `Location` object, is called directly for one test instance in no world list: the first early-content dungeon in `allow_pinning_dungeon`, 6 m beside you, with a 2 m radius. With no `Location` object at that position it adds no pin, caches none and logs no no-entrance warning (the entrance belongs to the `Location` object the game spawns later). With a bare `Location` component on a new GameObject there, which has no entrance, it adds exactly one pin with the dungeon's name and icon at the position, held in the static cache under it, and logs the no-entrance warning; the warning is checked only when the log settings write warnings. The test location is destroyed and its pin removed before the next check (SKIP when no early-content dungeon is in `allow_pinning_dungeon` and none could be added for the section, every test spot 6 m around you has a pin, a dungeon entrance or a location within 2 m, or the map filters unsaved automatic pins there, for example because unexplored automatic pins are hidden) |
 | `pin_static_classification_follows_object` | The static scan's own entry point is called with its interval cleared, as a new pass of the static mapping starts, and one box collider on a new GameObject beside you is read from the static cache after each scan. Its object has a hover name that the check changes: a flora name (the first exact flora name in the registries) classifies it as that flora with the name as its source token; renamed to a mineral name it is classified as that mineral; renamed to a name no registry knows it is not classified; renamed to the flora name again it is a flora again. Moved under a second object named as the mineral it is classified as that mineral and its object is the second one; moved back it is the flora again. The objects have no network view and are not mapped, so no pin is added; they are destroyed and one more scan drops the collider from the cache (SKIP when `static_object_mapping_range` is 0, the static scan is incomplete or does not finish because its collider buffer is full, or the registries have no exact flora name and exact mineral name) |
-| `pin_flora_patches_group_plants_in_range` | Non-persistent plants of two flora names (the first two of the common mushroom, dandelion, thistle, raspberry and blueberry pickables with different names) are spawned 60 m above you: a chain of one name along a diagonal, its plants 0.9 of `flora_pins_merge_range` apart and at least 33 m long on each axis, so that plants within the range of each other stand in different cells of the lookup a plant searches for its patch; a plant of that name 1.1 of the range past the chain's end; a plant of the other name half the range beside the chain; and two plants of the chain's name half the range apart, 1.1 of the range above its first plant. Two more stand for plants the game moves or renames right after they appear: one of the chain's name, set up 60 m away and moved at once to half the range from that pair, and one of the other name, set up half the range beside the plant past the chain's end and given the chain's name at once. Each plant gets its flora node, and its network is built at once, as the game builds it a second or two after the plant appears, the chain's two ends first and the moved and renamed plants last. The networks are exactly the groups that linking every two plants of one name within the range gives, by the names and positions the plants have then, chains included: the chain is one patch, the plant past its end with the renamed plant is one, the plant of the other name beside the chain is one, and the pair above with the moved plant is one. The plants are removed before the next check (SKIP when `flora_pins_merge_range` is below 4 m, fewer than two of those prefabs are available, another flora plant is within the range of a test plant plus 1 m, or the plants did not stand where they were placed or take the name they were given) |
-| `pin_runtime_flora_pins_loaded_plant` | A non-persistent pickable that is no flora (the first of the flint, stone and branch pickables that qualifies) is spawned on the ground beside you and gets no flora node. It is given a hover name of its own, so that the `custom_flora` entry the check then adds for that name, the way the config screen's object editor adds one, matches it and no plant of the world. The plant, already loaded, gets its flora node from the running module, with no reload and no module toggle, while every other plant keeps its one node. With the entry's identifier added to `allow_pinning_flora`, the plant's network is built at once, and a static pass that starts with a fresh scan of the area, run through the entry point the minimap update calls, adds the plant's pin and holds it in the static cache. The pin and the plant are removed before the settings are put back (SKIP when `enable_automatic_mapping` is off, the static interval or range is 0, the static scan is incomplete or the pass does not run, the test identifier or the test plant's name is already known to a registry, none of those pickables qualifies or the plant does not go by the name it was given, a pin is within 8 m of the test spot, the map filters unsaved automatic pins there, for example because unexplored automatic pins are hidden, a setting could not be changed, or the scan did not classify the plant's collider) |
-| `pin_runtime_flora_settings_restored` | Reported when `pin_runtime_flora_pins_loaded_plant` changed a setting: `custom_flora` and `allow_pinning_flora` are back at your values, and the test flora is no longer defined |
-| `pin_destroyed_deposit_removed` | Three non-persistent tin deposits, spawned 4 m apart on the ground 6 m in front of you, get their pins from a static pass that starts with a fresh scan of the area. The first goes as a used-up deposit removes itself: its owner destroys it through `ZNetView.Destroy`, and the destruction the game sends on its next update is sent at once (`ZDOMan.SendDestroyed`), with the deposit's ZDO marked persistent for that moment, as a world object's is. Its pin leaves the map and the static cache. The deposit goes without any destroy callback of its own running, so only the destruction of its ZDO can remove the pin |
+| `pin_flora_patches_group_plants_in_range` | Non-persistent plants of two flora names (the first two of the common mushroom, dandelion, thistle, raspberry and blueberry pickables with different names) are spawned 60 m above you: a chain of one name along a diagonal, its plants 0.9 of `flora_pins_merge_range` apart and at least 33 m long on each axis, so that plants within the range of each other stand in different cells of the lookup a plant searches for its patch; a plant of that name 1.1 of the range past the chain's end; a plant of the other name half the range beside the chain; and two plants of the chain's name half the range apart, 1.1 of the range above its first plant. Two more stand for plants the game moves or renames right after they appear: one of the chain's name, set up 60 m away and moved at once to half the range from that pair, and one of the other name, set up half the range beside the plant past the chain's end and given the chain's name at once. Each plant gets its flora node, and its network is built at once, as the game builds it a second or two after the plant appears, the chain's two ends first and the moved and renamed plants last. The networks are exactly the groups that linking every two plants of one name within the range gives, by the names and positions the plants have then, chains included: the chain is one patch, the plant past its end with the renamed plant is one, the plant of the other name beside the chain is one, and the pair above with the moved plant is one. The plants are removed before the next check (SKIP when `flora_pins_merge_range` is below 4 m and could not be set to 4 m for the section, fewer than two of those prefabs are available, another flora plant is within the range of a test plant plus 1 m, or the plants did not stand where they were placed or take the name they were given) |
+| `pin_runtime_flora_pins_loaded_plant` | A non-persistent pickable that is no flora (the first of the flint, stone and branch pickables that qualifies) is spawned on the ground at the first spot 4, 8 or 12 m around you with no pin within 8 m and gets no flora node. It is given a hover name of its own, so that the `custom_flora` entry the check then adds for that name, the way the config screen's object editor adds one, matches it and no plant of the world. The plant, already loaded, gets its flora node from the running module, with no reload and no module toggle, while every other plant keeps its one node. With the entry's identifier added to `allow_pinning_flora`, the plant's network is built at once, and a static pass that starts with a fresh scan of the area, run through the entry point the minimap update calls, adds the plant's pin and holds it in the static cache. The pin and the plant are removed before the next check, and the two settings go back with the section's others (SKIP when `enable_automatic_mapping` is off or the static interval or range is 0 and could not be changed for the section, the static scan is incomplete or the pass does not run, the test identifier or the test plant's name is already known to a registry, none of those pickables qualifies or the plant does not go by the name it was given, every spot 4 to 12 m around you has a pin within 8 m, the map filters unsaved automatic pins there, a setting could not be changed, or the scan did not classify the plant's collider) |
+| `pin_destroyed_deposit_removed` | Three non-persistent tin deposits, spawned 4 m apart in a row on the ground 6 m (else 10 m) out in the first of eight headings from your facing where every spot is within the static range and has no pin within 3 m, get their pins from a static pass that starts with a fresh scan of the area. The first goes as a used-up deposit removes itself: its owner destroys it through `ZNetView.Destroy`, and the destruction the game sends on its next update is sent at once (`ZDOMan.SendDestroyed`), with the deposit's ZDO marked persistent for that moment, as a world object's is. Its pin leaves the map and the static cache. The deposit goes without any destroy callback of its own running, so only the destruction of its ZDO can remove the pin |
 | `pin_destroyed_manual_and_shared_kept` | A pin you placed (no author) and a shared pin (with an owner), both added within 1 m of the first deposit's pin before it goes, are still on the map afterwards |
 | `pin_destroyed_by_other_game_removed` | The second deposit's destruction arrives as another game's does, through the game's handler of the routed `DestroyZDO` call (`ZDOMan.RPC_DestroyZDO`): the game removes the deposit here, and the deposit's pin leaves the map and the static cache, although no callback of the game that destroyed it ran here |
 | `pin_unloaded_deposit_kept` | The third deposit is unloaded with the steps the game takes when an object's zone leaves the active area (`ZNetScene.RemoveObjects`), and the destruction they lead to is sent at once: its instance goes, and its ZDO, which is not persistent, is destroyed by its owner, so the game raises its destruction as for any destroyed object. A world object's persistent ZDO would stay instead. The deposit's pin stays on the map and in the static cache: unloading is not destruction. A ZDO the steps leave is destroyed right after, before the game could spawn the deposit from it again |
 | `pin_cleanup` | Every pin created by the section has been removed |
+| `pin_settings_restored` | Reported when the section changed a setting: every setting it changed is back at your value (SKIP when you changed one meanwhile and your value was kept; FAIL when one could not be written back), and the test flora of `pin_runtime_flora_pins_loaded_plant` is no longer defined |
 
-Location checks read loaded locations without modifying them and remove only their own pins and objects; a location's automatic pin that the pin key saved in place is put back unsaved and held by Automatic Mapping as before. They SKIP with a reason when no suitable location ray without an existing manual pin is available; stand near a dungeon entrance or tar pit and retry. No location prefab is spawned because its initialization can generate terrain or entities. `pin_loaded_location_spot` adds only a bare `Location` component on an empty GameObject, which generates nothing, and destroys it in the same frame. Vanilla `Piece.SetCreator` writes only while the creator is 0, so the creator-0 piece is its own spawn and never gets a creator. Test pieces, trees, deposits and creatures are non-persistent, placed only where the camera ray's first hit is the object at a point that exactly one loaded location area contains (strictly inside, as `Location.IsInside` tests), and deactivated and removed before the next check; the `pin_piece_name` piece gets its position back. Checks SKIP with a reason when no such spot, unobstructed ray or duplicate-free position is available, and `pin_location_ground` SKIPs when every terrain point it finds lies inside more than one area. The action gives world-generated pieces, terrain and unnamed hits the nearest containing loaded location; when that location is unrecognized, the usual object or ground pin applies. Player-built pieces, creatures, deposits, trees, loose items and non-piece networked parts of a location such as destructibles or interactables keep their own pins; the game spawns those parts as scene roots, not under the location.
+The location checks run beside a location the section goes to itself. It takes
+the nearest early-content location from the world's location list (a dungeon
+before a spot, so that the interior check has an interior to enter; one with a
+saved pin of yours at it is passed over), removes its own drop and piece first,
+and teleports to a point 5 m outside the location's area, facing it, the way
+the game moves a player between distant points, with god mode and ghost mode on
+for the move and off again on arrival. It then waits for the location to load
+(up to 10 s), for the camera to follow (up to 5 s) and for two static passes
+(up to 10 s), so that `navhotkey_location` finds the pass's pin, and runs the
+exterior checks with a fresh test piece. For `pin_location_interior` it goes
+through the location's entrance the way entering a dungeon does - a short
+teleport to the entrance's target point - and waits for the camera to follow
+into the interior. It then returns to where the command started before the
+next check, and `pin_location_excursion` reports the trip; when a step fails
+the dependent checks SKIP with that step's reason, and a failed return is
+retried by the hand-back when the command ends. The timings are not confirmed
+yet; the first in-game run shows whether they hold. Being teleported to a
+location means the game may generate its zones on a first visit, and creatures
+there act as usual once the player has arrived; the dedicated test world accepts
+both. Location checks read loaded locations without modifying them and remove
+only their own pins and objects; a location's automatic pin that the pin key
+saved in place is put back unsaved and held by Automatic Mapping as before.
+They SKIP with a reason when no suitable location ray without an existing
+manual pin is available. No location prefab is spawned because its
+initialization can generate terrain or entities. `pin_loaded_location_spot`
+adds only a bare `Location` component on an empty GameObject, which generates
+nothing, and destroys it in the same frame. Vanilla `Piece.SetCreator` writes only while the creator is 0, so the creator-0 piece is its own spawn and never gets a creator. Test pieces, trees, deposits and creatures are non-persistent, placed only where the camera ray's first hit is the object at a point that exactly one loaded location area contains (strictly inside, as `Location.IsInside` tests), and deactivated and removed before the next check; the `pin_piece_name` piece gets its position back. Checks SKIP with a reason when no such spot, unobstructed ray or duplicate-free position is available, and `pin_location_ground` SKIPs when every terrain point it finds lies inside more than one area. The action gives world-generated pieces, terrain and unnamed hits the nearest containing loaded location; when that location is unrecognized, the usual object or ground pin applies. Player-built pieces, creatures, deposits, trees, loose items and non-piece networked parts of a location such as destructibles or interactables keep their own pins; the game spawns those parts as scene roots, not under the location.
 
 The four destroyed-object checks run first. Their deposits are spawned before
 any test pin exists, and the section waits one frame for them, because a
@@ -1524,20 +1568,21 @@ subscription Automatic Mapping makes for the world you are in: run the section
 once in a world you entered with `automatic_mapping / module` already `Enabled`
 when the game started, before turning the module off and on there, and once
 more after going back to the main menu and entering a world again. They SKIP
-when `enable_automatic_mapping` is off, the static interval or range is 0,
-`remove_pins_of_destroyed_object` is off, tin deposits are not in
-`allow_pinning_mineral`, a game method they use is missing, the static scan is
-incomplete there, a test spot is outside the static range or within 3 m of a
-pin, the static pass does not run, it adds no pin for a deposit (for example
-because the mineral category or unexplored automatic pins are hidden), or a
-deposit takes a saved deposit pin that was already on the map as its own: that
-pin stays on the map as it was. A real
+when `enable_automatic_mapping` is off, the static interval or range is 0 or
+`remove_pins_of_destroyed_object` is off and the setting could not be changed
+for the section, tin deposits are not in `allow_pinning_mineral` and could not
+be added, a game method they use is missing, the static scan is incomplete
+there, every row of test spots around you has one outside the static range or
+within 3 m of a pin, the static pass does not run, it adds no pin for a deposit
+(for example because your simulation distance does not reach the zones around
+it), or a deposit takes a saved deposit pin that was already on the map as its
+own: that pin stays on the map as it was. A real
 unloading, which needs you to move away, and a destruction by another player
 are not produced; the checks reproduce the game's own steps for both.
 
-Obstructed object rays, unavailable bare ground, existing duplicate pins, and
-no empty direction within range cause the affected checks to SKIP. Move to an
-open area and retry. Pin creation and removal finish in the same frame, before
+Obstructed object rays at every spot tried, unavailable bare ground, existing
+duplicate pins, and no empty direction within range cause the affected checks
+to SKIP. Move to an open area and retry. Pin creation and removal finish in the same frame, before
 another map save or player input. Every removal follows one rule: a check
 removes only pins it added. A pin that was on the map when the check started is
 never removed, also when the check fails or throws; if a test object took it as
@@ -1572,11 +1617,57 @@ the session for retry. Physical hotkey input, save/reload persistence, and a
 module off/on with the saved pin remain in-game verification steps outside this
 section; use `automatics_smoke_lifecycle mapping` for the module lifecycle checks.
 
+#### `navhotkey`
+
+The navigation hotkey section drives the aimed-object navigation key against a
+spawned non-persistent boar and Wood drop, each at the first of several spots
+beside the camera's line of sight that a camera ray reaches unobstructed. It
+sets up what it needs itself and puts every setting back at its end, reported
+by `navhotkey_settings_restored` (FAIL when a setting could not be put back or
+was changed meanwhile): Automatic Mapping is turned on for the section when it
+is off (`navhotkey_setup` says so), `navigate_to_aimed_object_key` is bound to
+F8, `navigation_start_key` to its default, Left Shift, when it is unbound, for
+the map-click checks (the click is simulated; the key is not pressed), and
+`hide_unexplored_automatic_mapping_pins` is turned off and
+`map_filter_hidden_categories` cleared, so that the test creature's automatic
+pin is shown. `navhotkey_hidden_category_kept` turns `enable_map_enhancements`
+on and hides the Other category for its own check, and puts both filters back
+to the section's values right after. Run it in a single-player world with the
+inventory closed. The `navhotkey_location` check runs in the `pin` section,
+beside the location it visits.
+
+| Check | Asserts |
+|---|---|
+| `navhotkey_setup` | Reported only when Automatic Mapping was off: it was turned on for the section and is put back afterwards |
+| `navhotkey_exact_pin` | A ray at a creature with its own automatic pin selects that pin, not a saved pin beside it, and adds no marker |
+| `navhotkey_replace_with_pin` | Switching from a temporary marker on the drop to the creature's pin removes the marker |
+| `navhotkey_map_creature` | A map click on the creature's pin with `navigation_start_key` held stores the creature's ZDOID (SKIP when the key is unbound and could not be bound for the section) |
+| `navhotkey_pin_follows` | The destination follows the pinned creature before the next validation tick |
+| `navhotkey_removed_pin_kept` | Removing the tracked creature's dynamic pin leaves a temporary destination on it |
+| `navhotkey_hidden_category_kept` | A non-creature whose automatic pin is hidden by category gets a temporary marker and stays navigating through three validation ticks |
+| `navhotkey_temporary` | An unpinned object gets exactly one named, unsaved, non-automatic marker |
+| `navhotkey_not_saved` | The temporary marker is absent from the serialized map data, while a saved control pin is in it |
+| `navhotkey_distance_format` | The navigation label appends the bracketed horizontal distance |
+| `navhotkey_repeat_clears` | Repeating the target removes its marker and clears navigation |
+| `navhotkey_replacement` | Switching to the unpinned creature removes the old marker and keeps the creature's identity |
+| `navhotkey_temporary_follows` | The destination and the temporary marker follow the creature |
+| `navhotkey_marker_adopts_pin` | A new automatic pin on the followed creature replaces its marker, which is removed |
+| `navhotkey_marker_returns` | Removing the adopted pin puts a marker back on the creature |
+| `navhotkey_creature_marker_to_pin` | A map click on a pinned target from a creature marker leaves no extra unsaved pin (SKIP when `navigation_start_key` is unbound and could not be bound for the section) |
+| `navhotkey_empty`, `navhotkey_unbound`, `navhotkey_stopped`, `navhotkey_blocked` | An empty ray, an unbound key, a stop request and an open inventory each leave the destination and its single marker unchanged |
+| `navhotkey_dead_clears` | The creature's live death flag clears navigation before its ZDO is destroyed |
+| `navhotkey_destroyed_clears` | The owner's destruction of the target ZDO clears navigation and removes every temporary marker |
+| `navhotkey_settings_restored` | Every setting the section changed is back at your value |
+
 #### `aimbar`
 
 The looked-at object bar section aims at a spawned boar, a player-built wall piece
-and a mushroom. These checks cover the targets that get only a name and distance
-label, and the bar coming back:
+and a mushroom. Automatic Mapping is turned on for the section when it is off
+(`aimbar_setup` says so) and put back with the section's other settings,
+reported by `aimbar_settings_restored`. The game must be unpaused with the HUD
+visible and the large map closed, which the section cannot arrange. These checks
+cover the targets that get only a name and distance label, and the bar coming
+back:
 
 | Check | Asserts |
 |---|---|

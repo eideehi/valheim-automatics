@@ -4,10 +4,13 @@ using System.Collections.Generic;
 using System.Linq;
 using Automatics.AutomaticMapping;
 using Automatics.Valheim;
+using BepInEx.Configuration;
 using HarmonyLib;
 using ModUtils;
 using Splatform;
 using UnityEngine;
+using Held = System.Collections.Generic.Dictionary<BepInEx.Configuration.ConfigEntryBase,
+    Automatics.SmokeTest.SmokeSession.SettingRestoration>;
 using MappingConfig = Automatics.AutomaticMapping.Config;
 using MappingModule = Automatics.AutomaticMapping.Module;
 
@@ -102,11 +105,21 @@ namespace Automatics.SmokeTest
                 run.Skip("pin_section", "requires a loaded single-player world, minimap and camera");
                 yield break;
             }
-            if (!MappingModule.Running)
+            // Automatic Mapping on for the section, then the settings its checks need; every
+            // setting goes back at the section's end, reported by pin_settings_restored.
+            var held = new Held();
+            var module = new SmokeSetup.SetupResult();
+            var setup = SmokeSetup.EnableModule(run.RunId, held, MappingConfig.ModuleEntry,
+                () => MappingModule.Running, module);
+            while (setup.MoveNext()) yield return setup.Current;
+            if (!module.Ok)
             {
-                run.Skip("pin_section", "Automatic Mapping is not running; enable the module first");
+                run.Skip("pin_section", "Automatic Mapping is not running: " + module.Reason);
+                ReportSettings(run, false);
                 yield break;
             }
+            if (module.Changed) run.Pass("pin_setup", "Automatic Mapping " + module.Reason);
+            PrepareSettings(run, held);
 
             var sectionPins = new SmokePins();
             var created = new List<Minimap.PinData>();
@@ -120,6 +133,7 @@ namespace Automatics.SmokeTest
             SmokeSession.TrackHandBack(cleanup);
             ItemDrop drop = null;
             GameObject piece = null;
+            var floraWritten = false;
             try
             {
                 if (SpawnDestroyedObjectDeposits(run, player, deposits))
@@ -149,8 +163,7 @@ namespace Automatics.SmokeTest
                     run.Skip("pin_object_saved", "the Wood prefab is unavailable");
                 else
                 {
-                    drop = FeaturesSmokeCommand.SpawnTestDrop(prefab,
-                        camera.position + camera.forward * 3f + camera.right * 2f, false);
+                    drop = FeaturesSmokeCommand.SpawnTestDrop(prefab, ClearSpot(player, 3f, 2f), false);
                     if (!drop || !Objects.GetZNetView(drop, out var nview) ||
                         nview.GetZDO() == null || nview.GetZDO().Persistent)
                         run.Skip("pin_object_saved", "could not prepare a non-persistent Wood drop");
@@ -161,10 +174,9 @@ namespace Automatics.SmokeTest
                     }
                 }
 
-                CheckHidden(run, objectPin);
+                CheckHidden(run, held, objectPin);
 
-                piece = SpawnTestPiece(camera.position + camera.forward * 4f - camera.right * 2f,
-                    camera.forward, true, out var pieceSkip);
+                piece = SpawnTestPiece(ClearSpot(player, 4f, -2f), camera.forward, true, out var pieceSkip);
                 if (!piece)
                     run.Skip("pin_piece_name", pieceSkip);
                 else
@@ -173,26 +185,33 @@ namespace Automatics.SmokeTest
                     CheckPiece(run, player, piece, created);
                 }
 
-                CheckDetachedPiece(run, player, piece, created);
-                var navigationChecked = false;
-                CheckLocation(run, player, created, false, ref navigationChecked);
-                CheckLocation(run, player, created, true, ref navigationChecked);
-                if (!navigationChecked)
-                    run.Skip("navhotkey_location", "no eligible loaded location ray was available in the location pin checks");
-                CheckObjectsInLocation(run, player, created);
-                CheckInterior(run, player, created);
+                // The location checks are made beside a location the section goes to; the
+                // objects spawned here would be left behind, so they go first.
+                FeaturesSmokeCommand.RemoveTestDrop(drop, "pin feature smoke");
+                drop = null;
+                RemoveTestObject(piece);
+                piece = null;
+                var excursion = VisitLocation(run, player, held, created);
+                while (excursion.MoveNext()) yield return excursion.Current;
+                if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
+                    !MappingModule.Running)
+                {
+                    run.Skip("pin_section", "the world, the camera or Automatic Mapping went away during the location excursion");
+                    yield break;
+                }
+
                 CheckGround(run, player, created);
                 CheckMiss(run, player, created);
                 CheckSavedPinRecognition(run, player, map, created);
                 CheckUncachedAutomaticPin(run, player, map, created);
-                CheckLoadingAreaKeepsPin(run, player, map, created);
+                CheckLoadingAreaKeepsPin(run, player, held, map, created);
                 CheckMinedDeposit(run, player, map, created);
                 CheckDepositsSharingPin(run, player, map, created);
                 CheckLoadedLocationSpot(run, player, map, created);
                 CheckDungeonWaitsForLocation(run, player, map, created);
                 CheckStaticClassificationFollowsObject(run, player);
                 CheckFloraPatchGrouping(run, player);
-                CheckRuntimeFloraPinsLoadedPlant(run, player, map, created);
+                CheckRuntimeFloraPinsLoadedPlant(run, player, held, map, created, ref floraWritten);
             }
             finally
             {
@@ -219,6 +238,98 @@ namespace Automatics.SmokeTest
                 run.Pass("pin_cleanup", $"removed {created.Count} test pin(s)");
             else
                 run.Fail("pin_cleanup", "a test pin remains on the map");
+            ReportSettings(run, floraWritten);
+        }
+
+        // The static range the checks' spots need: the destroyed-object deposits stand up to
+        // 7.2 m out, the mined-deposit spots from 7 m, the runtime flora plant up to 12 m.
+        private const int MinStaticRange = 16;
+
+        // The settings the checks read, written for the section where they would make a check
+        // SKIP: the mapping switch, the static pass's interval and range, the removal of destroyed
+        // objects' pins, the test deposits' minerals and an early-content spot and dungeon in
+        // their allow lists, the flora merge range the patch check needs, and the two filters
+        // that would hide the test pins. A write the session refuses is logged, and the check
+        // that needs the setting SKIPs as before.
+        private static void PrepareSettings(FeatureRun run, Held held)
+        {
+            void Write(ConfigEntryBase entry, object value)
+            {
+                if (entry != null) SmokeSetup.Write(run, held, entry, value);
+            }
+
+            void Allow(string field, StringList allowed, ValheimObject registry)
+            {
+                if (EarlyLocations.Any(x => allowed.Contains(x))) return;
+                var early = EarlyLocations.FirstOrDefault(x =>
+                    registry.GetIdentify(x, out var identifier) && identifier == x);
+                if (early != null) Write(SmokeSetup.Field<StringList>(typeof(MappingConfig), field), new StringList(allowed) { early });
+            }
+
+            if (!MappingConfig.EnableAutomaticMapping)
+                Write(SmokeSetup.Field<bool>(typeof(MappingConfig), "_enableAutomaticMapping"), true);
+            if (MappingConfig.StaticObjectMappingInterval <= 0f)
+                Write(SmokeSetup.Field<float>(typeof(MappingConfig), "_staticObjectMappingInterval"), 0.25f);
+            if (MappingConfig.StaticObjectMappingRange < MinStaticRange)
+                Write(SmokeSetup.Field<int>(typeof(MappingConfig), "_staticObjectMappingRange"), MinStaticRange);
+            if (!MappingConfig.RemovePinsOfDestroyedObject)
+                Write(SmokeSetup.Field<bool>(typeof(MappingConfig), "_removePinsOfDestroyedObject"), true);
+            if (MappingConfig.FloraPinMergeRange < 4)
+                Write(SmokeSetup.Field<int>(typeof(MappingConfig), "_floraPinMergeRange"), 4);
+            if (MappingConfig.HideUnexploredAutomaticMappingPins)
+                Write(MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false);
+            if (MappingConfig.HasHiddenMapCategories)
+                Write(MappingConfig.MapFilterHiddenCategoriesEntry, new StringList());
+
+            var minerals = MappingConfig.AllowPinningMineral;
+            var missing = new[] { "CopperDeposit", "TinDeposit" }.Where(x => !minerals.Contains(x)).ToList();
+            if (missing.Count > 0)
+            {
+                var allowed = new StringList(minerals);
+                foreach (var mineral in missing) allowed.Add(mineral);
+                Write(SmokeSetup.Field<StringList>(typeof(MappingConfig), "_allowPinningMineral"), allowed);
+            }
+            Allow("_allowPinningSpot", MappingConfig.AllowPinningSpot, ValheimObject.Spot);
+            Allow("_allowPinningDungeon", MappingConfig.AllowPinningDungeon, ValheimObject.Dungeon);
+        }
+
+        // Every setting the section wrote, put back and reported as one check; with the runtime
+        // flora check's entries back, its test flora must be gone from the registry too.
+        private static void ReportSettings(FeatureRun run, bool floraWritten)
+        {
+            var results = SmokeSession.RestoreSettings(run.RunId);
+            if (results.Count == 0) return;
+            var detail = string.Join("; ", results.Select(x => x.Value));
+            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
+                run.Fail("pin_settings_restored", detail);
+            else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
+                                      x.Key == SmokeSession.ToggleOutcome.NotThisRun))
+                run.Skip("pin_settings_restored", "restoration skipped: " + detail);
+            else if (floraWritten && ValheimObject.Flora.IsDefined(RuntimeFloraIdentifier))
+                run.Fail("pin_settings_restored", "the settings were put back, but the test flora is still defined: " + detail);
+            else
+                run.Pass("pin_settings_restored", detail);
+        }
+
+        // A spot ahead of the camera for a test object: the given offset to the side, then the
+        // same on the other side, then twice and three times as far out, the first that a camera
+        // ray reaches unobstructed and that no saved pin you placed is within 2 m of. The given
+        // offset when none qualifies; the check then says what is in the way.
+        internal static Vector3 ClearSpot(Player player, float ahead, float side)
+        {
+            var camera = GameCamera.instance.transform;
+            foreach (var factor in new[] { 1f, -1f, 2f, -2f, 3f, -3f })
+            {
+                var spot = camera.position + camera.forward * ahead + camera.right * (side * factor);
+                var reach = Vector3.Distance(camera.position, spot);
+                if (FirstHit(player, new Ray(camera.position, spot - camera.position), out var hit) &&
+                    hit.distance < reach + 0.5f)
+                    continue;
+                if (Map.GetClosestPin(spot, 2f, pin => pin.m_save && !Map.IsAutomaticPin(pin), includeInactive: true) != null)
+                    continue;
+                return spot;
+            }
+            return camera.position + camera.forward * ahead + camera.right * side;
         }
 
         private static Minimap.PinData CheckObject(FeatureRun run, Player player, ItemDrop drop,
@@ -279,8 +390,9 @@ namespace Automatics.SmokeTest
         }
 
         // Hiding unexplored pins applies to automatic pins only. The setting is turned on for
-        // this check alone, through the session, and put back before it returns.
-        private static void CheckHidden(FeatureRun run, Minimap.PinData pin)
+        // this check alone, through the section's settings, and off again before it returns: the
+        // checks after it need their unsaved automatic pins shown.
+        private static void CheckHidden(FeatureRun run, Held held, Minimap.PinData pin)
         {
             if (pin == null)
             {
@@ -289,7 +401,7 @@ namespace Automatics.SmokeTest
             }
             if (!MappingConfig.EnableAutomaticMapping)
             {
-                run.Skip("pin_not_hidden", "enable_automatic_mapping is off, so no pin is ever hidden");
+                run.Skip("pin_not_hidden", "enable_automatic_mapping is off and could not be turned on for the section, so no pin is ever hidden");
                 return;
             }
             var entry = MappingConfig.HideUnexploredAutomaticMappingPinsEntry;
@@ -299,16 +411,13 @@ namespace Automatics.SmokeTest
                 return;
             }
 
+            var hidden = entry.Value;
             try
             {
-                if (!entry.Value)
+                if (!hidden && !SmokeSetup.Write(run.RunId, held, entry, true, out var refusal))
                 {
-                    if (!SmokeSession.BeginSetting(run.RunId, entry, out var setting, out var refusal) ||
-                        !SmokeSession.WriteSetting(run.RunId, setting, true, out refusal))
-                    {
-                        run.Skip("pin_not_hidden", $"{entry.Definition.Key} could not be turned on: {refusal}");
-                        return;
-                    }
+                    run.Skip("pin_not_hidden", $"{entry.Definition.Key} could not be turned on: {refusal}");
+                    return;
                 }
 
                 if (!MappingConfig.HideUnexploredAutomaticMappingPins)
@@ -320,18 +429,7 @@ namespace Automatics.SmokeTest
             }
             finally
             {
-                var results = SmokeSession.RestoreSettings(run.RunId);
-                if (results.Count > 0)
-                {
-                    var detail = string.Join("; ", results.Select(x => x.Value));
-                    if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
-                        run.Fail("pin_settings_restored", detail);
-                    else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
-                                              x.Key == SmokeSession.ToggleOutcome.NotThisRun))
-                        run.Skip("pin_settings_restored", "restoration skipped: " + detail);
-                    else
-                        run.Pass("pin_settings_restored", detail);
-                }
+                if (!hidden) SmokeSetup.Write(run, held, entry, false);
             }
         }
 
@@ -469,7 +567,15 @@ namespace Automatics.SmokeTest
         private static KnownLocation Recognize(Location location)
         {
             if (!location || !location.gameObject.activeInHierarchy) return null;
-            var prefab = Objects.GetPrefabName(location.gameObject);
+            var known = Recognize(Objects.GetPrefabName(location.gameObject));
+            if (known != null) known.Location = location;
+            return known;
+        }
+
+        // The location prefab's recognized name, with no Location object yet.
+        private static KnownLocation Recognize(string prefab)
+        {
+            if (string.IsNullOrEmpty(prefab)) return null;
             var registry = ValheimObject.Dungeon;
             if (!registry.GetIdentify(prefab, out var identifier))
             {
@@ -484,7 +590,241 @@ namespace Automatics.SmokeTest
                 label[0] == '$' ? label.Substring(1) : null;
             if (string.IsNullOrWhiteSpace(name) || name == missing || name.Contains("$") || name.Contains("@"))
                 return null;
-            return new KnownLocation { Location = location, Prefab = prefab, Label = label, Name = name };
+            return new KnownLocation { Prefab = prefab, Label = label, Name = name };
+        }
+
+        // -- The trip to a location ------------------------------------------------------------
+
+        // The location checks need an early-content location within pin range of the camera, and
+        // the interior check the camera inside a dungeon, so the section goes to the nearest one
+        // itself: a distant teleport to ArrivalMargin m outside the location's area, facing it,
+        // with god and ghost mode on for the move; the Location object is given time to load and
+        // the static pass to map it; the exterior checks; the interior, entered the way
+        // Teleport.Interact enters it; and the return to where the command started, made whatever
+        // happened before it. Each step that can fail SKIPs the checks that depend on it with its
+        // reason. The timings are not from the decompile; the first in-game run confirms them
+        // (unverified).
+        private const float ArrivalMargin = 5f;
+        private const float LocationLoadTimeout = 10f;
+        private const float CameraFollowTimeout = 5f;
+        private const float CameraFollowDistance = 10f;
+        private const float StaticPassTimeout = 10f;
+
+        private static readonly string[] LocationChecks =
+        {
+            "pin_location_detached_piece", "pin_location_player_piece", "pin_location_wall", "navhotkey_location",
+            "pin_location_ground", "pin_location_tree", "pin_location_deposit", "pin_location_creature",
+            "pin_location_interior"
+        };
+
+        // An early-content location in the world's location list, which the server keeps and a
+        // single-player game is.
+        private sealed class Destination
+        {
+            public KnownLocation Known;
+            public Vector3 Position;
+            public float ExteriorRadius;
+            public bool Dungeon;
+        }
+
+        // The nearest early-content location without a manual pin of yours at it, a dungeon
+        // before a spot so that the interior check has an interior to enter. Null with the reason
+        // when the world has none.
+        private static Destination FindDestination(Vector3 origin, out string reason)
+        {
+            Destination nearest = null;
+            foreach (var instance in ZoneSystem.instance.m_locationInstances.Values)
+            {
+                var known = Recognize(instance.m_location.m_prefabName);
+                if (known == null || HasManualPin(instance.m_position, known.Name)) continue;
+                var candidate = new Destination
+                {
+                    Known = known, Position = instance.m_position,
+                    ExteriorRadius = instance.m_location.m_exteriorRadius,
+                    Dungeon = ValheimObject.Dungeon.GetIdentify(known.Prefab, out _)
+                };
+                if (nearest == null || (candidate.Dungeon && !nearest.Dungeon) ||
+                    (candidate.Dungeon == nearest.Dungeon &&
+                     Utils.DistanceXZ(origin, candidate.Position) < Utils.DistanceXZ(origin, nearest.Position)))
+                    nearest = candidate;
+            }
+            reason = nearest == null ? "no early-content location exists in this world" : null;
+            return nearest;
+        }
+
+        // The destination's Location object, once the game has spawned it with its zone.
+        private static KnownLocation FindLoaded(Destination destination)
+        {
+            var locations = StaticObjectMapping.LoadedLocations;
+            if (locations == null) return null;
+            return locations.Where(x => x && Utils.DistanceXZ(x.transform.position, destination.Position) < 1f &&
+                                        Objects.GetPrefabName(x.gameObject) == destination.Known.Prefab)
+                .Select(x => Recognize(x)).FirstOrDefault(x => x != null);
+        }
+
+        private static IEnumerator VisitLocation(FeatureRun run, Player player, Held held,
+            List<Minimap.PinData> created)
+        {
+            const string check = "pin_location_excursion";
+            var destination = FindDestination(player.transform.position, out var problem);
+            KnownLocation location = null;
+            var visited = "";
+            if (problem == null)
+            {
+                var away = Vector3.ProjectOnPlane(player.transform.position - destination.Position, Vector3.up);
+                away = away.sqrMagnitude < 1f ? Vector3.forward : away.normalized;
+                var distance = Utils.DistanceXZ(player.transform.position, destination.Position);
+                // 3 m above the ground the world generator gives the spot, whose zone may not
+                // exist yet: the teleport looks for the floor downward from a metre above its
+                // target (ZoneSystem.FindFloor), so ground the location raised by up to 4 m is
+                // still found, and a 3 m drop is under the game's fall-damage height; a distant
+                // teleport settles on the solid height when it finds no floor, so more of a rise
+                // costs time, not the arrival (unverified).
+                var spot = destination.Position + away * (destination.ExteriorRadius + ArrivalMargin);
+                spot.y = WorldGenerator.instance.GetHeight(spot.x, spot.z) + 3f;
+                var move = new SmokeSetup.SetupResult();
+                var steps = SmokeSetup.Teleport(run.RunId, spot, Quaternion.LookRotation(-away), true, true, move);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (move.Ok)
+                    visited = $"{destination.Known.Name} {distance:0} m from the start";
+                else
+                    problem = $"the teleport to {destination.Known.Name} {distance:0} m away failed: {move.Reason}";
+            }
+            if (problem == null)
+            {
+                // The Location object spawns with its zone, which the teleport waited for.
+                var deadline = Time.time + LocationLoadTimeout;
+                while (run.IsCurrent && (location = FindLoaded(destination)) == null && Time.time <= deadline)
+                    yield return null;
+                if (location == null)
+                    problem = $"{destination.Known.Name} did not load within {LocationLoadTimeout:0} s of arriving beside it";
+            }
+            if (problem == null)
+            {
+                var steps = Settle(run, player, true);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+
+                var camera = GameCamera.instance.transform;
+                var piece = SpawnTestPiece(camera.position + camera.forward * 4f - camera.right * 2f,
+                    camera.forward, true, out _);
+                try
+                {
+                    CheckDetachedPiece(run, player, piece, created);
+                    var navigationChecked = false;
+                    CheckLocation(run, player, held, created, false, ref navigationChecked);
+                    CheckLocation(run, player, held, created, true, ref navigationChecked);
+                    if (!navigationChecked)
+                        run.Skip("navhotkey_location", "no eligible loaded location ray was available in the location pin checks");
+                    CheckObjectsInLocation(run, player, created);
+                }
+                finally
+                {
+                    RemoveTestObject(piece);
+                }
+
+                var inside = new SmokeSetup.SetupResult();
+                steps = EnterInterior(run, player, destination, location, inside);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (inside.Ok)
+                {
+                    CheckInterior(run, player, created);
+                    visited += ", and its interior";
+                }
+                else
+                    run.Skip("pin_location_interior", inside.Reason);
+            }
+            else
+                foreach (var name in LocationChecks)
+                    run.Skip(name, problem);
+
+            var home = new SmokeSetup.SetupResult();
+            var back = SmokeSetup.ReturnToStart(run.RunId, home);
+            while (back.MoveNext()) yield return back.Current;
+            if (home.Ok)
+            {
+                var settle = Settle(run, player, false);
+                while (settle.MoveNext()) yield return settle.Current;
+            }
+            if (problem != null)
+                run.Skip(check, problem);
+            else if (home.Ok)
+                run.Pass(check, $"visited {visited}; back where the command started");
+            else
+                run.Skip(check, $"visited {visited}, but the return failed: {home.Reason}; the hand-back puts you back when the command ends");
+        }
+
+        // After a move: the camera has caught up with the player (unverified: how the game camera
+        // follows a teleport is not in the decompile), and, when asked, the static pass has run
+        // twice since, so the location's own pin is on the map by the time navhotkey_location
+        // looks for it. A pass that does not come within StaticPassTimeout s is not waited for.
+        private static IEnumerator Settle(FeatureRun run, Player player, bool passes)
+        {
+            var camera = GameCamera.instance.transform;
+            var deadline = Time.time + CameraFollowTimeout;
+            while (run.IsCurrent && Vector3.Distance(camera.position, player.transform.position) > CameraFollowDistance &&
+                   Time.time <= deadline)
+                yield return null;
+            if (!passes) yield break;
+
+            var passId = AccessTools.Field(typeof(StaticObjectMapping), "_currentPassId");
+            var before = (int)passId.GetValue(null);
+            deadline = Time.time + StaticPassTimeout;
+            while (run.IsCurrent && (int)passId.GetValue(null) < before + 2 && Time.time <= deadline)
+                yield return null;
+        }
+
+        // Into the location's interior the way Teleport.Interact takes the player through the
+        // entrance: a short hop to the entrance's target point, one metre forward and down from
+        // the interior teleport's transform, facing as it does. The entrance is the nearest
+        // Teleport with a target point within the location's area, found as the static pass finds
+        // it. The interior sits 5000 m above the zone; the camera follows the player there before
+        // the check runs (unverified).
+        private static IEnumerator EnterInterior(FeatureRun run, Player player, Destination destination,
+            KnownLocation location, SmokeSetup.SetupResult result)
+        {
+            if (!location.Location.m_hasInterior)
+            {
+                result.Reason = destination.Dungeon
+                    ? $"{location.Name} has no interior"
+                    : $"{location.Name} has no interior, and no early-content dungeon exists in this world";
+                yield break;
+            }
+            var entrance = Physics.OverlapSphere(location.Position, location.Location.m_exteriorRadius,
+                    LayerMask.GetMask("character_trigger"), QueryTriggerInteraction.Collide)
+                .Select(collider => collider.GetComponent<Teleport>())
+                .Where(teleport => teleport && teleport.m_targetPoint && !Character.InInterior(teleport.transform.position))
+                .OrderBy(teleport => Vector3.Distance(location.Position, teleport.transform.position))
+                .FirstOrDefault();
+            if (!entrance)
+            {
+                result.Reason = $"no entrance with a target point was found within {location.Name}'s area";
+                yield break;
+            }
+
+            var target = entrance.m_targetPoint.transform;
+            var move = new SmokeSetup.SetupResult();
+            var steps = SmokeSetup.Teleport(run.RunId, target.position + target.forward - target.up, target.rotation,
+                false, true, move);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!move.Ok)
+            {
+                result.Reason = $"the hop through {location.Name}'s entrance failed: {move.Reason}";
+                yield break;
+            }
+
+            var camera = GameCamera.instance.transform;
+            var deadline = Time.time + CameraFollowTimeout;
+            while (run.IsCurrent && Time.time <= deadline &&
+                   !(Character.InInterior(camera.position) &&
+                     Vector3.Distance(camera.position, player.transform.position) <= CameraFollowDistance))
+                yield return null;
+            if (!Character.InInterior(camera.position))
+            {
+                result.Reason = $"the camera did not follow into {location.Name}'s interior within {CameraFollowTimeout:0} s";
+                yield break;
+            }
+            result.Ok = true;
         }
 
         // Exterior locations within pin range with a recognized name and no manual pin of it yet.
@@ -605,7 +945,7 @@ namespace Automatics.SmokeTest
                         break;
                     }
                     if (found == null)
-                        run.Skip(check, "no loaded early-content location area within range has an unobstructed test-piece ray at a point only it contains and no existing manual pin; stand near a dungeon entrance or tar pit and retry; location prefabs are not spawned because they can alter terrain or entities");
+                        run.Skip(check, "no loaded early-content location area within range has an unobstructed test-piece ray at a point only it contains and no existing manual pin; location prefabs are not spawned because they can alter terrain or entities");
                 }
             }
             finally
@@ -686,7 +1026,7 @@ namespace Automatics.SmokeTest
                 var check = entry.Key;
                 if (locations.Count == 0)
                 {
-                    run.Skip(check, "no loaded early-content location area without a manual pin is within range; stand near a dungeon entrance or tar pit and retry");
+                    run.Skip(check, "no loaded early-content location area without a manual pin is within range");
                     continue;
                 }
                 var go = SpawnTestObject(entry.Value, camera.position + camera.forward * 4f + camera.up * 3f,
@@ -735,7 +1075,7 @@ namespace Automatics.SmokeTest
         }
 
         // Interior rooms are 5000 m above their zone, beyond pin range from outdoors, so this
-        // check runs only when the camera is already inside a loaded dungeon interior.
+        // check runs once the section's trip has the camera inside a loaded dungeon interior.
         private static void CheckInterior(FeatureRun run, Player player, List<Minimap.PinData> created)
         {
             const string check = "pin_location_interior";
@@ -743,7 +1083,7 @@ namespace Automatics.SmokeTest
             var origin = GameCamera.instance.transform.position;
             if (!Character.InInterior(origin))
             {
-                run.Skip(check, "the camera is not inside a dungeon interior, which is out of pin range from outdoors; enter an early-content dungeon and retry");
+                run.Skip(check, "the camera is not inside a dungeon interior, which is out of pin range from outdoors");
                 return;
             }
             var directions = new List<Vector3> { GameCamera.instance.transform.forward, Vector3.down };
@@ -838,7 +1178,7 @@ namespace Automatics.SmokeTest
         }
 
         // Read existing locations only: spawning their prefab can generate terrain or entities.
-        private static void CheckLocation(FeatureRun run, Player player,
+        private static void CheckLocation(FeatureRun run, Player player, Held held,
             List<Minimap.PinData> created, bool ground, ref bool navigationChecked)
         {
             var check = ground ? "pin_location_ground" : "pin_location_wall";
@@ -895,7 +1235,7 @@ namespace Automatics.SmokeTest
                     }
                     if (!navigationChecked)
                     {
-                        CheckLocationNavigation(run, player, ray, location);
+                        CheckLocationNavigation(run, player, held, ray, location);
                         navigationChecked = true;
                     }
                     var kept = ExpectLocationPinKept(location, out var keptDetail);
@@ -924,11 +1264,13 @@ namespace Automatics.SmokeTest
                 }
             }
             run.Skip(check, overlapping
-                ? "every terrain point found lies inside more than one location area; move to a spot where one location's area stands alone and retry"
-                : "no visible eligible loaded location without an existing manual pin; stand near a dungeon entrance or tar pit and retry; location spawning is not used");
+                ? "every terrain point found lies inside more than one location area"
+                : "no visible eligible loaded location without an existing manual pin; location spawning is not used");
         }
 
-        private static void CheckLocationNavigation(FeatureRun run, Player player, Ray ray,
+        // The shortcut is bound for the check through the section's settings, which go back at
+        // the section's end.
+        private static void CheckLocationNavigation(FeatureRun run, Player player, Held held, Ray ray,
             KnownLocation location)
         {
             const string check = "navhotkey_location";
@@ -950,8 +1292,8 @@ namespace Automatics.SmokeTest
                 run.Skip(check, "the loaded location has no cached position or entrance pin to use as an independent expectation");
                 return;
             }
-            var key = MappingConfig.NavigateToAimedObjectKeyEntry;
-            if (!SmokeSession.BeginSetting(run.RunId, key, out var setting, out var refusal))
+            if (!SmokeSetup.Write(run.RunId, held, MappingConfig.NavigateToAimedObjectKeyEntry,
+                    new KeyboardShortcut(KeyCode.F8), out var refusal))
             {
                 run.Skip(check, refusal);
                 return;
@@ -959,12 +1301,6 @@ namespace Automatics.SmokeTest
             var original = Navigation.CaptureTarget();
             try
             {
-                if (!SmokeSession.WriteSetting(run.RunId, setting,
-                        new BepInEx.Configuration.KeyboardShortcut(KeyCode.F8), out refusal))
-                {
-                    run.Skip(check, refusal);
-                    return;
-                }
                 Navigation.ClearTarget();
                 var count = Map.GetAllPins().Count;
                 Navigation.TryNavigateFromRay(player, ray, true);
@@ -977,13 +1313,6 @@ namespace Automatics.SmokeTest
             finally
             {
                 Navigation.RestoreTarget(original);
-                var restored = SmokeSession.RestoreSettings(run.RunId);
-                foreach (var result in restored)
-                    if (result.Key == SmokeSession.ToggleOutcome.Failed)
-                        run.Fail(check, "shortcut restoration failed: " + result.Value);
-                    else if (result.Key == SmokeSession.ToggleOutcome.LeftForUser ||
-                             result.Key == SmokeSession.ToggleOutcome.NotThisRun)
-                        run.Skip(check, "shortcut restoration skipped: " + result.Value);
             }
         }
 
@@ -1123,8 +1452,7 @@ namespace Automatics.SmokeTest
             ItemDrop drop = null;
             try
             {
-                drop = FeaturesSmokeCommand.SpawnTestDrop(prefab,
-                    camera.position + camera.forward * 3f - camera.right * 1f, false);
+                drop = FeaturesSmokeCommand.SpawnTestDrop(prefab, ClearSpot(player, 3f, -1f), false);
                 if (!drop || !Objects.GetZNetView(drop, out var nview) ||
                     nview.GetZDO() == null || nview.GetZDO().Persistent)
                 {
@@ -1192,12 +1520,12 @@ namespace Automatics.SmokeTest
 
         // The static scan leaves an object whose area is still loading to a later pass, and the
         // pin the object already has must survive that pass: pruning it would take it off the map
-        // while the area loads. A copper deposit is spawned just across the zone border nearest to
-        // the player, inside the static range, and a static pass that starts with a fresh scan of
+        // while the area loads. A copper deposit is spawned just across a zone border near the
+        // player, inside the static range, and a static pass that starts with a fresh scan of
         // the area pins it. A second pass then runs while the game reports that zone, and only
         // that zone, as still loading. Both passes go through the entry point the minimap update
         // calls.
-        private static void CheckLoadingAreaKeepsPin(FeatureRun run, Player player, Minimap map,
+        private static void CheckLoadingAreaKeepsPin(FeatureRun run, Player player, Held held, Minimap map,
             List<Minimap.PinData> created)
         {
             const string check = "pin_static_loading_area_kept";
@@ -1205,12 +1533,12 @@ namespace Automatics.SmokeTest
             var range = MappingConfig.StaticObjectMappingRange;
             if (!MappingConfig.EnableAutomaticMapping || interval <= 0f || range <= 0)
             {
-                run.Skip(check, "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, so no periodic static pass runs");
+                run.Skip(check, "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, and could not be changed for the section, so no periodic static pass runs");
                 return;
             }
             if (!MappingConfig.AllowPinningMineral.Contains("CopperDeposit"))
             {
-                run.Skip(check, "copper deposits are not in allow_pinning_mineral");
+                run.Skip(check, "copper deposits are not in allow_pinning_mineral and could not be added for the section");
                 return;
             }
             if (!ModuleRegistry.RuntimeToggleSupported)
@@ -1227,27 +1555,48 @@ namespace Automatics.SmokeTest
                 return;
             }
 
-            // 2 m past the zone border nearest to the player, on the ground.
+            // On the ground past a border of the player's zone: the four borders, the nearest
+            // first, each 2 and 6 m past and slid 0, 8 and 16 m along either way, the first spot
+            // with no pin within 8 m.
             var origin = player.transform.position;
             var zone = ZoneSystem.GetZone(origin);
             var center = ZoneSystem.GetZonePos(zone);
             const float half = ZoneSystem.c_ZoneSizeHalf;
-            var toBorder = new[]
+            var borders = new[]
             {
                 new Vector3(center.x + half - origin.x, 0f, 0f), new Vector3(center.x - half - origin.x, 0f, 0f),
                 new Vector3(0f, 0f, center.z + half - origin.z), new Vector3(0f, 0f, center.z - half - origin.z)
-            }.OrderBy(x => x.magnitude).First();
-            var spot = origin + toBorder + toBorder.normalized * 2f;
-            spot.y = ZoneSystem.instance.GetGroundHeight(spot);
-            var loadingZone = ZoneSystem.GetZone(spot);
-            if (loadingZone == zone || Vector3.Distance(origin, spot) > range - 1f)
+            }.OrderBy(x => x.magnitude);
+            var spot = Vector3.zero;
+            var found = false;
+            foreach (var toBorder in borders)
             {
-                run.Skip(check, $"no point across a zone border is within static_object_mapping_range ({range} m); move a few metres and retry");
+                var along = Vector3.Cross(Vector3.up, toBorder.normalized);
+                foreach (var past in new[] { 2f, 6f })
+                foreach (var slide in new[] { 0f, 8f, -8f, 16f, -16f })
+                {
+                    spot = origin + toBorder + toBorder.normalized * past + along * slide;
+                    spot.y = ZoneSystem.instance.GetGroundHeight(spot);
+                    found = ZoneSystem.GetZone(spot) != zone && Map.GetClosestPin(spot, 8f, includeInactive: true) == null;
+                    if (found) break;
+                }
+                if (found) break;
+            }
+            if (!found)
+            {
+                run.Skip(check, "every spot 2 and 6 m past the borders of your zone, slid up to 16 m along them, has a pin within 8 m; move and retry");
                 return;
             }
-            if (Map.GetClosestPin(spot, 8f, includeInactive: true) != null)
+            var loadingZone = ZoneSystem.GetZone(spot);
+
+            // The nearest border can be a half zone away, beyond the static range; the range is
+            // raised to reach the spot for this check and put back after it.
+            var rangeEntry = SmokeSetup.Field<int>(typeof(MappingConfig), "_staticObjectMappingRange");
+            var needed = Mathf.CeilToInt(Vector3.Distance(origin, spot)) + 2;
+            var raised = needed > range;
+            if (raised && (rangeEntry == null || !SmokeSetup.Write(run, held, rangeEntry, needed)))
             {
-                run.Skip(check, "a pin is within 8 m of the test spot across the nearest zone border; move and retry");
+                run.Skip(check, $"no point across a zone border is within static_object_mapping_range ({range} m), which could not be raised to {needed} m for the check");
                 return;
             }
 
@@ -1337,10 +1686,11 @@ namespace Automatics.SmokeTest
                 // Whatever pin the deposit holds goes by the rule before the deposit does, so the
                 // deposit's destruction cannot take a pin of yours that it took as its own.
                 if (go && Objects.GetZdoid(go.transform, out var id) &&
-                    StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(id), out var held))
-                    smokePins.Remove(map, held);
+                    StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(id), out var taken))
+                    smokePins.Remove(map, taken);
                 smokePins.Remove(map, pin);
                 RemoveTestObject(go);
+                if (raised) SmokeSetup.Write(run, held, rangeEntry, range);
             }
         }
 
@@ -1507,7 +1857,7 @@ namespace Automatics.SmokeTest
             var localUser = PlatformManager.DistributionPlatform?.LocalUser;
             author = localUser != null ? localUser.PlatformUserID : PlatformUserID.None;
             if (!MappingConfig.AllowPinningMineral.Contains("CopperDeposit"))
-                return "copper deposits are not in allow_pinning_mineral";
+                return "copper deposits are not in allow_pinning_mineral and could not be added for the section";
             if (!author.IsValid)
                 return "no local platform user is available to author a saved pin";
             return null;
@@ -1896,7 +2246,7 @@ namespace Automatics.SmokeTest
                 ValheimObject.Spot.GetIdentify(x, out var identifier) && identifier == x);
             if (spot == null || !ValheimObject.Spot.GetName(spot, out var label) || string.IsNullOrEmpty(label))
             {
-                run.Skip(check, "no early-content spot is in allow_pinning_spot");
+                run.Skip(check, "no early-content spot is in allow_pinning_spot, and none could be added for the section");
                 return;
             }
 
@@ -2009,7 +2359,7 @@ namespace Automatics.SmokeTest
                 identifier == x && MappingConfig.AllowPinningDungeon.Contains(x));
             if (dungeon == null || !ValheimObject.Dungeon.GetName(dungeon, out var label) || string.IsNullOrEmpty(label))
             {
-                run.Skip(check, "no early-content dungeon is in allow_pinning_dungeon");
+                run.Skip(check, "no early-content dungeon is in allow_pinning_dungeon, and none could be added for the section");
                 return;
             }
 
@@ -2326,7 +2676,7 @@ namespace Automatics.SmokeTest
             var range = MappingConfig.FloraPinMergeRange;
             if (range < 4)
             {
-                run.Skip(check, $"flora_pins_merge_range is {range} m; the test chain needs 4 m or more");
+                run.Skip(check, $"flora_pins_merge_range is {range} m and could not be set to 4 m for the section; the test chain needs 4 m or more");
                 return;
             }
             if (FloraNetworkConstructionMethod == null)
@@ -2481,20 +2831,22 @@ namespace Automatics.SmokeTest
         // activation, while every other plant keeps the one node it had. With the entry's
         // identifier added to allow_pinning_flora, the node's network is built at once, as the
         // game builds it a second or two later, and a static pass that starts with a fresh scan of
-        // the area pins the plant. The plant and its pin are removed, and both settings put back,
-        // before the next check.
-        private static void CheckRuntimeFloraPinsLoadedPlant(FeatureRun run, Player player, Minimap map,
-            List<Minimap.PinData> created)
+        // the area pins the plant. The plant and its pin are removed before the next check; the
+        // two settings go back with the section's others, and written says they were changed, so
+        // the settings check can make sure the test flora is gone with them.
+        private const string RuntimeFloraIdentifier = "AutomaticsSmokeRuntimeFlora";
+
+        private static void CheckRuntimeFloraPinsLoadedPlant(FeatureRun run, Player player, Held held, Minimap map,
+            List<Minimap.PinData> created, ref bool written)
         {
             const string check = "pin_runtime_flora_pins_loaded_plant";
-            const string restoredCheck = "pin_runtime_flora_settings_restored";
-            const string identifier = "AutomaticsSmokeRuntimeFlora";
+            const string identifier = RuntimeFloraIdentifier;
             const string plantName = "AutomaticsSmokeRuntimeFloraPlant";
             var interval = MappingConfig.StaticObjectMappingInterval;
             var range = MappingConfig.StaticObjectMappingRange;
             if (!MappingConfig.EnableAutomaticMapping || interval <= 0f || range <= 0)
             {
-                run.Skip(check, "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, so no periodic static pass runs");
+                run.Skip(check, "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, and could not be changed for the section, so no periodic static pass runs");
                 return;
             }
             if (FloraNetworkConstructionMethod == null || ClassifyTokenMethod == null || StaticCacheField == null)
@@ -2543,12 +2895,21 @@ namespace Automatics.SmokeTest
                 return;
             }
 
+            // On the ground 4, 8 or 12 m from you, in the eight headings from your facing, the
+            // first spot with no pin within 8 m.
             var forward = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
-            var spot = player.transform.position + forward * 3f + player.transform.right * 3f;
-            spot.y = ZoneSystem.instance.GetGroundHeight(spot);
-            if (Map.GetClosestPin(spot, 8f, includeInactive: true) != null)
+            var spot = Vector3.zero;
+            var found = false;
+            for (var distance = 4f; distance <= 12f && !found; distance += 4f)
+            for (var i = 0; i < 8 && !found; i++)
             {
-                run.Skip(check, "a pin is within 8 m of the test spot beside you; move and retry");
+                spot = player.transform.position + Quaternion.Euler(0f, i * 45f, 0f) * forward * distance;
+                spot.y = ZoneSystem.instance.GetGroundHeight(spot);
+                found = Map.GetClosestPin(spot, 8f, includeInactive: true) == null;
+            }
+            if (!found)
+            {
+                run.Skip(check, "every spot 4 to 12 m around you has a pin within 8 m; move and retry");
                 return;
             }
             if (!MappingConfig.SaveStaticObjectPins && Map.ShouldSuppressTransientAutomaticPin(spot))
@@ -2588,12 +2949,6 @@ namespace Automatics.SmokeTest
                     return;
                 }
 
-                if (!SmokeSession.BeginSetting(run.RunId, customFlora, out var floraSetting, out var refusal) ||
-                    !SmokeSession.BeginSetting(run.RunId, allowFlora, out var allowSetting, out refusal))
-                {
-                    run.Skip(check, refusal);
-                    return;
-                }
                 if (!ObjectElementList.TryCopyWithElement(
                         customFlora.BoxedValue as List<ObjectElement> ?? new List<ObjectElement>(), identifier,
                         "Automatics smoke runtime flora", plantName, out var withFlora))
@@ -2601,11 +2956,12 @@ namespace Automatics.SmokeTest
                     run.Fail(check, "precondition failed: the flora entry could not be made");
                     return;
                 }
-                if (!SmokeSession.WriteSetting(run.RunId, floraSetting, withFlora, out refusal))
+                if (!SmokeSetup.Write(run.RunId, held, customFlora, withFlora, out var refusal))
                 {
                     run.Skip(check, $"{customFlora.Definition.Key} could not be changed: {refusal}");
                     return;
                 }
+                written = true;
 
                 var nodes = go.GetComponents<FloraNode>();
                 var node = nodes.Length == 1 ? nodes[0] : null;
@@ -2619,7 +2975,7 @@ namespace Automatics.SmokeTest
                     return;
                 }
 
-                if (!SmokeSession.WriteSetting(run.RunId, allowSetting,
+                if (!SmokeSetup.Write(run.RunId, held, allowFlora,
                         new StringList(MappingConfig.AllowPinningFlora) { identifier }, out refusal))
                 {
                     run.Skip(check, $"{allowFlora.Definition.Key} could not be changed: {refusal}");
@@ -2660,25 +3016,10 @@ namespace Automatics.SmokeTest
             {
                 // Whatever pin the plant holds goes by the rule before the plant does.
                 if (go && Objects.GetZdoid(go.transform, out var heldId) &&
-                    StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(heldId), out var held))
-                    smokePins.Remove(map, held);
+                    StaticObjectMapping.TryGetCachedPin(new StaticObjectMapping.MapPinIdentify(heldId), out var taken))
+                    smokePins.Remove(map, taken);
                 smokePins.Remove(map, pin);
                 RemoveTestObject(go);
-
-                var results = SmokeSession.RestoreSettings(run.RunId);
-                if (results.Count > 0)
-                {
-                    var detail = string.Join("; ", results.Select(x => x.Value));
-                    if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
-                        run.Fail(restoredCheck, detail);
-                    else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
-                                              x.Key == SmokeSession.ToggleOutcome.NotThisRun))
-                        run.Skip(restoredCheck, "restoration skipped: " + detail);
-                    else if (ValheimObject.Flora.IsDefined(identifier))
-                        run.Fail(restoredCheck, "the settings were put back, but the test flora is still defined: " + detail);
-                    else
-                        run.Pass(restoredCheck, detail);
-                }
             }
         }
 
@@ -2732,9 +3073,9 @@ namespace Automatics.SmokeTest
             if (!MappingConfig.EnableAutomaticMapping || MappingConfig.StaticObjectMappingInterval <= 0f || range <= 0)
                 reason = "enable_automatic_mapping is off, or static_object_mapping_interval or static_object_mapping_range is 0, so no periodic static pass runs";
             else if (!MappingConfig.RemovePinsOfDestroyedObject)
-                reason = "remove_pins_of_destroyed_object is off";
+                reason = "remove_pins_of_destroyed_object is off and could not be turned on for the section";
             else if (!MappingConfig.AllowPinningMineral.Contains("TinDeposit"))
-                reason = "tin deposits are not in allow_pinning_mineral";
+                reason = "tin deposits are not in allow_pinning_mineral and could not be added for the section";
             else if (SendDestroyedMethod == null || ReceiveDestroyedMethod == null || SceneInstancesField == null)
                 reason = "ZDOMan.SendDestroyed, ZDOMan.RPC_DestroyZDO or ZNetScene.m_instances was not found in this game version";
             else if ((bool)AccessTools.Field(typeof(StaticObjectMapping), "_cacheIncomplete").GetValue(null))
@@ -2745,37 +3086,50 @@ namespace Automatics.SmokeTest
                 return false;
             }
 
+            // Three spots in a row 4 m apart, 6 m or 10 m out in the first of the eight headings
+            // from the camera's facing where every spot is within the static range and no pin is
+            // within 3 m of one.
             var forward = Vector3.ProjectOnPlane(GameCamera.instance.transform.forward, Vector3.up);
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
             forward.Normalize();
-            var right = Vector3.Cross(Vector3.up, forward);
             var origin = player.transform.position;
-            for (var i = 0; i < 3; i++)
+            var spots = new Vector3[3];
+            var found = false;
+            for (var distance = 6f; distance <= 10f && !found; distance += 4f)
+            for (var i = 0; i < 8 && !found; i++)
             {
-                var spot = origin + forward * 6f + right * (4f * (i - 1));
-                spot.y = ZoneSystem.instance.GetGroundHeight(spot);
-                if (Vector3.Distance(origin, spot) > range - 1f)
-                    reason = $"the test spots 6 m in front of you are outside static_object_mapping_range ({range} m)";
-                else if (Map.GetClosestPin(spot, 3f, includeInactive: true) != null)
-                    reason = "a pin is within 3 m of a test spot 6 m in front of you; turn or move and retry";
-                else
+                var direction = Quaternion.Euler(0f, i * 45f, 0f) * forward;
+                var right = Vector3.Cross(Vector3.up, direction);
+                found = true;
+                for (var j = 0; j < 3 && found; j++)
                 {
-                    var go = SpawnTestObject(new[] { "MineRock_Tin" }, spot, Quaternion.identity, out var skip,
-                        prefab => prefab.GetComponent<Destructible>() || prefab.GetComponent<MineRock>() ||
-                                  prefab.GetComponent<MineRock5>());
-                    if (go)
-                    {
-                        Objects.GetZdoid(go.transform, out var id);
-                        var colliders = go.GetComponentsInChildren<Collider>();
-                        foreach (var collider in colliders) collider.enabled = false;
-                        spawned.Add(new TestDeposit { Go = go, Id = id, Colliders = colliders });
-                        continue;
-                    }
-                    reason = skip;
+                    spots[j] = origin + direction * distance + right * (4f * (j - 1));
+                    spots[j].y = ZoneSystem.instance.GetGroundHeight(spots[j]);
+                    found = Vector3.Distance(origin, spots[j]) <= range - 1f &&
+                            Map.GetClosestPin(spots[j], 3f, includeInactive: true) == null;
                 }
-
-                SkipDestroyedObjectChecks(run, reason);
+            }
+            if (!found)
+            {
+                SkipDestroyedObjectChecks(run,
+                    $"every row of three test spots 6 and 10 m around you has one outside static_object_mapping_range ({range} m) or with a pin within 3 m; move and retry");
                 return false;
+            }
+
+            foreach (var spot in spots)
+            {
+                var go = SpawnTestObject(new[] { "MineRock_Tin" }, spot, Quaternion.identity, out var skip,
+                    prefab => prefab.GetComponent<Destructible>() || prefab.GetComponent<MineRock>() ||
+                              prefab.GetComponent<MineRock5>());
+                if (!go)
+                {
+                    SkipDestroyedObjectChecks(run, skip);
+                    return false;
+                }
+                Objects.GetZdoid(go.transform, out var id);
+                var colliders = go.GetComponentsInChildren<Collider>();
+                foreach (var collider in colliders) collider.enabled = false;
+                spawned.Add(new TestDeposit { Go = go, Id = id, Colliders = colliders });
             }
 
             Physics.SyncTransforms();
@@ -3038,11 +3392,6 @@ namespace Automatics.SmokeTest
                 run.Skip("navhotkey_section", "requires a loaded single-player world, minimap, inventory and camera");
                 yield break;
             }
-            if (!MappingModule.Running)
-            {
-                run.Skip("navhotkey_section", "Automatic Mapping is not running; enable the module first");
-                yield break;
-            }
             var creaturePrefab = ZNetScene.instance.GetPrefab("Boar");
             var dropPrefab = ZNetScene.instance.GetPrefab("Wood");
             if (!creaturePrefab || !dropPrefab)
@@ -3050,14 +3399,36 @@ namespace Automatics.SmokeTest
                 run.Skip("navhotkey_section", "the test creature or Wood prefab is unavailable");
                 yield break;
             }
-            var key = MappingConfig.NavigateToAimedObjectKeyEntry;
-            if (!SmokeSession.BeginSetting(run.RunId, key, out var keySetting, out var refusal) ||
-                !SmokeSession.WriteSetting(run.RunId, keySetting,
-                    new BepInEx.Configuration.KeyboardShortcut(KeyCode.F8), out refusal))
+
+            // Automatic Mapping on for the section, the shortcut bound, navigation_start_key bound
+            // for the map-click checks when it is not, and the two filters that would hide the
+            // test creature's pin off; every setting goes back at the section's end.
+            var held = new Held();
+            var module = new SmokeSetup.SetupResult();
+            var setup = SmokeSetup.EnableModule(run.RunId, held, MappingConfig.ModuleEntry,
+                () => MappingModule.Running, module);
+            while (setup.MoveNext()) yield return setup.Current;
+            if (!module.Ok)
             {
-                run.Skip("navhotkey_section", refusal);
+                run.Skip("navhotkey_section", "Automatic Mapping is not running: " + module.Reason);
+                SmokeSetup.ReportSettings(run, "navhotkey_settings_restored");
                 yield break;
             }
+            if (module.Changed) run.Pass("navhotkey_setup", "Automatic Mapping " + module.Reason);
+            var key = MappingConfig.NavigateToAimedObjectKeyEntry;
+            if (!SmokeSetup.Write(run.RunId, held, key, new KeyboardShortcut(KeyCode.F8), out var refusal))
+            {
+                run.Skip("navhotkey_section", refusal);
+                SmokeSetup.ReportSettings(run, "navhotkey_settings_restored");
+                yield break;
+            }
+            var startKey = SmokeSetup.Field<KeyboardShortcut>(typeof(MappingConfig), "_navigationStartKey");
+            if (startKey != null && MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
+                SmokeSetup.Write(run, held, startKey, new KeyboardShortcut(KeyCode.LeftShift));
+            if (MappingConfig.HideUnexploredAutomaticMappingPins)
+                SmokeSetup.Write(run, held, MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false);
+            if (MappingConfig.HasHiddenMapCategories)
+                SmokeSetup.Write(run, held, MappingConfig.MapFilterHiddenCategoriesEntry, new StringList());
 
             var original = Navigation.CaptureTarget();
             var before = new HashSet<Minimap.PinData>(Map.GetAllPins());
@@ -3093,7 +3464,7 @@ namespace Automatics.SmokeTest
             {
                 var camera = GameCamera.instance.transform;
                 creature = UnityEngine.Object.Instantiate(creaturePrefab,
-                    camera.position + camera.forward * 5f + camera.right * 3f, Quaternion.identity);
+                    PinFeatureSmoke.ClearSpot(player, 5f, 3f), Quaternion.identity);
                 SmokeSession.TrackSpawn(creature);
                 var nview = creature.GetComponent<ZNetView>();
                 if (!nview || !nview.IsValid())
@@ -3105,8 +3476,10 @@ namespace Automatics.SmokeTest
                 var character = creature.GetComponent<Character>();
                 var id = nview.GetZDO().m_uid;
                 creatureId = id;
-                drop = FeaturesSmokeCommand.SpawnTestDrop(dropPrefab,
-                    camera.position + camera.forward * 5f - camera.right * 3f, false);
+                // The creature stands before the drop's spot is chosen, so the drop is not put
+                // behind it.
+                Physics.SyncTransforms();
+                drop = FeaturesSmokeCommand.SpawnTestDrop(dropPrefab, PinFeatureSmoke.ClearSpot(player, 5f, -3f), false);
                 Physics.SyncTransforms();
                 if (!drop || !TryRay(player, creature, out var creatureRay) ||
                     !TryRay(player, drop.gameObject, out var dropRay))
@@ -3143,7 +3516,7 @@ namespace Automatics.SmokeTest
                         "switching from a temporary marker to the automatic pin removes the marker");
                     var mapClickDetail = "navigation_start_key is unbound";
                     if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
-                        run.Skip("navhotkey_map_creature", "navigation_start_key is unbound");
+                        run.Skip("navhotkey_map_creature", "navigation_start_key is unbound and could not be bound for the section");
                     else
                     {
                         Navigation.ClearTarget();
@@ -3170,7 +3543,7 @@ namespace Automatics.SmokeTest
                     Navigation.ClearTarget();
                 }
 
-                CheckHiddenCategory(run, player, map, drop, dropRay, navigate, added);
+                CheckHiddenCategory(run, player, map, held, drop, dropRay, navigate, added);
                 navigate(player, dropRay, true);
                 var marker = Navigation.TemporaryMarker;
                 Check(run, "navhotkey_temporary", marker != null && ReferenceEquals(Navigation.TargetPin, marker) &&
@@ -3238,7 +3611,7 @@ namespace Automatics.SmokeTest
 
                 var creatureTarget = Navigation.CaptureTarget();
                 if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
-                    run.Skip("navhotkey_creature_marker_to_pin", "navigation_start_key is unbound");
+                    run.Skip("navhotkey_creature_marker_to_pin", "navigation_start_key is unbound and could not be bound for the section");
                 else
                 {
                     var clicked = false;
@@ -3254,11 +3627,10 @@ namespace Automatics.SmokeTest
                 var empty = new Ray(new Vector3(0f, 10000f, 0f), Vector3.up);
                 navigate(player, empty, true);
                 CheckUnchanged(run, "navhotkey_empty", target, before, added);
-                SmokeSession.WriteSetting(run.RunId, keySetting, new BepInEx.Configuration.KeyboardShortcut(), out refusal);
+                SmokeSetup.Write(run, held, key, new KeyboardShortcut());
                 navigate(player, dropRay, true);
                 CheckUnchanged(run, "navhotkey_unbound", target, before, added);
-                SmokeSession.WriteSetting(run.RunId, keySetting,
-                    new BepInEx.Configuration.KeyboardShortcut(KeyCode.F8), out refusal);
+                SmokeSetup.Write(run, held, key, new KeyboardShortcut(KeyCode.F8));
                 var stopped = MappingModule.StopRequested;
                 try
                 {
@@ -3336,7 +3708,10 @@ namespace Automatics.SmokeTest
             }
         }
 
-        private static void CheckHiddenCategory(FeatureRun run, Player player, Minimap map,
+        // The filters for the check go through the section's settings: the hidden categories get
+        // Other, and both filters go back to the section's values afterwards - no hidden category
+        // and unexplored pins shown - as the checks after this one need them.
+        private static void CheckHiddenCategory(FeatureRun run, Player player, Minimap map, Held held,
             ItemDrop drop, Ray ray, Action<Player, Ray, bool> navigate, List<Minimap.PinData> added)
         {
             if (!Objects.GetZdoid(drop, out var id))
@@ -3346,27 +3721,17 @@ namespace Automatics.SmokeTest
             }
             var changes = new[]
             {
-                new KeyValuePair<BepInEx.Configuration.ConfigEntryBase, object>(MappingConfig.EnableMapEnhancementsEntry, true),
-                new KeyValuePair<BepInEx.Configuration.ConfigEntryBase, object>(MappingConfig.MapFilterHiddenCategoriesEntry,
+                new KeyValuePair<ConfigEntryBase, object>(MappingConfig.EnableMapEnhancementsEntry, true),
+                new KeyValuePair<ConfigEntryBase, object>(MappingConfig.MapFilterHiddenCategoriesEntry,
                     new StringList(new[] { "Other" })),
-                new KeyValuePair<BepInEx.Configuration.ConfigEntryBase, object>(MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false)
+                new KeyValuePair<ConfigEntryBase, object>(MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false)
             };
-            var settings = new List<SmokeSession.SettingRestoration>();
-            foreach (var change in changes)
-            {
-                if (!SmokeSession.BeginSetting(run.RunId, change.Key, out var setting, out var refusal))
-                {
-                    run.Fail("navhotkey_hidden_category_kept", "filter setting precondition failed: " + refusal);
-                    return;
-                }
-                settings.Add(setting);
-            }
             var smokePins = new SmokePins();
             Minimap.PinData automatic = null;
             try
             {
-                for (var i = 0; i < changes.Length; i++)
-                    if (!SmokeSession.WriteSetting(run.RunId, settings[i], changes[i].Value, out var refusal))
+                foreach (var change in changes)
+                    if (!SmokeSetup.Write(run.RunId, held, change.Key, change.Value, out var refusal))
                     {
                         run.Fail("navhotkey_hidden_category_kept", "filter write precondition failed: " + refusal);
                         return;
@@ -3400,8 +3765,18 @@ namespace Automatics.SmokeTest
             {
                 Navigation.ClearTarget();
                 smokePins.Remove(map, automatic);
-                foreach (var setting in settings)
-                    if (!SmokeSession.WriteSetting(run.RunId, setting, setting.Original, out var refusal))
+                var back = new[]
+                {
+                    new KeyValuePair<ConfigEntryBase, object>(MappingConfig.EnableMapEnhancementsEntry,
+                        held.TryGetValue(MappingConfig.EnableMapEnhancementsEntry, out var enhancements)
+                            ? enhancements.Original
+                            : true),
+                    new KeyValuePair<ConfigEntryBase, object>(MappingConfig.MapFilterHiddenCategoriesEntry, new StringList()),
+                    new KeyValuePair<ConfigEntryBase, object>(MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false)
+                };
+                foreach (var change in back)
+                    if (held.ContainsKey(change.Key) &&
+                        !SmokeSetup.Write(run.RunId, held, change.Key, change.Value, out var refusal))
                         run.Fail("navhotkey_hidden_category_settings", "filter restoration failed: " + refusal);
             }
         }
@@ -3498,17 +3873,27 @@ namespace Automatics.SmokeTest
                 run.Skip("aimbar_section", "requires a loaded single-player world, local owner, minimap, enemy HUD and camera");
                 yield break;
             }
-            if (!MappingModule.Running)
-            {
-                run.Skip("aimbar_section", "Automatic Mapping is not running; enable the module first");
-                yield break;
-            }
             if (Game.IsPaused() || !Hud.instance || Hud.IsUserHidden() ||
                 Minimap.instance.m_mode == Minimap.MapMode.Large)
             {
                 run.Skip("aimbar_section", "the game must be unpaused, HUD visible and large map closed");
                 yield break;
             }
+
+            // Automatic Mapping on for the section; its toggle goes back with the section's other
+            // settings.
+            var held = new Held();
+            var module = new SmokeSetup.SetupResult();
+            var setup = SmokeSetup.EnableModule(run.RunId, held, MappingConfig.ModuleEntry,
+                () => MappingModule.Running, module);
+            while (setup.MoveNext()) yield return setup.Current;
+            if (!module.Ok)
+            {
+                run.Skip("aimbar_section", "Automatic Mapping is not running: " + module.Reason);
+                SmokeSetup.ReportSettings(run, "aimbar_settings_restored");
+                yield break;
+            }
+            if (module.Changed) run.Pass("aimbar_setup", "Automatic Mapping " + module.Reason);
 
             var original = Navigation.CaptureTarget();
             var camera = GameCamera.instance.transform;
