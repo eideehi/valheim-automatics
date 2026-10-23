@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Automatics.Valheim;
 using BepInEx.Configuration;
 using HarmonyLib;
 using ModUtils;
@@ -18,7 +19,12 @@ namespace Automatics.SmokeTest
     // the attack its animation event carries into Attack.DoMeleeAttack. An observer patch, removed
     // afterwards, records the melee call, every rock damage call and every Pickaxes skill raise,
     // and drops any player hit on another object and any terrain operation a player hit spawns.
-    // The section refuses to start with a building piece or another destructible within reach.
+    // Before anything is spawned, the section sets itself up: it turns the module and area mining
+    // on, restricts allow_mining_mineral to the first test kind with no deposit of your world in
+    // reach, turns you to the first of eight headings with no building piece or other
+    // destructible within reach, moves you to clear ground nearby when no kind or no heading
+    // will do, and puts items aside for two free inventory slots; you are taken back to where the
+    // command started at the end of the section.
     // The deposits get a health far above any hit, so no section breaks and nothing drops. Automatic
     // Repair is turned off for the section, because it puts a worn item back to full durability once
     // a second and would hide the pickaxe's wear between the frames a swing spans. Afterwards the added items are removed, the
@@ -32,11 +38,12 @@ namespace Automatics.SmokeTest
         private const float SwingTimeout = 3f;
         private const float ViewPitch = 15f;
         private const float RockDistance = 1.8f;
+        private const float ReachAhead = 1.5f;
         private const float ReachRadius = 4f;
         private const float OutsideMargin = 0.3f;
 
-        // Deposits of the earlier biomes, smallest first; the first one the allow list accepts is
-        // used. The names are checked against ZNetScene at run time.
+        // Deposits of the earlier biomes, smallest first; the first one with no deposit of its kind
+        // of your world in reach is used. The names are checked against ZNetScene at run time.
         private static readonly string[] RockPrefabs =
             { "MineRock_Tin", "MineRock_Obsidian", "rock4_copper", "mudpile" };
 
@@ -45,22 +52,17 @@ namespace Automatics.SmokeTest
 
         public static IEnumerator Run(FeatureRun run)
         {
+            return WoodcuttingFeatureSmoke.ReturnAfter(run, "mining_section", RunSection(run));
+        }
+
+        private static IEnumerator RunSection(FeatureRun run)
+        {
             var player = Player.m_localPlayer;
             if (!run.IsCurrent || !player || !ZNetScene.instance || !ObjectDB.instance ||
                 !ZoneSystem.instance || !ZNet.instance || !ZNet.instance.IsServer() ||
                 ZNet.instance.GetPeerConnections() > 0)
             {
                 run.Skip("mining_section", "requires a loaded single-player world");
-                yield break;
-            }
-            if (!MiningModule.Running)
-            {
-                run.Skip("mining_section", "Automatic Mining is not running; enable the module first");
-                yield break;
-            }
-            if (!MiningConfig.EnableAreaMining)
-            {
-                run.Skip("mining_section", "enable_area_mining is off; turn it on and retry");
                 yield break;
             }
             if (!ModuleRegistry.RuntimeToggleSupported)
@@ -77,53 +79,102 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            var radius = MiningConfig.AreaMiningRadius;
-            var nearby = new List<MiningArea.Target>();
-            MiningComponent.CollectAreaTargets(player, player.transform.position, radius + RockDistance + 4f,
-                nearby);
-            if (nearby.Count > 0)
-            {
-                run.Skip("mining_section",
-                    $"an allowed mineral of your world is within {radius + RockDistance + 4f:0.#} m, and area mining could hit it; move away from minerals and retry");
-                yield break;
-            }
-
-            if (!PickRock(out var rockPrefab, out var rockTier, out var rockSkip))
-            {
-                run.Skip("mining_section", rockSkip);
-                yield break;
-            }
-            var pickaxeName = PickPickaxe(rockTier);
-            if (pickaxeName == null)
-            {
-                run.Skip("mining_section", $"no pickaxe prefab reaches tool tier {rockTier}");
-                yield break;
-            }
-            var facing = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
-            if (facing.sqrMagnitude < 0.5f) facing = Vector3.forward;
-            var blocker = FindBlocker(player, facing);
-            if (blocker != null)
-            {
-                run.Skip("mining_section",
-                    $"{blocker} is within the swing's reach, and a swing could damage it; face open ground and retry");
-                yield break;
-            }
-
-            var inventory = player.GetInventory();
-            if (inventory.GetEmptySlots() < 2)
-            {
-                run.Skip("mining_section", "needs two free inventory slots for the test pickaxe and club");
-                yield break;
-            }
-
+            var held = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
             var state = new PlayerState(player);
             var rocks = new List<GameObject>();
+            SmokeSetup.InventoryStash stash = null;
             Func<string, bool> handBack = _ => state.Restore();
             SmokeSession.TrackHandBack(handBack);
             try
             {
-                if (!TryPauseAutomaticMining(run) || !TryPauseAutomaticRepair(run))
+                // Before the module can start: its timer would mine with a pickaxe of yours.
+                if (!TryPauseAutomaticMining(run, held))
                     yield break;
+
+                var setup = new List<string>();
+                var module = new SmokeSetup.SetupResult();
+                var steps = SmokeSetup.EnableModule(run.RunId, held, MiningConfig.ModuleEntry,
+                    () => MiningModule.Running, module);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!module.Ok)
+                {
+                    run.Skip("mining_section", $"Automatic Mining is not running: {module.Reason}");
+                    yield break;
+                }
+                if (module.Changed) setup.Add("Automatic Mining turned on for the section");
+
+                if (!MiningConfig.EnableAreaMining)
+                {
+                    var areaEntry = SmokeSetup.Field<bool>(typeof(MiningConfig), "_enableAreaMining");
+                    if (areaEntry == null || !Write(run, held, areaEntry, true) || !MiningConfig.EnableAreaMining)
+                    {
+                        run.Skip("mining_section", "enable_area_mining is off and could not be turned on for the run");
+                        yield break;
+                    }
+                    setup.Add("enable_area_mining turned on for the section");
+                }
+
+                if (!TryPauseAutomaticRepair(run, held))
+                    yield break;
+
+                var kinds = RockKinds(out var kindSkip);
+                if (kinds.Count == 0)
+                {
+                    run.Skip("mining_section", kindSkip);
+                    yield break;
+                }
+
+                var radius = MiningConfig.AreaMiningRadius;
+                var reach = radius + RockDistance + 4f;
+                var start = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
+                if (start.sqrMagnitude < 0.5f) start = Vector3.forward;
+                var kind = PickKind(run, held, player, kinds, reach, out var refused, out var kindProblem);
+                if (refused)
+                {
+                    run.Skip("mining_section", kindProblem);
+                    yield break;
+                }
+                var heading = kind != null ? FindHeading(player, player.transform.position, start, out kindProblem) : null;
+                if (heading == null)
+                {
+                    var minerals = WorldMinerals();
+                    var move = new SmokeSetup.SetupResult();
+                    steps = WoodcuttingFeatureSmoke.Settle(run, ReachAhead + ReachRadius,
+                        p => SiteProblem(player, p, start, kinds, minerals, reach), kindProblem, move);
+                    while (steps.MoveNext()) yield return steps.Current;
+                    if (!move.Ok)
+                    {
+                        run.Skip("mining_section", move.Reason);
+                        yield break;
+                    }
+                    if (move.Changed) setup.Add(move.Reason);
+
+                    kind = PickKind(run, held, player, kinds, reach, out _, out kindProblem);
+                    heading = kind != null ? FindHeading(player, player.transform.position, start, out kindProblem) : null;
+                    if (heading == null)
+                    {
+                        run.Skip("mining_section", kindProblem);
+                        yield break;
+                    }
+                }
+                setup.Add($"allow_mining_mineral set to {kind.Identifier} alone for the section");
+
+                var rockPrefab = kind.Prefab;
+                var pickaxeName = PickPickaxe(kind.MinToolTier);
+                var facing = heading.Value;
+                setup.Add(WoodcuttingFeatureSmoke.Turn(start, facing));
+                steps = WoodcuttingFeatureSmoke.Face(player, facing);
+                while (steps.MoveNext()) yield return steps.Current;
+
+                stash = SmokeSetup.Stash(player, 2);
+                if (player.GetInventory().GetEmptySlots() < 2)
+                {
+                    run.Skip("mining_section",
+                        $"needs two free inventory slots for the test pickaxe and club, and putting your unequipped items aside did not free them ({stash.Report})");
+                    yield break;
+                }
+                setup.Add(stash.Report);
+                run.Pass("mining_setup", string.Join("; ", setup));
 
                 var right = Vector3.Cross(Vector3.up, facing);
                 var first = player.transform.position + facing * RockDistance;
@@ -176,7 +227,7 @@ namespace Automatics.SmokeTest
                 }
 
                 var swing = new SwingResult();
-                var steps = Swing(player, pickaxe, facing, state, swing);
+                steps = Swing(player, pickaxe, facing, state, swing);
                 while (steps.MoveNext()) yield return steps.Current;
                 CheckPickaxeSwing(run, swing, rocks, pickaxe, radius);
                 CheckOutsideRock(run, swing, rocks, outside, radius);
@@ -226,6 +277,8 @@ namespace Automatics.SmokeTest
                     {
                         try
                         {
+                            // After the test items are gone, so the slots they took are free.
+                            stash?.Restore();
                             ReportSettings(run);
                         }
                         finally
@@ -241,17 +294,10 @@ namespace Automatics.SmokeTest
 
         // Automatic Mining's own timer would mine the test deposits with the test pickaxe while
         // the swings run. It is turned off for the section, through the session.
-        private static bool TryPauseAutomaticMining(FeatureRun run)
+        private static bool TryPauseAutomaticMining(FeatureRun run,
+            Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held)
         {
-            if (!MiningConfig.EnableAutomaticMining || MiningConfig.MiningInterval <= 0f)
-                return true;
-
-            var entry = MiningConfig.EnableAutomaticMiningEntry;
-            if (entry != null &&
-                SmokeSession.BeginSetting(run.RunId, entry, out var setting, out var refusal) &&
-                SmokeSession.WriteSetting(run.RunId, setting, false, out refusal) &&
-                !MiningConfig.EnableAutomaticMining)
-                return true;
+            if (WoodcuttingFeatureSmoke.PauseAutomaticMining(run, held)) return true;
 
             run.Skip("mining_section",
                 "enable_automatic_mining could not be turned off for the run, and its timer would mine the test rocks");
@@ -261,9 +307,9 @@ namespace Automatics.SmokeTest
         // Automatic Repair would put the test pickaxe back to full durability between the frames a
         // swing spans, and so hide its wear. The module is turned off for the section, through the
         // session, and put back at its end.
-        private static bool TryPauseAutomaticRepair(FeatureRun run)
+        private static bool TryPauseAutomaticRepair(FeatureRun run,
+            Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held)
         {
-            var held = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
             if (WoodcuttingFeatureSmoke.PauseAutomaticRepair(run, held)) return true;
 
             run.Skip("mining_section",
@@ -274,6 +320,113 @@ namespace Automatics.SmokeTest
         private static void ReportSettings(FeatureRun run)
         {
             SmokeSetup.ReportSettings(run, "mining_settings_restored");
+        }
+
+        private static bool Write(FeatureRun run, Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held,
+            ConfigEntryBase entry, object value)
+        {
+            return SmokeSetup.Write(run, held, entry, value);
+        }
+
+        // -- The test kind ----------------------------------------------------------------------
+
+        // A deposit prefab the section can spawn: its mineral identifier and the tool tier it needs.
+        private sealed class RockKind
+        {
+            public GameObject Prefab;
+            public string Identifier;
+            public int MinToolTier;
+        }
+
+        // The deposit prefabs of RockPrefabs the loaded world has, each with its identifier and a
+        // pickaxe prefab that reaches its tier, in order.
+        private static List<RockKind> RockKinds(out string skip)
+        {
+            skip = "none of the test deposits is available with a mineral identifier and a pickaxe that reaches it (" +
+                   string.Join(", ", RockPrefabs) + ")";
+            var kinds = new List<RockKind>();
+            foreach (var name in RockPrefabs)
+            {
+                var prefab = ZNetScene.instance.GetPrefab(name);
+                var component = prefab ? RockComponent(prefab) : null;
+                var identifier = Identify(component);
+                if (identifier == null) continue;
+
+                int tier;
+                switch (component)
+                {
+                    case MineRock rock: tier = rock.m_minToolTier; break;
+                    case MineRock5 rock5: tier = rock5.m_minToolTier; break;
+                    case Destructible destructible: tier = destructible.m_minToolTier; break;
+                    default: continue;
+                }
+                if (PickPickaxe(tier) == null) continue;
+                kinds.Add(new RockKind { Prefab = prefab, Identifier = identifier, MinToolTier = tier });
+            }
+            return kinds;
+        }
+
+        // The mineral identifier allow_mining_mineral knows the deposit by, as Automatic Mining
+        // resolves it, or null.
+        private static string Identify(Component component)
+        {
+            return component && ValheimObject.Mineral.GetIdentify(Objects.GetName(component), out var identifier)
+                ? identifier
+                : null;
+        }
+
+        // The first kind no deposit of your world within reach of the spot you stand on would let
+        // area mining hit: allow_mining_mineral is written to each kind alone in turn, and area
+        // mining's own collection answers. The list stays at the kind returned; for none, it holds
+        // the last kind tried, and problem says why. refused is true when the list could not be
+        // written at all.
+        private static RockKind PickKind(FeatureRun run, Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held,
+            Player player, List<RockKind> kinds, float reach, out bool refused, out string problem)
+        {
+            refused = false;
+            var entry = SmokeSetup.Field<StringList>(typeof(MiningConfig), "_allowMiningMineral");
+            var nearby = new List<MiningArea.Target>();
+            foreach (var kind in kinds)
+            {
+                if (entry == null || !Write(run, held, entry, new StringList(new[] { kind.Identifier })) ||
+                    MiningConfig.AllowMiningMinerals.Count != 1 || !MiningConfig.AllowMiningMinerals.Contains(kind.Identifier))
+                {
+                    refused = true;
+                    problem = $"allow_mining_mineral could not be set to {kind.Identifier} alone for the run";
+                    return null;
+                }
+
+                nearby.Clear();
+                MiningComponent.CollectAreaTargets(player, player.transform.position, reach, nearby);
+                if (nearby.Count == 0)
+                {
+                    problem = null;
+                    return kind;
+                }
+            }
+
+            problem =
+                $"a deposit of your world of each test kind ({string.Join(", ", kinds.Select(x => x.Identifier))}) is within {reach:0.#} m, and area mining could hit it";
+            return null;
+        }
+
+        // The deposits of your world that Automatic Mining knows, by identifier, with their colliders.
+        private static List<(string Identifier, Collider[] Colliders)> WorldMinerals()
+        {
+            return UnityEngine.Object.FindObjectsByType<MiningComponent>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)
+                .Where(x => x)
+                .Select(x => (Identify(RockComponent(x.gameObject)), x.GetComponentsInChildren<Collider>()))
+                .Where(x => x.Item1 != null)
+                .ToList();
+        }
+
+        // Whether a deposit of the kind has a collider whose bounds come within radius of center:
+        // never nearer than area mining's own test finds it, so no deposit it would find is missed.
+        private static bool MineralNear(List<(string Identifier, Collider[] Colliders)> minerals, string identifier,
+            Vector3 center, float radius)
+        {
+            return minerals.Any(x => x.Identifier == identifier &&
+                                     x.Colliders.Any(c => c && c.bounds.SqrDistance(center) <= radius * radius));
         }
 
         // -- Swings ---------------------------------------------------------------------------
@@ -489,11 +642,37 @@ namespace Automatics.SmokeTest
 
         // -- Test objects ---------------------------------------------------------------------
 
-        // Anything a swing could damage besides the test rocks: a building piece or another
-        // destructible within reach in front of the player. Returns its name, or null.
-        private static string FindBlocker(Player player, Vector3 facing)
+        // The first heading with nothing a swing could damage within reach of a player standing at
+        // origin, or null and why not.
+        private static Vector3? FindHeading(Player player, Vector3 origin, Vector3 facing, out string problem)
         {
-            var center = player.transform.position + facing * 1.5f;
+            var heading = WoodcuttingFeatureSmoke.FindHeading(facing, h => FindBlocker(player, origin, h),
+                out var blocker);
+            problem = heading == null
+                ? $"{blocker} is within the swing's reach in every heading, and a swing could damage it"
+                : null;
+            return heading;
+        }
+
+        // The site test of a move: a clear heading at the site, and a test kind with no deposit of
+        // your world near it. allow_mining_mineral is not written for each site; a deposit counts
+        // when its colliders' bounds come within reach, wider than area mining's own test, which
+        // the section runs again where it settles.
+        private static string SiteProblem(Player player, Vector3 site, Vector3 facing, List<RockKind> kinds,
+            List<(string Identifier, Collider[] Colliders)> minerals, float reach)
+        {
+            if (FindHeading(player, site, facing, out var problem) == null) return problem;
+            return kinds.Any(x => !MineralNear(minerals, x.Identifier, site, reach))
+                ? null
+                : $"a deposit of each test kind within {reach:0.#} m";
+        }
+
+        // Anything a swing could damage besides the test rocks: a building piece or another
+        // destructible within reach in front of a player standing at origin. Returns its name, or
+        // null.
+        private static string FindBlocker(Player player, Vector3 origin, Vector3 facing)
+        {
+            var center = origin + facing * ReachAhead;
             foreach (var collider in Physics.OverlapSphere(center, ReachRadius, ~0, QueryTriggerInteraction.Ignore))
             {
                 if (!collider || collider.transform.IsChildOf(player.transform)) continue;
@@ -505,31 +684,6 @@ namespace Automatics.SmokeTest
                     return $"'{Objects.GetName(destructible)}' ({Objects.GetPrefabName(destructible.gameObject)})";
             }
             return null;
-        }
-
-        private static bool PickRock(out GameObject prefab, out int minToolTier, out string skip)
-        {
-            skip = "none of the test deposits is available and allowed by allow_mining_mineral (" +
-                   string.Join(", ", RockPrefabs) + ")";
-            foreach (var name in RockPrefabs)
-            {
-                prefab = ZNetScene.instance.GetPrefab(name);
-                if (!prefab) continue;
-
-                var component = RockComponent(prefab);
-                if (!component || !MiningComponent.IsAllowedMineral(component)) continue;
-
-                switch (component)
-                {
-                    case MineRock rock: minToolTier = rock.m_minToolTier; return true;
-                    case MineRock5 rock5: minToolTier = rock5.m_minToolTier; return true;
-                    case Destructible destructible: minToolTier = destructible.m_minToolTier; return true;
-                }
-            }
-
-            prefab = null;
-            minToolTier = 0;
-            return false;
         }
 
         private static string PickPickaxe(int minToolTier)

@@ -22,10 +22,15 @@ namespace Automatics.SmokeTest
     // The `woodcutting` section of automatics_smoke_features: Automatic Woodcutting's hits on a tree
     // it spawns, and on the log and stump that felling the tree leaves. Before anything is
     // equipped or spawned, woodcutting_interval is set to 0, so no periodic pass runs while the
-    // section holds a test axe. It then checks the tree data against the prefabs of the loaded
-    // world, against species it works out from the prefabs itself, and writes the settings the
-    // checks assume where yours differ: Automatic Mining's passes off, woodcutting passes on, an
-    // axe needed in the right hand, and the test tree's species allowed. A
+    // section holds a test axe, and the module is turned on when it is off. It then checks the
+    // tree data against the prefabs of the loaded world, against species it works out from the
+    // prefabs itself. It sets woodcutting_range to reach the test tree when it does not, turns
+    // the player to the first of eight headings with nothing near the spot the tree goes to,
+    // moves them to clear ground nearby when no heading will do or a tree, log or stump of the
+    // world stands within reach, and puts items aside for the free inventory slots it needs; the
+    // player is taken back to where the command started at the end of the section. It writes the
+    // settings the checks assume where yours differ: Automatic Mining's passes off, woodcutting
+    // passes on, an axe needed in the right hand, and the test tree's species allowed. A
     // non-persistent tree is spawned in front of the player with a health no hit reaches, so it
     // does not fall until the section fells it, and a test axe is added and equipped. The module's
     // own per-target entry then hits the tree once, and the hit data, the axe's wear and the skill
@@ -64,6 +69,10 @@ namespace Automatics.SmokeTest
         // A log ignores damage for 0.2 s after it spawns; the section waits a little longer.
         internal const float LogDelay = 0.3f;
         internal const int StartFrames = 10;
+
+        // The woodcutting_range the section writes when yours does not reach the test tree: the
+        // default.
+        private const int ReachingRange = 3;
 
         internal const string TreePrefab = "Beech1";
         private const string WallPrefab = "woodwall";
@@ -104,17 +113,17 @@ namespace Automatics.SmokeTest
 
         public static IEnumerator Run(FeatureRun run)
         {
+            return ReturnAfter(run, SectionCheck, RunSection(run));
+        }
+
+        private static IEnumerator RunSection(FeatureRun run)
+        {
             var player = Player.m_localPlayer;
             if (!run.IsCurrent || !player || !ZNetScene.instance || !ObjectDB.instance ||
                 !ZoneSystem.instance || !ZNet.instance || !ZNet.instance.IsServer() ||
                 ZNet.instance.GetPeerConnections() > 0)
             {
                 run.Skip(SectionCheck, "requires a loaded single-player world");
-                yield break;
-            }
-            if (!WoodcuttingModule.Running)
-            {
-                run.Skip(SectionCheck, "Automatic Woodcutting is not running; enable the module first");
                 yield break;
             }
             if (!ModuleRegistry.RuntimeToggleSupported)
@@ -128,12 +137,14 @@ namespace Automatics.SmokeTest
             var spawned = new List<GameObject>();
             PlayerState state = null;
             Func<string, bool> handBack = null;
+            SmokeSetup.InventoryStash stash = null;
             GameObject treeObject = null;
             GameObject otherObject = null;
             try
             {
-                // First of all, before anything is equipped or spawned and before a frame passes:
-                // a periodic pass would hit trees of your world with the test axe.
+                // First of all, before anything is equipped or spawned, before a frame passes and
+                // before the module is turned on: a periodic pass would hit trees of your world
+                // with the test axe.
                 if (WoodcuttingConfig.WoodcuttingInterval > 0f)
                     Write(run, held, WoodcuttingConfig.WoodcuttingIntervalEntry, 0f);
                 if (WoodcuttingConfig.WoodcuttingInterval > 0f)
@@ -143,6 +154,18 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
+                var setup = new List<string>();
+                var module = new SmokeSetup.SetupResult();
+                var steps = SmokeSetup.EnableModule(run.RunId, held, WoodcuttingConfig.ModuleEntry,
+                    () => WoodcuttingModule.Running, module);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!module.Ok)
+                {
+                    run.Skip(SectionCheck, $"Automatic Woodcutting is not running: {module.Reason}");
+                    yield break;
+                }
+                if (module.Changed) setup.Add("Automatic Woodcutting turned on for the section");
+
                 CheckSpeciesData(run, held);
 
                 if (player.InAttack() || player.IsSwimming() || !player.IsOnGround() ||
@@ -150,16 +173,6 @@ namespace Automatics.SmokeTest
                 {
                     run.Skip(SectionCheck,
                         "stand on open level ground, out of build mode, not attacking, swimming or attached");
-                    yield break;
-                }
-
-                var facing = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
-                if (facing.sqrMagnitude < 0.5f) facing = Vector3.forward;
-                var blocker = FindBlocker(player, facing);
-                if (blocker != null)
-                {
-                    run.Skip(SectionCheck,
-                        $"{blocker} is near the spot in front of you where the test tree goes; face open ground and retry");
                     yield break;
                 }
 
@@ -187,28 +200,64 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
-                var range = WoodcuttingConfig.WoodcuttingRange > 0
-                    ? WoodcuttingConfig.WoodcuttingRange
-                    : axeShared.m_attack.m_attackRange;
-                if (range < TreeDistance)
+                if (Range(axeShared) < TreeDistance)
                 {
-                    run.Skip(SectionCheck,
-                        $"the woodcutting range ({range:0.##} m) does not reach the test tree {TreeDistance:0.#} m in front of you; set woodcutting_range to 3 and retry");
-                    yield break;
+                    if (!Write(run, held, WoodcuttingConfig.WoodcuttingRangeEntry, ReachingRange) ||
+                        Range(axeShared) < TreeDistance)
+                    {
+                        run.Skip(SectionCheck,
+                            $"the woodcutting range ({Range(axeShared):0.##} m) does not reach the test tree {TreeDistance:0.#} m in front of you, and woodcutting_range could not be set to {ReachingRange} for the run");
+                        yield break;
+                    }
+                    setup.Add($"woodcutting_range set to {ReachingRange} for the section");
                 }
 
+                // The spot: the first clear heading where you stand, else clear ground nearby.
+                var start = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
+                if (start.sqrMagnitude < 0.5f) start = Vector3.forward;
+                var heading = FindSite(player, player.transform.position, start, out var siteProblem);
+                if (heading == null)
+                {
+                    var move = new SmokeSetup.SetupResult();
+                    steps = Settle(run, TreeDistance + ClearMargin,
+                        p => FindSite(player, p, start, out var why) == null ? why : null,
+                        siteProblem, move);
+                    while (steps.MoveNext()) yield return steps.Current;
+                    if (!move.Ok)
+                    {
+                        run.Skip(SectionCheck, move.Reason);
+                        yield break;
+                    }
+                    if (move.Changed) setup.Add(move.Reason);
+
+                    heading = FindSite(player, player.transform.position, start, out siteProblem);
+                    if (heading == null)
+                    {
+                        run.Skip(SectionCheck, siteProblem);
+                        yield break;
+                    }
+                }
+                var facing = heading.Value;
+                setup.Add(Turn(start, facing));
+                steps = Face(player, facing);
+                while (steps.MoveNext()) yield return steps.Current;
+
                 var slots = 1 + AxePrefabs.Length;
+                stash = SmokeSetup.Stash(player, slots);
                 if (player.GetInventory().GetEmptySlots() < slots)
                 {
-                    run.Skip(SectionCheck, $"needs {slots} free inventory slots for the test axes and club");
+                    run.Skip(SectionCheck,
+                        $"needs {slots} free inventory slots for the test axes and club, and putting your unequipped items aside did not free them ({stash.Report})");
                     yield break;
                 }
+                setup.Add(stash.Report);
 
                 if (!PrepareSettings(run, held, treeSpecies, out var refusal))
                 {
                     run.Skip(SectionCheck, refusal);
                     yield break;
                 }
+                run.Pass("woodcutting_setup", string.Join("; ", setup));
 
                 var spot = player.transform.position + facing * TreeDistance;
                 spot.y = ZoneSystem.instance.GetGroundHeight(spot);
@@ -278,7 +327,7 @@ namespace Automatics.SmokeTest
                 otherSpot.y = ZoneSystem.instance.GetGroundHeight(otherSpot);
                 otherObject = SpawnOtherDestructible(otherSpot, out var otherSkip);
 
-                var steps = Fell(run, held, player, component, tree, axe, treeSpecies, spawned);
+                steps = Fell(run, held, player, component, tree, axe, treeSpecies, spawned);
                 while (steps.MoveNext()) yield return steps.Current;
 
                 CheckOtherDestructible(run, otherObject, otherSkip);
@@ -314,6 +363,8 @@ namespace Automatics.SmokeTest
                     {
                         try
                         {
+                            // After the test items are gone, so the slots they took are free.
+                            stash?.Restore();
                             if (held.Count > 0) ReportRestore(run);
                         }
                         finally
@@ -658,6 +709,14 @@ namespace Automatics.SmokeTest
         }
 
         // -- Settings ---------------------------------------------------------------------------
+
+        // The range a pass reaches with the axe: woodcutting_range, or the axe's attack range at 0.
+        private static float Range(ItemDrop.ItemData.SharedData axe)
+        {
+            return WoodcuttingConfig.WoodcuttingRange > 0
+                ? WoodcuttingConfig.WoodcuttingRange
+                : axe.m_attack.m_attackRange;
+        }
 
         // The settings the checks below assume, written for the section where yours differ: passes
         // on, an axe needed in the right hand, and the test tree's species
@@ -1946,16 +2005,122 @@ namespace Automatics.SmokeTest
             var origin = player.transform.position;
             var testDistance = new[] { target }.Concat(alongside).Where(x => x)
                 .Min(x => Vector3.Distance(origin, x.transform.position));
-            var nearer = UnityEngine.Object.FindObjectsByType<WoodcuttingComponent>(
-                    FindObjectsInactive.Exclude, FindObjectsSortMode.None)
-                .Where(x => x && !HitObserver.IsTestObject(x.gameObject) &&
-                            Objects.GetZNetView(x, out var nview) && nview.IsValid())
-                .Select(x => Vector3.Distance(origin, x.transform.position))
+            var nearer = WorldTargetDistances(origin)
                 .Where(x => x <= testDistance)
                 .ToList();
             return nearer.Count > 0
                 ? $"a tree, log or stump of your world is {nearer.Min():0.#} m from you, not farther than the test object ({testDistance:0.#} m), so the pass could go to it; move away from trees and retry"
                 : null;
+        }
+
+        // How far each tree, log and stump of your world that the module knows lies from origin.
+        private static IEnumerable<float> WorldTargetDistances(Vector3 origin)
+        {
+            return UnityEngine.Object.FindObjectsByType<WoodcuttingComponent>(
+                    FindObjectsInactive.Exclude, FindObjectsSortMode.None)
+                .Where(x => x && !HitObserver.IsTestObject(x.gameObject) &&
+                            Objects.GetZNetView(x, out var nview) && nview.IsValid())
+                .Select(x => Vector3.Distance(origin, x.transform.position));
+        }
+
+        // The section's site test for a player standing at origin: the first heading in which
+        // nothing stands near the spot the test tree goes to, and no tree, log or stump of your
+        // world within reach of origin, where a pass would take it before the test objects.
+        // Returns the heading, or null and why not.
+        private static Vector3? FindSite(Player player, Vector3 origin, Vector3 facing, out string problem)
+        {
+            var reach = TreeDistance + ClearMargin;
+            var nearest = WorldTargetDistances(origin).DefaultIfEmpty(float.MaxValue).Min();
+            if (nearest <= reach)
+            {
+                problem = $"a tree, log or stump of your world is {nearest:0.#} m from you, within {reach:0.#} m, so a pass could go to it instead of a test object";
+                return null;
+            }
+
+            var heading = FindHeading(facing, h => FindBlocker(player, origin, h), out var blocker);
+            problem = heading == null
+                ? $"{blocker} is near the spot in front of you where the test tree goes, in every heading"
+                : null;
+            return heading;
+        }
+
+        // -- Setting up the spot -------------------------------------------------------------------
+
+        // How long Face waits for your body to turn.
+        private const float FaceTimeout = 1f;
+
+        // The headings a section tries for its test objects, 45° apart: facing first, then 45° to
+        // the right, 45° to the left, and so on to straight behind.
+        internal static IEnumerable<Vector3> Headings(Vector3 facing)
+        {
+            for (var i = 0; i < 8; i++)
+            {
+                var angle = (i + 1) / 2 * 45f * (i % 2 == 0 ? -1f : 1f);
+                yield return Quaternion.Euler(0f, angle, 0f) * facing;
+            }
+        }
+
+        // The first heading in which problem finds nothing in the way, or null; blocker is what
+        // stands in the way of the first heading tried.
+        internal static Vector3? FindHeading(Vector3 facing, Func<Vector3, string> problem, out string blocker)
+        {
+            blocker = null;
+            foreach (var heading in Headings(facing))
+            {
+                var found = problem(heading);
+                if (found == null) return heading;
+                blocker = blocker ?? found;
+            }
+            return null;
+        }
+
+        // For a setup note: how far the heading turns you from where you faced.
+        internal static string Turn(Vector3 from, Vector3 to)
+        {
+            var angle = Vector3.SignedAngle(from, to, Vector3.up);
+            return Mathf.Abs(angle) < 1f
+                ? "kept your facing"
+                : $"turned you {Mathf.Abs(angle):0}° to the {(angle > 0f ? "right" : "left")}";
+        }
+
+        // Turns you to the heading. SetLookDir sets the yaw your view and body follow, and the body
+        // turns at its own speed, so this waits until it faces the heading, for at most
+        // FaceTimeout. How long the turn takes is unverified offline.
+        internal static IEnumerator Face(Player player, Vector3 heading)
+        {
+            player.SetLookDir(heading);
+            var deadline = Time.time + FaceTimeout;
+            while (player && Time.time < deadline &&
+                   Vector3.Angle(Vector3.ProjectOnPlane(player.transform.forward, Vector3.up), heading) > 2f)
+                yield return null;
+        }
+
+        // Runs a section and then takes you back to where the command started when the section
+        // moved you, so the next section starts there too. When the move back fails, the run's
+        // hand-back tries again at its end.
+        internal static IEnumerator ReturnAfter(FeatureRun run, string check, IEnumerator section)
+        {
+            while (section.MoveNext()) yield return section.Current;
+
+            var back = new SmokeSetup.SetupResult();
+            var steps = SmokeSetup.ReturnToStart(run.RunId, back);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!back.Ok)
+                FeaturesSmokeCommand.Warn(
+                    $"[Automatics Smoke] {check}: you could not be taken back to where the command started: {back.Reason}; the run's hand-back tries again at its end");
+        }
+
+        // When the spot you stand on does not pass site, moves you to the nearest site nearby that
+        // passes it and is free of building pieces within radius (SmokeSetup.Relocate, which also
+        // wants dry, level ground). result.Reason is a SKIP reason for a failure and a setup note
+        // for a move.
+        internal static IEnumerator Settle(FeatureRun run, float radius, Func<Vector3, string> site,
+            string here, SmokeSetup.SetupResult result)
+        {
+            var steps = SmokeSetup.Relocate(run.RunId,
+                p => SmokeSetup.Clearance(radius, SmokeSetup.SiteKinds.Pieces)(p) ?? site(p), result);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!result.Ok) result.Reason = $"{here}; and {result.Reason}";
         }
 
         private static void ReportRestore(FeatureRun run)
@@ -1984,11 +2149,12 @@ namespace Automatics.SmokeTest
 
         // -- Test objects ---------------------------------------------------------------------
 
-        // Anything near the spot where the test tree goes: a building piece, another tree, log or
-        // stump, a creature or any other destructible. Returns its name, or null.
-        private static string FindBlocker(Player player, Vector3 facing)
+        // Anything near the spot where the test tree goes for a player standing at origin: a
+        // building piece, another tree, log or stump, a creature or any other destructible.
+        // Returns its name, or null.
+        private static string FindBlocker(Player player, Vector3 origin, Vector3 facing)
         {
-            var center = player.transform.position + facing * (TreeDistance * 0.5f);
+            var center = origin + facing * (TreeDistance * 0.5f);
             var radius = TreeDistance * 0.5f + ClearMargin;
             foreach (var collider in Physics.OverlapSphere(center, radius, ~0, QueryTriggerInteraction.Ignore))
             {

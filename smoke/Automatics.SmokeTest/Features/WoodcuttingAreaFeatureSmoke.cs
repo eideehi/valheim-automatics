@@ -20,7 +20,12 @@ namespace Automatics.SmokeTest
     // that are felled at once into a log and a stump each, one of them of a second species. More
     // test objects stand for each exclusion: a tree above the axe's tool tier, a tree of the
     // second species, and a stump of the test species to the side, placed midway between the
-    // area radius and the raised one. The section turns Automatic Mining's passes and
+    // area radius and the raised one. Before anything is spawned, the section turns the module
+    // and area woodcutting on, turns the player to the first of eight headings with nothing near
+    // the spots and no allowed tree, log or stump of the world in reach, moves them to clear
+    // ground nearby when no heading will do, and puts items aside for two free inventory slots;
+    // the player is taken back to where the command started at the end of the section. The
+    // section turns Automatic Mining's passes and
     // Automatic Repair off (it puts a worn item back to full durability once a second, which would
     // undo the worn-down axe of the second swing, or its wear, between frames; the failures that read
     // durability also give the axe's durability as the swing's melee call began) and
@@ -83,22 +88,17 @@ namespace Automatics.SmokeTest
 
         public static IEnumerator Run(FeatureRun run)
         {
+            return WoodcuttingFeatureSmoke.ReturnAfter(run, SectionCheck, RunSection(run));
+        }
+
+        private static IEnumerator RunSection(FeatureRun run)
+        {
             var player = Player.m_localPlayer;
             if (!run.IsCurrent || !player || !ZNetScene.instance || !ObjectDB.instance ||
                 !ZoneSystem.instance || !ZNet.instance || !ZNet.instance.IsServer() ||
                 ZNet.instance.GetPeerConnections() > 0)
             {
                 run.Skip(SectionCheck, "requires a loaded single-player world");
-                yield break;
-            }
-            if (!WoodcuttingModule.Running)
-            {
-                run.Skip(SectionCheck, "Automatic Woodcutting is not running; enable the module first");
-                yield break;
-            }
-            if (!WoodcuttingConfig.EnableAreaWoodcutting)
-            {
-                run.Skip(SectionCheck, "enable_area_woodcutting is off; turn it on and retry");
                 yield break;
             }
             if (!ModuleRegistry.RuntimeToggleSupported)
@@ -115,45 +115,102 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            var fixture = Fixture.Plan(player, out var planSkip);
+            var start = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
+            if (start.sqrMagnitude < 0.5f) start = Vector3.forward;
+            var fixture = Fixture.Plan(player, start, out var planSkip);
             if (fixture == null)
             {
                 run.Skip(SectionCheck, planSkip);
-                yield break;
-            }
-            var blocker = fixture.FindBlocker(player);
-            if (blocker != null)
-            {
-                run.Skip(SectionCheck,
-                    $"{blocker} is near the spots in front of you where the test trees go, and a swing could reach it; face open ground and retry");
-                yield break;
-            }
-            var nearby = new List<WoodcuttingArea.Target>();
-            WoodcuttingComponent.CollectAreaTargets(fixture.TriggerSpot, fixture.LiftedRadius + 2f, nearby);
-            if (nearby.Count > 0)
-            {
-                run.Skip(SectionCheck,
-                    $"an allowed tree, log or stump of your world is within {fixture.LiftedRadius + 2f:0.#} m of the spot in front of you, and area woodcutting could hit it; move away from trees and retry");
-                yield break;
-            }
-            if (player.GetInventory().GetEmptySlots() < 2)
-            {
-                run.Skip(SectionCheck, "needs two free inventory slots for the test axe and club");
                 yield break;
             }
 
             var held = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
             var spawned = new List<GameObject>();
             var state = new WoodcuttingFeatureSmoke.PlayerState(player, WoodcuttingFeatureSmoke.RaisableSkills());
+            SmokeSetup.InventoryStash stash = null;
             Func<string, bool> handBack = _ => state.Restore();
             SmokeSession.TrackHandBack(handBack);
             try
             {
+                // Before the module is turned on: with the passes off, it cannot hit trees of your
+                // world with an axe of yours while it starts.
                 if (!PrepareSettings(run, held, fixture, out var refusal))
                 {
                     run.Skip(SectionCheck, refusal);
                     yield break;
                 }
+
+                var setup = new List<string>();
+                var module = new SmokeSetup.SetupResult();
+                var steps = SmokeSetup.EnableModule(run.RunId, held, WoodcuttingConfig.ModuleEntry,
+                    () => WoodcuttingModule.Running, module);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!module.Ok)
+                {
+                    run.Skip(SectionCheck, $"Automatic Woodcutting is not running: {module.Reason}");
+                    yield break;
+                }
+                if (module.Changed) setup.Add("Automatic Woodcutting turned on for the section");
+
+                if (!WoodcuttingConfig.EnableAreaWoodcutting)
+                {
+                    var areaEntry = SmokeSetup.Field<bool>(typeof(WoodcuttingConfig), "_enableAreaWoodcutting");
+                    if (areaEntry == null || !Write(run, held, areaEntry, true) ||
+                        !WoodcuttingConfig.EnableAreaWoodcutting)
+                    {
+                        run.Skip(SectionCheck, "enable_area_woodcutting is off and could not be turned on for the run");
+                        yield break;
+                    }
+                    setup.Add("enable_area_woodcutting turned on for the section");
+                }
+
+                // The spot: the first clear heading where you stand, else clear ground nearby.
+                // While it is looked for, allow_woodcutting_tree holds every species the section
+                // allows at some point, so the screen covers the later swings too.
+                if (!Write(run, held, WoodcuttingConfig.AllowWoodcuttingTreeEntry, fixture.ScreenedSpecies()))
+                {
+                    run.Skip(SectionCheck, "allow_woodcutting_tree could not be written for the run");
+                    yield break;
+                }
+                if (!fixture.FindHeading(player, player.transform.position, start, out var siteProblem))
+                {
+                    var move = new SmokeSetup.SetupResult();
+                    steps = WoodcuttingFeatureSmoke.Settle(run, fixture.LiftedRadius,
+                        p => fixture.FindHeading(player, p, start, out var why) ? null : why,
+                        siteProblem, move);
+                    while (steps.MoveNext()) yield return steps.Current;
+                    if (!move.Ok)
+                    {
+                        run.Skip(SectionCheck, move.Reason);
+                        yield break;
+                    }
+                    if (move.Changed) setup.Add(move.Reason);
+
+                    if (!fixture.FindHeading(player, player.transform.position, start, out siteProblem))
+                    {
+                        run.Skip(SectionCheck, siteProblem);
+                        yield break;
+                    }
+                }
+                if (!Write(run, held, WoodcuttingConfig.AllowWoodcuttingTreeEntry,
+                        new StringList(new[] { fixture.Species })))
+                {
+                    run.Skip(SectionCheck, "allow_woodcutting_tree could not be written for the run");
+                    yield break;
+                }
+                setup.Add(WoodcuttingFeatureSmoke.Turn(start, fixture.Facing));
+                steps = WoodcuttingFeatureSmoke.Face(player, fixture.Facing);
+                while (steps.MoveNext()) yield return steps.Current;
+
+                stash = SmokeSetup.Stash(player, 2);
+                if (player.GetInventory().GetEmptySlots() < 2)
+                {
+                    run.Skip(SectionCheck,
+                        $"needs two free inventory slots for the test axe and club, and putting your unequipped items aside did not free them ({stash.Report})");
+                    yield break;
+                }
+                setup.Add(stash.Report);
+                run.Pass("woodcutting_area_setup", string.Join("; ", setup));
 
                 if (!fixture.Spawn(spawned, out var spawnSkip))
                 {
@@ -200,7 +257,7 @@ namespace Automatics.SmokeTest
                 SwingObserver.TriggerAllowed = go => !fixture.SecondSpeciesObjects.Contains(go);
                 SetHealth(fixture.Trigger, 1f);
                 var first = new SwingResult { Name = "first" };
-                var steps = Swing(player, axe, fixture.Facing, ViewPitch, state, first, spawned);
+                steps = Swing(player, axe, fixture.Facing, ViewPitch, state, first, spawned);
                 while (steps.MoveNext()) yield return steps.Current;
                 swings.Add(first);
                 fixture.CollectFresh(first);
@@ -338,6 +395,8 @@ namespace Automatics.SmokeTest
                     {
                         try
                         {
+                            // After the test items are gone, so the slots they took are free.
+                            stash?.Restore();
                             ReportSettings(run);
                         }
                         finally
@@ -1405,6 +1464,7 @@ namespace Automatics.SmokeTest
 
             private string _secondPrefab;
             private string _stumpPrefab;
+            private string _kindOtherPrefab;
             private Vector3 _origin;
             private Vector3 _right;
             private float _ring;
@@ -1415,8 +1475,9 @@ namespace Automatics.SmokeTest
             // radius, so it changes the distance to that stump by about a centimetre.
             private Vector3 _expectedHit;
 
-            // Picks the species, the axe and the spots, all from what the loaded world has.
-            public static Fixture Plan(Player player, out string skip)
+            // Picks the species, the axe and the spots, all from what the loaded world has, the
+            // spots in front of you along facing.
+            public static Fixture Plan(Player player, Vector3 facing, out string skip)
             {
                 skip = null;
                 var fixture = new Fixture();
@@ -1463,20 +1524,64 @@ namespace Automatics.SmokeTest
                 fixture.AxeName = WoodcuttingFeatureSmoke.PickAxe(Mathf.Max(tree.m_minToolTier, secondTier), out var axe);
                 fixture.AxeTier = axe.m_toolTier;
 
-                var facing = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
-                if (facing.sqrMagnitude < 0.5f) facing = Vector3.forward;
-                fixture.Facing = facing;
-                fixture._right = Vector3.Cross(Vector3.up, facing);
-                fixture._origin = player.transform.position;
                 var attack = axe.m_attack;
                 // Beyond the swing's own reach, so only area woodcutting hits the targets there.
                 fixture._ring = Mathf.Max(attack.m_attackRange + attack.m_attackRayWidth + 1.6f, 3.4f);
                 fixture.Radius = Mathf.Min(fixture._ring + 1.5f, 7f);
                 fixture.LiftedRadius = Mathf.Min(fixture.Radius + 3f, 10f);
-                fixture.TriggerSpot = fixture._origin + facing * TriggerDistance;
-                fixture._expectedHit = new Vector3(fixture.TriggerSpot.x, player.m_eye.position.y,
-                    fixture.TriggerSpot.z);
+                fixture._kindOtherPrefab = PickKindOtherTree(fixture.Species, out _);
+                fixture.Aim(player, player.transform.position, facing);
                 return fixture;
+            }
+
+            // Lays the spots out in front of a player standing at origin along facing.
+            private void Aim(Player player, Vector3 origin, Vector3 facing)
+            {
+                Facing = facing;
+                _right = Vector3.Cross(Vector3.up, facing);
+                _origin = origin;
+                TriggerSpot = origin + facing * TriggerDistance;
+                var eye = origin.y + player.m_eye.position.y - player.transform.position.y;
+                _expectedHit = new Vector3(TriggerSpot.x, eye, TriggerSpot.z);
+            }
+
+            // Every species the section allows at some point: the test species, the second
+            // species the third swing allows, and the other species of the same-kind check.
+            public StringList ScreenedSpecies()
+            {
+                var species = new List<string> { Species, SecondSpecies };
+                if (_kindOtherPrefab != null) species.AddRange(WoodcuttingFeatureSmoke.SpeciesOf(_kindOtherPrefab));
+                return new StringList(species);
+            }
+
+            // Lays the spots out along the first of the eight headings from facing, for a player
+            // standing at origin, in which nothing stands near the spots of the first swings or
+            // of the same-kind check, and no allowed tree, log or stump of your world lies within
+            // the raised radius plus 2 m of the spot in front of you. Problem says why none will
+            // do; the spots are then laid out along the last heading tried.
+            public bool FindHeading(Player player, Vector3 origin, Vector3 facing, out string problem)
+            {
+                var heading = WoodcuttingFeatureSmoke.FindHeading(facing, h =>
+                {
+                    Aim(player, origin, h);
+                    var blocker = FindBlocker(player) ?? FindKindBlocker(player, PlanKind());
+                    if (blocker != null)
+                        return $"{blocker} is near the spots in front of you where the test trees go, and a swing could reach it";
+
+                    var nearby = new List<WoodcuttingArea.Target>();
+                    WoodcuttingComponent.CollectAreaTargets(TriggerSpot, LiftedRadius + 2f, nearby);
+                    return nearby.Count > 0
+                        ? $"an allowed tree, log or stump of your world is within {LiftedRadius + 2f:0.#} m of the spot in front of you, and area woodcutting could hit it"
+                        : null;
+                }, out problem);
+                if (heading == null)
+                {
+                    problem += ", in every heading";
+                    return false;
+                }
+
+                problem = null;
+                return true;
             }
 
             private IEnumerable<(string Prefab, Vector3 Spot)> Spots()

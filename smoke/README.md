@@ -1535,18 +1535,38 @@ the hover is then left to a person.
 
 #### `mining`
 
-Run `automatics_smoke_features mining` in a single-player world with Automatic
-Mining enabled and `enable_area_mining` on, standing on open level ground with
-no allowed mineral of your world nearby (the section SKIPs and names the
-distance when one is), no building piece or other destructible object within
-about 4 m in front of you (the section SKIPs and names it), and two free
-inventory slots. It spawns two non-persistent deposits of the earlier biomes
-about 1.8 m in front of you, side by side, and a third to the other side, a
-little beyond `area_mining_radius`, all of the first kind `allow_mining_mineral`
-accepts, and gives every section a health no hit reaches, so nothing breaks or
-drops. It adds a pickaxe whose tool
-tier reaches the deposit and equips it, turns you to face the deposits, lowers
-your view a little, and starts a real attack with `Humanoid.StartAttack`. An
+Run `automatics_smoke_features mining` in a single-player world, standing on the
+ground, out of build mode and not attacking, swimming or attached. The section
+sets up the rest itself before it spawns anything:
+
+- it turns `enable_automatic_mining` off when Automatic Mining mines on an
+  interval (see below), then turns the module's `module` setting on when the
+  module is off, and `enable_area_mining` on when it is off;
+- it takes the test deposit kinds in order (tin, obsidian, copper, then a
+  mud pile; those the loaded world has, each with a pickaxe that reaches its
+  tool tier), sets `allow_mining_mineral` to each kind alone in turn, and keeps
+  the first kind for which area mining finds no deposit of your world within
+  `area_mining_radius` + 5.8 m of you (8.8 m at the default radius of 3 m); the
+  list stays at that kind for the section;
+- it turns you to the first of eight headings, 45° apart and starting with the
+  way you face, with no building piece or other destructible object within 4 m
+  of the point 1.5 m ahead;
+- when no kind or no heading will do where you stand, it moves you to clear
+  ground nearby, as described in *Safety of the console commands*: a site with
+  a clear heading, a test kind with no deposit of its kind whose colliders come
+  within that distance, and no building piece or map pin within 5.5 m. You are
+  taken back to where the command started at the end of the section;
+- it puts unequipped items aside until two inventory slots are free, and puts
+  them back at the end of the section.
+
+The `mining_setup` check reports what was done. When a step fails, the section
+SKIPs `mining_section` and names the step and why, for instance every site it
+tried. It then spawns two non-persistent deposits of that kind about 1.8 m in
+front of you, side by side, and a third to the other side, a little beyond
+`area_mining_radius`, and gives every section a health no hit reaches, so
+nothing breaks or drops. It adds a pickaxe whose tool tier reaches the deposit
+and equips it, lowers your view a little, and starts a real attack with
+`Humanoid.StartAttack`. An
 observer patch, removed at the end of the section, records the melee call, every
 rock damage call and every Pickaxes skill raise. While it is in place, it also
 guards your world: a hit of yours on anything but the test deposits is dropped,
@@ -1555,6 +1575,7 @@ swing that misses digs nothing.
 
 | Check | Asserts |
 |---|---|
+| `mining_setup` | The section set itself up; the note says what it changed: the module or area mining turned on, the test kind written to `allow_mining_mineral`, the heading it turned you to, the move to clear ground and the items put aside |
 | `mining_area_expands` | The swing hit a test deposit, and area mining added at least one extra hit, each seen as a damage call |
 | `mining_area_cap_and_radius` | At most `area_mining_max_targets` extra hits, each within `area_mining_radius` of the swing's first mineral hit, none on a section or object the swing or an earlier extra hit already hit, and all on the test deposits |
 | `mining_area_damage_applied` | Every extra target lost health |
@@ -1564,7 +1585,7 @@ swing that misses digs nothing.
 | `mining_area_not_from_automatic_mining` | A hit through Automatic Mining's own hit path on a test deposit adds no extra hit |
 | `mining_area_not_from_other_weapons` | A real swing with an added club that hits a test deposit adds no extra hit |
 | `mining_world_guarded` | The section ran to its end under the guard; the note counts the hits on other objects and the terrain operations it dropped |
-| `mining_settings_restored` | Reported only when the section turned `enable_automatic_mining` or Automatic Repair's `module` setting off: each is back at your value |
+| `mining_settings_restored` | Every setting the section changed is back at your value: `allow_mining_mineral`, and those of the module, area mining, `enable_automatic_mining` and Automatic Repair's `module` setting when it changed them |
 
 When Automatic Mining would mine on its timer, `enable_automatic_mining` is
 turned off for the section, so it cannot mine the test deposits with the test
@@ -1576,20 +1597,10 @@ when either cannot be turned off. An attack that does not start within 1 second,
 or triggers no melee hit within 3 seconds, SKIPs the swing's checks and names
 the reason; so does a swing that hits none of the test deposits. At the end
 the added pickaxe and club are removed from your inventory, the items you had
-equipped are equipped again, and your view pitch and Pickaxes skill level are
-put back. The swings still count toward your mining statistics and use some
-stamina. Do not move or attack while the section runs.
-
-## Remove
-
-To uninstall the smoke plugin, remove the dedicated deploy directory:
-
-```bash
-rm -r "$VALHEIM_DIR/BepInEx/plugins/AutomaticsSmoke"
-```
-
-The smoke project is optional developer tooling. The data checks under
-`scripts/` are unaffected by this plugin.
+equipped are equipped again, the items put aside go back, and your view pitch
+and Pickaxes skill level are put back; your view stays turned to the heading
+unless you were moved. The swings still count toward your mining statistics and
+use some stamina. Do not move or attack while the section runs.
 
 #### `planting`
 
@@ -2088,21 +2099,32 @@ in-game checks outside this section.
 
 #### `woodcutting`
 
-Run `automatics_smoke_features woodcutting` in a single-player world with
-Automatic Woodcutting enabled, standing on open level ground with five free
-inventory slots, and with no building piece, tree, log, creature or other
-destructible object within 2.5 m of the point 1 m in front of you (the section
-SKIPs and names it). `woodcutting_range` has to reach 2 m: the default of 3 does,
-and 0 uses the axe's attack range. The section:
+Run `automatics_smoke_features woodcutting` in a single-player world, standing on
+the ground, out of build mode and not attacking, swimming or attached. The
+section:
 
 - sets `woodcutting_interval` to 0 before it equips or spawns anything, so no
   periodic pass runs while it holds a test axe. The write is recorded through the
   session like every setting a section changes, and put back at the end. Some
   checks set it to 1 s and back to 0 around a single call, in the same frame;
+- turns Automatic Woodcutting's `module` setting on when the module is off;
 - checks the tree data against the prefabs of the loaded world and the trees the
   world generator places. The species each log and stump prefab should have is
   worked out by the section itself, from the prefabs alone, and the module's
   resolver is compared with it;
+- sets `woodcutting_range` to 3, the default, when the range a pass reaches
+  (`woodcutting_range`, or the axe's attack range at 0) does not reach the test
+  tree 2 m in front of you;
+- turns you to the first of eight headings, 45° apart and starting with the way
+  you face, with no building piece, tree, log, creature or other destructible
+  object within 2.5 m of the point 1 m ahead. When no heading will do, or a tree,
+  log or stump of your world stands within 3.5 m of you, where a pass could take
+  it before the test objects, it moves you to clear ground nearby, as described
+  in *Safety of the console commands*: a site with a clear heading, no tree, log
+  or stump within 3.5 m and no building piece or map pin within 3.5 m. You are
+  taken back to where the command started at the end of the section;
+- puts unequipped items aside until five inventory slots are free, and puts them
+  back at the end of the section;
 - writes, where yours differ, the settings the checks assume:
   `enable_automatic_mining` off when Automatic Mining mines on an interval, so it
   cannot wear a pickaxe of yours or raise your Pickaxes skill while the section
@@ -2151,6 +2173,7 @@ of them, never one that grows or spawns creatures; the log file names it.
 
 | Check | Asserts |
 |---|---|
+| `woodcutting_setup` | The section set itself up; the note says what it changed: the module turned on, `woodcutting_range` written, the heading it turned you to, the move to clear ground and the items put aside |
 | `woodcutting_species_identifiers_match` | Every built-in tree identifier matches at least one standing tree (`TreeBase`) prefab of the loaded world. A FAIL names the identifiers of the earlier biomes and counts the others; the log file names them all |
 | `woodcutting_species_coverage` | The section walks every standing tree prefab's log, that log's smaller logs in turn, and its stump, and gives each of them the species of every tree that leads to it. The module resolves each of those prefabs to exactly that set, each standing tree prefab to its own species, and a prefab that leads to no species to none. A prefab that leads to no species fails the check only when the world generator places it, or when it is a log or stump that a tree the generator places leads to. The generator places the prefabs of the enabled entries of its vegetation list (`ZoneSystem.m_vegetation`). The other prefabs that lead to no species, such as legacy prefabs, trees of an area the generator does not place and `TreeLog`s that are not wood, do not fail: the log file names each with the reason, and the note counts them. The log file also lists, in one line, the prefabs that lead to no species and are placed or reached from a placed tree. SKIP when the vegetation list is missing or has no enabled entry with a prefab, unless a prefab resolves differently. A FAIL counts the prefabs that fail for leading to no species and those resolved differently; the log file names them |
 | `woodcutting_species_shared_allowed` | For every log or stump prefab that trees of more than one species lead to, by the same walk, `allow_woodcutting_tree` holding any one of those species alone allows it, and holding none of them does not; the list is written back straight after. The note counts them; the log file names them with their species |
@@ -2192,10 +2215,12 @@ of them, never one that grows or spawns creatures; the log file names it.
 | `woodcutting_settings_restored` | Reported when the section changed a setting: every setting it changed is back at your value |
 
 When the section cannot start it SKIPs `woodcutting_section` and names the
-reason: the module is off, the interval or another setting could not be written,
-something stands near the spot or between your eyes and the test tree, no part of
-the test tree is found at your eye height, the range does not reach it, or the
-inventory is full. The section looks along rays from your eyes toward each of the
+reason: the module could not be turned on, the interval or another setting could
+not be written, no clear spot was found where you stand or nearby (the reason
+names the sites tried), something stands between your eyes and the test tree, no
+part of the test tree is found at your eye height, or the inventory slots could
+not be freed. The checks that run a pass still SKIP when a tree, log or stump of
+your world has come nearer than the test object since. The section looks along rays from your eyes toward each of the
 tree's colliders, at eye height, aiming both at the vertical line through the
 tree's position and at the collider's own vertical centre line. No part is found
 when none of those rays meets anything at all. The section then waits for the next physics
@@ -2215,22 +2240,42 @@ centre line, both at eye height kept within its bounds), whether a ray toward
 that point meets the collider itself and at what distance, and the first solid
 collider of any layer that ray meets. At the end the added axes and club
 are removed from your inventory, the items you had equipped are equipped again,
-the skills are put back, and the test objects, including the log, the stump, the
-small trees and the other Destructibles the section spawned, are removed. The
+the items put aside go back, the skills are put back, and the test objects,
+including the log, the stump, the small trees and the other Destructibles the
+section spawned, are removed. Your view stays turned to the heading unless you
+were moved. The
 hits still count toward your tree statistics. The fall direction of a real tree,
 real stumps of your world and the feel of the interval remain in-game checks
 outside this section.
 
 #### `woodcuttingarea`
 
-Run `automatics_smoke_features woodcuttingarea` in a single-player world with
-Automatic Woodcutting enabled and `enable_area_woodcutting` on, standing on open
-level ground with two free inventory slots. It needs room: no allowed tree, log or
-stump of your world within the raised area radius of the spot in front of you, and
-no building piece or other destructible object at any of the spots the test trees
-go to (the section SKIPs and names it). It spawns non-persistent trees and a stump
-around the spot in front of you, each with a health no hit reaches and nothing to
-drop:
+Run `automatics_smoke_features woodcuttingarea` in a single-player world, standing
+on the ground, out of build mode and not attacking, swimming or attached. Before
+it spawns anything, the section writes the settings below, then sets up the rest
+itself:
+
+- it turns Automatic Woodcutting's `module` setting on when the module is off,
+  and `enable_area_woodcutting` on when it is off;
+- it turns you to the first of eight headings, 45° apart and starting with the
+  way you face, with no building piece or other destructible object at any of
+  the spots the test trees of the section go to, the same-kind checks' included,
+  or within a swing's reach, and no allowed tree, log or stump of your world
+  within the raised area radius plus 2 m of the spot in front of you. While it
+  looks, `allow_woodcutting_tree` holds every species the section allows at some
+  point (the beech's, the second species' and the birch's), and it is set to the
+  beech's species alone again afterwards;
+- when no heading will do where you stand, it moves you to clear ground nearby,
+  as described in *Safety of the console commands*: a site with such a heading
+  and no building piece or map pin within the raised area radius. You are taken
+  back to where the command started at the end of the section;
+- it puts unequipped items aside until two inventory slots are free, and puts
+  them back at the end of the section.
+
+The `woodcutting_area_setup` check reports what was done. When a step fails, the
+section SKIPs `woodcuttingarea_section` and names the step and why, for instance
+every site it tried. It spawns non-persistent trees and a stump around the spot
+in front of you, each with a health no hit reaches and nothing to drop:
 
 - a beech 1.6 m in front of you, the first swing's target, at 1 health so that
   swing fells it;
@@ -2256,7 +2301,7 @@ off, sets `area_woodcutting_radius` to fit the trees,
 same-kind checks take the nearest targets whatever their kind, and
 `allow_woodcutting_tree` to the beech's species alone. The same-kind checks at the end write these four settings again
 for themselves. It adds an axe whose tool tier reaches both species and equips it,
-turns you to face the trees, lowers your view a little, refills your stamina before
+keeps you facing the trees, lowers your view a little, refills your stamina before
 each swing, and starts real attacks with `Humanoid.StartAttack`, only while the
 swing's weapon is in your right hand. The game unequips an axe whose durability
 runs out at its next physics step and equips nothing during an attack, so after
@@ -2297,6 +2342,7 @@ to false and the cap at 1, is judged by the same rules.
 
 | Check | Asserts |
 |---|---|
+| `woodcutting_area_setup` | The section set itself up; the note says what it changed: the module or area woodcutting turned on, the heading it turned you to, the move to clear ground and the items put aside |
 | `woodcutting_area_expands` | The first swing hit a test object, and area woodcutting added at least one extra hit, each seen as a damage call on a test object |
 | `woodcutting_area_cap_and_radius` | That swing added exactly `area_woodcutting_max_targets` extra hits while more targets qualified, each within `area_woodcutting_radius` of the swing's first direct hit on an allowed target as the observer saw it, none on an object the swing or an earlier extra hit already hit, and all on the targets that qualify (SKIP when the swing itself hit so many of them that the cap could not be reached, or no direct hit on an allowed test object was seen) |
 | `woodcutting_area_damage_applied` | Every extra target lost health |
@@ -2327,9 +2373,11 @@ An attack that does not start within 1 second, or triggers no melee hit within 3
 seconds, SKIPs the swing's checks and names the reason; so does a swing whose
 weapon is not in your right hand, which is not started, and a swing that hits
 none of the test objects. At the end the added axe and club are removed from your
-inventory, the items you had equipped are equipped again, and your view pitch,
-skills, stamina and settings are put back. The swings and fellings still count toward your
-statistics. Do not move or attack while the section runs. Area woodcutting in a
+inventory, the items you had equipped are equipped again, the items put aside go
+back, and your view pitch, skills, stamina and settings are put back; your view
+stays turned to the heading unless you were moved. The swings and fellings still
+count toward your statistics. `woodcutting_area_stops_when_axe_breaks` SKIPs in a
+world whose durability rate is 0, a world setting the section leaves to you. Do not move or attack while the section runs. Area woodcutting in a
 real forest, with real stumps and falling trees, remains an in-game check outside
 this section.
 
@@ -2405,3 +2453,14 @@ when one is, `repair_piece_station_lookup_once` expects the walls to be repaired
 Repairing a piece sends the module's usual animation trigger, so your character may
 swing once. A repair with the real hammer, the interaction through the real
 crafting panel and multiplayer remain in-game checks outside this section.
+
+## Remove
+
+To uninstall the smoke plugin, remove the dedicated deploy directory:
+
+```bash
+rm -r "$VALHEIM_DIR/BepInEx/plugins/AutomaticsSmoke"
+```
+
+The smoke project is optional developer tooling. The data checks under
+`scripts/` are unaffected by this plugin.
