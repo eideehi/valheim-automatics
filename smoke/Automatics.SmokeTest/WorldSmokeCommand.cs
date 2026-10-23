@@ -5,9 +5,12 @@ using System.Linq;
 using Automatics;
 using Automatics.AutomaticProcessing;
 using Automatics.Valheim;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using ModUtils;
 using UnityEngine;
+using Held = System.Collections.Generic.Dictionary<BepInEx.Configuration.ConfigEntryBase,
+    Automatics.SmokeTest.SmokeSession.SettingRestoration>;
 
 namespace Automatics.SmokeTest
 {
@@ -32,6 +35,15 @@ namespace Automatics.SmokeTest
     //
     // Item safety is asymmetric: a test item left behind is harmless, a real item removed
     // is not. Nothing is removed from an inventory unless it is provably the check's own.
+    //
+    // The run sets up what its checks need itself. Before the first check it turns on, for the
+    // run, every module whose checks run (SmokeSetup.EnableModule) and moves the player to clear
+    // ground when a container that is not its own is within WorldClearance of them
+    // (SmokeSetup.Relocate); the player is moved back before the Summary. Each check writes the
+    // settings it depends on (Set), the containers' search ranges among them, lowered so that
+    // only the test chest is in reach, and the storage and pickup checks put inventory items
+    // aside for themselves (SmokeSetup.Stash). Every setting goes back at the end and is reported
+    // as world_settings_restored.
     //
     // Each check starts in a frame of its own and spawns in a spot of its own, relative to the
     // player, so nothing an earlier check placed is in its way: the storage chest 1.5 m ahead,
@@ -64,12 +76,33 @@ namespace Automatics.SmokeTest
         // vanilla refuses a drop for 0.5 s after it spawns.
         private const float PickupTimeoutSeconds = 5f;
 
+        // The ranges the checks write for the run: storage_search_range just past the storage
+        // chest, 1.5 m ahead, and the container search range of the smelter and the charging
+        // piece just past their chest, 1.5 m beside them.
+        private const int StorageRangeForRun = 2;
+        private const int ContainerRangeForRun = 4;
+
+        // How far from the player a container that is not the run's own is in reach of a check:
+        // a station stands up to 3.5 m ahead or behind and 3.5 m aside (about 5 m), plus its
+        // container range for the run, plus a metre. The storage range is well inside it.
+        private const float WorldClearance = 10f;
+
+        private const string SettingsRestored = "world_settings_restored";
+
         private static readonly ManualLogSource Log =
             BepInEx.Logging.Logger.CreateLogSource("Automatics Smoke World");
 
         private static MonoBehaviour _host;
         private static bool _registered;
         private static bool _commandBuilt;
+
+        // The current run's settings (Set) and how turning on each module for it went. One run
+        // at a time, so they are set at the start of Run.
+        private static int _runId;
+        private static Held _held = new Held();
+        private static SmokeSetup.SetupResult _storageModule = new SmokeSetup.SetupResult();
+        private static SmokeSetup.SetupResult _doorModule = new SmokeSetup.SetupResult();
+        private static SmokeSetup.SetupResult _processingModule = new SmokeSetup.SetupResult();
 
         internal static void EnsureRegistered(MonoBehaviour host)
         {
@@ -137,6 +170,11 @@ namespace Automatics.SmokeTest
             IEnumerator steps = null;
             try
             {
+                _runId = runId;
+                _held = new Held();
+                var setUp = SetUp(context, includeStorage);
+                while (setUp.MoveNext()) yield return setUp.Current;
+
                 var results = new List<CheckResult>
                 {
                     includeStorage
@@ -219,6 +257,17 @@ namespace Automatics.SmokeTest
                     : CheckResult.Skip("the run was abandoned before this check")
                                  .WithName("world_processing_charge_takes_accepted_ammunition"));
 
+                // Every check's objects are gone by now: the settings go back, and the player, when
+                // the setup moved them, before the Summary.
+                var settings = RestoreSettings();
+                if (settings != null) results.Add(settings);
+                var back = new SmokeSetup.SetupResult();
+                var home = SmokeSetup.ReturnToStart(runId, back);
+                while (home.MoveNext()) yield return home.Current;
+                if (!back.Ok)
+                    Emit(context, LogLevel.Warning,
+                        $"[Automatics Smoke] {CommandName}: you could not be moved back to where the command started yet ({back.Reason}); the smoke plugin tries again as the run ends");
+
                 Report(context, results);
             }
             finally
@@ -229,6 +278,146 @@ namespace Automatics.SmokeTest
                 // Guard hands back the run's obligations and releases the lock after this.
                 (steps as IDisposable)?.Dispose();
             }
+        }
+
+        // -- Setup ---------------------------------------------------------------
+
+        // Turns on, for the run, every module whose checks run, then moves the player to clear
+        // ground when a container that is not the run's own is within WorldClearance. A step that
+        // fails is left to the checks that need it, which SKIP and say why.
+        private static IEnumerator SetUp(Terminal context, bool includeStorage)
+        {
+            const string noWorld = "no world was loaded when the run started";
+            _storageModule = new SmokeSetup.SetupResult { Reason = noWorld };
+            _doorModule = new SmokeSetup.SetupResult { Reason = noWorld };
+            _processingModule = new SmokeSetup.SetupResult { Reason = noWorld };
+            if (ZNetScene.instance == null || !Player.m_localPlayer) yield break;
+
+            IEnumerator steps;
+            if (includeStorage)
+            {
+                steps = SmokeSetup.EnableModule(_runId, _held,
+                    global::Automatics.AutomaticStorage.Config.ModuleEntry, StorageRunning, _storageModule);
+                while (steps.MoveNext()) yield return steps.Current;
+            }
+
+            steps = SmokeSetup.EnableModule(_runId, _held,
+                global::Automatics.AutomaticDoor.Config.ModuleEntry, DoorRunning, _doorModule);
+            while (steps.MoveNext()) yield return steps.Current;
+
+            steps = SmokeSetup.EnableModule(_runId, _held,
+                global::Automatics.AutomaticProcessing.Config.ModuleEntry, ProcessingRunning, _processingModule);
+            while (steps.MoveNext()) yield return steps.Current;
+
+            var player = Player.m_localPlayer;
+            if (!player || ContainerNear(player.transform.position) == null) yield break;
+
+            var moved = new SmokeSetup.SetupResult();
+            steps = SmokeSetup.Relocate(_runId, ContainerNear, moved);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (moved.Changed)
+                Emit(context, LogLevel.Info,
+                    $"[Automatics Smoke] {CommandName}: a container that is not the check's own was within {WorldClearance:0} m of you, so you were {moved.Reason}; you are moved back before the Summary");
+            else if (!moved.Ok)
+                Emit(context, LogLevel.Warning,
+                    $"[Automatics Smoke] {CommandName}: a container that is not the check's own is within {WorldClearance:0} m of you, and you could not be moved to clear ground ({moved.Reason}); the checks it is in reach of SKIP");
+        }
+
+        // The first container within WorldClearance of the site, or null.
+        private static string ContainerNear(Vector3 site)
+        {
+            var container = global::Automatics.ContainerCache.GetAllInstance().FirstOrDefault(x =>
+                x && Vector3.Distance(site, x.transform.position) <= WorldClearance);
+            if (!container) return null;
+
+            var p = container.transform.position;
+            return $"{DisplayName(Objects.GetName(container))} at ({p.x:0.0}, {p.y:0.0}, {p.z:0.0}) within {WorldClearance:0} m";
+        }
+
+        // The applied state, not the setting: the entry points the checks drive do nothing while
+        // their module is not running.
+        private static bool StorageRunning()
+        {
+            return ModuleRegistry.GetState(global::Automatics.AutomaticStorage.Module.Instance.Name) ==
+                   ModuleState.Enabled && global::Automatics.AutomaticStorage.Module.Running;
+        }
+
+        private static bool DoorRunning()
+        {
+            return ModuleRegistry.GetState(global::Automatics.AutomaticDoor.Module.Instance.Name) ==
+                   ModuleState.Enabled && global::Automatics.AutomaticDoor.Module.Running;
+        }
+
+        private static bool ProcessingRunning()
+        {
+            return ModuleRegistry.GetState(global::Automatics.AutomaticProcessing.Module.Instance.Name) ==
+                   ModuleState.Enabled && global::Automatics.AutomaticProcessing.Module.Running;
+        }
+
+        private static CheckResult NotRunning(string module, SmokeSetup.SetupResult setUp)
+        {
+            return CheckResult.Skip(setUp.Ok
+                ? $"{module} module is not running"
+                : $"{module} module is not running: {setUp.Reason}");
+        }
+
+        // Writes a setting for the run when it does not hold value already; the session puts it
+        // back at the end. Null when the setting holds value now; otherwise a SKIP that names the
+        // setting and why it was not written. A setting this build does not have is left to the
+        // check's own precondition.
+        private static CheckResult Set(ConfigEntryBase entry, object value)
+        {
+            if (entry == null || Equals(entry.BoxedValue, value)) return null;
+            return SmokeSetup.Write(_runId, _held, entry, value, out var refusal)
+                ? null
+                : CheckResult.Skip(
+                    $"{entry.Definition.Section}/{entry.Definition.Key} could not be set for the run: {refusal}");
+        }
+
+        // An allow list with identifier added for the run.
+        private static CheckResult Allow(ConfigEntry<StringList> entry, string identifier)
+        {
+            return entry == null || identifier == null || entry.Value.Contains(identifier)
+                ? null
+                : Set(entry, new StringList(entry.Value) { identifier });
+        }
+
+        private static string ChestIdentifier()
+        {
+            return ValheimObject.Container.GetIdentify(ChestWood, out var identifier) ? identifier : null;
+        }
+
+        // What a processing check sets for its piece: the process allowed, the wood chest allowed,
+        // and the piece's container search range at ContainerRangeForRun.
+        private static CheckResult SetUpProcessing(string piece, Process process)
+        {
+            var allowed = ProcessingSmokeCommand.PieceSetting<Process>("_allowProcessing", piece);
+            return (allowed == null || (allowed.Value & process) != 0 ? null : Set(allowed, allowed.Value | process)) ??
+                   Allow(SmokeSetup.Field<StringList>(typeof(global::Automatics.AutomaticProcessing.Config),
+                       "_allowContainer"), ChestIdentifier()) ??
+                   Set(ProcessingSmokeCommand.PieceSetting<int>("_containerSearchRange", piece), ContainerRangeForRun);
+        }
+
+        // A per-piece switch of Automatic Processing off for the run.
+        private static CheckResult TurnOff(string field, string piece)
+        {
+            return Set(ProcessingSmokeCommand.PieceSetting<bool>(field, piece), false);
+        }
+
+        // Puts back every setting the run wrote and reports them as SmokeSetup.ReportSettings
+        // does. Null when it wrote none.
+        private static CheckResult RestoreSettings()
+        {
+            var results = SmokeSession.RestoreSettings(_runId);
+            if (results.Count == 0) return null;
+
+            var detail = string.Join("; ", results.Select(x => x.Value));
+            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
+                return CheckResult.Fail(SettingsRestored, detail);
+            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
+                                 x.Key == SmokeSession.ToggleOutcome.NotThisRun))
+                return CheckResult.Skip("restoration skipped: " + detail).WithName(SettingsRestored);
+            return CheckResult.Pass(detail).WithName(SettingsRestored);
         }
 
         private static void Report(Terminal context, List<CheckResult> results)
@@ -290,11 +479,10 @@ namespace Automatics.SmokeTest
             var playerInventory = player.GetInventory();
             if (playerInventory == null) return CheckResult.Skip("player inventory is null");
 
-            // The applied state, not the setting: AutomaticStorage.Store moves nothing while the
-            // module is not running.
-            if (ModuleRegistry.GetState(global::Automatics.AutomaticStorage.Module.Instance.Name) !=
-                ModuleState.Enabled || !global::Automatics.AutomaticStorage.Module.Running)
-                return CheckResult.Skip("automatic_storage module is not running");
+            if (!StorageRunning()) return NotRunning("automatic_storage", _storageModule);
+            var storageConfig = typeof(global::Automatics.AutomaticStorage.Config);
+            var range = Set(SmokeSetup.Field<int>(storageConfig, "_storageSearchRange"), StorageRangeForRun);
+            if (range != null) return range;
             if (global::Automatics.AutomaticStorage.Config.StorageSearchRange < 2)
                 return CheckResult.Skip("storage_search_range too small to reach a spawned chest");
 
@@ -306,6 +494,10 @@ namespace Automatics.SmokeTest
                 return CheckResult.Skip("Wood prefab lacks ItemDrop");
 
             var woodType = woodPrefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_itemType;
+            var allowed = Allow(SmokeSetup.Field<StringList>(storageConfig, "_allowedItemTypes"),
+                              global::Automatics.AutomaticStorage.Config.GetItemTypeKey(woodType)) ??
+                          Allow(SmokeSetup.Field<StringList>(storageConfig, "_allowContainer"), ChestIdentifier());
+            if (allowed != null) return allowed;
             if (!global::Automatics.AutomaticStorage.Config.IsAllowedItemType(woodType))
                 return CheckResult.Skip("Material item type not in allowed_item_types");
 
@@ -363,59 +555,89 @@ namespace Automatics.SmokeTest
                 var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
                 if (sample == null) return CheckResult.Skip("could not build Wood sample item");
 
-                // The player's own count of this exact Wood. The cleanup never takes them
-                // below it, whatever else happens.
-                var ownWood = PickableHarvester.CountExactItems(playerInventory, sample);
-
-                var added = AddItemsLooped(playerInventory, woodPrefab, 5);
-                if (added <= 0) return CheckResult.Skip("could not add test Wood to player inventory");
-
-                // From here on the chest can hold the player's own items, so it is taken out
-                // of the scope's destruction first and handed back only once it has been seen
-                // empty again. Nothing between here and that point can destroy it.
-                scope.Keep(chestGo);
-
-                CheckResult result;
-                string storedCounts = null;
+                // Everything outside the hotbar and every stack of Wood is put aside for the
+                // check and put back at the end. So the test Wood gets a stack of its own outside
+                // the hotbar, where Store may take it (the game adds Wood to a stack with room
+                // first, a hotbar one included), and the chest cannot fill up with the player's
+                // own items before the test Wood is reached.
+                var stash = SmokeSetup.Stash(player,
+                    match: x => x.m_gridPos.y > 0 || x.m_shared.m_name == sample.m_shared.m_name);
                 try
                 {
-                    // Default routing needs the chest to already hold Wood. This extra test
-                    // item is included in the cleanup count after the chest is handed back.
-                    if (!global::Automatics.AutomaticStorage.Config.StoreIntoAnyContainer)
-                    {
-                        var seeded = AddItemsLooped(chestInventory, woodPrefab, 1);
-                        added += seeded;
-                        Expect(seeded == 1, "could not seed test Wood in the chest");
-                    }
-
-                    result = StoreAndAssert(player, playerInventory, chestInventory, sample,
-                        out storedCounts);
+                    var result = StoreTestWood(player, playerInventory, woodPrefab, sample, scope, chestGo,
+                        chestInventory);
+                    return result.Status == CheckStatus.Pass && stash.Taken > 0
+                        ? CheckResult.Pass(string.Join("; ", new[]
+                        {
+                            $"{stash.Taken} stack(s) of yours were put aside for the check and put back",
+                            result.Message
+                        }.Where(x => x.Length > 0)))
+                        : result;
                 }
-                catch (Exception e)
+                finally
                 {
-                    // A failed assertion carries the counts already; when the fault came before
-                    // Store's result was recorded, what reached the chest is counted here.
-                    result = CheckResult.Fail("", storedCounts == null
-                        ? $"{e.GetType().Name}: {e.Message} ({CountChest(chestInventory)}, result.StoredItems: not recorded)"
-                        : e.GetType().Name + ": " + e.Message);
+                    stash.Restore();
+                }
+            }
+        }
+
+        // The storage check from the test Wood on, with the player's items outside the hotbar
+        // put aside.
+        private static CheckResult StoreTestWood(Player player, Inventory playerInventory, GameObject woodPrefab,
+            ItemDrop.ItemData sample, SpawnScope scope, GameObject chestGo, Inventory chestInventory)
+        {
+            // The player's own count of this exact Wood. The cleanup never takes them
+            // below it, whatever else happens.
+            var ownWood = PickableHarvester.CountExactItems(playerInventory, sample);
+
+            var added = AddTestWood(player, playerInventory, woodPrefab, 5);
+            if (added <= 0) return CheckResult.Skip("could not add test Wood outside the hotbar of the player inventory");
+
+            // From here on the chest can hold the player's own items, so it is taken out
+            // of the scope's destruction first and handed back only once it has been seen
+            // empty again. Nothing between here and that point can destroy it.
+            scope.Keep(chestGo);
+
+            CheckResult result;
+            string storedCounts = null;
+            try
+            {
+                // Default routing needs the chest to already hold Wood. This extra test
+                // item is included in the cleanup count after the chest is handed back.
+                if (!global::Automatics.AutomaticStorage.Config.StoreIntoAnyContainer)
+                {
+                    var seeded = AddItemsLooped(chestInventory, woodPrefab, 1);
+                    added += seeded;
+                    Expect(seeded == 1, "could not seed test Wood in the chest");
                 }
 
-                var leftInChest = ReturnChestContents(scope, chestGo, chestInventory, playerInventory);
-                var testWoodLeft = RemoveTestWood(playerInventory, sample, added, ownWood);
-
-                if (leftInChest != null)
-                    return CheckResult.Fail("", result.Status == CheckStatus.Fail
-                        ? $"{leftInChest}; the check itself also failed: {result.Message}"
-                        : storedCounts == null
-                            ? leftInChest
-                            : $"{leftInChest} ({storedCounts})");
-
-                if (testWoodLeft > 0 && result.Status == CheckStatus.Pass)
-                    return CheckResult.Pass(
-                        $"{testWoodLeft} test Wood could not be told apart from yours and was left in the inventory");
-
-                return result;
+                result = StoreAndAssert(player, playerInventory, chestInventory, sample,
+                    out storedCounts);
             }
+            catch (Exception e)
+            {
+                // A failed assertion carries the counts already; when the fault came before
+                // Store's result was recorded, what reached the chest is counted here.
+                result = CheckResult.Fail("", storedCounts == null
+                    ? $"{e.GetType().Name}: {e.Message} ({CountChest(chestInventory)}, result.StoredItems: not recorded)"
+                    : e.GetType().Name + ": " + e.Message);
+            }
+
+            var leftInChest = ReturnChestContents(scope, chestGo, chestInventory, playerInventory);
+            var testWoodLeft = RemoveTestWood(playerInventory, sample, added, ownWood);
+
+            if (leftInChest != null)
+                return CheckResult.Fail("", result.Status == CheckStatus.Fail
+                    ? $"{leftInChest}; the check itself also failed: {result.Message}"
+                    : storedCounts == null
+                        ? leftInChest
+                        : $"{leftInChest} ({storedCounts})");
+
+            if (testWoodLeft > 0 && result.Status == CheckStatus.Pass)
+                return CheckResult.Pass(
+                    $"{testWoodLeft} test Wood could not be told apart from yours and was left in the inventory");
+
+            return result;
         }
 
         // storedCounts is set as soon as Store has run, so that every FAIL message the caller
@@ -567,11 +789,11 @@ namespace Automatics.SmokeTest
             var player = Player.m_localPlayer;
             if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
 
-            if (ModuleRegistry.GetState("automatic-door") != ModuleState.Enabled ||
-                !global::Automatics.AutomaticDoor.Module.Running)
-                return CheckResult.Skip("automatic_door module disabled");
+            if (!DoorRunning()) return NotRunning("automatic_door", _doorModule);
             if (global::Automatics.AutomaticDoor.Config.DistanceForAutomaticOpening <= 0f)
                 return CheckResult.Skip("distance_for_automatic_opening <= 0");
+            var allowed = AllowWoodDoor();
+            if (allowed != null) return allowed;
             if (!global::Automatics.AutomaticDoor.Config.AllowAutomaticDoor.Contains("WoodDoor"))
                 return CheckResult.Skip("WoodDoor not in allow_automatic_door");
 
@@ -617,6 +839,12 @@ namespace Automatics.SmokeTest
             }
         }
 
+        private static CheckResult AllowWoodDoor()
+        {
+            return Allow(SmokeSetup.Field<StringList>(typeof(global::Automatics.AutomaticDoor.Config),
+                "_allowAutomaticDoor"), "WoodDoor");
+        }
+
         // A door in a dungeon is left alone. Two open doors and no player in reach of either:
         // the one at ground level is the control that the close pass runs here, and the one
         // 5000 m up, where the game puts dungeon interiors, has to stay open. The player cannot
@@ -629,9 +857,9 @@ namespace Automatics.SmokeTest
             if (player.InInterior())
                 return CheckResult.Skip("the player is indoors; run it outdoors");
 
-            if (ModuleRegistry.GetState("automatic-door") != ModuleState.Enabled ||
-                !global::Automatics.AutomaticDoor.Module.Running)
-                return CheckResult.Skip("automatic_door module disabled");
+            if (!DoorRunning()) return NotRunning("automatic_door", _doorModule);
+            var allowed = AllowWoodDoor();
+            if (allowed != null) return allowed;
             if (!global::Automatics.AutomaticDoor.Config.AllowAutomaticDoor.Contains("WoodDoor"))
                 return CheckResult.Skip("WoodDoor not in allow_automatic_door");
 
@@ -748,12 +976,6 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            if (playerInventory.GetEmptySlots() == 0)
-            {
-                report(CheckResult.Skip("inventory full"));
-                yield break;
-            }
-
             var sample = PickableHarvester.CreatePickupItemData(woodPrefab, 1);
             if (sample == null)
             {
@@ -764,10 +986,19 @@ namespace Automatics.SmokeTest
             var right = player.transform.right;
             var origin = player.transform.position;
 
+            // Room for the one Wood: a free slot and its weight, made by putting items of yours
+            // aside for the check; they are put back at the end.
+            var stash = SmokeSetup.Stash(player, 1, sample.GetWeight());
             GameObject go = null;
             var woodMayBeLeft = false;
             try
             {
+                if (playerInventory.GetEmptySlots() == 0)
+                {
+                    report(CheckResult.Skip($"inventory full, and putting items aside left no free slot ({stash.Report})"));
+                    yield break;
+                }
+
                 // Spawned outside a SpawnScope: the drop belongs to SmokeSession, which destroys
                 // it only while it still holds the one Wood the check gives it (see finally).
                 go = UnityEngine.Object.Instantiate(woodPrefab, origin + right * 1.5f,
@@ -870,7 +1101,7 @@ namespace Automatics.SmokeTest
 
                 if (!PickableHarvester.CanAddItem(player, itemDrop.m_itemData))
                 {
-                    report(CheckResult.Skip("harvester gate rejects add (weight/space)"));
+                    report(CheckResult.Skip($"harvester gate rejects add (weight/space) after items were put aside ({stash.Report})"));
                     yield break;
                 }
 
@@ -892,12 +1123,18 @@ namespace Automatics.SmokeTest
                 // Proven to be the test drop's Wood: removed at once, in the same frame.
                 if (RemoveExactItems(playerInventory, sample, 1) == 1) woodMayBeLeft = false;
 
+                var room = stash.Taken > 0
+                    ? $"{stash.Taken} stack(s) of yours were put aside to make room and put back"
+                    : "";
                 report(woodMayBeLeft
-                    ? CheckResult.Pass("the test Wood could not be removed afterwards and was left in the inventory")
-                    : CheckResult.Pass());
+                    ? CheckResult.Pass(string.Join("; ", new[]
+                        { room, "the test Wood could not be removed afterwards and was left in the inventory" }
+                        .Where(x => x.Length > 0)))
+                    : CheckResult.Pass(room));
             }
             finally
             {
+                stash.Restore();
                 if (woodMayBeLeft)
                     Log.LogWarning(
                         "[Automatics Smoke] world_pickup_itemdrop_to_inventory: the Wood this check picked up was not removed, because it could not be attributed to the test drop; at most one test Wood was left in the inventory");
@@ -929,9 +1166,10 @@ namespace Automatics.SmokeTest
 
             // The applied state, not the setting: SmelterProcess.QuickRefuel passes its input
             // through untouched while the module is not running.
-            if (ModuleRegistry.GetState(global::Automatics.AutomaticProcessing.Module.Instance.Name) !=
-                ModuleState.Enabled || !global::Automatics.AutomaticProcessing.Module.Running)
-                return CheckResult.Skip("automatic_processing module is not running");
+            if (!ProcessingRunning()) return NotRunning("automatic_processing", _processingModule);
+            var setUp = SetUpProcessing(Smelter, Process.Refuel) ??
+                        TurnOff("_refuelOnlyWhenMaterialsSupplied", Smelter);
+            if (setUp != null) return setUp;
             if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(Smelter, Process.Refuel))
                 return CheckResult.Skip("Refuel not allowed for smelter in config");
 
@@ -1042,6 +1280,8 @@ namespace Automatics.SmokeTest
         {
             var player = Player.m_localPlayer;
             if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
+            var storeOnly = TurnOff("_storeOnlyIfProductExists", Smelter);
+            if (storeOnly != null) return storeOnly;
             if (global::Automatics.AutomaticProcessing.Config.StoreOnlyIfProductExists(Smelter))
                 return CheckResult.Skip(
                     "store_only_if_product_exists is on for the smelter, so it never stores into a chest whose inventory is still empty");
@@ -1165,9 +1405,9 @@ namespace Automatics.SmokeTest
 
             // The applied state, not the setting: SmelterProcess.Store stores nothing while the
             // module is not running.
-            if (ModuleRegistry.GetState(global::Automatics.AutomaticProcessing.Module.Instance.Name) !=
-                ModuleState.Enabled || !global::Automatics.AutomaticProcessing.Module.Running)
-                return CheckResult.Skip("automatic_processing module is not running");
+            if (!ProcessingRunning()) return NotRunning("automatic_processing", _processingModule);
+            var setUp = SetUpProcessing(Smelter, Process.Store);
+            if (setUp != null) return setUp;
             if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(Smelter, Process.Store))
                 return CheckResult.Skip("Store not allowed for smelter in config");
 
@@ -1269,15 +1509,20 @@ namespace Automatics.SmokeTest
 
             // The applied state, not the setting: TurretProcess.Charge does nothing while the
             // module is not running.
-            if (ModuleRegistry.GetState(global::Automatics.AutomaticProcessing.Module.Instance.Name) !=
-                ModuleState.Enabled || !global::Automatics.AutomaticProcessing.Module.Running)
-                return CheckResult.Skip("automatic_processing module is not running");
+            if (!ProcessingRunning()) return NotRunning("automatic_processing", _processingModule);
 
             var prefab = ZNetScene.instance.m_prefabs.FirstOrDefault(x =>
                 x && x.GetComponent<Turret>() && ChargeKinds(x.GetComponent<Turret>()).Count >= 3);
             if (!prefab)
                 return CheckResult.Skip("no piece that charges with three kinds of ammunition was found");
             var pieceName = prefab.GetComponent<Turret>().m_name;
+
+            // A reserve of 0 leaves no ammunition at its reserve, so it is raised to 1 for the run.
+            var reserveSetting =
+                ProcessingSmokeCommand.PieceSetting<int>("_numberOfItemsToStopCharge", pieceName);
+            var setUp = SetUpProcessing(pieceName, Process.Charge) ??
+                        (reserveSetting == null || reserveSetting.Value >= 1 ? null : Set(reserveSetting, 1));
+            if (setUp != null) return setUp;
             if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(pieceName, Process.Charge))
                 return CheckResult.Skip("Charge not allowed for the piece in config");
             var reserve = global::Automatics.AutomaticProcessing.Config.NumberOfItemsToStopCharge(pieceName);
@@ -1547,6 +1792,29 @@ namespace Automatics.SmokeTest
             }
 
             return total;
+        }
+
+        // Adds amount of the item as a stack of its own in the first empty, unlocked slot outside
+        // the hotbar, where Automatic Storage takes from by default. The game's AddItem fills a
+        // stack of the same item with room first, wherever it is, so the caller has put those
+        // aside. Returns how many were added.
+        private static int AddTestWood(Player player, Inventory inventory, GameObject prefab, int amount)
+        {
+            var name = prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name;
+            var locked = global::Automatics.AutomaticStorage.SlotLocks.GetLockedSlots(player);
+            for (var y = 1; y < inventory.GetHeight(); y++)
+            for (var x = 0; x < inventory.GetWidth(); x++)
+            {
+                var slot = new Vector2i(x, y);
+                if (inventory.GetItemAt(x, y) != null || locked.Contains(slot)) continue;
+
+                var before = inventory.CountItems(name, -1, false);
+                var item = PickableHarvester.CreatePickupItemData(prefab, amount);
+                if (item != null) inventory.AddItem(item, slot);
+                return inventory.CountItems(name, -1, false) - before;
+            }
+
+            return 0;
         }
 
         // Removes up to amount of this exact item - name, quality and world level, the

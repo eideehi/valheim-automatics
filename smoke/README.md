@@ -121,8 +121,7 @@ the commands cannot prove that something is their own, they leave it.
   written, say — is kept and tried again at the next of those moments, and a new
   run is refused while it stands.
 - If the game itself stops mid-run (a crash or a killed process), nothing can
-  run. Before the lifecycle command, `automatics_smoke_processing toggle` or
-  `automatics_smoke_features` changes a setting it records the change in
+  run. Before a smoke command changes a setting it records the change in
   `BepInEx/config/AutomaticsSmoke/lifecycle-toggle-restore.txt`, one record per
   setting, and it does not change the setting if that record cannot be written.
   At the next start the smoke plugin logs one warning per record naming the
@@ -188,16 +187,49 @@ check the piece that takes ammunition 3.5 m ahead and 3.5 m to your left, with
 its chest 1.5 m to the right of it. Each check also starts in a frame of its
 own, so the objects the previous check removed are gone by then.
 
+The command sets up what its checks need and puts it back when the run ends:
+
+- Before the first check it turns on, for the run, every module whose checks
+  run that is off: Automatic Door and Automatic Processing, and Automatic
+  Storage with `storage`.
+- When a container that isn't the run's own is within 10 m of you, it moves you
+  to clear ground first (see "Safety of the console commands" above) and moves
+  you back before the Summary.
+- Each check sets, for the run, the settings it depends on, and only when they
+  do not already hold the value it needs: for the storage check
+  `storage_search_range` 2 and the Material type and the wood chest in
+  `allowed_item_types` and `allow_container`; for the door checks `WoodDoor` in
+  `allow_automatic_door`; for the processing checks the process under test in
+  the piece's `allow_processing_by_*`, the wood chest in Processing's
+  `allow_container` and the piece's `container_search_range_by_*` at 4 (so only
+  the check's chest, 1.5 m away, is in reach), and besides that for the smelter
+  `*_refuel_only_when_materials_supplied` and (for the first container check)
+  `*_store_only_if_product_exists` off, and for the charging piece a
+  `*_number_of_items_to_stop_charge` of 0 raised to 1.
+- The storage check puts every item outside the hotbar, and every stack of
+  Wood, aside for the check, and the pickup check puts aside what it takes to
+  free a slot and the weight of one Wood; both put them back when they end (see
+  "Safety of the console commands" above).
+
+The run ends with `world_settings_restored`: PASS when every setting it wrote is
+back, SKIP when you changed one meanwhile (yours is kept) or the run was
+abandoned, FAIL when one could not be put back. It is missing when the run wrote
+nothing. A setting that cannot be written makes the check that needs it SKIP and
+name it.
+
 - `world_storage_store_moves_items` — opt-in: it runs only as
   `automatics_smoke_world storage`, and a plain `automatics_smoke_world` SKIPs it
   with a message saying so. `AutomaticStorage.Store` moves test Wood from the
   player into a spawned chest. `Store` moves every eligible item, not only the
   test Wood, so the check compares its reported count with everything that
   reached the chest. Afterwards everything in the chest is handed back to you,
-  and the chest is destroyed only once it has been seen empty. Returned items may
-  land in different slots, the hotbar included. If the chest fills up with your
-  own items before any test Wood has moved, the check SKIPs and suggests a
-  near-empty inventory. A FAIL message carries the counts: what is in the chest,
+  and the chest is destroyed only once it has been seen empty. The test Wood is
+  added as a stack of its own in an empty, unlocked slot outside the hotbar, and
+  since everything else outside the hotbar is put aside, Store can reach only
+  the test Wood and, when `store_hotbar_items` is on, your hotbar items. Returned
+  items may land in different slots, the hotbar included. If the chest still
+  fills up with your own items before any test Wood has moved, the check SKIPs.
+  A FAIL message carries the counts: what is in the chest,
   and `result.StoredItems`. If something cannot be handed back, the chest is left
   in the world and the check FAILs, listing what is in it and its coordinates.
   The test Wood is then removed, but never so much that your own count of that
@@ -223,7 +255,9 @@ own, so the objects the previous check removed are gone by then.
   its one Wood arrived; otherwise nothing is removed and a leftover is reported.
   A drop still in the world afterwards is destroyed only while it holds the one
   Wood the check gave it; if it grew, it is left where it is and the log says
-  where. A wait during which the game was paused SKIPs as inconclusive.
+  where. A wait during which the game was paused SKIPs as inconclusive. When the
+  inventory has no free slot or too little carry weight, items of yours are put
+  aside first, and the PASS note says how many.
 - `world_processing_smelter_refuel` — `SmelterProcess.QuickRefuel` raises the
   smelter's ZDO `fuel` by one and consumes fuel from a nearby chest.
 - `world_container_store_after_spawn_keeps_stored_items` — a chest whose saved
@@ -232,7 +266,8 @@ own, so the objects the previous check removed are gone by then.
   of the smelter's product into the spawned chest's saved data (`ZDO` `items`)
   without loading them, then `SmelterProcess.Store` stores one more: the chest's
   inventory and its saved data must both hold four. It SKIPs when
-  `store_only_if_product_exists` is on for the smelter.
+  `store_only_if_product_exists` is on for the smelter and could not be turned
+  off for the run.
 - `world_container_store_after_close_keeps_saved_changes` — a chest another
   game owns is left to it, and a chest that comes back keeps that game's changes.
   The check seeds the spawned chest with two of the smelter's product, then plays
@@ -254,26 +289,32 @@ own, so the objects the previous check removed are gone by then.
   (reserve + 2), an accepted kind at its reserve, and another accepted kind at
   reserve + 2; one `TurretProcess.Charge` call must leave the piece holding one
   of the last kind, and the chest with the refused kind and the kind at its
-  reserve untouched. It SKIPs when no such piece exists, when the reserve is 0 or
-  when charging is not allowed for the piece. The log names none of the items.
+  reserve untouched. It SKIPs when no such piece exists, or when the reserve or
+  the allowed processes could not be set for the run. The log names none of the
+  items.
 
-Run it away from your own containers. The storage check SKIPs when any other
-container is within `storage_search_range`, and the refuel and container checks
-SKIP when any other container is within the smelter's container search range,
-and the charging check when any is within the piece's (all 8 m by default).
-Otherwise the storage check would move your items into your own chests, the
-refuel check could burn your fuel and fail for a reason that is not a
-regression, the container checks would store the product in your chests, and
-the charging check could take your ammunition.
+Your own containers are kept out of reach. The storage check SKIPs when any
+other container is within `storage_search_range` (2 m for the run), and the
+refuel and container checks SKIP when any other container is within the
+smelter's container search range, and the charging check when any is within
+the piece's (4 m for the run). Otherwise the storage check would move your items
+into your own chests, the refuel check could burn your fuel and fail for a
+reason that is not a regression, the container checks would store the product
+in your chests, and the charging check could take your ammunition. The move to
+clear ground at the start makes these SKIPs rare; they are left for a container
+that comes into reach later, or when no clear ground was found within 45 m.
+
+Left to you: run it outdoors (the interior door check SKIPs indoors).
 
 The command runs as a coroutine on the smoke plugin and prints its results about
 a second after it is typed. Each check logs a `PASS`/`FAIL`/`SKIP` line plus a
-`[Automatics Smoke] Summary: total=8 ...` line to both the BepInEx log and the
-in-game console (out of scope: Farming, Feeding, Mining). A `PASS` line can carry
-a note, for example when a test item had to be left in the inventory. Checks SKIP
-(never FAIL) when run at the main menu, when a module is disabled, when a
-required config flag is off, or when other containers are in range. The storage
-check also SKIPs unless `storage` is given. The command never mutates config.
+`[Automatics Smoke] Summary: total=9 ...` line (8 when the run wrote no setting)
+to both the BepInEx log and the in-game console (out of scope: Farming, Feeding,
+Mining). A `PASS` line can carry a note, for example when a test item had to be
+left in the inventory or items of yours were put aside. Checks SKIP (never FAIL)
+when run at the main menu, when a module could not be turned on or a setting
+could not be set for the run, or when other containers are in range. The
+storage check also SKIPs unless `storage` is given.
 The processing container cache is reset both before the
 refuel call and again during teardown, so running the command back-to-back is
 safe.
@@ -776,19 +817,43 @@ The original module setting is restored under the shared session rules.
 `skill`, `store` or `collect` (the last five are described after `rpc`). Each is
 one smoke run.
 
+Every subcommand but `config` sets up what it needs before it places anything,
+and puts it back when the run ends:
+
+- Automatic Processing is turned on for the run when it is off (`toggle` turns
+  it on through the setting it round-trips; see there).
+- `automatic_pickup_range` is set to 1, its minimum, so that the test objects can
+  stand 4 m ahead of you without Automatic Pickup reaching what a station drops.
+- The settings a check depends on are set for the stations it uses: the wood
+  chest is added to `allow_container`, the process under test to the station's
+  `allow_processing_by_*`, and the counts the check seeds above
+  (`material_count_of_suppress_processing`,
+  `fuel_count_of_suppress_processing`) are lowered to 1 when they are higher.
+  The subcommands below name what else they set.
+- When a container or processing station that isn't the check's own is within
+  reach of where the test objects go, you are moved to clear ground first (see
+  "Safety of the console commands" above), and moved back before the Summary.
+
+Each setting is written only when it does not already hold the value the check
+needs. The run ends with `processing_settings_restored`: PASS when every setting
+it wrote is back, SKIP when you changed one meanwhile (yours is kept) or the run
+was abandoned, FAIL when one could not be put back. It is missing when the run
+wrote nothing. When a setting cannot be written, the checks SKIP and name it.
+
 `automatics_smoke_processing rpc` checks that Automatic Processing keeps every
 item when it moves one from a chest into a station. Processing does that by
 removing the item from the chest and invoking the station's intake RPC —
 `Smelter.RPC_AddOre(string, bool)`, `CookingStation.RPC_AddItem(string, bool)`
 or `Fermenter.RPC_AddItem(int, bool)` — and these are the paths that break when
-the game changes an RPC's payload. The command changes no setting.
+the game changes an RPC's payload. It sets up what it needs as described above.
 
 What it does:
 
 - It places a wood chest 4 m ahead of you, then a smelter to its right, a stone
   oven to its left and a fermenter beyond it, each 2.5 m from the chest. When
-  Automatic Pickup may be running, everything is placed further out, beyond
-  `automatic_pickup_range` + 2 m from you.
+  Automatic Pickup may be running and its range could not be set for the run,
+  everything is placed further out, beyond `automatic_pickup_range` + 2 m from
+  you.
 - It picks one material per station from that station's own conversions, one
   that no other test station would take and that is not a fuel, and puts
   `material_count_of_suppress_processing` + 3 of it into the chest (4 with the
@@ -827,14 +892,14 @@ A check reports one of four results. None but PASS counts as a pass:
 - `SKIP`: a precondition is missing, for example:
   - no world is loaded
   - it isn't a single-player world you host with nobody connected
-  - Automatic Processing is off
+  - Automatic Processing could not be turned on for the run, or did not start
+  - a setting could not be set for the run (the message names it)
   - a prefab is missing
-  - the wood chest isn't in `allow_container`
-  - the station's `allow_processing_by_*` has no Craft
   - no material can be kept apart
-  - something that isn't the check's own is within reach
-  - Automatic Pickup's range would push the stations beyond 16 m
-  - Processing does not find the test chest
+  - something that isn't the check's own is within reach, and no clear ground
+    to move you to was found within 45 m
+  - Processing does not find the test chest (a ward or the chest's access rules
+    can hide it)
   - the materials don't fit into the chest
 
   A world that unloads mid-run makes the checks SKIP as inconclusive.
@@ -846,26 +911,30 @@ A check reports one of four results. None but PASS counts as a pass:
   attempts and nothing reached the station within 30 frames. The message says
   what the station looked like.
 
-Where to stand: in a single-player world, away from your own buildings. The
-command SKIPs before placing anything if any container that isn't its own is
-within a test station's `container_search_range_by_*` + 2 m. It also SKIPs if
-any processing station that isn't its own has a container range (+ 2 m) that
-reaches the test chest. It lists what it found in a warning and says how much
-clear space it needs. After placing its objects it asks Processing itself which
-containers each station finds; if that is anything but the test chest, the run
-stops in the same frame and removes its objects before any station has run an
-update.
+Where to stand: anywhere in a single-player world; the run finds its own clear
+ground. Before placing anything it looks for any container that isn't its own
+within a test station's `container_search_range_by_*` + 2 m, and any processing
+station that isn't its own whose container range (+ 2 m) reaches the test chest.
+If it finds one, it moves you to the first spot 15, 30 or 45 m away (12
+bearings each) where nothing like that is in reach, keeping your facing, and
+places its objects from there. Only when no such spot exists does it SKIP; it
+then lists what it found in a warning and says how much clear space it needs.
+After placing its objects it asks Processing itself which containers each
+station finds; if that is anything but the test chest, the run stops in the
+same frame and removes its objects before any station has run an update.
 
 A passing run looks like this in the console and in the BepInEx log (item names
 depend on the game's conversions and your language):
 
 ```text
-[Automatics Smoke] automatics_smoke_processing rpc started: it places a chest, a smelter, a stone oven and a fermenter ahead of you, drives each station's intake once from the chest, watches them for 30 frames and removes them; no setting is changed
-[Automatics Smoke] automatics_smoke_processing rpc: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] automatics_smoke_processing rpc started: it places a chest, a smelter, a stone oven and a fermenter ahead of you, drives each station's intake once from the chest, watches them for 30 frames and removes them; the settings it needs are set for the run and put back afterwards
+[Automatics Smoke] automatics_smoke_processing rpc: automatic_processing/module was off, so it is turned on for the run and put back afterwards
+[Automatics Smoke] automatics_smoke_processing rpc: the test chest is at (102.3, 31.0, -48.7), 4.0 m ahead of you, with the test stations 2.5 m from it
 [Automatics Smoke] PASS processing_rpc_smelter_add_ore: Copper ore reached the smelter at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + smelter 1 + products 0 = 4 put in)
 [Automatics Smoke] PASS processing_rpc_cooking_station_add_item: Bread dough reached the stone oven at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + stone oven 1 + products 0 = 4 put in)
 [Automatics Smoke] PASS processing_rpc_fermenter_add_item: Mead base: Minor healing reached the fermenter at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + fermenter 1 + products 0 = 4 put in)
-[Automatics Smoke] Summary: total=3 passed=3 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+[Automatics Smoke] PASS processing_settings_restored: automatic_processing/module was put back from Enabled to Disabled; automatic_pickup/automatic_pickup_range was put back from 1 to 4
+[Automatics Smoke] Summary: total=4 passed=4 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
 The figures at frame 30 vary. A station's own update can take more of its
@@ -875,16 +944,18 @@ put in.
 Other results look like this:
 
 ```text
-[Automatics Smoke] SKIP processing_rpc_smelter_add_ore: 2 container(s) or processing station(s) that are not the check's own are within reach of where its test objects go (the first: Chest at (98.1, 30.8, -44.0), 5.2 m from where the test smelter goes); stand where nothing of yours is within about 20 m of you and run it again
+[Automatics Smoke] SKIP processing_rpc_smelter_add_ore: 2 container(s) or processing station(s) that are not the check's own are within reach of where its test objects go (the first: Chest at (98.1, 30.8, -44.0), 5.2 m from where the test smelter goes), and no clear ground to move you to was found (no clear site within 45 m of you (37 spots tried: ...)); stand where nothing of yours is within about 17 m of you and run it again
 [Automatics Smoke] NOT-RUN processing_rpc_fermenter_add_item: the entry returned without taking anything on both attempts, and nothing reached the fermenter within 30 frames (the chest still holds 4 of the 4 put in; owner=True, content=0, exposed=False, material_count_of_suppress_processing=1, product_stacks_of_suppress_processing=0, supply_only_when_materials_run_out=False)
 [Automatics Smoke] FAIL processing_rpc_smelter_add_ore: the ledger broke at frame 0: chest 3 + smelter 0 + products 0 = 3, but 4 were put in (1 missing); at frame 30: chest 3 + smelter 0 + products 0 = 3; no delivery was seen
 ```
 
 Safety, on top of the rules above:
 
-- It never writes the BepInEx config, and it never touches your inventory. The
-  test materials are added only to its own chest, with the game's
-  `Inventory.AddItem`.
+- It writes only the settings named above, through the session, and it never
+  touches your inventory. The test materials are added only to its own chest,
+  with the game's `Inventory.AddItem`. While Automatic Processing is on for the
+  run, it also acts on your own stations nearby, as it would if you had turned
+  it on.
 - The chest and the stations are marked non-persistent and are spared support
   and rain wear. A piece that breaks would drop what it holds.
 - A station is removed only after the contents the check caused (the queued ore,
@@ -910,12 +981,15 @@ Safety, on top of the rules above:
 
 Takes `automatic_processing / module` from `Enabled` through one off → on round
 trip by writing the setting, the way a user does, and makes sure it ends at its
-starting value. It runs only when the module is `Enabled`. It changes no other
-setting.
+starting value. When the module is off in your settings, the run turns it on
+first through the same setting, and it ends back off. The other settings the
+test smelter needs are set for the run as described above, together with the
+smelter's `*_refuel_only_when_materials_supplied`, turned off; they go back
+with the module setting and are reported as `processing_settings_restored`.
 
 | Check | Asserts |
 |---|---|
-| `processing_toggle_initial_state_settled` | The registry state matches the setting before anything is changed |
+| `processing_toggle_initial_state_settled` | The registry reports `Enabled`, matching the setting, before the round trip starts (after the module was turned on for the run, when it was off; the note says so) |
 | `processing_toggle_off_state_disabled` | The registry reports `Disabled` after the disable request |
 | `processing_toggle_off_patches_removed` | No patch is left under Processing's Harmony id (SKIP when runtime patch removal is unavailable) |
 | `processing_toggle_on_state_enabled` | The registry reports `Enabled` after the enable request |
@@ -924,10 +998,13 @@ setting.
 | `processing_toggle_on_quickrefuel_catchup_no_per_unit_rpc` | After the refuel above passed, the same smelter is caught up over 3 fuel units in one frame: 3 direct `SmelterProcess.QuickRefuel` calls each take one fuel from the test chest and add one to the smelter, and together they invoke the smelter's fuel RPC (`RPC_AddFuel`) at most once and play its fuel-added effect once (the first refuel's), not once per unit |
 | `processing_toggle_restored_initial_state` | The setting is back at its starting value and the registry reports the matching state |
 | `processing_toggle_no_errors_logged` | No error or exception was logged while the check ran |
+| `processing_settings_restored` | The other settings the run wrote are back (missing when it wrote none) |
 
 The test smelter and its chest are placed while the module is off, under the
-same rules as `rpc`: where to stand, what is SKIPped, the exact ledger, the
-per-frame check that Processing finds only the test chest, and the removal.
+same rules as `rpc`: where to stand (and the move to clear ground), what is
+SKIPped, the exact ledger, the per-frame check that Processing finds only the
+test chest, and the removal. They are removed as the run ends, before the
+settings are put back.
 Placement and isolation are both checked before the module is turned back on,
 so its first update of the smelter can find only the test chest. If any of that
 fails, whatever was placed is removed at once, before the enable. The per-frame
@@ -976,11 +1053,10 @@ Safety:
   kept. A restore that could not be made blocks the next run until it is done.
   BepInEx saves `BepInEx/config/net.eidee.valheim.automatics.cfg` on each
   change.
-- The check only ever pauses Automatic Processing, never turns it on for you.
-  If `automatic_processing / module` is not `Enabled` when it starts, every check
-  SKIPs and nothing is written. Turning Processing on for the check would let it
-  act on your own stations, and no watch can stop that in the frame one of them
-  loads. Turn it on yourself if you want this check, then run it again.
+- When `automatic_processing / module` is not `Enabled` when it starts, the run
+  turns it on through the same session and puts it back off at the end. While
+  it is on, Processing also acts on your own stations nearby, as it would if
+  you had turned it on.
 - The check's observer patch is removed only once `UnpatchSelf` succeeds. If
   removing it fails, a warning says so, the removal is kept as an obligation and
   retried at the next hand-back, and a new smoke run is refused meanwhile.
@@ -988,8 +1064,8 @@ Safety:
 A passing run looks like this:
 
 ```text
-[Automatics Smoke] automatics_smoke_processing toggle started: automatic_processing/module is turned off and on again through its setting, a test smelter is watched while it is on, and the setting is restored
-[Automatics Smoke] automatics_smoke_processing toggle: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] automatics_smoke_processing toggle started: automatic_processing/module is turned off and on again through its setting, a test smelter is watched while it is on, and the setting and the others the smelter needs for the run are restored
+[Automatics Smoke] automatics_smoke_processing toggle: the test chest is at (102.3, 31.0, -48.7), 4.0 m ahead of you, with the test stations 2.5 m from it
 [Automatics Smoke] PASS processing_toggle_initial_state_settled
 [Automatics Smoke] PASS processing_toggle_off_state_disabled
 [Automatics Smoke] PASS processing_toggle_off_patches_removed: no patch is left under "net.eidee.valheim.automatics.automatic-processing"
@@ -999,10 +1075,14 @@ A passing run looks like this:
 [Automatics Smoke] PASS processing_toggle_on_quickrefuel_catchup_no_per_unit_rpc: 3 QuickRefuel calls in one frame moved 3 Coal from the test chest into the smelter's fuel; the fuel RPC was invoked 0 time(s) and the fuel-added effect played 1 time(s); the game's own RPC, invoked once as a control, ran the handler 1 time(s) and played the effect 1 time(s)
 [Automatics Smoke] PASS processing_toggle_restored_initial_state: automatic_processing/module is already back at Enabled
 [Automatics Smoke] PASS processing_toggle_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
-[Automatics Smoke] Summary: total=9 passed=9 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range is back at 4
+[Automatics Smoke] Summary: total=10 passed=10 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
 The Harmony id, the timing and the item name depend on your build and language.
+With the module off in your settings, `processing_toggle_initial_state_settled`
+carries the note that it was turned on for the run, and
+`processing_toggle_restored_initial_state` reports it put back to `Disabled`.
 
 #### `automatics_smoke_processing config`
 
@@ -1026,8 +1106,9 @@ the file nor any setting.
 Checks who gains the skill and the bonus food for what Automatic Processing does
 at a cooking station. The player who built the station gains what the game gives
 for putting food in by hand (a skill raise of 0.4) and for taking cooked food out
-(a raise of 0.6 and a bonus roll), and only in that player's own game. The
-command changes no setting.
+(a raise of 0.6 and a bonus roll), and only in that player's own game. Besides
+the setup described above, it allows Store for the oven and turns its
+`*_store_only_if_product_exists` off for the run.
 
 What it does:
 
@@ -1078,10 +1159,9 @@ What it does:
 | `processing_skill_state_restored` | Your skill level and progress, the bonus chance and the prefix are back as they were |
 
 A precondition that is missing SKIPs the run under `processing_skill_setup`.
-Besides the `rpc` preconditions, these count: the oven's
-`allow_processing_by_*` lacks Craft or Store, its
-`*_store_only_if_product_exists` is on, or the oven raises no skill in this game
-build, or the bonus roll cannot be made certain. The two bonus checks SKIP when
+Besides the `rpc` preconditions, these count: the oven raises no skill in this
+game build, the bonus roll cannot be made certain, or your character has no
+player id yet, which the run cannot give it. The two bonus checks SKIP when
 the oven gives no bonus food in this game build. The three finished-slot checks
 SKIP when the test chest does not hold exactly the one more material they need
 (after taking out what an earlier check left unused), when the oven has no
@@ -1092,8 +1172,8 @@ oven was not empty or the chest could not be filled to room for exactly one item
 and its bonus).
 
 ```text
-[Automatics Smoke] automatics_smoke_processing skill started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder and runs the oven's own update over cooked food that could not be stored, and removes them; your cooking skill and the game's bonus chance are put back, and no setting is changed
-[Automatics Smoke] automatics_smoke_processing skill: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] automatics_smoke_processing skill started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder and runs the oven's own update over cooked food that could not be stored, and removes them; your cooking skill, the game's bonus chance and the settings it needs for the run are put back afterwards
+[Automatics Smoke] automatics_smoke_processing skill: the test chest is at (102.3, 31.0, -48.7), 4.0 m ahead of you, with the test stations 2.5 m from it
 [Automatics Smoke] PASS processing_skill_no_builder: with no builder, Craft took one Bread dough and Store put one Bread into the chest with the bonus roll made certain, and neither raised the Cooking skill
 [Automatics Smoke] PASS processing_skill_other_builder: with another player as the builder, Craft took one Bread dough and Store put one Bread into the chest with the bonus roll made certain, and neither raised the Cooking skill
 [Automatics Smoke] PASS processing_skill_builder: with you as the builder and the bonus roll made impossible, Craft raised the Cooking skill by 0.4 and Store by 0.6 and put exactly one Bread into the chest
@@ -1103,7 +1183,8 @@ and its bonus).
 [Automatics Smoke] PASS processing_skill_done_slot_stored_on_later_pass: once the chest had room, the oven's update stored the finished Bread (2 with the bonus), emptied its slot and raised the Cooking skill once by 0.6; a second update stored nothing more and raised nothing; the burnt slots were left as they were
 [Automatics Smoke] PASS processing_skill_done_slot_stored_without_fuel: with no fuel in the oven, one update stored the finished Bread (2 with the bonus), emptied its slot with one raise of the Cooking skill by 0.6, and left the burnt slots as they were
 [Automatics Smoke] PASS processing_skill_state_restored: the Cooking skill is back at level 12 with progress 3.5, the bonus chance at 0.25, and the Player.RaiseSkill prefix is removed
-[Automatics Smoke] Summary: total=9 passed=9 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4
+[Automatics Smoke] Summary: total=10 passed=10 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
 The item names, the bonus amount, the skill figures and the bonus chance depend
@@ -1125,8 +1206,8 @@ Safety, on top of the `rpc` rules:
 
 Checks that Automatic Processing stores a product only where it fits. Before,
 a store into a full chest still called the game's `Inventory.AddItem`, which
-logged a warning and saved the chest on every attempt. The command changes no
-setting.
+logged a warning and saved the chest on every attempt. Besides the setup
+described above, it allows Store for the smelter for the run.
 
 What it does:
 
@@ -1156,18 +1237,18 @@ What it does:
 | `processing_store_stores_what_fits` | With room for one, Store returns true, puts one of three into the chest with exactly one add and no warning, and drops the other two at the smelter as it always has |
 
 A precondition that is missing SKIPs the run under `processing_store_setup`.
-Besides the `rpc` preconditions, the smelter's `allow_processing_by_*` lacking
-Craft or Store counts, and so does a chest that cannot be filled. A check is
+Besides the `rpc` preconditions, a chest that cannot be filled counts. A check is
 NOT-RUN when the observer cannot patch the game or the chest cannot be left
 with room for exactly one. A check FAILs when the warning listener did not
 receive its own probe.
 
 ```text
-[Automatics Smoke] automatics_smoke_processing store started: it places a chest and a smelter ahead of you, fills the chest with the smelter's product, calls the smelter's Store entry with the chest full and with room for one, and removes them; no setting is changed
-[Automatics Smoke] automatics_smoke_processing store: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] automatics_smoke_processing store started: it places a chest and a smelter ahead of you, fills the chest with the smelter's product, calls the smelter's Store entry with the chest full and with room for one, and removes them; the settings it needs are set for the run and put back afterwards
+[Automatics Smoke] automatics_smoke_processing store: the test chest is at (102.3, 31.0, -48.7), 4.0 m ahead of you, with the test stations 2.5 m from it
 [Automatics Smoke] PASS processing_store_full_chest_untouched: with the chest full of Copper, Store returned false and the chest got no add, no save and no warning
 [Automatics Smoke] PASS processing_store_stores_what_fits: with room for one Copper, Store put one of 3 into the chest with one add and no warning, and dropped the other 2 at the smelter, which the check removed
-[Automatics Smoke] Summary: total=2 passed=2 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4
+[Automatics Smoke] Summary: total=3 passed=3 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
 The item name depends on the game's conversions and your language.
@@ -1188,7 +1269,10 @@ hand yields, the world's resource rate included, and that it stores only whole
 units. Before, one stored item stood for each unit at any resource rate, a
 beehive could store more units than it holds, and a sap extractor that filled up
 while nothing could be stored never stored again. The command sets the game's
-resource rate for the run and puts it back; it changes no setting.
+resource rate for the run and puts it back. Besides the setup described above,
+it allows Store for each piece and, for the run, turns each piece's
+`*_store_only_if_product_exists` off and sets its
+`*_product_stacks_of_suppress_processing` to 0.
 
 What it does:
 
@@ -1228,7 +1312,7 @@ No check may leave a new item drop.
 
 A precondition that is missing SKIPs the run under `processing_collect_setup`,
 or the checks of the piece it concerns with the same message. Besides the `rpc`
-preconditions, these count: a piece's `allow_processing_by_*` lacks Store, its
+preconditions, these count when the run could not set them: a piece's
 `*_store_only_if_product_exists` is on, or its
 `*_product_stacks_of_suppress_processing` is above 0 (that limit, not the chest,
 would decide what is stored). A yield or whole-unit check SKIPs when one unit
@@ -1238,8 +1322,8 @@ of its item, and a check is NOT-RUN when the chest cannot be left with the room
 it needs.
 
 ```text
-[Automatics Smoke] automatics_smoke_processing collect started: it places a chest, a beehive, a sap extractor and a wisp fountain ahead of you, sets the world's resource rate to 3, takes one unit out of each by hand, drives each one's Store entry into the chest, and removes them; the resource rate is put back and no setting is changed
-[Automatics Smoke] automatics_smoke_processing collect: the test chest is at (102.3, 31.0, -48.7), 7.0 m ahead of you, with the test stations 2.5 m from it
+[Automatics Smoke] automatics_smoke_processing collect started: it places a chest, a beehive, a sap extractor and a wisp fountain ahead of you, sets the world's resource rate to 3, takes one unit out of each by hand, drives each one's Store entry into the chest, and removes them; the resource rate and the settings it needs for the run are put back afterwards
+[Automatics Smoke] automatics_smoke_processing collect: the test chest is at (102.3, 31.0, -48.7), 4.0 m ahead of you, with the test stations 2.5 m from it
 [Automatics Smoke] PASS processing_collect_beehive_yield: at a resource rate of 3, one unit of the beehive yields 3 Honey by hand, and Store put the 2 units it held into the chest as 6 Honey and emptied it
 [Automatics Smoke] PASS processing_collect_beehive_whole_units: with room for 5 Honey in the chest and 3 new units, Store put one unit in as 3 Honey and left 2 units in the beehive
 [Automatics Smoke] PASS processing_collect_beehive_clamped_to_maximum: with 7 new units and room in the chest, Store put the beehive's maximum of 4 units in as 12 Honey and kept none of the rest
@@ -1249,7 +1333,8 @@ it needs.
 [Automatics Smoke] PASS processing_collect_wisplure_yield: at a resource rate of 3, picking a lured wisp by hand yields 3 Wisp, and Store put 3 into the chest
 [Automatics Smoke] PASS processing_collect_wisplure_whole_unit: with room for 2 Wisp in the chest, Store put none of a wisp's 3 in and returned false, so the fountain lures the wisp as usual
 [Automatics Smoke] PASS processing_collect_rate_restored: the world's resource rate is back at 1
-[Automatics Smoke] Summary: total=9 passed=9 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
+[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4
+[Automatics Smoke] Summary: total=10 passed=10 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
 The item names, the yields and the units a piece holds depend on your game build

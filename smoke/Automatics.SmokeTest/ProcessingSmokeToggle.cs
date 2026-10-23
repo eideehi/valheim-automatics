@@ -9,6 +9,7 @@ using BepInEx.Logging;
 using HarmonyLib;
 using ModUtils;
 using UnityEngine;
+using PickupConfig = Automatics.AutomaticPickup.Config;
 using Process = Automatics.AutomaticProcessing.Process;
 using ProcessingConfig = Automatics.AutomaticProcessing.Config;
 using ProcessingModule = Automatics.AutomaticProcessing.Module;
@@ -33,7 +34,11 @@ namespace Automatics.SmokeTest
     // captured. The setting is SmokeSession's to hand back, under the same rules as the
     // lifecycle command's: the change is recorded before it is made, one run at a time, a
     // change the user makes wins and stops the run, and the setting is put back only while it
-    // still holds the value the check wrote.
+    // still holds the value the check wrote. A module that is off in the user's settings is
+    // turned on first, as the lifecycle command does for a module that is off by default, and
+    // goes back off at the end. The settings the test smelter needs (automatic_pickup_range
+    // among them) go through the session's settings path, since the run holds the toggle slot,
+    // and are reported as processing_settings_restored.
     //
     // config: reads the live .cfg and compares its automatic_processing section with the
     // entries Automatic Processing binds. It writes nothing.
@@ -200,6 +205,7 @@ namespace Automatics.SmokeTest
             private string _moduleName;
             private string _harmonyId;
             private bool _toggleOwned;
+            private bool _turnedOn;
             private bool _benchReady;
             private float _enabledAt;
             private string _notReached = "not reached: an earlier step stopped the run";
@@ -252,7 +258,7 @@ namespace Automatics.SmokeTest
             public override IEnumerator Execute()
             {
                 _info(
-                    $"[Automatics Smoke] {_runner} started: automatic_processing/module is turned off and on again through its setting, a test smelter is watched while it is on, and the setting is restored");
+                    $"[Automatics Smoke] {_runner} started: automatic_processing/module is turned off and on again through its setting, a test smelter is watched while it is on, and the setting and the others the smelter needs for the run are restored");
 
                 var player = Player.m_localPlayer;
                 var problem = EnvironmentProblem(player, false);
@@ -273,15 +279,8 @@ namespace Automatics.SmokeTest
                 _harmonyId = global::Automatics.Automatics.GetHarmonyId(_moduleName);
                 _initialValue = _toggle.Value;
 
-                // The check only ever pauses Automatic Processing, never turns it on for the user:
-                // on, it would act on the user's own stations, and no watch can stop it in the
-                // frame one of them loads.
-                if (_initialValue != AutomaticsModule.Enabled)
-                {
-                    SkipAll(
-                        "Automatic Processing is off in your settings. Turning it on for the check would let it act on your own stations, so the check did not change it. Turn it on yourself if you want this check, then run it again.");
-                    yield break;
-                }
+                // A module that is off is turned on for the run first, and goes back off at the end.
+                _turnedOn = _initialValue != AutomaticsModule.Enabled;
 
                 // From here on any write to the setting that is not the check's own is the user
                 // taking it back.
@@ -298,11 +297,15 @@ namespace Automatics.SmokeTest
                 SmokeSession.TrackHandBack(_observersHandBack);
                 _errors.Start();
 
+                if (_turnedOn && !Write(AutomaticsModule.Enabled, InitialSettled)) yield break;
+
                 // The registry has to agree with the setting before anything is asked of it, or a
                 // transition still pending from before the command would be read as this one's.
-                var settle = WaitForState(StateFor(_initialValue), true, true);
+                var settle = WaitForState(ModuleState.Enabled, true, true);
                 while (settle.MoveNext()) yield return settle.Current;
-                RecordWait(InitialSettled, "nothing was changed");
+                RecordWait(InitialSettled, _turnedOn
+                    ? "automatic_processing/module was off in your settings, so it was turned on for the run; it goes back off at the end"
+                    : "nothing was changed");
                 if (_wait != WaitResult.Reached) yield break;
 
                 // off
@@ -318,9 +321,10 @@ namespace Automatics.SmokeTest
 
                 // The test smelter is placed while the module is off, so it already exists when
                 // the module comes back, as the user's own stations do.
-                PrepareBench(player);
+                var prepare = PrepareBench(player);
+                while (prepare.MoveNext()) yield return prepare.Current;
 
-                // on: back to the value the user had.
+                // on again
                 if (!Write(AutomaticsModule.Enabled, OnState)) yield break;
                 var on = WaitForState(ModuleState.Enabled, true, true);
                 while (on.MoveNext()) yield return on.Current;
@@ -335,11 +339,17 @@ namespace Automatics.SmokeTest
             }
 
             // Puts the setting back and waits for the registry to follow, then judges the log.
+            // RestoreToggle puts back every setting the run holds, the test smelter's with the
+            // toggle, so the smelter and its chest are handed back first.
             public override IEnumerator Finish()
             {
+                _benchReady = false;
+                ReleaseBenches($"{_runner} ended");
+
                 if (_toggleOwned)
                 {
                     var outcome = SmokeSession.RestoreToggle(_runId, out var detail);
+                    JudgeSettings();
                     switch (outcome)
                     {
                         case SmokeSession.ToggleOutcome.NothingWritten:
@@ -395,6 +405,31 @@ namespace Automatics.SmokeTest
                 }
             }
 
+            // processing_settings_restored for the settings RestoreToggle put back with the toggle,
+            // judged from their records, since it reports the toggle alone.
+            private void JudgeSettings()
+            {
+                var written = _settings.Values.Where(x => x.Written).ToList();
+                if (written.Count == 0) return;
+
+                string Show(SmokeSession.SettingRestoration setting, object value) =>
+                    TomlTypeConverter.ConvertToString(value, setting.Entry.SettingType);
+
+                var left = written.Where(x => !Equals(x.Entry.BoxedValue, x.Original)).ToList();
+                var detail = string.Join("; ", written.Select(x => left.Contains(x)
+                    ? $"{x.Name} is {Show(x, x.Entry.BoxedValue)}, not back at {Show(x, x.Original)}{(x.EditedByUser ? " (it was changed outside the check and left as it is)" : "")}"
+                    : $"{x.Name} is back at {Show(x, x.Original)}"));
+                if (!SmokeSession.IsCurrent(_runId))
+                    SettingsResult = CheckResult.Skip(SettingsRestored,
+                        "restoration skipped: the run was abandoned, so the smoke plugin handled its settings");
+                else if (left.Count == 0)
+                    SettingsResult = CheckResult.Pass(SettingsRestored, detail);
+                else if (left.All(x => x.EditedByUser))
+                    SettingsResult = CheckResult.Skip(SettingsRestored, "restoration skipped: " + detail);
+                else
+                    SettingsResult = CheckResult.Fail(SettingsRestored, detail);
+            }
+
             // A patch that could not be removed is kept as an obligation: every hand-back trigger
             // (the run's end, the plugin's disable or destroy, the game's quit, the next command)
             // tries again.
@@ -414,29 +449,37 @@ namespace Automatics.SmokeTest
             // first Smelter.UpdateSmelter after the enable can find only the test chest. When any
             // of that fails, whatever was placed is handed back at once, so nothing of the check's
             // stands while the module is on without the check watching it.
-            private void PrepareBench(Player player)
+            private IEnumerator PrepareBench(Player player)
             {
-                SetUpBench(player);
+                var steps = SetUpBench(player);
+                while (steps.MoveNext()) yield return steps.Current;
                 if (!_benchReady) ReleaseBenches($"{_runner} (the test smelter could not be set up)");
             }
 
-            private void SetUpBench(Player player)
+            private IEnumerator SetUpBench(Player player)
             {
+                // The smelter's own settings, and automatic_pickup_range as SetUp writes it.
+                if (!TurnOff("_refuelOnlyWhenMaterialsSupplied", _fuel.ObjectName) ||
+                    !AtMost("_fuelCountOfSuppressProcessing", _fuel.ObjectName, DefaultSuppressCount) ||
+                    !Set(PickupConfig.AutomaticPickupRangeEntry, PickupRangeForRun))
+                    yield break;
+
                 if (ProcessingConfig.RefuelOnlyWhenMaterialsSupplied(_fuel.ObjectName))
                 {
                     _fuel.Skip(
                         $"{_fuel.ObjectName.Substring(1)}_refuel_only_when_materials_supplied is on, and the test smelter gets no ore");
-                    return;
+                    yield break;
                 }
 
-                if (!FindChestPrefab(out var chestPrefab)) return;
+                if (!FindChestPrefab(out var chestPrefab)) yield break;
                 ResolveStations();
                 ChooseItems();
-                if (Active.Count == 0) return;
-                if (!PlanLayout(player, out var chestPosition, out var distance)) return;
-                if (!CheckSurroundings(chestPosition, distance)) return;
-                if (!PlaceBenches(chestPrefab, chestPosition, distance)) return;
-                if (!CheckSources()) return;
+                if (Active.Count == 0) yield break;
+                var lay = Lay(player);
+                while (lay.MoveNext()) yield return lay.Current;
+                if (!_ready) yield break;
+                if (!PlaceBenches(chestPrefab, _chestPosition, _distance)) yield break;
+                if (!CheckSources()) yield break;
 
                 var wanted = ProcessingConfig.FuelCountOfSuppressProcessing(_fuel.ObjectName) + FuelSurplus;
                 _fuel.Seeded = SeedChest(_benches.ChestInventory, _fuel.MaterialPrefab, _fuel.MaterialName,
@@ -445,7 +488,7 @@ namespace Automatics.SmokeTest
                 {
                     _fuel.Skip(
                         $"only {_fuel.Seeded} of the {wanted} {DisplayName(_fuel.MaterialName)} fit into the test chest");
-                    return;
+                    yield break;
                 }
 
                 _fuel.Prepare();
@@ -453,7 +496,7 @@ namespace Automatics.SmokeTest
                 if (!QuickRefuelObserver.Attach(_fuel.Station, out var attachProblem))
                 {
                     _fuel.NotRun(attachProblem);
-                    return;
+                    yield break;
                 }
 
                 // The observer's positive control: a direct call, which returns at once while the
@@ -464,7 +507,7 @@ namespace Automatics.SmokeTest
                 {
                     _fuel.NotRun(
                         $"the observer on SmelterProcess.QuickRefuel counted {QuickRefuelObserver.Calls} of 1 direct call, so it could not show whether the game calls the entry");
-                    return;
+                    yield break;
                 }
 
                 QuickRefuelObserver.Reset();
@@ -675,7 +718,7 @@ namespace Automatics.SmokeTest
                 switch (_wait)
                 {
                     case WaitResult.Reached:
-                        Pass(name, name == Restored ? note : "");
+                        Pass(name, name == Restored || (name == InitialSettled && _turnedOn) ? note : "");
                         break;
                     case WaitResult.Faulted:
                     case WaitResult.TimedOut:

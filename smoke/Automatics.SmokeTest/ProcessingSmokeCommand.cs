@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using ModUtils;
@@ -21,7 +22,10 @@ using ProcessingModule = Automatics.AutomaticProcessing.Module;
 using Processor = Automatics.AutomaticProcessing.Processor;
 using SapCollectorProcess = Automatics.AutomaticProcessing.SapCollectorProcess;
 using SmelterProcess = Automatics.AutomaticProcessing.SmelterProcess;
+using ValheimObject = Automatics.Valheim.ValheimObject;
 using WispSpawnerProcess = Automatics.AutomaticProcessing.WispSpawnerProcess;
+using Held = System.Collections.Generic.Dictionary<BepInEx.Configuration.ConfigEntryBase,
+    Automatics.SmokeTest.SmokeSession.SettingRestoration>;
 
 namespace Automatics.SmokeTest
 {
@@ -41,7 +45,7 @@ namespace Automatics.SmokeTest
     // update may feed it more in the meantime; the ledger still has to hold. ZNetView.InvokeRPC
     // targets the ZDO owner - this peer, for objects the check spawned - and
     // ZRoutedRpc.InvokeRoutedRPC handles a call to its own peer inline, so the ledger already
-    // has to balance on the frame of the call. The run changes no setting.
+    // has to balance on the frame of the call.
     //
     // toggle and config are in ProcessingSmokeToggle.cs: one round trip of
     // automatic_processing/module through its real setting, and a read-only look at the
@@ -51,10 +55,18 @@ namespace Automatics.SmokeTest
     // from a piece that collects an item over time is what taking it out by hand yields, in
     // whole units.
     //
+    // Every subcommand but config sets up what it needs itself before it places anything:
+    // Automatic Processing turned on for the run (toggle turns it on through the setting it
+    // round-trips), automatic_pickup_range at its minimum, so the test objects can stand at the
+    // nearest placement, and the per-piece settings a check depends on (the chest allowed, the
+    // process allowed, the counts it seeds above). When something that is not the check's own is
+    // within reach of where the test objects go, the player is moved to clear ground first and
+    // moved back at the end (SmokeSetup.Relocate).
+    //
     // Safety follows the asymmetric rule of the other smoke commands (smoke/README.md): only
     // objects this command spawned are changed, test items go only into its own chest, and
-    // whatever it cannot prove is its own is left where it is and reported. The one setting
-    // it writes, automatic_processing/module (toggle only), is SmokeSession's to hand back.
+    // whatever it cannot prove is its own is left where it is and reported. The settings it
+    // writes are SmokeSession's to hand back; processing_settings_restored reports them.
     internal static partial class ProcessingSmokeCommand
     {
         private const string CommandName = "automatics_smoke_processing";
@@ -71,6 +83,18 @@ namespace Automatics.SmokeTest
         // Added to every configured reach (container search range, pickup range) before it is
         // compared with a distance, so that a position near the edge counts as within it.
         private const float RangeMargin = 2f;
+
+        // automatic_pickup_range's minimum, written for the run, so that NearestPlacement clears
+        // Automatic Pickup's reach whatever the user's range.
+        private const float PickupRangeForRun = 1f;
+
+        // The default of material_count_of_suppress_processing and of
+        // fuel_count_of_suppress_processing. The checks seed above these counts, so a higher one
+        // is lowered to it for the run, and what they seed fits into the test chest.
+        private const int DefaultSuppressCount = 1;
+
+        // The one check every subcommand that writes settings ends with.
+        private const string SettingsRestored = "processing_settings_restored";
 
         private static readonly ManualLogSource Log =
             BepInEx.Logging.Logger.CreateLogSource("Automatics Smoke Processing");
@@ -208,7 +232,29 @@ namespace Automatics.SmokeTest
                 run?.HandBack(runner + " ended");
             }
 
-            Report(context, run.Results);
+            // Once the test objects are gone: the settings the run wrote go back, and so does
+            // the player, when a relocation moved them, before the report ends with its Summary.
+            run.RestoreSettings();
+            var back = new SmokeSetup.SetupResult();
+            var home = SmokeSetup.ReturnToStart(run.RunId, back);
+            while (home.MoveNext()) yield return home.Current;
+            if (!back.Ok)
+                Emit(context, LogLevel.Warning,
+                    $"[Automatics Smoke] {runner}: you could not be moved back to where the command started yet ({back.Reason}); the smoke plugin tries again as the run ends");
+
+            var results = run.Results.ToList();
+            if (run.SettingsResult != null) results.Add(run.SettingsResult);
+            Report(context, results);
+        }
+
+        // Automatic Processing keeps its per-piece settings in private dictionaries by the piece's
+        // name and exposes only their values; field is the dictionary's name, for instance
+        // "_allowProcessing". Null when the piece has none. The world command uses it too.
+        internal static ConfigEntry<T> PieceSetting<T>(string field, string piece)
+        {
+            var entries = AccessTools.Field(typeof(ProcessingConfig), field)?.GetValue(null) as
+                Dictionary<string, ConfigEntry<T>>;
+            return entries != null && entries.TryGetValue(piece, out var entry) ? entry : null;
         }
 
         // Whether Automatic Processing is running. This is the one place that decides it, and
@@ -285,8 +331,17 @@ namespace Automatics.SmokeTest
             protected readonly Action<string> _warn;
             protected readonly List<StationBench> _stations;
 
+            // The settings the run writes for itself (SmokeSetup.Write); put back when it ends and
+            // reported as processing_settings_restored.
+            protected readonly Held _settings = new Held();
+
             protected BenchSet _benches;
             protected Func<string, bool> _sessionHandBack;
+
+            // What SetUp and Lay came to: whether the run can go on, and where the chest goes.
+            protected bool _ready;
+            protected Vector3 _chestPosition;
+            protected float _distance;
 
             protected BenchRun(int runId, string runner, Action<string> info, Action<string> warn,
                 List<StationBench> stations)
@@ -303,6 +358,12 @@ namespace Automatics.SmokeTest
                     "the run ended before this check reached a result")).ToList();
 
             protected List<StationBench> Active => _stations.Where(x => x.Result == null).ToList();
+
+            public int RunId => _runId;
+
+            // processing_settings_restored, once RestoreSettings has run; null when the run wrote
+            // no setting.
+            public CheckResult SettingsResult { get; protected set; }
 
             public abstract IEnumerator Execute();
 
@@ -327,6 +388,91 @@ namespace Automatics.SmokeTest
             {
                 if (_benches != null && _benches.HandBack(reason))
                     SmokeSession.ReleaseHandBack(_sessionHandBack);
+            }
+
+            // Puts back every setting the run wrote and judges them as SmokeSetup.ReportSettings
+            // does: PASS when each is back, SKIP when one was left to the user or the run was
+            // abandoned, FAIL when one could not be put back.
+            public void RestoreSettings()
+            {
+                if (SettingsResult != null) return;
+                var results = SmokeSession.RestoreSettings(_runId);
+                if (results.Count == 0) return;
+
+                var detail = string.Join("; ", results.Select(x => x.Value));
+                if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
+                    SettingsResult = CheckResult.Fail(SettingsRestored, detail);
+                else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
+                                          x.Key == SmokeSession.ToggleOutcome.NotThisRun))
+                    SettingsResult = CheckResult.Skip(SettingsRestored, "restoration skipped: " + detail);
+                else
+                    SettingsResult = CheckResult.Pass(SettingsRestored, detail);
+            }
+
+            // What the run sets up before it plans anything: Automatic Processing turned on for
+            // the run when it is off, and automatic_pickup_range at its minimum. _ready says the
+            // run can go on; otherwise every check is settled as a SKIP that says what failed.
+            protected IEnumerator SetUp(Player player)
+            {
+                _ready = false;
+                var problem = EnvironmentProblem(player, false);
+                if (problem != null)
+                {
+                    SkipRemaining(problem);
+                    yield break;
+                }
+
+                var module = new SmokeSetup.SetupResult();
+                var steps = SmokeSetup.EnableModule(_runId, _settings, ProcessingConfig.ModuleEntry,
+                    () => ProcessingRunning(out _), module);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!module.Ok)
+                {
+                    SkipRemaining(module.Reason);
+                    yield break;
+                }
+
+                if (module.Changed)
+                    _info($"[Automatics Smoke] {_runner}: automatic_processing/module was off, so it is turned on for the run and put back afterwards");
+
+                // Asked again after the wait: the world may have gone meanwhile.
+                if (!CheckEnvironment(player)) yield break;
+                _ready = Set(PickupConfig.AutomaticPickupRangeEntry, PickupRangeForRun);
+            }
+
+            // Writes a setting for the run when it does not hold value already. A refusal settles
+            // the remaining checks as SKIPs that name it. A setting this build does not have is
+            // left to the check's own precondition.
+            protected bool Set(ConfigEntryBase entry, object value)
+            {
+                if (entry == null || Equals(entry.BoxedValue, value)) return true;
+                if (SmokeSetup.Write(_runId, _settings, entry, value, out var refusal)) return true;
+
+                SkipRemaining(
+                    $"{entry.Definition.Section}/{entry.Definition.Key} could not be set for the run: {refusal}");
+                return false;
+            }
+
+            // allow_processing_by_* of the piece, with process added for the run.
+            protected bool AllowProcess(string piece, Process process)
+            {
+                var entry = PieceSetting<Process>("_allowProcessing", piece);
+                return entry == null || (entry.Value & process) != 0 || Set(entry, entry.Value | process);
+            }
+
+            // A per-piece count the check seeds above or depends on, lowered to value for the run
+            // when it is higher.
+            protected bool AtMost(string field, string piece, int value)
+            {
+                var entry = PieceSetting<int>(field, piece);
+                return entry == null || entry.Value <= value || Set(entry, value);
+            }
+
+            // A per-piece switch that would keep the entry under test from acting, off for the run.
+            protected bool TurnOff(string field, string piece)
+            {
+                var entry = PieceSetting<bool>(field, piece);
+                return entry == null || !entry.Value || Set(entry, false);
             }
 
             protected bool CheckEnvironment(Player player)
@@ -362,6 +508,14 @@ namespace Automatics.SmokeTest
                     return false;
                 }
 
+                // Allowed for the run when it is not.
+                var allowed = SmokeSetup.Field<StringList>(typeof(ProcessingConfig), "_allowContainer");
+                if (allowed != null &&
+                    ValheimObject.Container.GetIdentify(ChestObjectName, out var identifier) &&
+                    !allowed.Value.Contains(identifier) &&
+                    !Set(allowed, new StringList(allowed.Value) { identifier }))
+                    return false;
+
                 if (!ContainerAccess.IsAllowed(prefab.GetComponent<Container>(),
                         ProcessingConfig.AllowContainer))
                 {
@@ -378,6 +532,8 @@ namespace Automatics.SmokeTest
                 foreach (var station in _stations)
                     if (!station.FindPrefab())
                         station.Skip($"{station.ObjectName} prefab not found");
+                    else if (!AllowProcess(station.ObjectName, station.RequiredProcess))
+                        return;
                     else if (!ProcessingLogics.IsAllowProcessing(station.ObjectName,
                                  station.RequiredProcess))
                         station.Skip(
@@ -441,24 +597,78 @@ namespace Automatics.SmokeTest
                     }
                 }
 
-                var origin = player.transform.position;
+                chestPosition = Arrange(player.transform.position, Facing(player), distance);
+                return true;
+            }
+
+            private static Vector3 Facing(Player player)
+            {
                 var forward = player.transform.forward;
                 forward.y = 0f;
                 if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
-                forward.Normalize();
+                return forward.normalized;
+            }
+
+            // Sets every station's position for a player at origin and returns the chest's.
+            private Vector3 Arrange(Vector3 origin, Vector3 forward, float distance)
+            {
                 var right = Vector3.Cross(Vector3.up, forward);
 
                 // The stations share the chest's height, so each stays StationOffset from it on
                 // any slope.
-                chestPosition = Grounded(origin + forward * distance, origin.y);
+                var chestPosition = Grounded(origin + forward * distance, origin.y);
                 var directions = new[] { right, -right, forward };
                 for (var i = 0; i < _stations.Count; i++)
                     _stations[i].Position =
                         chestPosition + directions[i % directions.Length] * StationOffset;
-                return true;
+                return chestPosition;
             }
 
-            protected bool CheckSurroundings(Vector3 chestPosition, float distance)
+            // Plans where the test objects go (_chestPosition, _distance) and checks what is
+            // around them. When something that is not the check's own is within reach, the player
+            // is first moved to clear ground where nothing is (SmokeSetup.Relocate, which keeps
+            // their facing) and the plan is made again from there; RunBench moves them back when
+            // the run ends. _ready says the run can place its objects.
+            protected IEnumerator Lay(Player player)
+            {
+                _ready = false;
+                if (!PlanLayout(player, out _chestPosition, out _distance)) yield break;
+
+                string relocation = null;
+                if (FindConflicts(_chestPosition, Active).Count > 0)
+                {
+                    var forward = Facing(player);
+                    var distance = _distance;
+                    var moved = new SmokeSetup.SetupResult();
+                    var steps = SmokeSetup.Relocate(_runId, site =>
+                    {
+                        var conflicts = FindConflicts(Arrange(site, forward, distance), Active);
+                        return conflicts.Count == 0 ? null : conflicts[0];
+                    }, moved);
+                    while (steps.MoveNext()) yield return steps.Current;
+
+                    if (!moved.Ok) relocation = moved.Reason;
+                    else if (moved.Changed)
+                        _info(
+                            $"[Automatics Smoke] {_runner}: things that are not the check's own were within reach of where its test objects go, so you were {moved.Reason}; you are moved back when the run ends");
+
+                    // A failed move can still have left the player elsewhere, so the plan is
+                    // made again from wherever they are.
+                    var problem = EnvironmentProblem(player, false);
+                    if (problem != null)
+                    {
+                        SkipRemaining(problem);
+                        yield break;
+                    }
+
+                    if (!PlanLayout(player, out _chestPosition, out _distance)) yield break;
+                }
+
+                _ready = CheckSurroundings(_chestPosition, _distance, relocation);
+            }
+
+            // relocation is why no clear ground was found, when a move was tried.
+            protected bool CheckSurroundings(Vector3 chestPosition, float distance, string relocation = null)
             {
                 var stations = Active;
                 var conflicts = FindConflicts(chestPosition, stations);
@@ -474,7 +684,7 @@ namespace Automatics.SmokeTest
                                 Processor.GetAllInstance()
                                     .Max(x => ProcessingConfig.ContainerSearchRange(x.name));
                 SkipRemaining(
-                    $"{conflicts.Count} container(s) or processing station(s) that are not the check's own are within reach of where its test objects go (the first: {conflicts[0]}); stand where nothing of yours is within about {Mathf.CeilToInt(clearance)} m of you and run it again");
+                    $"{conflicts.Count} container(s) or processing station(s) that are not the check's own are within reach of where its test objects go (the first: {conflicts[0]}){(relocation == null ? "" : $", and no clear ground to move you to was found ({relocation})")}; stand where nothing of yours is within about {Mathf.CeilToInt(clearance)} m of you and run it again");
                 return false;
             }
 
@@ -708,37 +918,25 @@ namespace Automatics.SmokeTest
             public override IEnumerator Execute()
             {
                 _info(
-                    $"[Automatics Smoke] {_runner} started: it places a chest, a smelter, a stone oven and a fermenter ahead of you, drives each station's intake once from the chest, watches them for {ObservedFrames} frames and removes them; no setting is changed");
+                    $"[Automatics Smoke] {_runner} started: it places a chest, a smelter, a stone oven and a fermenter ahead of you, drives each station's intake once from the chest, watches them for {ObservedFrames} frames and removes them; the settings it needs are set for the run and put back afterwards");
 
                 var player = Player.m_localPlayer;
-                if (!CheckEnvironment(player)) yield break;
+                var setUp = SetUp(player);
+                while (setUp.MoveNext()) yield return setUp.Current;
+                if (!_ready) yield break;
                 if (!FindChestPrefab(out var chestPrefab)) yield break;
 
                 ResolveStations();
                 ChooseItems();
+                foreach (var station in Active)
+                    if (!AtMost("_materialCountOfSuppressProcessing", station.ObjectName, DefaultSuppressCount))
+                        yield break;
                 if (Active.Count == 0) yield break;
 
-                if (!PlanLayout(player, out var chestPosition, out var distance)) yield break;
-                if (!CheckSurroundings(chestPosition, distance)) yield break;
-
-                // Registered before anything is spawned, so a run cut short at any point still
-                // has its test objects handed back by the session.
-                _benches = new BenchSet(_runner, _warn, _stations);
-                _sessionHandBack = _benches.HandBack;
-                SmokeSession.TrackHandBack(_sessionHandBack);
-
-                if (!_benches.PlaceChest(chestPrefab, chestPosition, out var chestProblem))
-                {
-                    SkipRemaining(chestProblem);
-                    yield break;
-                }
-
-                foreach (var station in Active)
-                    if (!_benches.PlaceStation(station, out var stationProblem))
-                        station.Skip(stationProblem);
-
-                _info(
-                    $"[Automatics Smoke] {_runner}: the test chest is at {Where(chestPosition)}, {distance:0.0} m ahead of you, with the test stations {StationOffset:0.0} m from it");
+                var lay = Lay(player);
+                while (lay.MoveNext()) yield return lay.Current;
+                if (!_ready) yield break;
+                if (!PlaceBenches(chestPrefab, _chestPosition, _distance)) yield break;
 
                 // Everything from the spawn to the first sample below happens in this frame, so
                 // no station has run an update of its own before the check has looked.
@@ -842,7 +1040,7 @@ namespace Automatics.SmokeTest
         // warning, and drops the other two at the smelter as it always has; the check removes
         // that drop at once. The filler and the stored product are taken out of the chest before
         // the run ends, so the chest and the smelter go through the rpc hand-back with their
-        // ledger balanced. Everything happens in the frame of the spawn; no setting is changed.
+        // ledger balanced. Everything happens in the frame of the spawn.
         private sealed class StoreRun : BenchRun
         {
             private const string Setup = "processing_store_setup";
@@ -895,13 +1093,16 @@ namespace Automatics.SmokeTest
             public override IEnumerator Execute()
             {
                 _info(
-                    $"[Automatics Smoke] {_runner} started: it places a chest and a smelter ahead of you, fills the chest with the smelter's product, calls the smelter's Store entry with the chest full and with room for one, and removes them; no setting is changed");
+                    $"[Automatics Smoke] {_runner} started: it places a chest and a smelter ahead of you, fills the chest with the smelter's product, calls the smelter's Store entry with the chest full and with room for one, and removes them; the settings it needs are set for the run and put back afterwards");
 
                 var player = Player.m_localPlayer;
-                if (!CheckEnvironment(player)) yield break;
+                var setUp = SetUp(player);
+                while (setUp.MoveNext()) yield return setUp.Current;
+                if (!_ready) yield break;
                 if (!FindChestPrefab(out var chestPrefab)) yield break;
 
                 ResolveStations();
+                if (Active.Count > 0 && !AllowProcess(_smelter.ObjectName, Process.Store)) yield break;
                 if (Active.Count > 0 &&
                     !ProcessingLogics.IsAllowProcessing(_smelter.ObjectName, Process.Store))
                     SkipRemaining(
@@ -909,9 +1110,10 @@ namespace Automatics.SmokeTest
                 ChooseItems();
                 if (Active.Count == 0) yield break;
 
-                if (!PlanLayout(player, out var chestPosition, out var distance)) yield break;
-                if (!CheckSurroundings(chestPosition, distance)) yield break;
-                if (!PlaceBenches(chestPrefab, chestPosition, distance)) yield break;
+                var lay = Lay(player);
+                while (lay.MoveNext()) yield return lay.Current;
+                if (!_ready) yield break;
+                if (!PlaceBenches(chestPrefab, _chestPosition, _distance)) yield break;
 
                 // Everything from here to the end happens in the frame of the spawn.
                 if (!CheckSources()) yield break;
@@ -1089,8 +1291,7 @@ namespace Automatics.SmokeTest
         // its maximum level and then with room for one unit, through the piece's own update tick.
         // Everything happens in the frame of the spawn. The drops the hand extraction made are
         // removed at once; whatever the run stored is taken out of the chest and every piece is
-        // emptied before the hand-back. The rate is put back however the run ends; no setting is
-        // changed.
+        // emptied before the hand-back. The rate is put back however the run ends.
         private sealed class CollectRun : BenchRun
         {
             private const string Setup = "processing_collect_setup";
@@ -1201,19 +1402,22 @@ namespace Automatics.SmokeTest
             public override IEnumerator Execute()
             {
                 _info(
-                    $"[Automatics Smoke] {_runner} started: it places a chest, a beehive, a sap extractor and a wisp fountain ahead of you, sets the world's resource rate to {TestRate}, takes one unit out of each by hand, drives each one's Store entry into the chest, and removes them; the resource rate is put back and no setting is changed");
+                    $"[Automatics Smoke] {_runner} started: it places a chest, a beehive, a sap extractor and a wisp fountain ahead of you, sets the world's resource rate to {TestRate}, takes one unit out of each by hand, drives each one's Store entry into the chest, and removes them; the resource rate and the settings it needs for the run are put back afterwards");
 
                 var player = Player.m_localPlayer;
-                if (!CheckEnvironment(player)) yield break;
+                var setUp = SetUp(player);
+                while (setUp.MoveNext()) yield return setUp.Current;
+                if (!_ready) yield break;
                 if (!FindChestPrefab(out var chestPrefab)) yield break;
 
                 ResolveStations();
                 ChooseCollectorItems();
                 if (Active.Count == 0) yield break;
 
-                if (!PlanLayout(player, out var chestPosition, out var distance)) yield break;
-                if (!CheckSurroundings(chestPosition, distance)) yield break;
-                if (!PlaceBenches(chestPrefab, chestPosition, distance)) yield break;
+                var lay = Lay(player);
+                while (lay.MoveNext()) yield return lay.Current;
+                if (!_ready) yield break;
+                if (!PlaceBenches(chestPrefab, _chestPosition, _distance)) yield break;
 
                 // Everything from here to the end happens in the frame of the spawn.
                 if (!CheckSources()) yield break;
@@ -1273,11 +1477,15 @@ namespace Automatics.SmokeTest
             }
 
             // A piece is tried only when Store may run on it and nothing in the settings decides
-            // what it stores besides the chest.
+            // what it stores besides the chest; the two settings that would are set for the run.
             private void ChooseCollectorItems()
             {
                 foreach (var collector in Collectors.ToList())
                 {
+                    if (!TurnOff("_storeOnlyIfProductExists", collector.ObjectName) ||
+                        !AtMost("_productStacksOfSuppressProcessing", collector.ObjectName, 0))
+                        return;
+
                     var rawName = collector.ObjectName.Substring(1);
                     var limit = ProcessingConfig.ProductStacksOfSuppressProcessing(collector.ObjectName);
                     if (ProcessingConfig.StoreOnlyIfProductExists(collector.ObjectName))

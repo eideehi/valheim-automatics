@@ -41,9 +41,9 @@ namespace Automatics.SmokeTest
     // run ends, through a hand-back registered with the session before any of them changes. The
     // bonus food and the filler the check added are taken out of its chest again right away, and
     // the burnt slots the check made are emptied, so the chest and the oven go through the rpc
-    // subcommand's hand-back with their ledger balanced. No setting is changed, and no frame
-    // passes while the test objects stand, so the oven's own update runs only when the check
-    // calls it.
+    // subcommand's hand-back with their ledger balanced. No frame passes while the test objects
+    // stand, so the oven's own update runs only when the check calls it. The settings the oven's
+    // entries depend on are set for the run (BenchRun.SetUp) and put back.
     internal static partial class ProcessingSmokeCommand
     {
         private static IEnumerator RunSkill(Terminal context, int runId, string runner)
@@ -157,14 +157,21 @@ namespace Automatics.SmokeTest
             public override IEnumerator Execute()
             {
                 _info(
-                    $"[Automatics Smoke] {_runner} started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder and runs the oven's own update over cooked food that could not be stored, and removes them; your cooking skill and the game's bonus chance are put back, and no setting is changed");
+                    $"[Automatics Smoke] {_runner} started: it places a chest and a stone oven ahead of you, drives the oven's Craft and Store entries from the chest with nobody, another player and you as the oven's builder and runs the oven's own update over cooked food that could not be stored, and removes them; your cooking skill, the game's bonus chance and the settings it needs for the run are put back afterwards");
 
                 var player = Player.m_localPlayer;
-                if (!CheckEnvironment(player)) yield break;
+                var setUp = SetUp(player);
+                while (setUp.MoveNext()) yield return setUp.Current;
+                if (!_ready) yield break;
                 if (!FindChestPrefab(out var chestPrefab)) yield break;
 
                 ResolveStations();
                 var rawName = _oven.ObjectName.Substring(1);
+                if (Active.Count > 0 &&
+                    (!AllowProcess(_oven.ObjectName, Process.Store) ||
+                     !TurnOff("_storeOnlyIfProductExists", _oven.ObjectName) ||
+                     !AtMost("_materialCountOfSuppressProcessing", _oven.ObjectName, DefaultSuppressCount)))
+                    yield break;
                 if (Active.Count > 0 && !ProcessingLogics.IsAllowProcessing(_oven.ObjectName, Process.Store))
                     SkipRemaining($"allow_processing_by_{rawName} does not include Store");
                 if (Active.Count > 0 && ProcessingConfig.StoreOnlyIfProductExists(_oven.ObjectName))
@@ -191,9 +198,10 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
-                if (!PlanLayout(player, out var chestPosition, out var distance)) yield break;
-                if (!CheckSurroundings(chestPosition, distance)) yield break;
-                if (!PlaceBenches(chestPrefab, chestPosition, distance)) yield break;
+                var lay = Lay(player);
+                while (lay.MoveNext()) yield return lay.Current;
+                if (!_ready) yield break;
+                if (!PlaceBenches(chestPrefab, _chestPosition, _distance)) yield break;
 
                 // Everything from here to the end happens in the frame of the spawn.
                 if (!CheckSources()) yield break;
