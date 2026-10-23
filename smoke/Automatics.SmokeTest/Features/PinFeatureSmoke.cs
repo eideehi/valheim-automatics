@@ -119,126 +119,136 @@ namespace Automatics.SmokeTest
                 yield break;
             }
             if (module.Changed) run.Pass("pin_setup", "Automatic Mapping " + module.Reason);
-            PrepareSettings(run, held);
 
-            var sectionPins = new SmokePins();
-            var created = new List<Minimap.PinData>();
-            var deposits = new List<TestDeposit>();
-            Func<string, bool> cleanup = _ =>
-            {
-                if (deposits.Count > 0) RemoveDeposits(map, sectionPins, deposits);
-                foreach (var pin in created) sectionPins.Remove(map, pin);
-                return true;
-            };
-            SmokeSession.TrackHandBack(cleanup);
-            ItemDrop drop = null;
-            GameObject piece = null;
+            // The settings go back however the section ends, a check that throws included, once
+            // the test objects and pins are gone: in `all` the next section needs the entries
+            // free, and the flora check's registry assertion holds on that path too.
             var floraWritten = false;
             try
             {
-                if (SpawnDestroyedObjectDeposits(run, player, deposits))
-                {
-                    // A deposit may still set itself up in Start (a MineRock reads its hit areas
-                    // there), which runs before its first frame. No test pin exists yet, and the
-                    // deposits' colliders stay off until the section's own pass, so no scan of the
-                    // game's pins them meanwhile and no save can keep such a pin.
-                    yield return null;
-                    if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
-                        !MappingModule.Running)
-                    {
-                        const string gone =
-                            "the world, the camera or Automatic Mapping went away while the deposits settled";
-                        SkipDestroyedObjectChecks(run, gone);
-                        run.Skip("pin_section", gone);
-                        yield break;
-                    }
-                    CheckDestroyedObjectPins(run, player, map, deposits, created);
-                    RemoveDeposits(map, sectionPins, deposits);
-                }
+                PrepareSettings(run, held);
 
-                Minimap.PinData objectPin = null;
-                var camera = GameCamera.instance.transform;
-                var prefab = ZNetScene.instance.GetPrefab("Wood");
-                if (!prefab || !prefab.GetComponent<ItemDrop>())
-                    run.Skip("pin_object_saved", "the Wood prefab is unavailable");
-                else
+                var sectionPins = new SmokePins();
+                var created = new List<Minimap.PinData>();
+                var deposits = new List<TestDeposit>();
+                Func<string, bool> cleanup = _ =>
                 {
-                    drop = FeaturesSmokeCommand.SpawnTestDrop(prefab, ClearSpot(player, 3f, 2f), false);
-                    if (!drop || !Objects.GetZNetView(drop, out var nview) ||
-                        nview.GetZDO() == null || nview.GetZDO().Persistent)
-                        run.Skip("pin_object_saved", "could not prepare a non-persistent Wood drop");
+                    if (deposits.Count > 0) RemoveDeposits(map, sectionPins, deposits);
+                    foreach (var pin in created) sectionPins.Remove(map, pin);
+                    return true;
+                };
+                SmokeSession.TrackHandBack(cleanup);
+                ItemDrop drop = null;
+                GameObject piece = null;
+                try
+                {
+                    if (SpawnDestroyedObjectDeposits(run, player, deposits))
+                    {
+                        // A deposit may still set itself up in Start (a MineRock reads its hit areas
+                        // there), which runs before its first frame. No test pin exists yet, and the
+                        // deposits' colliders stay off until the section's own pass, so no scan of the
+                        // game's pins them meanwhile and no save can keep such a pin.
+                        yield return null;
+                        if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
+                            !MappingModule.Running)
+                        {
+                            const string gone =
+                                "the world, the camera or Automatic Mapping went away while the deposits settled";
+                            SkipDestroyedObjectChecks(run, gone);
+                            run.Skip("pin_section", gone);
+                            yield break;
+                        }
+                        CheckDestroyedObjectPins(run, player, map, deposits, created);
+                        RemoveDeposits(map, sectionPins, deposits);
+                    }
+
+                    Minimap.PinData objectPin = null;
+                    var camera = GameCamera.instance.transform;
+                    var prefab = ZNetScene.instance.GetPrefab("Wood");
+                    if (!prefab || !prefab.GetComponent<ItemDrop>())
+                        run.Skip("pin_object_saved", "the Wood prefab is unavailable");
+                    else
+                    {
+                        drop = FeaturesSmokeCommand.SpawnTestDrop(prefab, ClearSpot(player, 3f, 2f), false);
+                        if (!drop || !Objects.GetZNetView(drop, out var nview) ||
+                            nview.GetZDO() == null || nview.GetZDO().Persistent)
+                            run.Skip("pin_object_saved", "could not prepare a non-persistent Wood drop");
+                        else
+                        {
+                            Physics.SyncTransforms();
+                            objectPin = CheckObject(run, player, drop, created);
+                        }
+                    }
+
+                    CheckHidden(run, held, objectPin);
+
+                    piece = SpawnTestPiece(ClearSpot(player, 4f, -2f), camera.forward, true, out var pieceSkip);
+                    if (!piece)
+                        run.Skip("pin_piece_name", pieceSkip);
                     else
                     {
                         Physics.SyncTransforms();
-                        objectPin = CheckObject(run, player, drop, created);
+                        CheckPiece(run, player, piece, created);
                     }
-                }
 
-                CheckHidden(run, held, objectPin);
+                    // The location checks are made beside a location the section goes to; the
+                    // objects spawned here would be left behind, so they go first.
+                    FeaturesSmokeCommand.RemoveTestDrop(drop, "pin feature smoke");
+                    drop = null;
+                    RemoveTestObject(piece);
+                    piece = null;
+                    var excursion = VisitLocation(run, player, held, created);
+                    while (excursion.MoveNext()) yield return excursion.Current;
+                    if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
+                        !MappingModule.Running)
+                    {
+                        run.Skip("pin_section", "the world, the camera or Automatic Mapping went away during the location excursion");
+                        yield break;
+                    }
 
-                piece = SpawnTestPiece(ClearSpot(player, 4f, -2f), camera.forward, true, out var pieceSkip);
-                if (!piece)
-                    run.Skip("pin_piece_name", pieceSkip);
-                else
-                {
-                    Physics.SyncTransforms();
-                    CheckPiece(run, player, piece, created);
-                }
-
-                // The location checks are made beside a location the section goes to; the
-                // objects spawned here would be left behind, so they go first.
-                FeaturesSmokeCommand.RemoveTestDrop(drop, "pin feature smoke");
-                drop = null;
-                RemoveTestObject(piece);
-                piece = null;
-                var excursion = VisitLocation(run, player, held, created);
-                while (excursion.MoveNext()) yield return excursion.Current;
-                if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
-                    !MappingModule.Running)
-                {
-                    run.Skip("pin_section", "the world, the camera or Automatic Mapping went away during the location excursion");
-                    yield break;
-                }
-
-                CheckGround(run, player, created);
-                CheckMiss(run, player, created);
-                CheckSavedPinRecognition(run, player, map, created);
-                CheckUncachedAutomaticPin(run, player, map, created);
-                CheckLoadingAreaKeepsPin(run, player, held, map, created);
-                CheckMinedDeposit(run, player, map, created);
-                CheckDepositsSharingPin(run, player, map, created);
-                CheckLoadedLocationSpot(run, player, map, created);
-                CheckDungeonWaitsForLocation(run, player, map, created);
-                CheckStaticClassificationFollowsObject(run, player);
-                CheckFloraPatchGrouping(run, player);
-                CheckRuntimeFloraPinsLoadedPlant(run, player, held, map, created, ref floraWritten);
-            }
-            finally
-            {
-                // Only pins added during our synchronous action calls, and the deposits' pins, are
-                // in this list.
-                try
-                {
-                    if (cleanup("pin feature smoke")) SmokeSession.ReleaseHandBack(cleanup);
+                    CheckGround(run, player, created);
+                    CheckMiss(run, player, created);
+                    CheckSavedPinRecognition(run, player, map, created);
+                    CheckUncachedAutomaticPin(run, player, map, created);
+                    CheckLoadingAreaKeepsPin(run, player, held, map, created);
+                    CheckMinedDeposit(run, player, map, created);
+                    CheckDepositsSharingPin(run, player, map, created);
+                    CheckLoadedLocationSpot(run, player, map, created);
+                    CheckDungeonWaitsForLocation(run, player, map, created);
+                    CheckStaticClassificationFollowsObject(run, player);
+                    CheckFloraPatchGrouping(run, player);
+                    CheckRuntimeFloraPinsLoadedPlant(run, player, held, map, created, ref floraWritten);
                 }
                 finally
                 {
+                    // Only pins added during our synchronous action calls, and the deposits' pins, are
+                    // in this list.
                     try
                     {
-                        FeaturesSmokeCommand.RemoveTestDrop(drop, "pin feature smoke");
+                        if (cleanup("pin feature smoke")) SmokeSession.ReleaseHandBack(cleanup);
                     }
                     finally
                     {
-                        if (piece && SmokeSession.DestroyTestObject(piece, 0, "pin feature smoke"))
-                            SmokeSession.ReleaseSpawn(piece);
+                        try
+                        {
+                            FeaturesSmokeCommand.RemoveTestDrop(drop, "pin feature smoke");
+                        }
+                        finally
+                        {
+                            if (piece && SmokeSession.DestroyTestObject(piece, 0, "pin feature smoke"))
+                                SmokeSession.ReleaseSpawn(piece);
+                        }
                     }
                 }
+                if (created.All(pin => !Map.GetAllPins().Contains(pin)))
+                    run.Pass("pin_cleanup", $"removed {created.Count} test pin(s)");
+                else
+                    run.Fail("pin_cleanup", "a test pin remains on the map");
             }
-            if (created.All(pin => !Map.GetAllPins().Contains(pin)))
-                run.Pass("pin_cleanup", $"removed {created.Count} test pin(s)");
-            else
-                run.Fail("pin_cleanup", "a test pin remains on the map");
-            ReportSettings(run, floraWritten);
+            finally
+            {
+                ReportSettings(run, floraWritten);
+            }
         }
 
         // The static range the checks' spots need: the destroyed-object deposits stand up to
@@ -559,6 +569,7 @@ namespace Automatics.SmokeTest
         {
             public Location Location;
             public string Prefab;
+            public string Identifier;
             public string Label;
             public string Name;
             public Vector3 Position => Location.transform.position;
@@ -590,7 +601,7 @@ namespace Automatics.SmokeTest
                 label[0] == '$' ? label.Substring(1) : null;
             if (string.IsNullOrWhiteSpace(name) || name == missing || name.Contains("$") || name.Contains("@"))
                 return null;
-            return new KnownLocation { Prefab = prefab, Label = label, Name = name };
+            return new KnownLocation { Prefab = prefab, Identifier = identifier, Label = label, Name = name };
         }
 
         // -- The trip to a location ------------------------------------------------------------
@@ -605,6 +616,9 @@ namespace Automatics.SmokeTest
         // reason. The timings are not from the decompile; the first in-game run confirms them
         // (unverified).
         private const float ArrivalMargin = 5f;
+        // What location_mapping_range gets beyond the arrival distance: the pass measures from
+        // the player in three dimensions, and the floor can lie a few metres off the target.
+        private const int LocationRangeMargin = 8;
         private const float LocationLoadTimeout = 10f;
         private const float CameraFollowTimeout = 5f;
         private const float CameraFollowDistance = 10f;
@@ -671,6 +685,20 @@ namespace Automatics.SmokeTest
             var visited = "";
             if (problem == null)
             {
+                // The static pass maps the destination only when its allow list holds it - the
+                // list PrepareSettings filled may name another one - and only within
+                // location_mapping_range of the player, which can be 0; both are written before
+                // the trip, so the passes that run while the location loads already map it.
+                var allowed = destination.Dungeon ? MappingConfig.AllowPinningDungeon : MappingConfig.AllowPinningSpot;
+                if (!allowed.Contains(destination.Known.Identifier))
+                    SmokeSetup.Write(run, held,
+                        SmokeSetup.Field<StringList>(typeof(MappingConfig),
+                            destination.Dungeon ? "_allowPinningDungeon" : "_allowPinningSpot"),
+                        new StringList(allowed) { destination.Known.Identifier });
+                var reach = Mathf.CeilToInt(destination.ExteriorRadius + ArrivalMargin) + LocationRangeMargin;
+                if (MappingConfig.LocationMappingRange < reach)
+                    SmokeSetup.Write(run, held, SmokeSetup.Field<int>(typeof(MappingConfig), "_locationMappingRange"), reach);
+
                 var away = Vector3.ProjectOnPlane(player.transform.position - destination.Position, Vector3.up);
                 away = away.sqrMagnitude < 1f ? Vector3.forward : away.normalized;
                 var distance = Utils.DistanceXZ(player.transform.position, destination.Position);
@@ -738,8 +766,10 @@ namespace Automatics.SmokeTest
                 foreach (var name in LocationChecks)
                     run.Skip(name, problem);
 
+            // Protected like the outbound moves: the player may stand at the entrance, or inside,
+            // with a creature awake, and the return waits out the teleport cooldown first.
             var home = new SmokeSetup.SetupResult();
-            var back = SmokeSetup.ReturnToStart(run.RunId, home);
+            var back = SmokeSetup.ReturnToStart(run.RunId, home, true);
             while (back.MoveNext()) yield return back.Current;
             if (home.Ok)
             {

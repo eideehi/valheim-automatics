@@ -1474,7 +1474,10 @@ spots stand up to 12 m out), `remove_pins_of_destroyed_object` turned on,
 `map_filter_hidden_categories` cleared, so that no unsaved test pin is hidden;
 copper and tin deposits are added to `allow_pinning_mineral`, and an
 early-content spot and dungeon to `allow_pinning_spot` and
-`allow_pinning_dungeon` when the lists hold none. Single checks change more:
+`allow_pinning_dungeon` when the lists hold none; before the location trip the
+visited location itself is added to its list when it is not in it, and
+`location_mapping_range` is raised to reach it from the arrival spot (its area
+radius plus 13 m) when it is shorter. Single checks change more:
 `hide_unexplored_automatic_mapping_pins` is turned on for `pin_not_hidden` and
 off again right after, `navhotkey_location` binds `navigate_to_aimed_object_key`
 to F8, `pin_static_loading_area_kept` raises `static_object_mapping_range` to
@@ -1525,7 +1528,7 @@ key and its input gate because the console is open.
 | `pin_destroyed_by_other_game_removed` | The second deposit's destruction arrives as another game's does, through the game's handler of the routed `DestroyZDO` call (`ZDOMan.RPC_DestroyZDO`): the game removes the deposit here, and the deposit's pin leaves the map and the static cache, although no callback of the game that destroyed it ran here |
 | `pin_unloaded_deposit_kept` | The third deposit is unloaded with the steps the game takes when an object's zone leaves the active area (`ZNetScene.RemoveObjects`), and the destruction they lead to is sent at once: its instance goes, and its ZDO, which is not persistent, is destroyed by its owner, so the game raises its destruction as for any destroyed object. A world object's persistent ZDO would stay instead. The deposit's pin stays on the map and in the static cache: unloading is not destruction. A ZDO the steps leave is destroyed right after, before the game could spawn the deposit from it again |
 | `pin_cleanup` | Every pin created by the section has been removed |
-| `pin_settings_restored` | Reported when the section changed a setting: every setting it changed is back at your value (SKIP when you changed one meanwhile and your value was kept; FAIL when one could not be written back), and the test flora of `pin_runtime_flora_pins_loaded_plant` is no longer defined |
+| `pin_settings_restored` | Reported when the section changed a setting, also when a check threw: every setting it changed is back at your value (SKIP when you changed one meanwhile and your value was kept; FAIL when one could not be written back), and the test flora of `pin_runtime_flora_pins_loaded_plant` is no longer defined |
 
 The location checks run beside a location the section goes to itself. It takes
 the nearest early-content location from the world's location list (a dungeon
@@ -1540,9 +1543,12 @@ exterior checks with a fresh test piece. For `pin_location_interior` it goes
 through the location's entrance the way entering a dungeon does - a short
 teleport to the entrance's target point - and waits for the camera to follow
 into the interior. It then returns to where the command started before the
-next check, and `pin_location_excursion` reports the trip; when a step fails
-the dependent checks SKIP with that step's reason, and a failed return is
-retried by the hand-back when the command ends. The timings are not confirmed
+next check, again with god mode and ghost mode on from before the return is
+accepted (it waits out the teleport cooldown first) until it has ended, and
+`pin_location_excursion` reports the trip; when a step fails the dependent
+checks SKIP with that step's reason, and a failed return is retried by the
+hand-back when the command ends. Every setting the trip changes goes back with
+the section's others. The timings are not confirmed
 yet; the first in-game run shows whether they hold. Being teleported to a
 location means the game may generate its zones on a first visit, and creatures
 there act as usual once the player has arrived; the dedicated test world accepts

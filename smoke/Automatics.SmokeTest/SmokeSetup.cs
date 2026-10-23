@@ -275,8 +275,11 @@ namespace Automatics.SmokeTest
 
         // Moves the player back to where the command started, when a move was made this run, so a
         // command can end with the player home before its Summary line; the run's hand-back then
-        // finds nothing to do. Ok with nothing done when no move was made.
-        public static IEnumerator ReturnToStart(int runId, SetupResult result)
+        // finds nothing to do. Ok with nothing done when no move was made. protect is Teleport's:
+        // god and ghost mode for the return, from before its first acceptance attempt - a return
+        // made right after another teleport waits out the 2 s cooldown - until it has ended; for
+        // a caller whose player may stand among creatures, at a location say.
+        public static IEnumerator ReturnToStart(int runId, SetupResult result, bool protect = false)
         {
             // A teleport still in its first 2 s has not moved the player yet, so their position
             // says nothing until it has ended.
@@ -293,7 +296,7 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            var steps = Teleport(runId, excursion.Start, excursion.StartRotation, excursion.StartIsFar(), false, result);
+            var steps = Teleport(runId, excursion.Start, excursion.StartRotation, excursion.StartIsFar(), protect, result);
             while (steps.MoveNext()) yield return steps.Current;
         }
 
