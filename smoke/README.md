@@ -524,7 +524,7 @@ reads every probe, again on each frame until two frames in a row agree (at most
 | `storage_off_probes_as_expected` | Every probe reads what it should while the module is off. For Automatic Storage, `Hooks.OnPlayerUpdate` has one handler fewer than at the baseline, and `Hooks.OnPlayerAwake` and `Hooks.OnPlayerFixedUpdate` have as many as at the baseline |
 | `storage_on_state_enabled` | The registry reports `Enabled` after the enable request |
 | `storage_on_running` | The module is applied and running again |
-| `storage_on_patches_applied` | The patches under the module's Harmony id are exactly the (target, patch method) pairs its patch classes declare. Automatic Storage declares none, so there must be none (SKIP when runtime patch removal is unavailable) |
+| `storage_on_patches_applied` | The patches under the module's Harmony id are exactly the (target, patch method) pairs its patch classes declare: for Automatic Storage the three slot-lock patches `AutomaticStorage.Patches` puts on the inventory grid (SKIP when runtime patch removal is unavailable) |
 | `storage_on_probes_at_baseline` | Every probe is back at its baseline |
 | `storage_restored_initial_state` | The setting is back at its starting value and the registry reports the matching state |
 | `storage_no_errors_logged` | No error or exception was logged while the check ran |

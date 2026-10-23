@@ -36,6 +36,7 @@ using RepairPatches = Automatics.AutomaticRepair.Patches;
 using RepairItems = Automatics.AutomaticRepair.ItemRepair;
 using RepairPieces = Automatics.AutomaticRepair.PieceRepair;
 using StorageModule = Automatics.AutomaticStorage.Module;
+using StoragePatches = Automatics.AutomaticStorage.Patches;
 using SupplyModule = Automatics.AutomaticSupply.Module;
 using SupplyPatches = Automatics.AutomaticSupply.Patches;
 using SupplyScope = Automatics.AutomaticSupply.SupplyScope;
@@ -795,8 +796,9 @@ namespace Automatics.SmokeTest
         }
 
         // Automatic Storage moves items only when its key is pressed, and the check never presses
-        // it: the module's one subscription is what comes and goes. The other two player hooks are
-        // counted to show that it touches nothing else.
+        // it: the module's one subscription and its slot-lock patches on the inventory grid are
+        // what come and go. The other two player hooks are counted to show that it touches nothing
+        // else.
         private static ModuleDescriptor DescribeStorage()
         {
             return new ModuleDescriptor
@@ -805,7 +807,7 @@ namespace Automatics.SmokeTest
                 Module = StorageModule.Instance,
                 Active = () => StorageModule.Active,
                 Running = () => StorageModule.Running,
-                PatchTypes = Type.EmptyTypes,
+                PatchTypes = new[] { typeof(StoragePatches) },
                 Probes = new[]
                 {
                     Probe.Handlers("Hooks.OnPlayerUpdate", () => Hooks.OnPlayerUpdate, 1),
