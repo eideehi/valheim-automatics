@@ -145,6 +145,17 @@ namespace Automatics.SmokeTest
         private const float MinBurstFloor = NavigationGuide.BurstFloor - FloorTolerance;
         private const float BurstAge = NavigationGuide.RadiateTime + NavigationGuide.GatherTime;
 
+        // With no such slope loaded, one is raised: a round mound MoundHeight high whose sides fall
+        // straight to the ground MoundRadius out (about 2 m over 2 m), its top on the grid
+        // MoundDistance from you and with no piece within MoundClearance. It stays, as the smoke
+        // runs in a test world.
+        private const float MoundDistance = 20f;
+        private const float MoundRadius = 3f;
+        private const float MoundHeight = 3f;
+        private const float MoundClearance = 5f;
+        private const int MoundFrames = 30;
+        private static readonly float[] MoundBearings = { 0f, 45f, -45f, 90f, -90f };
+
         private const float ArrivalMargin = 0.5f;
         private const float ArrivalProbeRise = 3f;
         private const int OutsideFrames = 3;
@@ -176,6 +187,10 @@ namespace Automatics.SmokeTest
 
         // How fast a stream light closes on its place, for the follow step of the slope check.
         private static readonly FieldInfo FollowRateField = AccessTools.Field(typeof(NavigationGuide), "FollowRate");
+
+        // Applies terrain settings to a terrain compiler at once. A TerrainOp object would send
+        // only its prefab's settings, so the mound's own settings go through this.
+        private static readonly MethodInfo DoOperationMethod = AccessTools.Method(typeof(TerrainComp), "DoOperation");
 
         public static IEnumerator Run(FeatureRun run)
         {
@@ -318,12 +333,15 @@ namespace Automatics.SmokeTest
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
 
-                // One look at the loaded terrain around you, for the raised column and the slope.
+                // One look at the loaded terrain around you, for the raised column and the slope;
+                // the slope check looks again when it raises a mound.
                 var grid = new TerrainGrid(player.transform.position);
                 steps = CheckColumnRaised(run, player, testPin, grid);
                 while (steps.MoveNext()) yield return steps.Current;
                 if (!run.IsCurrent) yield break;
-                CheckBurstAboveSlope(run, grid);
+                steps = CheckBurstAboveSlope(run, player, grid);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
 
                 steps = CheckTrailEnd(run, player, testPin);
                 while (steps.MoveNext()) yield return steps.Current;
@@ -819,13 +837,36 @@ namespace Automatics.SmokeTest
         // as it trails that place, above the terrain under it with your feet at a steep point of
         // the loaded terrain, though nobody stands there: the function is evaluated for many
         // lights and ages, and the terrain under each point is measured by the check itself.
-        private static void CheckBurstAboveSlope(FeatureRun run, TerrainGrid grid)
+        // When no loaded slope is steep enough, a mound is raised and the terrain looked at again.
+        private static IEnumerator CheckBurstAboveSlope(FeatureRun run, Player player, TerrainGrid grid)
         {
+            var raised = "";
             if (!grid.Steepest(out var feet, out var uphill, out var rise) || rise < MinSlopeRise)
             {
-                run.Skip("guide_burst_above_slope",
-                    $"no loaded terrain within {SearchRadius} m rises {MinSlopeRise} m within {SearchStep} m horizontally (steepest {(grid.Count > 0 ? rise.ToString("0.00") : "none")} m over {grid.Count} points on a {SearchStep} m grid); the burst on a slope is judged by eye");
-                return;
+                var none =
+                    $"no loaded terrain within {SearchRadius} m rises {MinSlopeRise} m within {SearchStep} m horizontally (steepest {(grid.Count > 0 ? rise.ToString("0.00") : "none")} m over {grid.Count} points on a {SearchStep} m grid)";
+                // The new grid is centred on a heightmap vertex (they are 1 m apart on whole
+                // coordinates), so the mound's top and the grid points around it are vertices.
+                var playerPos = player.transform.position;
+                var centre = new Vector3(Mathf.Round(playerPos.x), playerPos.y, Mathf.Round(playerPos.z));
+                var mound = new SmokeSetup.SetupResult();
+                var steps = RaiseMound(run, centre, -Toward(playerPos), mound);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+                if (!mound.Ok)
+                {
+                    run.Skip("guide_burst_above_slope",
+                        $"{none}, and no mound could be raised: {mound.Reason}; the burst on a slope is judged by eye");
+                    yield break;
+                }
+                grid = new TerrainGrid(centre);
+                if (!grid.Steepest(out feet, out uphill, out rise) || rise < MinSlopeRise)
+                {
+                    run.Skip("guide_burst_above_slope",
+                        $"{none}; {mound.Reason}, yet the steepest loaded terrain then rose {(grid.Count > 0 ? rise.ToString("0.00") : "none")} m within {SearchStep} m over {grid.Count} points; the burst on a slope is judged by eye");
+                    yield break;
+                }
+                raised = $"{none}, so {mound.Reason}; ";
             }
 
             var followRate = FollowRateField == null
@@ -834,7 +875,7 @@ namespace Automatics.SmokeTest
             if (float.IsNaN(followRate))
             {
                 run.Fail("guide_burst_above_slope", "NavigationGuide's FollowRate could not be read by reflection");
-                return;
+                yield break;
             }
 
             // A light's step toward its place in one frame at the frame rate below.
@@ -872,7 +913,7 @@ namespace Automatics.SmokeTest
             }
 
             var degrees = Mathf.Atan2(rise, SearchStep) * Mathf.Rad2Deg;
-            var detail =
+            var detail = raised +
                 $"steepest loaded terrain within {SearchRadius} m: rising {rise:0.00} m over {SearchStep} m (about {degrees:0} degrees; bound at least {MinSlopeRise} m) at {Utils.DistanceXZ(feet, Player.m_localPlayer ? Player.m_localPlayer.transform.position : feet):0} m from you, out of {grid.Count} points on a {SearchStep} m grid; " +
                 $"with the feet there, the body point {NavigationGuide.BodyHeight} m above them and the stream's place {NavigationGuide.HoverHeight} m (HoverHeight) over the terrain {SearchStep} m uphill, {SlopeSeeds} seeds × {SlopeAges} ages within {BurstAge:0.0} s (RadiateTime + GatherTime) gave {measured} points measured ({unmeasured} without terrain under them): " +
                 $"the lowest place was {lowestGoal:0.00} m and the lowest light after the stream's own burst step, one frame's follow ({follow:0.000}: 1 - exp(-FollowRate {followRate}/s / {SlopeFrameRate} fps)) from the body point, {lowestPosition:0.00} m above the terrain under it (bound {MinBurstFloor:0.00} m: BurstFloor {NavigationGuide.BurstFloor} m - {FloorTolerance} m)";
@@ -880,6 +921,84 @@ namespace Automatics.SmokeTest
                 run.Pass("guide_burst_above_slope", detail);
             else
                 run.Fail("guide_burst_above_slope", detail);
+        }
+
+        // Raises the mound on loaded, dry ground with no piece near, on the grid around centre
+        // MoundDistance away along ahead, or 45 or 90 degrees to either side, and waits until the
+        // terrain collider shows its top. Reason is why it failed, or what was raised.
+        private static IEnumerator RaiseMound(FeatureRun run, Vector3 centre, Vector3 ahead,
+            SmokeSetup.SetupResult result)
+        {
+            if (DoOperationMethod == null)
+            {
+                result.Reason = "TerrainComp's DoOperation could not be found by reflection";
+                yield break;
+            }
+
+            var water = ZoneSystem.instance.m_waterLevel;
+            var clear = SmokeSetup.Clearance(MoundClearance, SmokeSetup.SiteKinds.Pieces);
+            var refused = new List<string>();
+            var top = Vector3.zero;
+            var bearing = 0f;
+            foreach (var candidate in MoundBearings)
+            {
+                var offset = Quaternion.Euler(0f, candidate, 0f) * ahead * MoundDistance;
+                var site = centre + new Vector3(Mathf.Round(offset.x / SearchStep) * SearchStep, 0f,
+                    Mathf.Round(offset.z / SearchStep) * SearchStep);
+                var problem = !Terrain(site, out var ground) ? "no loaded terrain"
+                    : ground <= water ? "under the water"
+                    : clear(site);
+                if (problem == null)
+                {
+                    top = new Vector3(site.x, ground, site.z);
+                    bearing = candidate;
+                    break;
+                }
+                refused.Add($"{candidate:0} degrees: {problem}");
+            }
+            if (refused.Count == MoundBearings.Length)
+            {
+                result.Reason =
+                    $"no site {MoundDistance:0} m from you ahead or 45 or 90 degrees to a side ({string.Join("; ", refused)})";
+                yield break;
+            }
+
+            var settings = new TerrainOp.Settings
+            {
+                m_raise = true,
+                m_raiseRadius = MoundRadius,
+                m_raiseDelta = MoundHeight,
+                m_raisePower = 1f,
+                m_square = false,
+                m_paintCleared = false
+            };
+            var heightmaps = new List<Heightmap>();
+            Heightmap.FindHeightmap(top, MoundRadius, heightmaps);
+            foreach (var heightmap in heightmaps)
+                DoOperationMethod.Invoke(heightmap.GetAndCreateTerrainCompiler(),
+                    new object[] { top, Vector3.zero, settings });
+
+            // Each heightmap rebuilds its collision mesh in the LateUpdate after the operation;
+            // that the raycast sees it within MoundFrames is unverified.
+            var rose = 0f;
+            for (var frame = 0; frame < MoundFrames && rose < MoundHeight / 2f; frame++)
+            {
+                yield return null;
+                if (!run.IsCurrent) yield break;
+                rose = Terrain(top, out var now) ? now - top.y : 0f;
+            }
+            if (rose < MoundHeight / 2f)
+            {
+                result.Reason =
+                    $"the terrain at the top of a mound raised {MoundDistance:0} m from you on {heightmaps.Count} heightmap(s) rose {rose:0.00} m of {MoundHeight} m within {MoundFrames} frames";
+                yield break;
+            }
+
+            result.Ok = true;
+            result.Changed = true;
+            result.Position = top;
+            result.Reason =
+                $"a round mound {MoundHeight} m high and {MoundRadius} m in radius was raised {Utils.DistanceXZ(top, centre):0} m from you, {bearing:0} degrees from straight ahead (away from the target), with TerrainComp.DoOperation on {heightmaps.Count} heightmap(s) (its top rose {rose:0.00} m; the mound stays)";
         }
 
         // With the target nearer than the trail's length, the stream ends at the target and flows
