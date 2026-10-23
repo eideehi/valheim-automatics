@@ -199,12 +199,22 @@ namespace Automatics.SmokeTest
                     piece = null;
                     var excursion = VisitLocation(run, player, held, created);
                     while (excursion.MoveNext()) yield return excursion.Current;
+
+                    // Back from the excursion, the zones around you load again; the static passes
+                    // below run only once the area they need is ready.
+                    var reload = Time.realtimeSinceStartup;
+                    while (run.IsCurrent && player && ZNetScene.instance && !AreaReloaded(player.transform.position) &&
+                           Time.realtimeSinceStartup - reload < AreaReloadTimeout)
+                        yield return null;
                     if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
                         !MappingModule.Running)
                     {
                         run.Skip("pin_section", "the world, the camera or Automatic Mapping went away during the location excursion");
                         yield break;
                     }
+                    _notReloaded = AreaReloaded(player.transform.position)
+                        ? null
+                        : $"the area around you had not loaded again {AreaReloadTimeout:0} s after the return from the location excursion";
 
                     CheckGround(run, player, created);
                     CheckMiss(run, player, created);
@@ -623,6 +633,36 @@ namespace Automatics.SmokeTest
         private const float CameraFollowTimeout = 5f;
         private const float CameraFollowDistance = 10f;
         private const float StaticPassTimeout = 10f;
+
+        // The area the static passes after the excursion need, waited for after its return as the
+        // pass asks for it: ZNetScene.IsAreaReady (the zone has loaded, and every object in it and
+        // in the eight zones around it has spawned) for every zone within ReloadReach m of you on
+        // either axis - the loading-area deposit stands up to 6 m past the nearest border of your
+        // zone, the mined deposit up to 27 m out and the runtime flora plant up to 12 m. When the
+        // wait runs out, _notReloaded says so in the SKIP of a pass that did not run. The 20 s
+        // bound is not from the decompile (unverified).
+        private const float ReloadReach = ZoneSystem.c_ZoneSizeHalf + 6f;
+        private const float AreaReloadTimeout = 20f;
+        private static string _notReloaded;
+
+        private static bool AreaReloaded(Vector3 origin)
+        {
+            var low = ZoneSystem.GetZone(origin - new Vector3(ReloadReach, 0f, ReloadReach));
+            var high = ZoneSystem.GetZone(origin + new Vector3(ReloadReach, 0f, ReloadReach));
+            for (var x = low.x; x <= high.x; x++)
+            for (var y = low.y; y <= high.y; y++)
+                if (!ZNetScene.instance.IsAreaReady(ZoneSystem.GetZonePos(new Vector2s(x, y))))
+                    return false;
+            return true;
+        }
+
+        // The SKIP reason of a static pass that did not run after the excursion.
+        private static string PassNotRun(string pass)
+        {
+            return _notReloaded != null
+                ? $"{pass} did not run: {_notReloaded}"
+                : $"{pass} did not run (the game is paused or the area around you is still loading); retry";
+        }
 
         private static readonly string[] LocationChecks =
         {
@@ -1659,7 +1699,7 @@ namespace Automatics.SmokeTest
                 global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player, interval, false);
                 if ((int)passId.GetValue(null) == before)
                 {
-                    run.Skip(check, "the first static pass did not run (the game is paused or the area around you is still loading); retry");
+                    run.Skip(check, PassNotRun("the first static pass"));
                     return;
                 }
                 if (!StaticObjectMapping.TryGetCachedPin(identify, out pin))
@@ -2068,8 +2108,7 @@ namespace Automatics.SmokeTest
             }
 
             if ((int)passId.GetValue(null) == before)
-                run.Skip(MinedDepositCheck,
-                    "the static pass did not run (the game is paused or the area around you is still loading); retry");
+                run.Skip(MinedDepositCheck, PassNotRun("the static pass"));
             else if (ReferenceEquals(held, saved) && Map.GetAllPins().Contains(saved) && beside.Count == 0)
                 run.Pass(MinedDepositCheck,
                     "the mined deposit, loaded again with its centre more than 1.5 m from its saved pin, took that pin as its own and got no second pin");
@@ -3022,6 +3061,11 @@ namespace Automatics.SmokeTest
                 lastScan.SetValue(null, 0f);
                 var before = (int)passId.GetValue(null);
                 global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player, interval, false);
+                if ((int)passId.GetValue(null) == before && _notReloaded != null)
+                {
+                    run.Skip(check, PassNotRun("the static pass"));
+                    return;
+                }
                 if ((int)passId.GetValue(null) == before || (bool)cacheIncomplete.GetValue(null))
                 {
                     run.Skip(check, "the static pass did not run or did not finish its scan (the game is paused, the area around you is still loading, or the scan's collider buffer is full); retry");
