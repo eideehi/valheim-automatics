@@ -656,6 +656,15 @@ namespace Automatics.SmokeTest
             return true;
         }
 
+        // The checks after the excursion follow one another in one frame. A test object an earlier
+        // one destroyed keeps its ZDO in its sector, with no instance, until the game's next update
+        // hands the destruction on (ZDOMan.SendDestroyed), and ZNetScene.IsAreaReady takes that for
+        // an area still loading, so no static pass would run. A check hands it on before its pass.
+        private static void HandOnDestroyedZdos()
+        {
+            SendDestroyedMethod?.Invoke(ZDOMan.instance, null);
+        }
+
         // The SKIP reason of a static pass that did not run after the excursion.
         private static string PassNotRun(string pass)
         {
@@ -1694,6 +1703,7 @@ namespace Automatics.SmokeTest
                 var identify = new StaticObjectMapping.MapPinIdentify(id);
 
                 // A cleared scan time makes the first pass scan the area again, as a classifier change does.
+                HandOnDestroyedZdos();
                 lastScan.SetValue(null, 0f);
                 var before = (int)passId.GetValue(null);
                 global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player, interval, false);
@@ -2089,6 +2099,7 @@ namespace Automatics.SmokeTest
         {
             var lastScan = AccessTools.Field(typeof(StaticObjectMapping), "_lastCacheUpdateTime");
             var passId = AccessTools.Field(typeof(StaticObjectMapping), "_currentPassId");
+            HandOnDestroyedZdos();
             lastScan.SetValue(null, 0f);
             var before = (int)passId.GetValue(null);
             var pins = new HashSet<Minimap.PinData>(Map.GetAllPins());
@@ -3058,6 +3069,7 @@ namespace Automatics.SmokeTest
                 }
 
                 // A cleared scan time makes the pass scan the area again, as a classifier change does.
+                HandOnDestroyedZdos();
                 lastScan.SetValue(null, 0f);
                 var before = (int)passId.GetValue(null);
                 global::Automatics.AutomaticMapping.AutomaticMapping.Mapping(player, interval, false);

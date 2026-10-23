@@ -1630,7 +1630,11 @@ ready (`ZNetScene.IsAreaReady`, as the static pass asks it) for every zone
 within 38 m of you on either axis, because `pin_static_loading_area_kept`,
 `pin_mined_deposit_one_pin` and `pin_runtime_flora_pins_loaded_plant` run a
 static pass there; when the area has not loaded by then, a pass of theirs that
-does not run SKIPs with that reason. Every setting the trip changes goes back with
+does not run SKIPs with that reason. These checks follow the ones before them in
+the same frame, so each first hands on the destruction of the test objects
+removed before it, as the game's next update would (`ZDOMan.SendDestroyed`): a
+destroyed object's ZDO stays in its zone until then, and the game takes it for
+an object still loading. Every setting the trip changes goes back with
 the section's others. The timings are not confirmed
 yet; the first in-game run shows whether they hold. Being teleported to a
 location means the game may generate its zones on a first visit, and creatures
