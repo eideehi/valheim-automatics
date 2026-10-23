@@ -124,10 +124,10 @@ namespace Automatics.SmokeTest
             {
                 if (SpawnDestroyedObjectDeposits(run, player, deposits))
                 {
-                    // A tin deposit reads its hit areas in Start, which runs before its first
-                    // frame. No test pin exists yet, and the deposits' colliders stay off until the
-                    // section's own pass, so no scan of the game's pins them meanwhile and no save
-                    // can keep such a pin.
+                    // A deposit may still set itself up in Start (a MineRock reads its hit areas
+                    // there), which runs before its first frame. No test pin exists yet, and the
+                    // deposits' colliders stay off until the section's own pass, so no scan of the
+                    // game's pins them meanwhile and no save can keep such a pin.
                     yield return null;
                     if (!run.IsCurrent || !player || !map || !GameCamera.instance || !ZNetScene.instance ||
                         !MappingModule.Running)
@@ -398,15 +398,29 @@ namespace Automatics.SmokeTest
         }
 
         // Spawns the first available prefab non-persistent and records it with the session, so a
-        // run cut short still has it removed. Returns null with the reason when none could be set up.
+        // run cut short still has it removed. Returns null with the reason when none could be set
+        // up; a prefab the check rejects is named with the components on its root, so the log
+        // shows what it carries.
         private static GameObject SpawnTestObject(string[] prefabNames, Vector3 position, Quaternion rotation,
             out string skip, Func<GameObject, bool> accept = null)
         {
             skip = $"none of {string.Join(", ", prefabNames)} is available";
+            var problems = new List<string>();
             foreach (var prefabName in prefabNames)
             {
                 var prefab = ZNetScene.instance.GetPrefab(prefabName);
-                if (!prefab || (accept != null && !accept(prefab))) continue;
+                if (!prefab)
+                {
+                    problems.Add($"{prefabName} was not found");
+                    continue;
+                }
+                if (accept != null && !accept(prefab))
+                {
+                    var components = prefab.GetComponents<Component>().Where(x => x && !(x is Transform))
+                        .Select(x => x.GetType().Name);
+                    problems.Add($"{prefabName} was found but rejected; its root has {string.Join(", ", components)}");
+                    continue;
+                }
 
                 var go = UnityEngine.Object.Instantiate(prefab, position, rotation);
                 SmokeSession.TrackSpawn(go);
@@ -421,6 +435,7 @@ namespace Automatics.SmokeTest
                 nview.GetZDO().Persistent = false;
                 return go;
             }
+            skip += $" ({string.Join("; ", problems)})";
             return null;
         }
 
@@ -1237,7 +1252,9 @@ namespace Automatics.SmokeTest
             }
 
             var smokePins = new SmokePins();
-            var go = SpawnTestObject(new[] { "rock4_copper" }, spot, Quaternion.identity, out var skip,
+            // The copper deposit prefab that carries the MineRock5 on its root, as the pintooltip
+            // section spawns it; the whole rock, rock4_copper, has none there.
+            var go = SpawnTestObject(new[] { "rock4_copper_frac" }, spot, Quaternion.identity, out var skip,
                 prefab => prefab.GetComponent<MineRock5>());
             Minimap.PinData pin = null;
             try
@@ -1381,9 +1398,10 @@ namespace Automatics.SmokeTest
                 _section = section;
             }
 
+            // The copper deposit prefab that carries the MineRock5, with its hit areas, on its root.
             public GameObject Spawn(Vector3 position, out string skip)
             {
-                var go = SpawnTestObject(new[] { "rock4_copper" }, position, Quaternion.identity, out skip,
+                var go = SpawnTestObject(new[] { "rock4_copper_frac" }, position, Quaternion.identity, out skip,
                     prefab => prefab.GetComponent<MineRock5>());
                 if (!go) return null;
                 _deposits.Add(go);
@@ -2700,9 +2718,12 @@ namespace Automatics.SmokeTest
         }
 
         // Three non-persistent tin deposits, 4 m apart on the ground 6 m in front of you, for the
-        // destroyed-object checks. A tin deposit is a used-up deposit's simplest case: no destroy
-        // callback of its own, only its ZDO going. False, with every check skipped for the reason,
-        // when they cannot be set up; whatever was spawned is in spawned for the caller to remove.
+        // destroyed-object checks. A tin deposit is a used-up deposit's simplest case: the checks
+        // take it away only through its ZDO, so no destroy callback of its own runs. They need only
+        // its ZDO and colliders, so its prefab may carry on its root any of the components the
+        // static pass finds a mineral's position by. False, with every check skipped for the
+        // reason, when they cannot be set up; whatever was spawned is in spawned for the caller to
+        // remove.
         private static bool SpawnDestroyedObjectDeposits(FeatureRun run, Player player,
             List<TestDeposit> spawned)
         {
@@ -2740,7 +2761,8 @@ namespace Automatics.SmokeTest
                 else
                 {
                     var go = SpawnTestObject(new[] { "MineRock_Tin" }, spot, Quaternion.identity, out var skip,
-                        prefab => prefab.GetComponent<MineRock>());
+                        prefab => prefab.GetComponent<Destructible>() || prefab.GetComponent<MineRock>() ||
+                                  prefab.GetComponent<MineRock5>());
                     if (go)
                     {
                         Objects.GetZdoid(go.transform, out var id);
