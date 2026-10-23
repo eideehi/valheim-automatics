@@ -24,6 +24,7 @@ namespace Automatics.AutomaticPickup
         public static float AutomaticPickupInterval => _automaticPickupInterval.Value;
         public static KeyboardShortcut PickupAllNearbyKey => _pickupAllNearbyKey.Value;
         public static ConfigEntry<KeyboardShortcut> PickupAllNearbyKeyEntry => _pickupAllNearbyKey;
+        public static ConfigEntry<float> AutomaticPickupRangeEntry => _automaticPickupRange;
         public static ConfigEntry<float> AutomaticPickupIntervalEntry => _automaticPickupInterval;
 
         public static void Initialize()

@@ -1975,28 +1975,11 @@ namespace Automatics.SmokeTest
 
         // Takes the setting on with the session - which records the change before it is made and
         // refuses it when the record cannot be written - and writes it. Returns whether it was
-        // written; a refusal is logged.
+        // written; a refusal is logged. The shared SmokeSetup.Write, kept here for its callers.
         internal static bool Write(FeatureRun run, Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held,
             ConfigEntryBase entry, object value)
         {
-            string refusal;
-            if (!held.TryGetValue(entry, out var setting))
-            {
-                if (!SmokeSession.BeginSetting(run.RunId, entry, out setting, out refusal))
-                {
-                    FeaturesSmokeCommand.Warn(
-                        $"[Automatics Smoke] {entry.Definition.Section}/{entry.Definition.Key} was not changed for the run: {refusal}");
-                    return false;
-                }
-
-                held[entry] = setting;
-            }
-
-            if (SmokeSession.WriteSetting(run.RunId, setting, value, out refusal)) return true;
-
-            FeaturesSmokeCommand.Warn(
-                $"[Automatics Smoke] {entry.Definition.Section}/{entry.Definition.Key} was not changed for the run: {refusal}");
-            return false;
+            return SmokeSetup.Write(run, held, entry, value);
         }
 
         // -- Test objects ---------------------------------------------------------------------

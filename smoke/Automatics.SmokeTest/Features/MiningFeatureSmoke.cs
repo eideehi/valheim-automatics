@@ -273,17 +273,7 @@ namespace Automatics.SmokeTest
 
         private static void ReportSettings(FeatureRun run)
         {
-            var results = SmokeSession.RestoreSettings(run.RunId);
-            if (results.Count == 0) return;
-
-            var detail = string.Join("; ", results.Select(x => x.Value));
-            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
-                run.Fail("mining_settings_restored", detail);
-            else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
-                                      x.Key == SmokeSession.ToggleOutcome.NotThisRun))
-                run.Skip("mining_settings_restored", "restoration skipped: " + detail);
-            else
-                run.Pass("mining_settings_restored", detail);
+            SmokeSetup.ReportSettings(run, "mining_settings_restored");
         }
 
         // -- Swings ---------------------------------------------------------------------------
