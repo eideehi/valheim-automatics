@@ -319,9 +319,14 @@ namespace Automatics.SmokeTest
         {
             var map = Minimap.instance;
             var player = Player.m_localPlayer;
-            if (!run.IsCurrent || !map || !player || Game.m_noMap || !MappingModule.Running)
+            if (!run.IsCurrent || !map || !player)
             {
-                run.Skip("mapfilter_section", "requires a loaded world, an available map and Automatic Mapping running");
+                run.Skip("mapfilter_section", "requires a loaded world");
+                yield break;
+            }
+            if (Game.m_noMap)
+            {
+                run.Skip("mapfilter_section", "the world's no-map modifier is on, so there is no map to filter; run it in a world with the map");
                 yield break;
             }
 
@@ -373,6 +378,19 @@ namespace Automatics.SmokeTest
                     }
                     settings.Add(entry, setting);
                 }
+
+                // Automatic Mapping on for the run when it is off, through the module toggle the
+                // section already holds; the settings restore turns it off again.
+                var module = new SmokeSetup.SetupResult();
+                var enable = SmokeSetup.EnableModule(run.RunId, settings, MappingConfig.ModuleEntry,
+                    () => MappingModule.Running, module);
+                while (enable.MoveNext()) yield return enable.Current;
+                if (!module.Ok)
+                {
+                    run.Skip("mapfilter_section", "Automatic Mapping is not running: " + module.Reason);
+                    yield break;
+                }
+                if (module.Changed) run.Pass("mapfilter_setup", "Automatic Mapping " + module.Reason);
 
                 Write(run, settings, MappingConfig.EnableMapEnhancementsEntry, true);
                 Write(run, settings, MappingConfig.MapFilterHiddenCategoriesEntry, new StringList());
@@ -951,21 +969,30 @@ namespace Automatics.SmokeTest
             Minimap.PinData flora, Minimap.PinData mineral, Minimap.PinData manual,
             Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> settings)
         {
+            // The unexplored rule applies only with automatic mapping on. It is turned on for
+            // this check alone and off again before the section yields a frame, so no mapping
+            // pass runs with it.
+            var automaticMapping = SmokeSetup.Field<bool>(typeof(MappingConfig), "_enableAutomaticMapping");
+            var lifted = false;
             if (!MappingConfig.EnableAutomaticMapping)
             {
-                run.Skip("mapfilter_unexplored_combined", "enable_automatic_mapping precondition is off");
-                return;
-            }
-            var unexplored = new Vector3(20000f, origin.y, 20000f);
-            if (!Map.IsExplored(flora.m_pos) || Map.IsExplored(unexplored))
-            {
-                run.Fail("mapfilter_unexplored_combined", "exploration precondition failed: need an explored test pin and an unexplored point");
-                return;
+                if (automaticMapping == null || !SmokeSetup.Write(run, settings, automaticMapping, true))
+                {
+                    run.Skip("mapfilter_unexplored_combined", "enable_automatic_mapping is off and could not be turned on for the check");
+                    return;
+                }
+                lifted = true;
             }
             var originalMineral = mineral.m_pos;
             var originalManual = manual.m_pos;
             try
             {
+                var unexplored = new Vector3(20000f, origin.y, 20000f);
+                if (!Map.IsExplored(flora.m_pos) || Map.IsExplored(unexplored))
+                {
+                    run.Fail("mapfilter_unexplored_combined", "exploration precondition failed: need an explored test pin and an unexplored point");
+                    return;
+                }
                 Map.MovePin(mineral, unexplored);
                 Map.MovePin(manual, unexplored + Vector3.right);
                 Write(run, settings, MappingConfig.MapFilterHiddenCategoriesEntry, new StringList(new[] { "Flora" }));
@@ -990,6 +1017,7 @@ namespace Automatics.SmokeTest
             {
                 Map.MovePin(mineral, originalMineral);
                 Map.MovePin(manual, originalManual);
+                if (lifted) SmokeSetup.Write(run, settings, automaticMapping, false);
             }
         }
 
@@ -1047,10 +1075,9 @@ namespace Automatics.SmokeTest
             var player = Player.m_localPlayer;
             var map = Minimap.instance;
             if (!run.IsCurrent || !player || !map || !ZNetScene.instance || !InventoryGui.instance ||
-                !ZNet.instance || !ZNet.instance.IsServer() || ZNet.instance.GetPeerConnections() > 0 ||
-                !MappingModule.Running)
+                !ZNet.instance || !ZNet.instance.IsServer() || ZNet.instance.GetPeerConnections() > 0)
             {
-                run.Skip("pintooltip_section", "requires a loaded single-player world, inventory UI and running Automatic Mapping");
+                run.Skip("pintooltip_section", "requires a loaded single-player world and the inventory UI");
                 yield break;
             }
 
@@ -1119,6 +1146,20 @@ namespace Automatics.SmokeTest
                     }
                     settings.Add(entry, setting);
                 }
+
+                // Automatic Mapping on for the run when it is off; the settings restore turns it
+                // off again.
+                var module = new SmokeSetup.SetupResult();
+                var enable = SmokeSetup.EnableModule(run.RunId, settings, MappingConfig.ModuleEntry,
+                    () => MappingModule.Running, module);
+                while (enable.MoveNext()) yield return enable.Current;
+                if (!module.Ok)
+                {
+                    run.Skip("pintooltip_section", "Automatic Mapping is not running: " + module.Reason);
+                    yield break;
+                }
+                if (module.Changed) run.Pass("pintooltip_setup", "Automatic Mapping " + module.Reason);
+
                 Write(run, settings, MappingConfig.EnableMapEnhancementsEntry, true);
                 Write(run, settings, MappingConfig.MapFilterHiddenCategoriesEntry, new StringList());
                 Write(run, settings, MappingConfig.HideUnexploredAutomaticMappingPinsEntry, false);
@@ -1350,6 +1391,9 @@ namespace Automatics.SmokeTest
             }
             finally
             {
+                // Before the hand-back, whose own restore then finds nothing left; that one is
+                // for a section that never gets here.
+                SmokeSetup.ReportSettings(run, "pintooltip_settings_restored");
                 if (handBack("pin tooltip smoke")) SmokeSession.ReleaseHandBack(handBack);
             }
         }

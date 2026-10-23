@@ -1251,32 +1251,50 @@ spawned; otherwise they stay and the log says so.
 | Check | Asserts |
 |---|---|
 | `pickup_key_default_is_left_shift_e` | The `pickup_all_nearby_key` entry's default value is Left Shift + E and BepInEx writes it as `E + LeftShift`. Runs without a world and with the module off; the note gives the current value |
+| `pickup_setup` | The section's setup, as a note: whether Automatic Pickup had to be turned on, whether you were moved to a clear site, and what was put aside from your inventory. SKIP when no clear site was found within 45 m: the checks then run where you stand, and the reason lists the sites tried |
 | `pickup_hover_text_shows_key` | `ItemDrop.GetHoverText()` of a spawned Wood drop contains the line the hover patch adds: the key as BepInEx prints it and the translated message with the item's name (SKIP when the key is not set and could not be bound for the run) |
-| `pickup_key_pass_same_name_only` | Two Wood drops and one Stone drop lie 1.5 m to your right, a metre apart, with `m_autoPickup` cleared, so neither vanilla auto-pickup nor periodic pickup can take them. A key pass requested on the first Wood drop, through the call Automatic Pickup makes when the key goes down, takes both Wood drops, the Wood in your inventory grows by exactly 2, and the Stone drop is left. The Wood drops vanishing without the inventory growing is a FAIL, and so is the Stone drop being taken; more Wood arriving than the check spawned, or the Stone in your inventory changing while the Stone drop stays, is a SKIP, because Wood or Stone of your own was nearby (SKIP when `automatic_pickup_range` is below 2.5 m) |
-| `pickup_key_and_interval_in_one_pass` | The same three drops, 0.6 m apart, placed to your left half a metre beyond vanilla auto-pickup's reach (SKIP, inconclusive, when a Wood drop has rolled out of `automatic_pickup_range` before the requests; a FAIL gives each drop's distance at the request). In one frame the first Wood drop is given `m_autoPickup` and both the interval's and the key's request are made, through the calls `FixedUpdate` and `Update` make. The one pass that follows takes the hovered Wood drop for the interval, still takes the other Wood drop by its name for the key, and leaves the Stone drop; the same inventory rules apply (SKIP when the range does not reach past vanilla auto-pickup) |
-| `pickup_interval_pass_waits_for_pickable_drop` | With periodic pickup off (`automatic_pickup_interval` set to 0 for the check, so only the check's own requests make passes), a Wood drop that allows auto-pickup lies to your left a metre beyond vanilla auto-pickup's reach. In the frame it spawns, while vanilla still refuses it, the interval's request is made, through the call `FixedUpdate` makes. That pass has to leave the drop in the world, also for half a second after vanilla starts allowing it, since taking it then would mean the pass had started vanilla's deferred pickup; a second request made once vanilla allows it picks the drop up, and the Wood in your inventory grows by exactly 1. The drop vanishing before the second request is a FAIL; a first pass that ran only after vanilla allowed the drop is a SKIP (SKIP when the interval could not be set to 0, or the range does not reach past vanilla auto-pickup) |
-| `pickup_key_takes_not_yet_pickable_drop` | With periodic pickup off, a Wood drop with `m_autoPickup` cleared lies 1.5 m to your right. In the frame it spawns, while vanilla still refuses it, a key pass is requested on it, through the call `Update` makes. The key pass collects the drop once vanilla allows it, and the Wood in your inventory grows by exactly 1 (SKIP when the interval could not be set to 0, or `automatic_pickup_range` is below 2 m) |
-| `pickup_key_leaves_fish_in_water` | Two `Fish1` drops lie a step apart, 1.5 m to your right, with `m_autoPickup` cleared; the game's water level is written into one of them, so vanilla's `Fish.IsOutOfWater` is false for it. The hover text of the fish in water lacks the Pickup All Nearby line and the other one has it. A key pass requested on the fish in water makes no pass: both fish stay. A key pass requested on the other fish takes it, the fish in your inventory grows by exactly 1, and the fish in water stays (SKIP when `automatic_pickup_range` is below 2.5 m, the prefab is missing, or the fish could not be put in and out of water; SKIP, inconclusive, when right before either request, or on any frame of a pass before a fish is taken, the fish in water no longer reads the level written into it, has a water volume attached or is out of water, or the other fish is in water: a real water volume around the fish writes its own level into it, so run the check away from water) |
+| `pickup_key_pass_same_name_only` | Two Wood drops and one Stone drop lie 1.5 m to your right, a metre apart, with `m_autoPickup` cleared, so neither vanilla auto-pickup nor periodic pickup can take them. A key pass requested on the first Wood drop, through the call Automatic Pickup makes when the key goes down, takes both Wood drops, the Wood in your inventory grows by exactly 2, and the Stone drop is left. The Wood drops vanishing without the inventory growing is a FAIL, and so is the Stone drop being taken; more Wood arriving than the check spawned, or the Stone in your inventory changing while the Stone drop stays, is a SKIP, because Wood or Stone of your own was nearby (SKIP when `automatic_pickup_range` could not be set for the run and is below 2.5 m) |
+| `pickup_key_and_interval_in_one_pass` | The same three drops, 0.6 m apart, placed to your left half a metre beyond vanilla auto-pickup's reach (SKIP, inconclusive, when a Wood drop has rolled out of `automatic_pickup_range` before the requests; a FAIL gives each drop's distance at the request). In one frame the first Wood drop is given `m_autoPickup` and both the interval's and the key's request are made, through the calls `FixedUpdate` and `Update` make. The one pass that follows takes the hovered Wood drop for the interval, still takes the other Wood drop by its name for the key, and leaves the Stone drop; the same inventory rules apply (SKIP when the range could not be set for the run and does not reach past vanilla auto-pickup) |
+| `pickup_interval_pass_waits_for_pickable_drop` | With periodic pickup off (`automatic_pickup_interval` is 0 for the section, so only the check's own requests make passes), a Wood drop that allows auto-pickup lies to your left a metre beyond vanilla auto-pickup's reach. In the frame it spawns, while vanilla still refuses it, the interval's request is made, through the call `FixedUpdate` makes. That pass has to leave the drop in the world, also for half a second after vanilla starts allowing it, since taking it then would mean the pass had started vanilla's deferred pickup; a second request made once vanilla allows it picks the drop up, and the Wood in your inventory grows by exactly 1. The drop vanishing before the second request is a FAIL; a first pass that ran only after vanilla allowed the drop is a SKIP (SKIP when the interval could not be set to 0, or the range could not be set and does not reach past vanilla auto-pickup) |
+| `pickup_key_takes_not_yet_pickable_drop` | With periodic pickup off, a Wood drop with `m_autoPickup` cleared lies 1.5 m to your right. In the frame it spawns, while vanilla still refuses it, a key pass is requested on it, through the call `Update` makes. The key pass collects the drop once vanilla allows it, and the Wood in your inventory grows by exactly 1 (SKIP when the interval could not be set to 0, or `automatic_pickup_range` could not be set and is below 2 m) |
+| `pickup_key_leaves_fish_in_water` | Two `Fish1` drops lie a step apart, 1.5 m to your right, with `m_autoPickup` cleared; a water level above the fish is written into one of them, so vanilla's `Fish.IsOutOfWater` is false for it. For the length of the check a temporary patch on `Fish.SetLiquidLevel` drops the game's water-level writes into the two test fish, so a real water volume nearby cannot overwrite the levels (the other fish keeps none and reads as out of water; standing in real water it would get no buoyancy). The hover text of the fish in water lacks the Pickup All Nearby line and the other one has it. A key pass requested on the fish in water makes no pass: both fish stay. A key pass requested on the other fish takes it, the fish in your inventory grows by exactly 1, and the fish in water stays (SKIP when `automatic_pickup_range` could not be set and is below 2.5 m, the prefab is missing, the patch could not be added, or the fish could not be put in and out of water; SKIP, inconclusive, when right before either request, or on any frame of a pass before a fish is taken, the fish in water no longer reads the level written into it, has a water volume attached or is out of water, or the other fish is in water. Where the Harmony build cannot remove patches at runtime, the check runs without the patch, and that SKIP asks you to run it away from water) |
 | `pickup_interval_runs_with_key_bound` | With the key set and `automatic_pickup_interval` above 0, a Wood drop placed to your left a metre beyond vanilla auto-pickup's reach is picked up by Automatic Pickup's own timer (SKIP when the key or the interval could not be set for the run, or the range does not reach past vanilla auto-pickup) |
 | `pickup_settings_restored` | Reported only when the section changed a setting: every setting it changed is back at your value |
+| `pickup_fish_guard_removed` | Reported only as a FAIL, when the fish check's temporary patch could not be removed; it is tried again at the next hand-back |
 
-Every world check SKIPs unless `automatic_pickup / module` is `Enabled`. When
-`pickup_all_nearby_key` is not set, it is bound to its default, `E + LeftShift`,
-for the section. When `automatic_pickup_interval` is above 0, it is set to 0 for
-the three checks that make their own passes, so that no pass of the timer's can
-take the drop they watch. For the last check it is set back to your value, or,
-when it is 0, to its default, 0.5, because while it is above 0 Automatic
-Pickup also picks up your own items nearby. `pickup_settings_restored` then
-reports putting them back: PASS when they are back, SKIP when you changed one
-while the section ran and your value was kept, FAIL when one could not be written
-back (it is tried again at the next hand-back, and new runs are refused until
-then). Stand
-still while it runs: a player walking toward the drop could let vanilla
-auto-pickup take it. A passing run looks like this:
+The section sets up its world checks itself, under the rules in *Safety of the
+console commands*:
+
+- `automatic_pickup / module` is turned on for the section when it is off (the
+  world checks SKIP only when it then does not start).
+- When `pickup_all_nearby_key` is not set, it is bound to its default,
+  `E + LeftShift`.
+- `automatic_pickup_range` is set to 3.5 m for the two Wood pass checks and to
+  4 m for the rest, so every test drop lies inside it and as little else as
+  possible does.
+- When `automatic_pickup_interval` is above 0, it is set to 0 from the start, so
+  that no pass of the timer's can take the drop a check watches. For the last
+  check it is set back to your value, or, when it is 0, to its default, 0.5,
+  because that check is about the timer.
+- Before any drop is spawned, you are moved to a clear site when an item drop
+  lies within 6 m of you, or a pickable that yields Wood or Stone within 4 m:
+  passes with an interval part pick those up too, and Wood or Stone of your own
+  would make a check inconclusive. You are moved back when the section ends.
+- When your inventory has fewer than two free slots, or too little carry weight
+  for two Wood or two fish, items are put aside for the section and put back
+  afterwards.
+
+`pickup_settings_restored` then reports putting the settings back: PASS when
+they are back, SKIP when you changed one while the section ran and your value
+was kept, FAIL when one could not be written back (it is tried again at the
+next hand-back, and new runs are refused until then). Stand still while it
+runs: a player walking toward the drop could let vanilla auto-pickup take it. A
+passing run looks like this:
 
 ```text
 [Automatics Smoke] automatics_smoke_features pickup started: pickup
 [Automatics Smoke] PASS pickup_key_default_is_left_shift_e: default 'E + LeftShift'; the current value is 'E + LeftShift'
+[Automatics Smoke] PASS pickup_setup: Automatic Pickup already running; the spot you stand on is clear; nothing had to be put aside
 [Automatics Smoke] PASS pickup_hover_text_shows_key: 'E + LeftShift' with 'Pick up nearby Wood'
 [Automatics Smoke] PASS pickup_key_pass_same_name_only: both Wood drops were picked up and the Stone drop was left (woodDelta=2)
 [Automatics Smoke] PASS pickup_key_and_interval_in_one_pass: one pass took the hovered Wood drop with the interval and the other Wood drop by its name, and left the Stone drop (woodDelta=2)
@@ -1284,8 +1302,8 @@ auto-pickup take it. A passing run looks like this:
 [Automatics Smoke] PASS pickup_key_takes_not_yet_pickable_drop: a key pass made while vanilla refused the drop collected it once vanilla allowed it, with periodic pickup off
 [Automatics Smoke] PASS pickup_key_leaves_fish_in_water: a fish in water got no key pass and no hover line; a key pass on a fish out of water took it and left the one in water
 [Automatics Smoke] PASS pickup_interval_runs_with_key_bound: a Wood drop 3 m away was picked up at interval 0.5s with pickup_all_nearby_key 'E + LeftShift'
-[Automatics Smoke] PASS pickup_settings_restored: automatic_pickup/automatic_pickup_interval is already back at 0.5
-[Automatics Smoke] Summary: total=9 passed=9 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[Automatics Smoke] PASS pickup_settings_restored: automatic_pickup/automatic_pickup_interval is already back at 0.5; automatic_pickup/automatic_pickup_range is already back at 4
+[Automatics Smoke] Summary: total=10 passed=10 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 #### `pin`
@@ -1412,6 +1430,59 @@ label, and the bar coming back:
 | `aimbar_hidden_creature` | A boar with its HUD hidden, aimed at, gets the looked-at label with its name and the rounded horizontal distance in brackets, and the label's Health group is not shown |
 | `aimbar_boss` | The same for the boar marked as a boss |
 | `aimbar_bar_after_label_only` | A mushroom aimed at right after those two, with the same label object, gets the label with its Health group shown again and a full bar |
+
+#### `mapfilter`
+
+Run `automatics_smoke_features mapfilter` in a loaded world without the no-map
+world modifier (the section SKIPs and says so when it is on). The section
+checks the large map's category filter and search field against test pins it
+adds next to you: filter controls and their layout, what each display mode shows
+while categories are hidden or shown, how saved pin names are classified, the
+search field (matching, the Apply to minimap toggle, focus, typing with an input
+method, and the pin and navigation keys blocked while it has focus), the
+unexplored-pin rule combined with the filter, and turning map enhancements and
+the module off and on. Results are named `mapfilter_<check>`, one per control,
+category, display mode and test pin where that applies.
+
+`automatic_mapping / module` is turned on for the section when it is off; a
+`mapfilter_setup` PASS says so, and the section SKIPs only when the module then
+does not start. The section holds `enable_map_enhancements`,
+`map_filter_hidden_categories`, `hide_unexplored_automatic_mapping_pins` and the
+module setting for its length, writes them as each check needs (it turns the
+module off and on again itself near the end), and turns
+`enable_automatic_mapping` on for the unexplored checks alone when it is off.
+It opens the large map and changes its zoom and the search text; the map mode,
+zoom, search text, Apply to minimap toggle and navigation target are put back
+and its test pins removed when it ends. `mapfilter_settings_restored` and
+`mapfilter_mode_restored` report the settings and the map mode back.
+
+#### `pintooltip`
+
+Run `automatics_smoke_features pintooltip` in a single-player world with the
+inventory UI loaded. The section spawns a deer 15 m above you, two mushrooms
+and a copper deposit, gives them test pins, and checks the pin tooltip's
+content for each: name, horizontal distance, health, readiness and respawn time,
+merged flora counts and the deposit's remaining sections, read from the loaded
+object, from the server's data and from the client's cache. It then checks the
+tooltip for saved pins that are no longer linked to an object, for manual and
+location pins, the tooltip UI on the large map (shown, refreshed, closed,
+clamped, and with map enhancements off and on), a real pointer hover on a test
+marker, and a removed object's pin. The Pin Looked-at Object Key and the
+Navigate to Looked-at Object Key are checked on the merged mushroom patch
+(`pin_key_*` and `nav_key_*`). Results are named `pintooltip_<check>`.
+
+`automatic_mapping / module` is turned on for the section when it is off; a
+`pintooltip_setup` PASS says so, and the section SKIPs only when the module then
+does not start. For its length the section sets `enable_map_enhancements` on,
+clears `map_filter_hidden_categories`, turns
+`hide_unexplored_automatic_mapping_pins` off, sets `flora_pins_merge_range` to
+8 and binds `navigate_to_aimed_object_key` to F8; `pintooltip_settings_restored`
+reports putting them back. Temporary patches make a test object read as not
+loaded, make the tooltip read the data as a client would, and count sector
+reads; they are removed when the section ends. The test objects and pins are removed, and the map mode, view, search
+field, pointer and navigation target put back. The real pointer checks SKIP when
+the cursor is locked or the game does not move the pointer onto the marker;
+the hover is then left to a person.
 
 #### `mining`
 

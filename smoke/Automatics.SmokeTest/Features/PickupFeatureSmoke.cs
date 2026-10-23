@@ -1,8 +1,10 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Automatics.Valheim;
 using BepInEx.Configuration;
+using HarmonyLib;
 using ModUtils;
 using UnityEngine;
 using PickupComponent = Automatics.AutomaticPickup.AutomaticPickup;
@@ -16,12 +18,17 @@ namespace Automatics.SmokeTest
     // bound, and a key pass picks up only the objects named like the one it was made on, also
     // when the same pass picks up for the interval and takes the hovered object first.
     //
-    // The world checks need Automatic Pickup running; the section never turns it on. An unset
-    // Pickup All Nearby key is bound to its default, Left Shift + E, for the run. A periodic
-    // interval above 0 is set to 0 for the three checks that make their own passes, and an
-    // interval of 0 is set to its default, 0.5 s, for the last check only. All go through
-    // SmokeSession like the lifecycle command's module toggle: the change is recorded before it
-    // is made, and put back afterwards unless the user changed the setting meanwhile.
+    // The section sets up what the world checks need, through SmokeSetup: Automatic Pickup is
+    // turned on for the run when it is off; an unset Pickup All Nearby key is bound to its
+    // default, Left Shift + E; automatic_pickup_range is set to 3.5 m for the two Wood pass
+    // checks and to 4 m for the rest; a periodic interval above 0 is set to 0 from the start, so
+    // only the checks' own requests make passes, and the last check sets it back to the user's
+    // value, or to its default, 0.5 s, when that is 0. The settings go through SmokeSession: the
+    // change is recorded before it is made, and put back afterwards unless the user changed the
+    // setting meanwhile. Before any drop is spawned, the player is moved to clear ground when an
+    // item drop of their own lies within reach of a pass, or a pickable that yields Wood or
+    // Stone; and items are put aside when the inventory has no room for what the checks pick up.
+    // The player and the items go back when the section ends.
     //
     // The key pass is requested through AutomaticPickup.RequestKeyPickup, the call Update makes
     // when the key goes down, with the object the player would be hovering; the pass itself is
@@ -44,6 +51,7 @@ namespace Automatics.SmokeTest
         private const string StonePrefab = "Stone";
 
         private const string DefaultCheck = "pickup_key_default_is_left_shift_e";
+        private const string SetupCheck = "pickup_setup";
         private const string HoverCheck = "pickup_hover_text_shows_key";
         private const string KeyPassCheck = "pickup_key_pass_same_name_only";
         private const string OverlapCheck = "pickup_key_and_interval_in_one_pass";
@@ -51,9 +59,27 @@ namespace Automatics.SmokeTest
         private const string WaitsCheck = "pickup_interval_pass_waits_for_pickable_drop";
         private const string KeyNotYetPickableCheck = "pickup_key_takes_not_yet_pickable_drop";
         private const string FishCheck = "pickup_key_leaves_fish_in_water";
+        private const string FishGuardCheck = "pickup_fish_guard_removed";
         private const string RestoreCheck = "pickup_settings_restored";
 
+        private static readonly string[] WorldChecks =
+        {
+            HoverCheck, KeyPassCheck, OverlapCheck, WaitsCheck, KeyNotYetPickableCheck, FishCheck, IntervalCheck
+        };
+
         private const string FishPrefab = "Fish1";
+
+        // automatic_pickup_range for the run. The overlap check places its drops 2.5 m away
+        // (vanilla's 2 m reach and half a metre) and needs a metre to spare; the other checks
+        // place theirs up to 3 m away and need half a metre. The smaller range for the two Wood
+        // pass checks keeps their passes, which take every Wood drop or every allowed drop in
+        // range, off as much of the surroundings as possible.
+        private const float PassRange = 3.5f;
+        private const float SectionRange = 4f;
+
+        // How far beyond the range the site is kept free of item drops: a drop of the user's can
+        // roll or be thrown into the range while the section runs.
+        private const float DropMargin = 2f;
 
         // Bounds on the waits, not estimates of them: vanilla refuses a drop for 0.5 s after it
         // spawns, and a pass the component starts finishes within a few frames.
@@ -70,144 +96,189 @@ namespace Automatics.SmokeTest
         {
             CheckDefaultKey(run);
 
-            var problem = WorldProblem(out var player, out var component, out var wood, out var stone);
+            var problem = WorldProblem(out var player, out var wood, out var stone);
             if (problem != null)
             {
-                run.Skip(HoverCheck, problem);
-                run.Skip(KeyPassCheck, problem);
-                run.Skip(OverlapCheck, problem);
-                run.Skip(WaitsCheck, problem);
-                run.Skip(KeyNotYetPickableCheck, problem);
-                run.Skip(FishCheck, problem);
-                run.Skip(IntervalCheck, problem);
+                SkipAll(run, problem, WorldChecks);
                 yield break;
             }
 
             var held = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
+            SmokeSetup.InventoryStash stash = null;
             try
             {
                 // The hover line and periodic pickup with the key bound need a key. An unset key
                 // is bound to its default for the run and put back afterwards.
                 if (PickupConfig.PickupAllNearbyKey.MainKey == KeyCode.None)
-                    Write(run, held, PickupConfig.PickupAllNearbyKeyEntry,
+                    SmokeSetup.Write(run, held, PickupConfig.PickupAllNearbyKeyEntry,
                         new KeyboardShortcut(KeyCode.E, KeyCode.LeftShift));
 
-                var keyPass = FeaturesSmokeCommand.Contain(
-                    CheckWoodPass(run, KeyPassCheck, false, player, component, wood, stone), run, KeyPassCheck);
-                while (keyPass.MoveNext()) yield return keyPass.Current;
-
-                yield return null;
-                if (!run.IsCurrent)
-                {
-                    SkipAbandoned(run, OverlapCheck, WaitsCheck, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
-                    yield break;
-                }
-
-                var overlap = FeaturesSmokeCommand.Contain(
-                    CheckWoodPass(run, OverlapCheck, true, player, component, wood, stone), run, OverlapCheck);
-                while (overlap.MoveNext()) yield return overlap.Current;
-
-                yield return null;
-                if (!run.IsCurrent)
-                {
-                    SkipAbandoned(run, WaitsCheck, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
-                    yield break;
-                }
-
-                // The next three checks make their own passes, so periodic pickup is switched off
-                // for them: a pass the timer made could take the drop they watch.
+                // Every check makes its own passes until the last one, so periodic pickup is off
+                // from the start: a pass the timer made could take the drop a check watches, or
+                // items of the user's that would blur the counts. It is set before the module is
+                // turned on, so no timer pass runs at all.
                 var userInterval = PickupConfig.AutomaticPickupInterval;
                 if (userInterval > 0f)
-                    Write(run, held, PickupConfig.AutomaticPickupIntervalEntry, 0f);
+                    SmokeSetup.Write(run, held, PickupConfig.AutomaticPickupIntervalEntry, 0f);
+                SmokeSetup.Write(run, held, PickupConfig.AutomaticPickupRangeEntry, PassRange);
 
-                var waits = FeaturesSmokeCommand.Contain(
-                    CheckIntervalPassWaits(run, player, component, wood), run, WaitsCheck);
-                while (waits.MoveNext()) yield return waits.Current;
-
-                yield return null;
-                if (!run.IsCurrent)
+                var module = new SmokeSetup.SetupResult();
+                var steps = SmokeSetup.EnableModule(run.RunId, held, PickupConfig.ModuleEntry,
+                    () => PickupModule.Running, module);
+                while (steps.MoveNext()) yield return steps.Current;
+                var component = player ? player.GetComponent<PickupComponent>() : null;
+                if (!module.Ok || !component)
                 {
-                    SkipAbandoned(run, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
+                    SkipAll(run, !module.Ok
+                        ? "Automatic Pickup is not running: " + module.Reason
+                        : "the local player carries no AutomaticPickup component", WorldChecks);
                     yield break;
                 }
 
-                var keyNotYetPickable = FeaturesSmokeCommand.Contain(
-                    CheckKeyTakesNotYetPickable(run, player, component, wood), run, KeyNotYetPickableCheck);
-                while (keyNotYetPickable.MoveNext()) yield return keyNotYetPickable.Current;
-
-                yield return null;
-                if (!run.IsCurrent)
+                // Before any test drop is spawned: one spawned earlier would be left behind.
+                var site = new SmokeSetup.SetupResult();
+                steps = SmokeSetup.Relocate(run.RunId, ClearOfOwnItems, site);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent || !player)
                 {
-                    SkipAbandoned(run, FishCheck, IntervalCheck);
+                    SkipAll(run, "the run was abandoned or the local player went away during the setup", WorldChecks);
                     yield break;
                 }
 
-                var fish = FeaturesSmokeCommand.Contain(
-                    CheckFishInWater(run, player, component), run, FishCheck);
-                while (fish.MoveNext()) yield return fish.Current;
+                // Room for the most any one check picks up: two Wood, or two fish.
+                var weight = 2f * Mathf.Max(UnitWeight(wood), UnitWeight(ZNetScene.instance.GetPrefab(FishPrefab)));
+                stash = SmokeSetup.Stash(player, 2, weight + 0.1f);
 
-                yield return null;
-                if (!run.IsCurrent)
+                var setup = $"Automatic Pickup {module.Reason}; {site.Reason}; {stash.Report}";
+                if (site.Ok)
+                    run.Pass(SetupCheck, setup);
+                else
+                    run.Skip(SetupCheck,
+                        $"no site clear of other drops was found, so the checks run where you stand and may be inconclusive: {setup}");
+
+                var checks = Checks(run, held, player, component, wood, stone, userInterval);
+                while (checks.MoveNext()) yield return checks.Current;
+
+                if (site.Changed)
                 {
-                    SkipAbandoned(run, IntervalCheck);
-                    yield break;
+                    var back = new SmokeSetup.SetupResult();
+                    steps = SmokeSetup.ReturnToStart(run.RunId, back);
+                    while (steps.MoveNext()) yield return steps.Current;
+                    if (!back.Ok)
+                        FeaturesSmokeCommand.Warn(
+                            $"[Automatics Smoke] pickup: the player was not moved back to the starting spot yet ({back.Reason}); the run's hand-back tries again when the command ends");
                 }
-
-                // Periodic pickup is back on for this last check, at the user's interval or, when
-                // that is 0, at its default, 0.5 s: while it is on, Automatic Pickup also picks
-                // up your own items nearby.
-                if (PickupConfig.AutomaticPickupInterval <= 0f)
-                    Write(run, held, PickupConfig.AutomaticPickupIntervalEntry,
-                        userInterval > 0f ? userInterval : 0.5f);
-
-                var interval = FeaturesSmokeCommand.Contain(
-                    CheckIntervalPickup(run, player, wood), run, IntervalCheck);
-                while (interval.MoveNext()) yield return interval.Current;
             }
             finally
             {
-                if (held.Count > 0) ReportRestore(run);
+                stash?.Restore();
+                if (held.Count > 0) SmokeSetup.ReportSettings(run, RestoreCheck);
             }
         }
 
-        // Takes the setting on with the session - which records the change before it is made and
-        // refuses it when the record cannot be written - and writes it. A refusal is logged; the
-        // checks that need the value then SKIP on the value they find.
-        private static void Write(FeatureRun run, Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held,
-            ConfigEntryBase entry, object value)
+        private static IEnumerator Checks(FeatureRun run, Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration> held,
+            Player player, PickupComponent component, GameObject wood, GameObject stone, float userInterval)
         {
-            string refusal;
-            if (!held.TryGetValue(entry, out var setting))
+            var keyPass = FeaturesSmokeCommand.Contain(
+                CheckWoodPass(run, KeyPassCheck, false, player, component, wood, stone), run, KeyPassCheck);
+            while (keyPass.MoveNext()) yield return keyPass.Current;
+
+            yield return null;
+            if (!run.IsCurrent)
             {
-                if (!SmokeSession.BeginSetting(run.RunId, entry, out setting, out refusal))
-                {
-                    FeaturesSmokeCommand.Warn(
-                        $"[Automatics Smoke] {entry.Definition.Section}/{entry.Definition.Key} was not changed for the run: {refusal}");
-                    return;
-                }
-
-                held[entry] = setting;
+                SkipAbandoned(run, OverlapCheck, WaitsCheck, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
+                yield break;
             }
 
-            if (!SmokeSession.WriteSetting(run.RunId, setting, value, out refusal))
-                FeaturesSmokeCommand.Warn(
-                    $"[Automatics Smoke] {entry.Definition.Section}/{entry.Definition.Key} was not changed for the run: {refusal}");
+            var overlap = FeaturesSmokeCommand.Contain(
+                CheckWoodPass(run, OverlapCheck, true, player, component, wood, stone), run, OverlapCheck);
+            while (overlap.MoveNext()) yield return overlap.Current;
+
+            yield return null;
+            if (!run.IsCurrent)
+            {
+                SkipAbandoned(run, WaitsCheck, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
+                yield break;
+            }
+
+            // The rest place their drops up to 3 m away.
+            SmokeSetup.Write(run, held, PickupConfig.AutomaticPickupRangeEntry, SectionRange);
+
+            var waits = FeaturesSmokeCommand.Contain(
+                CheckIntervalPassWaits(run, player, component, wood), run, WaitsCheck);
+            while (waits.MoveNext()) yield return waits.Current;
+
+            yield return null;
+            if (!run.IsCurrent)
+            {
+                SkipAbandoned(run, KeyNotYetPickableCheck, FishCheck, IntervalCheck);
+                yield break;
+            }
+
+            var keyNotYetPickable = FeaturesSmokeCommand.Contain(
+                CheckKeyTakesNotYetPickable(run, player, component, wood), run, KeyNotYetPickableCheck);
+            while (keyNotYetPickable.MoveNext()) yield return keyNotYetPickable.Current;
+
+            yield return null;
+            if (!run.IsCurrent)
+            {
+                SkipAbandoned(run, FishCheck, IntervalCheck);
+                yield break;
+            }
+
+            var fish = FeaturesSmokeCommand.Contain(
+                CheckFishInWater(run, player, component), run, FishCheck);
+            while (fish.MoveNext()) yield return fish.Current;
+
+            yield return null;
+            if (!run.IsCurrent)
+            {
+                SkipAbandoned(run, IntervalCheck);
+                yield break;
+            }
+
+            // Periodic pickup is back on for this last check, at the user's interval or, when
+            // that is 0, at its default, 0.5 s: while it is on, Automatic Pickup also picks
+            // up your own items nearby.
+            if (PickupConfig.AutomaticPickupInterval <= 0f)
+                SmokeSetup.Write(run, held, PickupConfig.AutomaticPickupIntervalEntry,
+                    userInterval > 0f ? userInterval : 0.5f);
+
+            var interval = FeaturesSmokeCommand.Contain(
+                CheckIntervalPickup(run, player, wood), run, IntervalCheck);
+            while (interval.MoveNext()) yield return interval.Current;
         }
 
-        // Puts back every setting the section changed, and reports it as one check.
-        private static void ReportRestore(FeatureRun run)
+        // A site where the checks can tell their test items from the user's: no item drop within
+        // reach of a pass, and no pickable that yields Wood or Stone within the range, since the
+        // interval's part of a pass picks pickables too.
+        private static string ClearOfOwnItems(Vector3 site)
         {
-            var results = SmokeSession.RestoreSettings(run.RunId);
-            if (results.Count == 0) return;
+            var drop = SmokeSetup.Clearance(SectionRange + DropMargin, SmokeSetup.SiteKinds.Drops)(site);
+            if (drop != null) return drop;
 
-            var detail = string.Join("; ", results.Select(x => x.Value));
-            if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.Failed))
-                run.Fail(RestoreCheck, detail);
-            else if (results.Any(x => x.Key == SmokeSession.ToggleOutcome.LeftForUser ||
-                                      x.Key == SmokeSession.ToggleOutcome.NotThisRun))
-                run.Skip(RestoreCheck, "restoration skipped: " + detail);
-            else
-                run.Pass(RestoreCheck, detail);
+            foreach (var collider in Physics.OverlapSphere(site, SectionRange, ~0, QueryTriggerInteraction.Collide))
+            {
+                var pickable = collider ? collider.GetComponentInParent<Pickable>() : null;
+                if (!pickable || !pickable.m_itemPrefab) continue;
+                var name = pickable.m_itemPrefab.name;
+                if (name == WoodPrefab || name == StonePrefab)
+                    return $"pickable '{Objects.GetName(pickable)}', which yields {name}, within {SectionRange:0} m";
+            }
+
+            return null;
+        }
+
+        private static float UnitWeight(GameObject prefab)
+        {
+            var item = prefab ? PickableHarvester.CreatePickupItemData(prefab, 1) : null;
+            return item != null ? item.GetWeight(1) : 0f;
+        }
+
+        private static void SkipAll(FeatureRun run, string reason, IEnumerable<string> checks)
+        {
+            foreach (var check in checks)
+                run.Skip(check, reason);
         }
 
         // The default the entry was bound with, and how BepInEx writes it into the file. It needs
@@ -234,11 +305,9 @@ namespace Automatics.SmokeTest
             run.Pass(DefaultCheck, $"default 'E + LeftShift'; the current value is '{entry.GetSerializedValue()}'");
         }
 
-        private static string WorldProblem(out Player player, out PickupComponent component,
-            out GameObject wood, out GameObject stone)
+        private static string WorldProblem(out Player player, out GameObject wood, out GameObject stone)
         {
             player = null;
-            component = null;
             wood = null;
             stone = null;
 
@@ -247,11 +316,6 @@ namespace Automatics.SmokeTest
             if (player == null) return "Player.m_localPlayer is null";
             if (player.GetInventory() == null) return "the player inventory is null";
             if (ObjectDB.instance == null || ObjectDB.instance.m_items.Count == 0) return "ObjectDB is not ready";
-            if (!PickupModule.Running)
-                return "Automatic Pickup is not running; set automatic_pickup/module to Enabled to include this check";
-
-            component = player.GetComponent<PickupComponent>();
-            if (component == null) return "the local player carries no AutomaticPickup component";
 
             wood = ZNetScene.instance.GetPrefab(WoodPrefab);
             stone = ZNetScene.instance.GetPrefab(StonePrefab);
@@ -997,6 +1061,9 @@ namespace Automatics.SmokeTest
             ItemDrop swimming = null;
             ItemDrop landed = null;
             var fishMayBeLeft = false;
+            var guarded = false;
+            Func<string, bool> handBack = _ => WaterGuard.Detach(out _);
+            SmokeSession.TrackHandBack(handBack);
             try
             {
                 swimming = FeaturesSmokeCommand.SpawnTestDrop(prefab, origin, false);
@@ -1013,6 +1080,21 @@ namespace Automatics.SmokeTest
                 {
                     run.Skip(FishCheck, $"the spawned {FishPrefab} carries no Fish component");
                     yield break;
+                }
+
+                // In the frame they spawn, before any water volume has written into them: from
+                // here on the game's water-level writes into the two fish are dropped, so the
+                // levels below hold also by the water. Without runtime unpatching the fish go
+                // unguarded, and FishFixtureProblem below still tells a broken fixture apart.
+                if (ModuleRegistry.RuntimeToggleSupported)
+                {
+                    if (!WaterGuard.Attach(swimmingFish, landedFish, out var problem))
+                    {
+                        run.Skip(FishCheck, problem);
+                        yield break;
+                    }
+
+                    guarded = true;
                 }
 
                 // The water level Fish keeps for itself, set above the fish: what the game's water
@@ -1098,7 +1180,7 @@ namespace Automatics.SmokeTest
                 var fixture = FishFixtureProblem(swimming, level, landed);
                 if (fixture != null)
                 {
-                    run.Skip(FishCheck, $"inconclusive: before the pass, {fixture}; {FishAwayFromWater}");
+                    run.Skip(FishCheck, $"inconclusive: before the pass, {fixture}; {FixtureHint(guarded)}");
                     yield break;
                 }
 
@@ -1131,7 +1213,7 @@ namespace Automatics.SmokeTest
                         $"swimming taken={FeaturesSmokeCommand.IsConsumed(swimming)}, landed taken={FeaturesSmokeCommand.IsConsumed(landed)}, fishDelta={delta}";
                     if (broken != null)
                         run.Skip(FishCheck,
-                            $"inconclusive: before a fish was taken, {broken}; {FishAwayFromWater} ({taken})");
+                            $"inconclusive: before a fish was taken, {broken}; {FixtureHint(guarded)} ({taken})");
                     else
                         run.Fail(FishCheck, $"a key pass requested on a fish in water took fish ({taken})");
                     yield break;
@@ -1140,7 +1222,7 @@ namespace Automatics.SmokeTest
                 fixture = FishFixtureProblem(swimming, level, landed);
                 if (fixture != null)
                 {
-                    run.Skip(FishCheck, $"inconclusive: before the second pass, {fixture}; {FishAwayFromWater}");
+                    run.Skip(FishCheck, $"inconclusive: before the second pass, {fixture}; {FixtureHint(guarded)}");
                     yield break;
                 }
 
@@ -1189,7 +1271,7 @@ namespace Automatics.SmokeTest
                 if ((!landedTaken || swimmingTaken) && broken != null)
                 {
                     run.Skip(FishCheck,
-                        $"inconclusive: during the second pass, {broken}; {FishAwayFromWater} (landed taken={landedTaken}, swimming taken={swimmingTaken}){notes}");
+                        $"inconclusive: during the second pass, {broken}; {FixtureHint(guarded)} (landed taken={landedTaken}, swimming taken={swimmingTaken}){notes}");
                     yield break;
                 }
 
@@ -1222,6 +1304,9 @@ namespace Automatics.SmokeTest
             }
             finally
             {
+                if (WaterGuard.Detach(out var failure)) SmokeSession.ReleaseHandBack(handBack);
+                else run.Fail(FishGuardCheck, $"the patch that keeps the test fish's water levels could not be removed ({failure}); it is retried at the next hand-back");
+
                 if (fishMayBeLeft)
                     FeaturesSmokeCommand.Warn(
                         $"[Automatics Smoke] {FishCheck}: the fish the pass took could not be attributed to the test drops, so it was left in the inventory");
@@ -1230,13 +1315,99 @@ namespace Automatics.SmokeTest
             }
         }
 
-        private const string FishAwayFromWater =
-            "a water volume around the test fish writes its own level into a fish inside it on every update, so run this check away from water";
+        private static string FixtureHint(bool guarded)
+        {
+            return guarded
+                ? "the patch that drops the game's water-level writes into the two test fish was in place, so something else changed them"
+                : "this Harmony build cannot remove patches at runtime, so the game's water-level writes into the test fish were not blocked: a water volume around a fish writes its own level into it on every update, so run this check away from water";
+        }
+
+        // While a check holds its two test fish, the game's water-level writes into them are
+        // dropped. Every write to Fish.m_inWater goes through Fish.SetLiquidLevel, which a water
+        // volume calls on every update for a fish inside its trigger and when the fish leaves it
+        // (WaterVolume.UpdateFloaters, OnTriggerExit, OnDestroy), and a liquid surface likewise;
+        // without the patch, near water the level the check wrote would not hold. The patch also
+        // keeps the water volume off the fish, so a fish standing in real water gets no buoyancy
+        // and may sink there (unverified in game; the section moves to dry ground first). Other
+        // fish are untouched, and the patch is removed when the check ends, or at the run's
+        // hand-back when it is cut short.
+        private static class WaterGuard
+        {
+            private const string HarmonyId = "net.eidee.automatics.smoke.features.pickup.fish";
+
+            private static readonly HashSet<Fish> Guarded = new HashSet<Fish>();
+            private static Harmony _harmony;
+
+            public static bool Attach(Fish first, Fish second, out string problem)
+            {
+                problem = null;
+                var method = AccessTools.Method(typeof(Fish), nameof(Fish.SetLiquidLevel));
+                if (method == null)
+                {
+                    problem = "Fish.SetLiquidLevel was not found, so the test fish's water levels cannot be kept";
+                    return false;
+                }
+
+                if (_harmony != null && !Detach(out var stale))
+                {
+                    problem = $"an earlier fish water patch could not be removed ({stale})";
+                    return false;
+                }
+
+                Guarded.Add(first);
+                Guarded.Add(second);
+                _harmony = new Harmony(HarmonyId);
+                try
+                {
+                    _harmony.Patch(method, new HarmonyMethod(typeof(WaterGuard), nameof(KeepLevel)));
+                }
+                catch (Exception e)
+                {
+                    problem = $"the fish water patch could not be added ({e.GetType().Name}: {e.Message})";
+                    Detach(out _);
+                    return false;
+                }
+
+                return true;
+            }
+
+            // A patch that cannot be removed stays guarding nothing.
+            public static bool Detach(out string failure)
+            {
+                failure = null;
+                Guarded.Clear();
+                if (_harmony == null) return true;
+
+                try
+                {
+                    Unpatch(_harmony);
+                }
+                catch (Exception e)
+                {
+                    failure = $"{e.GetType().Name}: {e.Message}";
+                    return false;
+                }
+
+                _harmony = null;
+                return true;
+            }
+
+            // Apart from Detach, so the call is only compiled where a patch was made.
+            private static void Unpatch(Harmony harmony)
+            {
+                harmony.UnpatchSelf();
+            }
+
+            private static bool KeepLevel(Fish __instance)
+            {
+                return !Guarded.Contains(__instance);
+            }
+        }
 
         // Why the test fish are no longer one in water and one out of it, or null while they are.
         // A fish already taken is not read. A water volume whose trigger holds a fish writes the
-        // real water level into it on every update (WaterVolume.UpdateFloaters), so near water the
-        // level the check wrote does not hold.
+        // real water level into it on every update (WaterVolume.UpdateFloaters), so without the
+        // water patch the level the check wrote does not hold near water.
         private static string FishFixtureProblem(ItemDrop swimming, float level, ItemDrop landed)
         {
             if (!FeaturesSmokeCommand.IsConsumed(swimming))
