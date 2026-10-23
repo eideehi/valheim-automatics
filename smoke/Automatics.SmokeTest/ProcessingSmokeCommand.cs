@@ -88,6 +88,11 @@ namespace Automatics.SmokeTest
         // Automatic Pickup's reach whatever the user's range.
         private const float PickupRangeForRun = 1f;
 
+        // container_search_range_by_* of every test station, written for the run: past the test
+        // chest, StationOffset away, so Processing finds it whatever the user's range, and short
+        // enough that little else is in reach.
+        private const int ContainerRangeForRun = 4;
+
         // The default of material_count_of_suppress_processing and of
         // fuel_count_of_suppress_processing. The checks seed above these counts, so a higher one
         // is lowered to it for the run, and what they seed fits into the test chest.
@@ -628,10 +633,14 @@ namespace Automatics.SmokeTest
             // around them. When something that is not the check's own is within reach, the player
             // is first moved to clear ground where nothing is (SmokeSetup.Relocate, which keeps
             // their facing) and the plan is made again from there; RunBench moves them back when
-            // the run ends. _ready says the run can place its objects.
+            // the run ends. _ready says the run can place its objects. Each station's container
+            // search range is set for the run first, since the plan's conflicts are measured by it.
             protected IEnumerator Lay(Player player)
             {
                 _ready = false;
+                foreach (var station in Active)
+                    if (!Set(PieceSetting<int>("_containerSearchRange", station.ObjectName), ContainerRangeForRun))
+                        yield break;
                 if (!PlanLayout(player, out _chestPosition, out _distance)) yield break;
 
                 string relocation = null;

@@ -82,6 +82,16 @@ namespace Automatics.SmokeTest
         private const int StorageRangeForRun = 2;
         private const int ContainerRangeForRun = 4;
 
+        // distance_for_automatic_opening for the open check, written for the run: its default,
+        // past the door, 2 m to the player's left.
+        private const float OpeningDistanceForRun = 2.5f;
+
+        // The smelter's fuel_count_of_suppress_processing and the charging piece's
+        // number_of_items_to_stop_charge, written for the run: the checks seed a few above these,
+        // and a large one would not fit into the test chest. A reserve of 1 also leaves an
+        // accepted kind at its reserve in the charging check.
+        private const int ReserveForRun = 1;
+
         // How far from the player a container that is not the run's own is in reach of a check:
         // a station stands up to 3.5 m ahead or behind and 3.5 m aside (about 5 m), plus its
         // container range for the run, plus a metre. The storage range is well inside it.
@@ -790,10 +800,13 @@ namespace Automatics.SmokeTest
             if (player == null) return CheckResult.Skip("Player.m_localPlayer is null");
 
             if (!DoorRunning()) return NotRunning("automatic_door", _doorModule);
-            if (global::Automatics.AutomaticDoor.Config.DistanceForAutomaticOpening <= 0f)
-                return CheckResult.Skip("distance_for_automatic_opening <= 0");
-            var allowed = AllowWoodDoor();
+            var allowed = Set(SmokeSetup.Field<float>(typeof(global::Automatics.AutomaticDoor.Config),
+                              "_distanceForAutomaticOpening"), OpeningDistanceForRun) ??
+                          AllowWoodDoor();
             if (allowed != null) return allowed;
+            var opening = global::Automatics.AutomaticDoor.Config.DistanceForAutomaticOpening;
+            if (opening < 2f)
+                return CheckResult.Skip($"distance_for_automatic_opening is {opening:0.#} m, short of the door 2 m away");
             if (!global::Automatics.AutomaticDoor.Config.AllowAutomaticDoor.Contains("WoodDoor"))
                 return CheckResult.Skip("WoodDoor not in allow_automatic_door");
 
@@ -1168,7 +1181,9 @@ namespace Automatics.SmokeTest
             // through untouched while the module is not running.
             if (!ProcessingRunning()) return NotRunning("automatic_processing", _processingModule);
             var setUp = SetUpProcessing(Smelter, Process.Refuel) ??
-                        TurnOff("_refuelOnlyWhenMaterialsSupplied", Smelter);
+                        TurnOff("_refuelOnlyWhenMaterialsSupplied", Smelter) ??
+                        Set(ProcessingSmokeCommand.PieceSetting<int>("_fuelCountOfSuppressProcessing", Smelter),
+                            ReserveForRun);
             if (setUp != null) return setUp;
             if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(Smelter, Process.Refuel))
                 return CheckResult.Skip("Refuel not allowed for smelter in config");
@@ -1517,11 +1532,9 @@ namespace Automatics.SmokeTest
                 return CheckResult.Skip("no piece that charges with three kinds of ammunition was found");
             var pieceName = prefab.GetComponent<Turret>().m_name;
 
-            // A reserve of 0 leaves no ammunition at its reserve, so it is raised to 1 for the run.
-            var reserveSetting =
-                ProcessingSmokeCommand.PieceSetting<int>("_numberOfItemsToStopCharge", pieceName);
             var setUp = SetUpProcessing(pieceName, Process.Charge) ??
-                        (reserveSetting == null || reserveSetting.Value >= 1 ? null : Set(reserveSetting, 1));
+                        Set(ProcessingSmokeCommand.PieceSetting<int>("_numberOfItemsToStopCharge", pieceName),
+                            ReserveForRun);
             if (setUp != null) return setUp;
             if (!global::Automatics.AutomaticProcessing.Logics.IsAllowProcessing(pieceName, Process.Charge))
                 return CheckResult.Skip("Charge not allowed for the piece in config");

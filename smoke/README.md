@@ -199,13 +199,16 @@ The command sets up what its checks need and puts it back when the run ends:
   do not already hold the value it needs: for the storage check
   `storage_search_range` 2 and the Material type and the wood chest in
   `allowed_item_types` and `allow_container`; for the door checks `WoodDoor` in
-  `allow_automatic_door`; for the processing checks the process under test in
-  the piece's `allow_processing_by_*`, the wood chest in Processing's
-  `allow_container` and the piece's `container_search_range_by_*` at 4 (so only
-  the check's chest, 1.5 m away, is in reach), and besides that for the smelter
-  `*_refuel_only_when_materials_supplied` and (for the first container check)
-  `*_store_only_if_product_exists` off, and for the charging piece a
-  `*_number_of_items_to_stop_charge` of 0 raised to 1.
+  `allow_automatic_door`, and for the open check `distance_for_automatic_opening`
+  2.5 (its default, past the door 2 m away); for the processing checks the
+  process under test in the piece's `allow_processing_by_*`, the wood chest in
+  Processing's `allow_container` and the piece's `container_search_range_by_*`
+  at 4 (so only the check's chest, 1.5 m away, is in reach), and besides that for
+  the smelter `*_fuel_count_of_suppress_processing` 1 (the refuel check seeds 4
+  above it) and `*_refuel_only_when_materials_supplied` and (for the first
+  container check) `*_store_only_if_product_exists` off, and for the charging
+  piece `*_number_of_items_to_stop_charge` 1 (its seeds are the reserve + 2, the
+  reserve and the reserve + 2).
 - The storage check puts every item outside the hotbar, and every stack of
   Wood, aside for the check, and the pickup check puts aside what it takes to
   free a slot and the weight of one Wood; both put them back when they end (see
@@ -235,7 +238,9 @@ name it.
   The test Wood is then removed, but never so much that your own count of that
   Wood drops below what you had before.
 - `world_door_open_sets_zdo_state` — `AutomaticDoor.TryOpenNearby` flips the
-  spawned door's ZDO `state` to non-zero.
+  spawned door's ZDO `state` to non-zero. It SKIPs when
+  `distance_for_automatic_opening` could not be set for the run and is short of
+  the door.
 - `world_door_interior_left_alone` — a door in a dungeon is never closed. It
   spawns two wood doors, one on your left beyond the reach in which a player holds
   a door open and one 2 m to your left but 5000 m up, where the game puts dungeon
@@ -289,9 +294,9 @@ name it.
   (reserve + 2), an accepted kind at its reserve, and another accepted kind at
   reserve + 2; one `TurretProcess.Charge` call must leave the piece holding one
   of the last kind, and the chest with the refused kind and the kind at its
-  reserve untouched. It SKIPs when no such piece exists, or when the reserve or
-  the allowed processes could not be set for the run. The log names none of the
-  items.
+  reserve untouched, with the reserve at 1 for the run. It SKIPs when no such
+  piece exists, or when the reserve or the allowed processes could not be set
+  for the run. The log names none of the items.
 
 Your own containers are kept out of reach. The storage check SKIPs when any
 other container is within `storage_search_range` (2 m for the run), and the
@@ -830,8 +835,9 @@ and puts it back when the run ends:
   stand 4 m ahead of you without Automatic Pickup reaching what a station drops.
 - The settings a check depends on are set for the stations it uses: the wood
   chest is added to `allow_container`, the process under test to the station's
-  `allow_processing_by_*`, and the counts the check seeds above
-  (`material_count_of_suppress_processing`,
+  `allow_processing_by_*`, the station's `container_search_range_by_*` is set to
+  4 (past the chest, 2.5 m away, and short enough that little else is in reach),
+  and the counts the check seeds above (`material_count_of_suppress_processing`,
   `fuel_count_of_suppress_processing`) are lowered to 1 when they are higher.
   The subcommands below name what else they set.
 - When a container or processing station that isn't the check's own is within
@@ -937,7 +943,7 @@ depend on the game's conversions and your language):
 [Automatics Smoke] PASS processing_rpc_smelter_add_ore: Copper ore reached the smelter at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + smelter 1 + products 0 = 4 put in)
 [Automatics Smoke] PASS processing_rpc_cooking_station_add_item: Bread dough reached the stone oven at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + stone oven 1 + products 0 = 4 put in)
 [Automatics Smoke] PASS processing_rpc_fermenter_add_item: Mead base: Minor healing reached the fermenter at frame 0 (the frame of the call); the ledger held on every frame from 0 to 30 (at frame 30: chest 3 + fermenter 1 + products 0 = 4 put in)
-[Automatics Smoke] PASS processing_settings_restored: automatic_processing/module was put back from Enabled to Disabled; automatic_pickup/automatic_pickup_range was put back from 1 to 4
+[Automatics Smoke] PASS processing_settings_restored: automatic_processing/module was put back from Enabled to Disabled; automatic_pickup/automatic_pickup_range was put back from 1 to 4; automatic_processing/container_search_range_by_piece_smelter was put back from 4 to 8; automatic_processing/container_search_range_by_piece_oven was put back from 4 to 8; automatic_processing/container_search_range_by_piece_fermenter was put back from 4 to 8
 [Automatics Smoke] Summary: total=4 passed=4 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
@@ -1079,7 +1085,7 @@ A passing run looks like this:
 [Automatics Smoke] PASS processing_toggle_on_quickrefuel_catchup_no_per_unit_rpc: 3 QuickRefuel calls in one frame moved 3 Coal from the test chest into the smelter's fuel; the fuel RPC was invoked 0 time(s) and the fuel-added effect played 1 time(s); the game's own RPC, invoked once as a control, ran the handler 1 time(s) and played the effect 1 time(s)
 [Automatics Smoke] PASS processing_toggle_restored_initial_state: automatic_processing/module is already back at Enabled
 [Automatics Smoke] PASS processing_toggle_no_errors_logged: no error or exception was logged while the check ran (the observer saw its own probe once)
-[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range is back at 4
+[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range is back at 4; automatic_processing/container_search_range_by_piece_smelter is back at 8
 [Automatics Smoke] Summary: total=10 passed=10 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
@@ -1187,7 +1193,7 @@ and its bonus).
 [Automatics Smoke] PASS processing_skill_done_slot_stored_on_later_pass: once the chest had room, the oven's update stored the finished Bread (2 with the bonus), emptied its slot and raised the Cooking skill once by 0.6; a second update stored nothing more and raised nothing; the burnt slots were left as they were
 [Automatics Smoke] PASS processing_skill_done_slot_stored_without_fuel: with no fuel in the oven, one update stored the finished Bread (2 with the bonus), emptied its slot with one raise of the Cooking skill by 0.6, and left the burnt slots as they were
 [Automatics Smoke] PASS processing_skill_state_restored: the Cooking skill is back at level 12 with progress 3.5, the bonus chance at 0.25, and the Player.RaiseSkill prefix is removed
-[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4
+[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4; automatic_processing/container_search_range_by_piece_oven was put back from 4 to 8
 [Automatics Smoke] Summary: total=10 passed=10 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
@@ -1251,7 +1257,7 @@ receive its own probe.
 [Automatics Smoke] automatics_smoke_processing store: the test chest is at (102.3, 31.0, -48.7), 4.0 m ahead of you, with the test stations 2.5 m from it
 [Automatics Smoke] PASS processing_store_full_chest_untouched: with the chest full of Copper, Store returned false and the chest got no add, no save and no warning
 [Automatics Smoke] PASS processing_store_stores_what_fits: with room for one Copper, Store put one of 3 into the chest with one add and no warning, and dropped the other 2 at the smelter, which the check removed
-[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4
+[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4; automatic_processing/container_search_range_by_piece_smelter was put back from 4 to 8
 [Automatics Smoke] Summary: total=3 passed=3 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
@@ -1337,7 +1343,7 @@ it needs.
 [Automatics Smoke] PASS processing_collect_wisplure_yield: at a resource rate of 3, picking a lured wisp by hand yields 3 Wisp, and Store put 3 into the chest
 [Automatics Smoke] PASS processing_collect_wisplure_whole_unit: with room for 2 Wisp in the chest, Store put none of a wisp's 3 in and returned false, so the fountain lures the wisp as usual
 [Automatics Smoke] PASS processing_collect_rate_restored: the world's resource rate is back at 1
-[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4
+[Automatics Smoke] PASS processing_settings_restored: automatic_pickup/automatic_pickup_range was put back from 1 to 4; automatic_processing/container_search_range_by_piece_beehive was put back from 4 to 8; automatic_processing/container_search_range_by_piece_sapcollector was put back from 4 to 8; …
 [Automatics Smoke] Summary: total=10 passed=10 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[]
 ```
 
