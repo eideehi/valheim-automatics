@@ -103,7 +103,9 @@ far.
 ### Safety of the console commands
 
 The console commands below run in the world you load, so they are written to
-leave your save and your settings alone. The rule they follow is asymmetric: a
+hand your save and your settings back as they found them: a setting, a module
+or the player's position or inventory changed for a run is changed back when
+the run ends. The rule they follow is asymmetric: a
 test item left behind, or a setting left as you last set it, is harmless;
 removing one of your items or overwriting one of your settings is not. Wherever
 the commands cannot prove that something is their own, they leave it.
@@ -159,7 +161,10 @@ obligation before the earlier one.
   short; the return is a teleport too, retried on its own until the player has
   arrived or two attempts have failed (then a warning says where they are), so
   it can end a few seconds after the Summary line, and a command started
-  meanwhile is refused once. A check that teleports elsewhere (a location, say)
+  meanwhile is refused once. A command or section may also return the player
+  itself before its Summary line; `automatics_smoke_features` returns them after
+  every section, one that stopped on an exception included, before the next one
+  starts. A check that teleports elsewhere (a location, say)
   may turn god mode and ghost mode on for the trip, and both are turned off
   again afterwards.
 - A check that needs free inventory slots, free carry weight or none of some
@@ -1373,18 +1378,21 @@ one feature against objects it spawns next to the player. The run ends with one
 `[Automatics Smoke] Summary: ...` line over every section it ran. A section that
 has no checks yet logs one `SKIP <section>_section: not implemented yet`, and an
 exception inside a section is a `FAIL <section>_section` line, after which the
-next section still runs.
+next section still runs. A section that moved you is followed by your return to
+the spot the command started from, also when it stopped on an exception, so
+every section starts from there.
 
-The command never turns a module on, with one exception: `supply` turns
-`automatic_supply / module` on for its own section when it is off, because the
-module is off by default. Everywhere else a check whose module is off SKIPs and
-says so. A section may change a setting its checks need for the length of the run,
-under the rules in *Safety of the console commands* above: the change is
-recorded before it is made and refused when the record cannot be written, and
-the setting is put back when the section ends (or at the plugin's hand-back
-triggers), unless you changed it meanwhile, in which case your value is kept. A
-check whose settings still keep it from showing anything SKIPs and names the
-setting to change.
+Sections set up what their checks need instead of asking you to, with the
+shared helpers and under the rules in *Safety of the console commands* above.
+Most turn the module they test on for the run when it is off, and set the
+settings their checks depend on; some also move you to clear ground or put
+inventory items aside. A setting change is recorded before it is made and
+refused when the record cannot be written, and every change is undone when the
+section ends (or at the plugin's hand-back triggers); a setting you changed
+meanwhile keeps your value. A section that changed a setting reports putting it
+back in a check of its own. When a setup step fails, the checks that need it
+SKIP and name what failed. What each section changes, and what it still leaves
+to you, is given in its own rows and the paragraphs that follow them.
 Test drops are marked non-persistent and are recorded with the session, so a run
 that is cut short still removes them. Items a check picked up are removed from
 your inventory only when the count of that item grew by exactly what the check
