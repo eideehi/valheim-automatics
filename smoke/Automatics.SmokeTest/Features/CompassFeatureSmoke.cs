@@ -24,10 +24,12 @@ namespace Automatics.SmokeTest
     // pin between a change and its check.
     //
     // The test pins are unsaved, so no map save keeps them, and they are the only pins the
-    // section removes. Your navigation target is cleared for the section and set again at its
-    // end. The camera, the map mode, the HUD, the minimap's icon filter, the event bar, the test
-    // creature with its boss flag and bar, and the settings it changes are put back when the
-    // section ends, and by the session hand-back when the run is cut short.
+    // section removes. Automatic Mapping is turned on for the section when it is off, and a pin
+    // search that applies to the minimap is cleared. Your navigation target is cleared for the
+    // section and set again at its end. The camera, the map mode, the HUD, the minimap's icon
+    // filter, the pin search, the event bar, the test creature with its boss flag and bar, and
+    // the settings it changes are put back when the section ends, and by the session hand-back
+    // when the run is cut short.
     internal static class CompassFeatureSmoke
     {
         // The range the section sets for its pins, and how far a placed x may be off, in canvas
@@ -71,11 +73,6 @@ namespace Automatics.SmokeTest
                 run.Skip("compass_section", "requires a loaded world with the local player, minimap, HUD and camera");
                 yield break;
             }
-            if (!MappingModule.Running)
-            {
-                run.Skip("compass_section", "Automatic Mapping is not running; enable the module first");
-                yield break;
-            }
             if (Game.m_noMap)
             {
                 run.Skip("compass_section", "the world has no map, so the compass is never shown");
@@ -84,12 +81,6 @@ namespace Automatics.SmokeTest
             if (!Navigation.CanShowHud(player) || map.m_mode != Minimap.MapMode.Small)
             {
                 run.Skip("compass_section", "the game must be unpaused, the HUD shown and the large map closed");
-                yield break;
-            }
-            if (MapFilter.SearchActive)
-            {
-                run.Skip("compass_section",
-                    "a pin search applies to the minimap; clear it or turn off Apply to minimap first");
                 yield break;
             }
             if (RefreshAtField == null || VisibleIconTypesField == null || SharedFadeField == null ||
@@ -103,6 +94,26 @@ namespace Automatics.SmokeTest
 
             var camera = GameCamera.instance.transform;
             var fixture = new Fixture(run, player, map, camera);
+            var module = new SmokeSetup.SetupResult();
+            var setup = SmokeSetup.EnableModule(run.RunId, fixture.Settings, MappingConfig.ModuleEntry,
+                () => MappingModule.Running, module);
+            while (setup.MoveNext()) yield return setup.Current;
+            if (!run.IsCurrent) yield break;
+            if (!module.Ok)
+            {
+                run.Skip("compass_section", "Automatic Mapping is not running: " + module.Reason);
+                SmokeSetup.ReportSettings(run, "compass_settings_restored");
+                yield break;
+            }
+            if (module.Changed) run.Pass("compass_module_enabled", "Automatic Mapping " + module.Reason);
+            // The wait for the module may have let the game pause, the HUD hide or the map open.
+            if (!Navigation.CanShowHud(player) || map.m_mode != Minimap.MapMode.Small)
+            {
+                run.Skip("compass_section", "the game must be unpaused, the HUD shown and the large map closed");
+                SmokeSetup.ReportSettings(run, "compass_settings_restored");
+                yield break;
+            }
+
             var rotation = camera.rotation;
             var userHidden = hud.m_userHidden;
             var mode = map.m_mode;
@@ -113,6 +124,9 @@ namespace Automatics.SmokeTest
             var originalTarget = Navigation.CaptureTarget();
             var navigationRestored = false;
             List<Minimap.PinData> pinsBefore = null;
+            // A pin search applies to the minimap while it is pinned; its text is cleared for the
+            // section and set again at its end.
+            var search = MapFilter.SearchActive ? MapFilter.SearchText : null;
             Func<string, bool> handBack = _ =>
             {
                 if (camera) camera.rotation = rotation;
@@ -120,6 +134,8 @@ namespace Automatics.SmokeTest
                 fixture.RestoreBars();
                 if (!map || Minimap.instance != map) return true;
                 foreach (var pin in fixture.Created) map.RemovePin(pin);
+                if (search != null && MapFilter.SearchInput) MapFilter.SetSearchText(search);
+                search = null;
                 if (map.m_mode != mode) map.SetMapMode(mode);
                 if (!navigationRestored)
                 {
@@ -136,6 +152,18 @@ namespace Automatics.SmokeTest
             SmokeSession.TrackHandBack(handBack);
             try
             {
+                if (search != null)
+                {
+                    if (MapFilter.SearchInput) MapFilter.SetSearchText("");
+                    if (MapFilter.SearchActive)
+                    {
+                        run.Skip("compass_section",
+                            "a pin search applies to the minimap and could not be cleared for the section; clear it or turn off Apply to minimap first");
+                        yield break;
+                    }
+                    run.Pass("compass_search_cleared", "the pin search applied to the minimap is cleared for the section and set again at its end");
+                }
+
                 // Cleared before the pins are counted, so that a temporary marker of yours, which
                 // comes back as a new pin, is not counted as one the section lost.
                 Navigation.ClearTarget();
@@ -437,10 +465,14 @@ namespace Automatics.SmokeTest
         // unexplored spot stay.
         private static void CheckUnexplored(Fixture fixture)
         {
-            if (!MappingConfig.EnableAutomaticMapping)
+            // Turned on for the rest of the section, which runs in this frame, so no scan adds a
+            // pin before the section's settings are put back.
+            var automatic = SmokeSetup.Field<bool>(typeof(MappingConfig), "_enableAutomaticMapping");
+            if (!MappingConfig.EnableAutomaticMapping &&
+                (automatic == null || !SmokeSetup.Write(fixture.Run, fixture.Settings, automatic, true)))
             {
                 fixture.Run.Skip("compass_unexplored_filter",
-                    "enable_automatic_mapping is off, so Hide Pins Outside Explored Area does not apply");
+                    "enable_automatic_mapping is off and could not be turned on for the section, so Hide Pins Outside Explored Area does not apply");
                 return;
             }
 

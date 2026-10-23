@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Automatics.AutomaticMapping;
+using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 using MappingConfig = Automatics.AutomaticMapping.Config;
@@ -30,9 +31,11 @@ namespace Automatics.SmokeTest
     // and starts navigation on the pin at 60 m again, so the later checks have one.
     //
     // The test pin is unsaved, so no map save can keep it, and it is the only pin the section
-    // removes. navigation_arrival_distance is set to its default for the section. The navigation
-    // target, the map mode, navigation_arrival_distance and enable_navigation_guide are put back
-    // when the section ends, and by the session hand-back when the run is cut short.
+    // removes. navigation_arrival_distance is set to its default for the section. Automatic
+    // Mapping and enable_navigation_guide are turned on for the section when they are off, and
+    // an unbound navigation_start_key is bound to its default. The navigation target, the map
+    // mode and these settings are put back when the section ends, and by the session hand-back
+    // when the run is cut short.
     internal static class GuideFeatureSmoke
     {
         private const float TargetDistance = 60f;
@@ -185,16 +188,6 @@ namespace Automatics.SmokeTest
                 run.Skip("guide_section", "requires a loaded single-player world, minimap, HUD and camera");
                 yield break;
             }
-            if (!MappingModule.Running)
-            {
-                run.Skip("guide_section", "Automatic Mapping is not running; enable the module first");
-                yield break;
-            }
-            if (!MappingConfig.EnableNavigationGuide)
-            {
-                run.Skip("guide_section", "enable_navigation_guide is off; turn it on first");
-                yield break;
-            }
             if (player.InInterior())
             {
                 run.Skip("guide_section", "the swarm flies at your height indoors; run it outdoors");
@@ -211,6 +204,43 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
+            // The module, the option and the click key, set up for the section.
+            var state = new SectionState();
+            var held = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
+            var module = new SmokeSetup.SetupResult();
+            var setup = SmokeSetup.EnableModule(run.RunId, held, MappingConfig.ModuleEntry,
+                () => MappingModule.Running, module);
+            while (setup.MoveNext()) yield return setup.Current;
+            if (!run.IsCurrent) yield break;
+            if (!module.Ok)
+            {
+                run.Skip("guide_section", "Automatic Mapping is not running: " + module.Reason);
+                ReportSettingsRestored(run, state);
+                yield break;
+            }
+            var changed = new List<string>();
+            if (module.Changed) changed.Add("Automatic Mapping turned on");
+            if (!MappingConfig.EnableNavigationGuide)
+            {
+                if (!TakeGuideSetting(run, state, out var guideRefusal) ||
+                    !SmokeSession.WriteSetting(run.RunId, state.GuideSetting, true, out guideRefusal))
+                {
+                    run.Skip("guide_section", "enable_navigation_guide is off and could not be turned on for the section: " + guideRefusal);
+                    ReportSettingsRestored(run, state);
+                    yield break;
+                }
+                changed.Add("enable_navigation_guide turned on");
+            }
+            if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
+            {
+                // A refusal is logged; the map click checks then skip with the key unbound.
+                var key = SmokeSetup.Field<KeyboardShortcut>(typeof(MappingConfig), "_navigationStartKey");
+                if (key != null && SmokeSetup.Write(run, held, key, key.DefaultValue))
+                    changed.Add($"navigation_start_key bound to {key.Value}");
+            }
+            if (changed.Count > 0)
+                run.Pass("guide_setup", string.Join("; ", changed) + " for the section, and put back at its end");
+
             var originalTarget = Navigation.CaptureTarget();
             var originalMode = map.m_mode;
             var cameraForward = Vector3.ProjectOnPlane(GameCamera.instance.transform.forward, Vector3.up);
@@ -219,7 +249,6 @@ namespace Automatics.SmokeTest
 
             Minimap.PinData testPin = null;
             var restoredNavigation = false;
-            var state = new SectionState();
             Func<string, bool> handBack = _ =>
             {
                 if (map && map.m_mode != originalMode) map.SetMapMode(originalMode);
@@ -352,7 +381,7 @@ namespace Automatics.SmokeTest
                 {
                     try
                     {
-                        // Put back here when the section ended before the option checks did it.
+                        // Every setting the section took on, put back at its end.
                         if (!state.SettingsReported) ReportSettingsRestored(run, state);
                     }
                     finally
@@ -986,7 +1015,7 @@ namespace Automatics.SmokeTest
             }
             if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
             {
-                run.Skip(name, "navigation_start_key is unbound, so a map click cannot clear navigation");
+                run.Skip(name, "navigation_start_key is unbound and could not be bound for the section, so a map click cannot clear navigation");
                 yield break;
             }
             if (state.Leftover != null)
@@ -1552,7 +1581,9 @@ namespace Automatics.SmokeTest
             }
             finally
             {
-                ReportSettingsRestored(run, state);
+                // On again for the rest of the section, as it was set up; the section's settings
+                // are put back at its end.
+                if (state.GuideSetting != null) SmokeSession.WriteSetting(run.RunId, state.GuideSetting, true, out _);
             }
 
             yield return null;
@@ -1885,7 +1916,7 @@ namespace Automatics.SmokeTest
         {
             if (MappingConfig.NavigationStartKey.MainKey == KeyCode.None)
             {
-                run.Skip("guide_map_click_toggle", "navigation_start_key is unbound");
+                run.Skip("guide_map_click_toggle", "navigation_start_key is unbound and could not be bound for the section");
                 return;
             }
             Navigation.ClearTarget();

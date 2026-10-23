@@ -1710,9 +1710,15 @@ does.
 
 #### `guide`
 
-Run `automatics_smoke_features guide` outdoors in a single-player world with
-Automatic Mapping enabled and `enable_navigation_guide` on (the section SKIPs
-otherwise, and indoors, where the swarm flies at your height). It adds one
+Run `automatics_smoke_features guide` outdoors in a single-player world (the
+section SKIPs indoors, where the swarm flies at your height, and while the game
+is paused). When Automatic Mapping is off it is turned on for the section, and
+the section waits until the module runs; `enable_navigation_guide` is turned on
+when it is off, and an unbound `navigation_start_key` is bound to its default
+(Left Shift). `guide_setup` PASSes and names what was changed; all of it is put
+back before `guide_settings_restored`. Only when a change cannot be made does
+the section SKIP (the module or the option) or the map click checks SKIP (the
+key), naming why. It adds one
 unsaved, unnamed test pin about 60 m behind the camera and starts navigation to
 it through the same call a map click makes, so the start message appears. Stand
 still while it runs: the section moves the test pin, not you, and the game's own
@@ -1739,7 +1745,8 @@ times after a change to the swarm.
 The section runs in this order and starts navigation again where a later check
 needs one:
 
-1. `navigation_arrival_distance` is set to its default, 5 m.
+1. The setup above, then `navigation_arrival_distance` is set to its default,
+   5 m.
 2. `guide_map_click_toggle`.
 3. Navigation starts on the test pin 60 m away: `guide_material`,
    `guide_radiates_from_body`, then `guide_swarm_alive`,
@@ -1767,23 +1774,25 @@ needs one:
 15. `guide_distance_format`.
 16. With `enable_navigation_guide` off: `guide_option_off_destroys` and
     `navigation_clears_with_swarm_off`; navigation is started on the pin at 60 m
-    again before both settings go back for `guide_settings_restored` and
-    `guide_option_on_recreates`.
-17. `guide_destroyed_on_clear`, then `guide_navigation_restored`.
+    again before the option is turned back on for `guide_option_on_recreates`.
+17. `guide_destroyed_on_clear`, then `guide_settings_restored` and
+    `guide_navigation_restored`.
 
 When a scattering swarm is still in the scene after any of these waits, the
 checks that count guide objects (`guide_scatters_after_map_clear`,
 `guide_scatters_on_manual_clear`, `guide_option_off_destroys` and
-`guide_destroyed_on_clear`) SKIP and name the object that was left. The section
-changes two settings: `navigation_arrival_distance` is set to 5 m at its start
-(and to 10 m and 0 within `navigation_arrival_distance_setting`), and
-`enable_navigation_guide` is turned off within `guide_scatters_after_map_clear`
-and for the option-off checks. Both are put back before
+`guide_destroyed_on_clear`) SKIP and name the object that was left. Besides the
+setup above, the section changes two settings: `navigation_arrival_distance` is
+set to 5 m at its start (and to 10 m and 0 within
+`navigation_arrival_distance_setting`), and `enable_navigation_guide` is turned
+off within `guide_scatters_after_map_clear` and for the option-off checks, and
+on again after each. Every setting the section changed is put back before
 `guide_settings_restored`, or when the section ends early.
 
 | Check | Asserts |
 |---|---|
-| `guide_map_click_toggle` | With the large map open, clicking the test pin with `navigation_start_key` held starts navigation to it, and clicking it again clears navigation. The note gives what the simulated click saw (SKIP when `navigation_start_key` is unbound) |
+| `guide_setup` | Only when the setup changed something: PASS naming what was turned on or bound for the section |
+| `guide_map_click_toggle` | With the large map open, clicking the test pin with `navigation_start_key` held starts navigation to it, and clicking it again clears navigation. The note gives what the simulated click saw (SKIP when `navigation_start_key` is unbound and could not be bound for the section) |
 | `guide_material` | Both particle systems, the stream and the column, draw with a resolved particle material whose shader the GPU supports and which blends additively: a fixed additive shader, or blend factors that add onto the background. The note names the source (a built-in additive shader, or a copy of a campfire or torch effect material) and each renderer's shader and blend factors. The mod also logs the source once a session |
 | `guide_radiates_from_body` | On the section's first swarm, the burst lights born in its first 0.1 s start within 0.3 m of your body point (`BodyHeight` above your feet). At age `RadiateTime` their median 3D distance from the body point is at least 0.8 m; they lie in at least 3 of the 4 horizontal quadrants around you taken against the direction to the target; at least 10 % of them are behind you (direction to the light · direction to the target below -0.3); at least 15 % are more than 0.4 m above the body point and at least 15 % more than 0.2 m below it; and none has gone below the ground under you by then. While younger than `RadiateTime` + `GatherTime` (currently 0.9 s), none is lower than the terrain under it plus `BurstFloor` - 0.05 m (currently 0.15 m). Once they are travel lights, each one's distance along the line to the target grows over the next 0.5 s. A cloud that stays at your body, spreads only forward or spreads in a flat ring fails it |
 | `guide_swarm_alive` | The guide object is a shown root object with exactly two particle systems, two point lights in `navigation_guide_color` and no `ZNetView`; the stream and the column each hold at least 30 lights, at least half of each with alpha above 0.1 in a colour between `navigation_guide_color` and its mix with `MaxWhiteMix` white (currently 35 %); and the HUD label is hidden because the target is off-screen |
@@ -1796,7 +1805,7 @@ and for the option-off checks. Both are put back before
 | `guide_burst_above_slope` | The steepest point of the loaded terrain within 60 m, on a 2 m grid, where the terrain rises at least 1.5 m within 2 m along a grid axis, is used as the place of your feet. The step the stream makes for a bursting light each frame (its place, the move toward it and the floor under both) is called there for 300 seeds × 10 ages within `RadiateTime` + `GatherTime`, toward a place in the stream `HoverHeight` over the terrain 2 m uphill, with each light one frame at 60 fps from the body point (`FollowRate` read from the mod). No place and no light is lower than `BurstFloor` - 0.05 m (currently 0.15 m) above the terrain under it, measured by the check itself. The note gives the slope found (SKIP when no such point exists; the burst on a slope is then judged by eye) |
 | `guide_trail_ends_at_target` | With the pin moved to 12 m and 1.5 s to settle, over the next 2 s no stream light is farther along the line than the target plus `ColumnRadius` + 0.5 m (currently 1.3 m), and some come within 2 m horizontally of the column's centre. The pin is put back at 60 m. A stream that runs on past the target fails it |
 | `guide_hidden_on_large_map` | With the large map open the swarm is hidden: its particle renderers and point lights off and its particle systems paused. Once the map closes it is shown again; the column holds at least 30 lights and none of those it had before the map opened; and over the next 1 s no burst light appears, while the lights born in the first 0.5 s after the close are, at every look, no more than 0.3 m behind you along the line. The map mode is put back (SKIP in a world without a map) |
-| `guide_scatters_after_map_clear` | Before each case the section waits up to 3 s for the swarm to be ready: shown, its burst over (no burst light younger than `RadiateTime` + `GatherTime`), and at least 30 stream and 30 column lights with alpha above 0.1. With the swarm ready, the stream's line and the column's axis are taken as in `guide_scatters_on_manual_clear`, the large map is opened and, once the swarm is hidden, the test pin is clicked with `navigation_start_key` held and the map left open. The click holds the swarm: for at least 0.5 s navigation stays cleared, the held swarm is the only guide object and stays hidden, and its lights keep the seeds and positions they had at the click (within 0.001 m; at least 30 stream lights). Within 2 frames of the map closing it is shown and scatters as in `guide_scatters_on_manual_clear`, and within `ScatterTime` + 0.5 s no guide object is left. Two more cases, each with a held swarm: a navigation started on the map before it closes drops the held swarm, and over 0.5 s after closing no scattering object appears, a new swarm is shown with burst lights, and it is then the only guide object; turning `enable_navigation_guide` off drops it within 2 frames with the map open, and over 0.5 s after closing no guide object appears. The option is turned back on. After each case, whatever happened, the section waits up to `ScatterTime` + 0.5 s for every guide object but the live swarm to go before it starts navigation again; one left is named for the later checks that count guide objects. The map's view and mode are put back after each click; a large map you had open is closed to the small map until the section ends (SKIP in a world without a map, when `navigation_start_key` is unbound, when the option could not be turned off, or, naming the case, when the swarm was not ready in time) |
+| `guide_scatters_after_map_clear` | Before each case the section waits up to 3 s for the swarm to be ready: shown, its burst over (no burst light younger than `RadiateTime` + `GatherTime`), and at least 30 stream and 30 column lights with alpha above 0.1. With the swarm ready, the stream's line and the column's axis are taken as in `guide_scatters_on_manual_clear`, the large map is opened and, once the swarm is hidden, the test pin is clicked with `navigation_start_key` held and the map left open. The click holds the swarm: for at least 0.5 s navigation stays cleared, the held swarm is the only guide object and stays hidden, and its lights keep the seeds and positions they had at the click (within 0.001 m; at least 30 stream lights). Within 2 frames of the map closing it is shown and scatters as in `guide_scatters_on_manual_clear`, and within `ScatterTime` + 0.5 s no guide object is left. Two more cases, each with a held swarm: a navigation started on the map before it closes drops the held swarm, and over 0.5 s after closing no scattering object appears, a new swarm is shown with burst lights, and it is then the only guide object; turning `enable_navigation_guide` off drops it within 2 frames with the map open, and over 0.5 s after closing no guide object appears. The option is turned back on. After each case, whatever happened, the section waits up to `ScatterTime` + 0.5 s for every guide object but the live swarm to go before it starts navigation again; one left is named for the later checks that count guide objects. The map's view and mode are put back after each click; a large map you had open is closed to the small map until the section ends (SKIP in a world without a map, when `navigation_start_key` is unbound and could not be bound for the section, when the option could not be turned off, or, naming the case, when the swarm was not ready in time) |
 | `guide_scatters_on_manual_clear` | With the swarm ready as in `guide_scatters_after_map_clear` and the pin 60 m away, the check takes the stream's line itself - from you, horizontally toward the target, as far as the target or `TrailLength`, whichever is nearer - and the column's axis at the target. Then the routine both manual clears use (map click and looked-at-object key) clears navigation with the "Navigation cleared" message, and exactly one guide object is left, the swarm that was shown, shown and scattering. Following the stream and the column separately for 0.8 s, from the lights each held with alpha above 0.1 at the first look after the scatter began: no light with a new seed appears, every one of those lights is still there, at least 75 % of the stream's lights moved outward from their nearest point on the line the check took and at least 75 % of the column's outward from the axis it took (each light's outward direction taken at the first look), each system's mean outward move is at least the bound of `guide_scatters_on_arrival`, and their mean alpha falls below half its first value. The line the scatter was handed ends within 0.25 m of the ends of the check's line, and its axis lies within 0.25 m of the target, so a line of one point at the column fails. Within `ScatterTime` + 0.5 s no guide object is left, and the section waits up to that long for every guide object but the live swarm to go before it starts navigation again. A stream flying off from the column's axis instead moves only about half its lights outward (SKIP when the swarm was not ready in time) |
 | `navigation_clears_on_arrival` | The test pin is moved in front of you and raised 3 m above your own height. At `navigation_arrival_distance` + 0.5 m (5.5 m at the section's 5 m) horizontally navigation stays on and the swarm is shown; at `navigation_arrival_distance` - 0.5 m (4.5 m, about 5.4 m in 3D, so a 3D measurement would not end it) navigation ends within 2 frames, the HUD label is gone, there is no live swarm, and the test pin is still on the map. The note gives both distances and the height above you |
 | `guide_scatters_on_arrival` | At that arrival exactly one guide object is left, the swarm that was shown. Following the stream and the column separately for 0.8 s, from the lights each held with alpha above 0.1 at the first look after the arrival: no light with a new seed appears, every one of those lights is still there, their mean horizontal distance from the column's axis grows by at least half the outward distance the slowest light covers by then (from `ScatterDelay`, `MinScatterSpeed`, `ScatterDecay` and the smallest outward share of a direction, (1 - `ScatterSpread`) / (1 + `ScatterSpread` + `ScatterLift`); currently about 0.05 m at 0.8 s), and their mean alpha falls below half its first value. Both point lights are dimmer than at the arrival, and within `ScatterTime` + 0.5 s no guide object is left (SKIP when navigation did not end on arrival) |
@@ -1805,9 +1814,9 @@ and for the option-off checks. Both are put back before
 | `guide_distance_format` | With the pin 20 m in front of the camera, the navigation label reads the pin's name followed by the rounded horizontal distance in brackets |
 | `guide_option_off_destroys` | With `enable_navigation_guide` off, no guide object is left in the scene |
 | `navigation_clears_with_swarm_off` | With `enable_navigation_guide` off, the steps of `navigation_clears_on_arrival` still end navigation: it stays on at 5.5 m and ends within 2 frames at 4.5 m |
-| `guide_settings_restored` | `enable_navigation_guide` and `navigation_arrival_distance` are back at your values |
 | `guide_option_on_recreates` | With the option back on, the swarm is shown again for the navigation started at 60 m |
 | `guide_destroyed_on_clear` | A frame after navigation is cleared without a scatter, the way it ends when the map's pins are cleared (`Navigation.ClearTarget`), no guide object is left |
+| `guide_settings_restored` | Every setting the section changed (`navigation_arrival_distance`, `enable_navigation_guide`, and the module toggle and `navigation_start_key` when the setup changed them) is back at your value |
 | `guide_navigation_restored` | The navigation you had before the section is set again, or none is left when you had none (FAIL when your target pin is no longer on the map; navigation is then restored through a temporary marker) |
 
 The section removes only its own test pin and puts back the map mode and your
@@ -1817,17 +1826,22 @@ frame cost remain an in-game judgement outside this section.
 
 #### `compass`
 
-Run `automatics_smoke_features compass` in a world with Automatic Mapping
-running, the HUD shown and the large map closed (the section SKIPs otherwise,
-in a world without a map, and while a pin search applies to the minimap). Stand
-still while it runs. Everything runs in one frame: the section adds unsaved test
+Run `automatics_smoke_features compass` in a world with the game unpaused, the
+HUD shown and the large map closed (the section SKIPs otherwise, and in a world
+without a map). When Automatic Mapping is off it is turned on for the section,
+and the section waits until the module runs (`compass_module_enabled`); it
+SKIPs only when that fails. A pin search that applies to the minimap is cleared
+for the section and set again at its end (`compass_search_cleared`); the
+section SKIPs only when it stays applied. Stand still while it runs. After that
+setup everything runs in one frame: the section adds unsaved test
 pins at known bearings and distances from you, turns the camera to known
 headings and runs the compass update itself, so no scan moves or removes a pin
 in between. For the section it turns `enable_compass`, `enable_compass_labels`
 and `enable_map_enhancements` on, sets `compass_position` to `Top` and
 `compass_pin_range` to 80 m, clears `map_filter_hidden_categories` and turns
 `hide_unexplored_automatic_mapping_pins` off, and it changes them further for
-single checks as described below. It clears your navigation target before it
+single checks as described below; `compass_unexplored_filter` turns
+`enable_automatic_mapping` on when it is off. It clears your navigation target before it
 counts the pins on the map and sets it again at the end; the target checks
 navigate to test pins without the start message. The boss bar check spawns a
 non-persistent boar, marks it as a boss and shows its bar through the enemy
@@ -1836,6 +1850,8 @@ flag and its bar are removed in the same frame.
 
 | Check | Asserts |
 |---|---|
+| `compass_module_enabled` | Reported when the section turned Automatic Mapping on: it started within 600 frames |
+| `compass_search_cleared` | Reported when a pin search applied to the minimap: its text was cleared for the section |
 | `compass_strip_shown` | The strip exists, is shown and sits under the HUD's root object |
 | `compass_letters_facing_north` | Facing north, N is at the centre and E and W at the strip's ends, each within 1 canvas unit, and S is hidden |
 | `compass_letters_follow_turning` | At headings 30 and 225 each letter is where its angle from the heading puts it, or hidden beyond the half view |
@@ -1847,7 +1863,7 @@ flag and its bar are removed in the same frame.
 | `compass_icon_type_toggle` | With its icon type turned off in the minimap's icon filter, a pin is hidden while a pin of another type stays; turned back on, it is shown again |
 | `compass_category_filter` | An automatic pin registered with a live Flora category on explored ground is hidden while `map_filter_hidden_categories` holds `Flora`, and shown again once it is empty |
 | `compass_manual_pin_kept` | A manual pin of the same type stays shown while Flora is hidden, and a manual pin on unexplored ground stays shown with `hide_unexplored_automatic_mapping_pins` on |
-| `compass_unexplored_filter` | An automatic pin 110 to 290 m away on unexplored ground (with the range at 300 m and the camera facing it) is shown until `hide_unexplored_automatic_mapping_pins` is turned on and hidden after, while an automatic pin on explored ground stays (SKIP when `enable_automatic_mapping` is off or everything in that distance is explored) |
+| `compass_unexplored_filter` | An automatic pin 110 to 290 m away on unexplored ground (with the range at 300 m and the camera facing it) is shown until `hide_unexplored_automatic_mapping_pins` is turned on and hidden after, while an automatic pin on explored ground stays (SKIP when `enable_automatic_mapping` could not be turned on or everything in that distance is explored) |
 | `compass_cap_nearest_in_view` | With 24 pins 5 to 28 m behind you and 30 pins 32 to 61 m ahead, the 24 shown are the nearest in view by the map's own rule, and none of the pins behind is among them |
 | `compass_cap_after_turn` | Turned around before the next collection of pins, the 24 shown are again the nearest in view, now the pins behind, and none of the pins ahead |
 | `compass_nearer_on_top` | The shown pins run nearest first, and each marker is drawn over the next |
@@ -1889,7 +1905,8 @@ SKIPs as inconclusive; run it away from crowded pins. So do the label checks
 when a pin of yours lies at least as near the centre as the test pin (or, for
 `compass_label_outside_window`, within 10 degrees of it), and the three bar
 checks while a boss's bar is already shown. The section removes only
-its own test pins, and puts back the camera, the map mode, the HUD, the event
+its own test pins, and puts back the camera, the map mode, the HUD, the pin
+search, the event
 bar's place and visibility, your navigation target and, after it, the
 minimap's icon filter (vanilla turns a hidden icon type back on when a pin of
 that type is added, which a temporary marker set again with your navigation
@@ -1902,18 +1919,29 @@ judgement outside this section.
 
 #### `supply`
 
-Run `automatics_smoke_features supply` in a single-player world, away from your own
-containers, with the inventory closed, outside build mode and not at a crafting
-station, and with at least four free inventory slots. The section:
+Run `automatics_smoke_features supply` in a single-player world with the
+inventory closed, outside build mode and not at a crafting station. The section:
 
 - turns `automatic_supply / module` on when it is off and waits for it to start,
   and sets `supply_range` to 4 m; both are recorded and put back through the
   session, like every setting a section changes;
 - lifts your own no-cost toggle (`nocost`) for the section and turns it back on
   afterwards, because vanilla skips crafting and building costs while it is on;
+- when a container stands within 5 m of you, moves you with a short teleport
+  to the first clear, dry and fairly level spot on rings 15 to 45 m away (see
+  *Safety of the console commands*; `supply_relocated`), and moves you back at the end
+  of the section. It SKIPs when no such spot is found or another usable
+  container is still within 4 m;
+- puts aside every early material you carry and everything the smelter and the
+  cooking station take, then more items until four inventory slots are free,
+  and one more slot than the chosen recipe's materials when the craft checks
+  need it (`supply_items_put_aside`); the same items go back at the end of the
+  section. It SKIPs when four slots cannot be freed;
+- when you know no recipe whose result the made-up recipes can show, teaches
+  you one (`supply_recipe_learned`); your character keeps it;
 - spawns a wooden chest 1.5 m to your right, a workbench, a fireplace, a smelter,
   a cooking station over a fire pit and, for one check, a ward, all
-  non-persistent. It SKIPs when any other usable container is within 4 m.
+  non-persistent.
 
 Every test item is an early material you carry none of, chosen at runtime (a
 workbench recipe and a hammer piece of such materials, the fireplace's fuel, the
@@ -1924,6 +1952,9 @@ them. A check whose station or material cannot be found SKIPs and says why.
 |---|---|
 | `supply_module_enabled` | Reported when the section turned the module on: it started within 600 frames |
 | `supply_no_cost_lifted` | Reported when your no-cost toggle was on and was lifted for the section |
+| `supply_relocated` | Reported when a container stood within 5 m: you were moved to a clear spot |
+| `supply_items_put_aside` | Reported when items had to be put aside; the note names them |
+| `supply_recipe_learned` | Reported when you knew no recipe for the made-up recipes to show and one was learned |
 | `supply_container_panel_hidden` | With the container panel left active as the last chest leaves it, `InventoryGui.Show(null)` hides it in the same frame; `InventoryGui.Hide()` alone leaves it as vanilla does (still active, for the closing fade); the inventory is closed and the panel hidden again afterwards |
 | `supply_containers_eligible` | The test chest is the only usable container within Supply Range |
 | `supply_scoped_count` | With the recipe's materials only in the chest and the workbench as the current station, the real requirement check passes, and every per-quality count it makes is the inventory plus the chest for that quality; the same count outside the check is the inventory alone |
@@ -1940,7 +1971,7 @@ them. A check whose station or material cannot be found SKIPs and says why.
 | `supply_place_failed_refund` | With room, the placement takes every material, vanilla refuses the spot (the placement status is held at Invalid, so vanilla can never place the piece here), and closing the bracket returns everything to the chest |
 | `supply_fireplace_intake` | `Fireplace.Interact` takes one fuel from the chest; none is left in the inventory |
 | `supply_exception_no_refund` | The player inventory's change callback throws once, right after the fuel arrived: `Fireplace.Interact` throws, chest plus inventory is unchanged (the fuel stays in the inventory, not returned), and no action, counting scope or suppression is left open |
-| `supply_smelter_ore_intake` | The smelter's add-ore switch takes one accepted item from the chest (SKIP when you carry an item the smelter takes) |
+| `supply_smelter_ore_intake` | The smelter's add-ore switch takes one accepted item from the chest (SKIP when you still carry an item the smelter takes) |
 | `supply_smelter_fuel_intake` | The smelter's add-fuel switch takes one fuel from the chest |
 | `supply_cooking_intake` | With the test fire lit, the cooking station takes one accepted item from the chest into a free slot (SKIP when the fire does not light the station within 240 frames) |
 | `supply_in_use_chest_untouched` | With the chest marked in use, the fireplace takes nothing from it |
@@ -2220,15 +2251,24 @@ this section.
 
 #### `repair`
 
-Run `automatics_smoke_features repair` in a single-player world with Automatic
-Repair enabled, with `piece_search_range` and `crafting_station_search_range` of at
-least 4, the no-cost cheat off, and two free inventory slots. The section calls the
-module's own entries, `PieceRepair.Repair` for the periodic piece pass and
+Run `automatics_smoke_features repair` in a single-player world, alive and not in
+a teleport (the section SKIPs otherwise). The section calls the module's own
+entries, `PieceRepair.Repair` for the periodic piece pass and
 `ItemRepair.Repair` and `ItemRepair.CraftingStationInteractHook` for the two item
 paths, against non-persistent objects it spawns 1.5 to 2.2 m from you. Every check
 sets up and calls in one frame, so the module's own timers cannot act on the test
 objects in between. The section:
 
+- turns Automatic Repair on when it is off and waits for it to start, and sets
+  `piece_search_range` and `crafting_station_search_range` to 4, through the
+  session like every setting a section changes; it SKIPs only when one of these
+  fails;
+- lifts your own no-cost toggle (`nocost`) for the section and turns it back on
+  afterwards (`repair_no_cost_lifted`), also through the session hand-back when
+  the run is cut short;
+- puts items aside until two inventory slots are free for the test items, and
+  puts the same items back at the end (SKIP when two slots cannot be freed);
+  `repair_setup` names what was set up and put aside;
 - adds an observer patch, removed at the end, that records only while a check has
   it armed: the repair calls on test pieces (and refuses them on any other piece),
   the ward flashes of the test ward (the flash of any other ward is dropped, so no
@@ -2256,6 +2296,8 @@ objects in between. The section:
 
 | Check | Asserts |
 |---|---|
+| `repair_no_cost_lifted` | Reported when your no-cost toggle was on and was lifted for the section |
+| `repair_setup` | The module, the two ranges and the free slots are set up; the note says whether the module was turned on and what was put aside |
 | `repair_piece_damaged_only` | A pass repairs two damaged test pieces. An undamaged stationless piece and an undamaged wood wall cause no repair call, no ward access check and no station lookup (SKIP when the observer sees no access check at the damaged pieces) |
 | `repair_piece_ward_no_flash` | A control check with flashing on is denied and seen by the observer; then a pass flashes the test ward no time, leaves the damaged piece inside the ward alone and repairs the damaged piece outside it (SKIP when the ward grants you access or the control flash is not seen) |
 | `repair_piece_station_lookup_once` | Three damaged wood walls cost one build station lookup, and all are repaired when a build station is in range or the no-workbench rule is on, and none otherwise |
@@ -2268,11 +2310,12 @@ objects in between. The section:
 | `repair_item_unusable_station_excluded` | With both test workbenches made unusable (a fire requirement they do not meet), the periodic pass repairs nothing, raises nothing, and asks each once |
 | `repair_item_interaction_raises_crafting` | The interaction repairs the worn test item at the station, raises the Crafting skill by the wear it had, and asks the station once |
 | `repair_item_interaction_unusable_station_excluded` | At an unusable station the interaction repairs and raises nothing |
-| `repair_settings_restored` | Reported when the section changed a setting: it is back at your value |
+| `repair_settings_restored` | Every setting the section changed (the two ranges, and the module toggle and the interaction setting when it changed them) is back at your value |
 
-The periodic item checks SKIP when a crafting station of yours is within
-`crafting_station_search_range` of you, because the pass would let it repair the
-test items before the test workbenches do; stand farther from it. The exclusion of
+The periodic item checks SKIP when a crafting station of yours is within 4 m of
+you (`crafting_station_search_range` as the section sets it), because the pass
+would let it repair the test items before the test workbenches do; stand farther
+from it. The exclusion of
 station-requiring pieces is only seen where no build station is in range of you:
 when one is, `repair_piece_station_lookup_once` expects the walls to be repaired.
 Repairing a piece sends the module's usual animation trigger, so your character may

@@ -27,12 +27,18 @@ namespace Automatics.SmokeTest
     // Only items the player carries none of are used, so every one of them in the inventory or in
     // the chest is the check's own; the log names none of them. The module is turned on for the
     // section when it is off, Supply Range is set to 4 m so only the test chest is in reach, and
-    // the player's no-cost toggle is lifted; all of it is put back afterwards. The chest is
-    // removed only while it holds nothing but test items; otherwise it is kept and reported.
+    // the player's no-cost toggle is lifted; all of it is put back afterwards. When a container
+    // stands within that range, the player is moved to clear ground first and returned at the
+    // end of the section. The early materials and the station inputs the player carries, and
+    // more items until four slots are free, are put aside for the section and put back
+    // afterwards; a player who knows no recipe for the made-up recipes to show learns one (the
+    // character keeps it). The chest is removed only while it holds nothing but test items;
+    // otherwise it is kept and reported.
     internal static class SupplyFeatureSmoke
     {
         private const string Label = "supply feature smoke";
         private const int Range = 4;
+        private const int FreeSlots = 4;
 
         // Materials from before the Mistlands update. Every test item is one of these.
         private static readonly HashSet<string> EarlyMaterials = new HashSet<string>(StringComparer.Ordinal)
@@ -52,6 +58,7 @@ namespace Automatics.SmokeTest
         private static readonly FieldInfo PlacementStatus = AccessTools.Field(typeof(Player), "m_placementStatus");
         private static readonly FieldInfo PlacementGhost = AccessTools.Field(typeof(Player), "m_placementGhost");
         private static readonly FieldInfo NoPlacementCost = AccessTools.Field(typeof(Player), "m_noPlacementCost");
+        private static readonly MethodInfo AddKnownRecipe = AccessTools.Method(typeof(Player), "AddKnownRecipe");
         private static readonly FieldInfo CraftRecipe = AccessTools.Field(typeof(InventoryGui), "m_craftRecipe");
         private static readonly FieldInfo CraftUpgradeItem = AccessTools.Field(typeof(InventoryGui), "m_craftUpgradeItem");
         private static readonly FieldInfo MultiCrafting = AccessTools.Field(typeof(InventoryGui), "m_multiCrafting");
@@ -94,6 +101,22 @@ namespace Automatics.SmokeTest
 
         public static IEnumerator Run(FeatureRun run)
         {
+            var steps = Checks(run);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!run.IsCurrent) yield break;
+
+            // Back to where the section started when it moved the player; otherwise the
+            // command's hand-back does it at its end.
+            var back = new SmokeSetup.SetupResult();
+            steps = SmokeSetup.ReturnToStart(run.RunId, back);
+            while (steps.MoveNext()) yield return steps.Current;
+            if (!back.Ok)
+                FeaturesSmokeCommand.Warn(
+                    $"[Automatics Smoke] {Label}: the player was not moved back yet ({back.Reason}); the command's hand-back tries again at its end");
+        }
+
+        private static IEnumerator Checks(FeatureRun run)
+        {
             var player = Player.m_localPlayer;
             if (!run.IsCurrent || !player || !ZNetScene.instance || !ZoneSystem.instance || !ObjectDB.instance ||
                 !InventoryGui.instance || !Hud.instance || !ZNet.instance || !ZNet.instance.IsServer() ||
@@ -114,11 +137,6 @@ namespace Automatics.SmokeTest
                 run.Skip("supply_section", "a game or module member the section drives could not be resolved");
                 yield break;
             }
-            if (player.GetInventory().GetEmptySlots() < 4)
-            {
-                run.Skip("supply_section", $"needs 4 free inventory slots, has {player.GetInventory().GetEmptySlots()}");
-                yield break;
-            }
             if (player.GetCurrentCraftingStation())
             {
                 run.Skip("supply_section", "step away from the crafting station, then run it again");
@@ -129,6 +147,7 @@ namespace Automatics.SmokeTest
             Func<string, bool> handBack = state.HandBack;
             SmokeSession.TrackHandBack(handBack);
             var harmony = new Harmony("net.eidee.valheim.automatics.smoke.supply");
+            var stashes = new List<SmokeSetup.InventoryStash>();
             try
             {
                 // Settings first, then wait for the module to be applied: nothing is spawned yet.
@@ -163,6 +182,35 @@ namespace Automatics.SmokeTest
                     run.Pass("supply_no_cost_lifted", "the player's no-cost toggle is off for this section and restored afterwards");
                 }
 
+                // Clear ground before anything is spawned: no container within Supply Range.
+                var site = OtherContainers(player.transform.position);
+                if (site != null)
+                {
+                    var moved = new SmokeSetup.SetupResult();
+                    var steps = SmokeSetup.Relocate(run.RunId, OtherContainers, moved);
+                    while (steps.MoveNext()) yield return steps.Current;
+                    if (!run.IsCurrent) yield break;
+                    if (!moved.Ok)
+                    {
+                        run.Skip("supply_section", $"{site}; {moved.Reason}; run it away from other containers");
+                        yield break;
+                    }
+                    run.Pass("supply_relocated", $"{site}, so the player {moved.Reason}; returned at the end of the section");
+                }
+
+                // Registered after the section's hand-back, so a run cut short takes the test
+                // items out before these go back.
+                stashes.Add(SmokeSetup.Stash(player, FreeSlots, 0f, PutAside()));
+                if (state.Inventory.GetEmptySlots() < FreeSlots)
+                {
+                    run.Skip("supply_section",
+                        $"needs {FreeSlots} free inventory slots; putting items aside left {state.Inventory.GetEmptySlots()} ({stashes[0].Report})");
+                    yield break;
+                }
+                if (stashes[0].Taken > 0) run.Pass("supply_items_put_aside", stashes[0].Report + "; put back at the end of the section");
+                if (!KnownResult(player) && LearnRecipe(player))
+                    run.Pass("supply_recipe_learned", "you knew no recipe for the made-up recipes to show, so one was learned (the character keeps it)");
+
                 CheckContainerPanel(run);
 
                 if (!state.SpawnChest(out var problem))
@@ -174,7 +222,7 @@ namespace Automatics.SmokeTest
                 if (eligible.Count != 1 || eligible[0] != state.Chest)
                 {
                     run.Skip("supply_section",
-                        $"{eligible.Count(x => x != state.Chest)} other usable container(s) within {Range} m; run it away from other containers");
+                        $"{eligible.Count(x => x != state.Chest)} other usable container(s) within {Range} m after the move to clear ground; run it away from other containers");
                     yield break;
                 }
                 run.Pass("supply_containers_eligible", "only the test chest is within Supply Range");
@@ -191,6 +239,9 @@ namespace Automatics.SmokeTest
 
                 var recipe = state.SelectRecipe(out var recipeReport);
                 var piece = state.SelectPiece(out var pieceReport);
+                // The craft checks hold one more stack than the recipe's materials.
+                if (recipe != null && state.Inventory.GetEmptySlots() < state.Needs(recipe).Count + 1)
+                    stashes.Add(SmokeSetup.Stash(player, state.Needs(recipe).Count + 1));
                 if (recipe == null) run.Skip("supply_crafting", recipeReport);
                 if (piece == null) run.Skip("supply_placement", pieceReport);
 
@@ -282,6 +333,8 @@ namespace Automatics.SmokeTest
                     {
                         if (handBack(Label)) SmokeSession.ReleaseHandBack(handBack);
                         else run.Fail("supply_player_restored", "a test object or item could not be handed back; the hand-back retries");
+                        // After the test items are out, so these go back into their slots.
+                        foreach (var stash in stashes) stash.Restore();
                         if (state.KeptChest) run.Skip("supply_chest_removed", "the test chest held items the check cannot prove it put there and was kept");
                         if (state.LeftItems) run.Skip("supply_test_items_removed", "some test items could not be accounted for and were left where they were");
                     }
@@ -368,6 +421,38 @@ namespace Automatics.SmokeTest
             if (gui.IsContainerOpen()) return true;
             var animator = InventoryAnimator.GetValue(gui) as Object;
             return animator && (bool)AnimatorGetBool.Invoke(animator, new object[] { "visible" });
+        }
+
+        // What the section puts aside, by prefab name: the early materials and everything the
+        // test smelter and cooking station take, so the player carries none of them and each
+        // can be a test item.
+        private static Predicate<ItemDrop.ItemData> PutAside()
+        {
+            var names = new HashSet<string>(EarlyMaterials, StringComparer.Ordinal);
+            var smelter = ZNetScene.instance.GetPrefab("smelter")?.GetComponent<Smelter>();
+            if (smelter) names.UnionWith(smelter.m_conversion.Where(x => x?.m_from).Select(x => x.m_from.gameObject.name));
+            var cooking = ZNetScene.instance.GetPrefab("piece_cookingstation")?.GetComponent<CookingStation>();
+            if (cooking) names.UnionWith(cooking.m_conversion.Where(x => x?.m_from).Select(x => x.m_from.gameObject.name));
+            return item => item.m_dropPrefab && names.Contains(item.m_dropPrefab.name);
+        }
+
+        // Why a spot will not do for the section: a container within Supply Range of it, which
+        // the eligibility check would count. Null when none is.
+        private static string OtherContainers(Vector3 site)
+        {
+            var count = ContainerCache.GetAllInstance()
+                .Count(x => x && Vector3.Distance(site, x.transform.position) <= Range + 1f);
+            return count == 0 ? null : $"{count} container(s) within {Range + 1} m";
+        }
+
+        // Teaches the player the first recipe a made-up recipe can show, when they know none.
+        private static bool LearnRecipe(Player player)
+        {
+            var recipe = ObjectDB.instance.m_recipes.FirstOrDefault(x =>
+                x && x.m_enabled && x.m_item && x.m_item.m_itemData.m_shared.m_dlc.Length == 0);
+            if (!recipe || AddKnownRecipe == null) return false;
+            AddKnownRecipe.Invoke(player, new object[] { recipe });
+            return KnownResult(player);
         }
 
         // The result for a recipe made up for a check: an item whose recipe the player already
@@ -705,7 +790,7 @@ namespace Automatics.SmokeTest
             var result = KnownResult(state.Player);
             if (!result)
             {
-                run.Skip(name, "you know no recipe whose result a made-up recipe can show");
+                run.Skip(name, "you know no recipe whose result a made-up recipe can show, and none could be learned");
                 return;
             }
 
@@ -847,8 +932,8 @@ namespace Automatics.SmokeTest
             var result = KnownResult(state.Player);
             if (!result)
             {
-                run.Skip(countName, "you know no recipe whose result a made-up recipe can show");
-                run.Skip(refreshName, "you know no recipe whose result a made-up recipe can show");
+                run.Skip(countName, "you know no recipe whose result a made-up recipe can show, and none could be learned");
+                run.Skip(refreshName, "you know no recipe whose result a made-up recipe can show, and none could be learned");
                 return;
             }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using BepInEx.Configuration;
 using HarmonyLib;
 using ModUtils;
@@ -42,6 +43,12 @@ namespace Automatics.SmokeTest
     // drops the flash of every ward but the test ward, and is registered with the session before its patches go on, so a run cut short removes
     // it. The previously held skill levels, your stamina, the settings and the test objects are
     // put back at the end or by the session's hand-back.
+    //
+    // The section sets up what it needs for the run: Automatic Repair is turned on when it is
+    // off, piece_search_range and crafting_station_search_range are set to RequiredRange (so a
+    // station of yours farther away is out of the item pass's reach), the player's no-cost
+    // toggle is lifted, and items are put aside until two inventory slots are free. All of it is
+    // put back at the end or by the session's hand-back.
     internal static class RepairFeatureSmoke
     {
         private const string Label = "repair feature smoke";
@@ -62,10 +69,13 @@ namespace Automatics.SmokeTest
             { "AxeBronze", "SwordBronze", "MaceBronze", "AxeIron", "SwordIron", "KnifeCopper" };
 
         // The ground distance at which test objects are placed; every one is well within the
-        // module's search ranges, which the section requires to be at least RequiredRange.
+        // module's search ranges, which the section sets to RequiredRange for the run.
         private const float Ring = 2.2f;
         private const int RequiredRange = 4;
         private const float WornFraction = 0.37f;
+        private const int FreeSlots = 2;
+
+        private static readonly FieldInfo NoPlacementCost = AccessTools.Field(typeof(Player), "m_noPlacementCost");
 
         public static IEnumerator Run(FeatureRun run)
         {
@@ -78,12 +88,6 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            if (!RepairModule.Running)
-            {
-                run.Skip(SectionCheck, "Automatic Repair is not running; enable the module first");
-                yield break;
-            }
-
             if (!ModuleRegistry.RuntimeToggleSupported)
             {
                 run.Skip(SectionCheck,
@@ -91,17 +95,16 @@ namespace Automatics.SmokeTest
                 yield break;
             }
 
-            if (RepairConfig.PieceSearchRange < RequiredRange ||
-                RepairConfig.CraftingStationSearchRange < RequiredRange)
+            if (player.IsDead() || player.IsTeleporting())
             {
-                run.Skip(SectionCheck,
-                    $"piece_search_range and crafting_station_search_range have to be at least {RequiredRange}");
+                run.Skip(SectionCheck, "stand alive in the world, not in a teleport");
                 yield break;
             }
 
-            if (player.IsDead() || player.IsTeleporting() || player.NoCostCheat())
+            if (player.NoCostCheat() && NoPlacementCost == null)
             {
-                run.Skip(SectionCheck, "stand alive in the world with the no-cost cheat off");
+                run.Skip(SectionCheck,
+                    "the no-cost cheat is on and Player.m_noPlacementCost was not found to lift it; turn the cheat off");
                 yield break;
             }
 
@@ -110,12 +113,6 @@ namespace Automatics.SmokeTest
             if (hammer == null || hammer.m_itemData.m_shared.m_buildPieces == null)
             {
                 run.Skip(SectionCheck, $"the {HammerPrefab} item is not available");
-                yield break;
-            }
-
-            if (player.GetInventory().GetEmptySlots() < 2)
-            {
-                run.Skip(SectionCheck, "needs 2 free inventory slots for the test items");
                 yield break;
             }
 
@@ -133,13 +130,63 @@ namespace Automatics.SmokeTest
             var held = new Dictionary<ConfigEntryBase, SmokeSession.SettingRestoration>();
             var spawned = new List<GameObject>();
             WoodcuttingFeatureSmoke.PlayerState state = null;
+            SmokeSetup.InventoryStash stash = null;
+            var noCostLifted = false;
             Func<string, bool> handBack = null;
             try
             {
+                var module = new SmokeSetup.SetupResult();
+                var steps = SmokeSetup.EnableModule(run.RunId, held, RepairConfig.ModuleEntry,
+                    () => RepairModule.Running, module);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
+                if (!module.Ok)
+                {
+                    run.Skip(SectionCheck, "Automatic Repair is not running: " + module.Reason);
+                    yield break;
+                }
+
+                var pieceRange = SmokeSetup.Field<int>(typeof(RepairConfig), "_pieceSearchRange");
+                var stationRange = SmokeSetup.Field<int>(typeof(RepairConfig), "_craftingStationSearchRange");
+                if (pieceRange == null || stationRange == null ||
+                    !SmokeSetup.Write(run, held, pieceRange, RequiredRange) ||
+                    !SmokeSetup.Write(run, held, stationRange, RequiredRange))
+                {
+                    run.Skip(SectionCheck,
+                        $"piece_search_range and crafting_station_search_range could not be set to {RequiredRange} for the run");
+                    yield break;
+                }
+
                 state = new WoodcuttingFeatureSmoke.PlayerState(player,
                     new[] { Skills.SkillType.Crafting });
-                handBack = _ => state.Restore();
+                handBack = _ =>
+                {
+                    if (noCostLifted && player) NoPlacementCost.SetValue(player, true);
+                    noCostLifted = false;
+                    return state.Restore();
+                };
                 SmokeSession.TrackHandBack(handBack);
+
+                if (player.NoCostCheat())
+                {
+                    NoPlacementCost.SetValue(player, false);
+                    noCostLifted = true;
+                    run.Pass("repair_no_cost_lifted",
+                        "the player's no-cost toggle is off for this section and restored afterwards");
+                }
+
+                // Registered after the hand-back above, so a run cut short takes the test items
+                // out before the stashed ones go back.
+                stash = SmokeSetup.Stash(player, FreeSlots);
+                if (player.GetInventory().GetEmptySlots() < FreeSlots)
+                {
+                    run.Skip(SectionCheck,
+                        $"needs {FreeSlots} free inventory slots for the test items; putting items aside left {player.GetInventory().GetEmptySlots()} ({stash.Report})");
+                    yield break;
+                }
+
+                run.Pass("repair_setup",
+                    $"Automatic Repair {module.Reason}; piece_search_range and crafting_station_search_range set to {RequiredRange} for the run; {stash.Report}");
 
                 if (!RepairObserver.Attach(out var problem))
                 {
@@ -199,7 +246,7 @@ namespace Automatics.SmokeTest
                     {
                         if (state != null)
                         {
-                            if (state.Restore()) SmokeSession.ReleaseHandBack(handBack);
+                            if (handBack(Label)) SmokeSession.ReleaseHandBack(handBack);
                             else
                                 run.Fail("repair_player_restored",
                                     "the previously equipped items could not all be equipped again; it is retried at the next hand-back");
@@ -207,6 +254,8 @@ namespace Automatics.SmokeTest
                     }
                     finally
                     {
+                        // After the test items are out, so the stashed ones go back into their slots.
+                        stash?.Restore();
                         try
                         {
                             if (held.Count > 0) ReportRestore(run);
@@ -504,7 +553,7 @@ namespace Automatics.SmokeTest
             var foreign = ForeignStationInRange(player, stations);
             if (foreign != null)
             {
-                var reason = $"a crafting station of yours is within {RepairConfig.CraftingStationSearchRange} m of you; stand farther from it";
+                var reason = $"a crafting station of yours is within {RepairConfig.CraftingStationSearchRange} m of you, the crafting_station_search_range set for the run; stand farther from it";
                 foreach (var periodic in new[]
                          {
                              "repair_item_none_worn_touches_no_station", "repair_item_periodic_raises_crafting",
