@@ -53,7 +53,8 @@ namespace Automatics.SmokeTest
     // gains the skill and bonus food for what Processing does at a cooking station. store, below
     // rpc: a product is stored only where it fits. collect, below store: what Processing stores
     // from a piece that collects an item over time is what taking it out by hand yields, in
-    // whole units.
+    // whole units. all: every subcommand, one after another, then one Summary over all of them
+    // (RunAll).
     //
     // Every subcommand but config sets up what it needs itself before it places anything:
     // Automatic Processing turned on for the run (toggle turns it on through the setting it
@@ -70,6 +71,7 @@ namespace Automatics.SmokeTest
     internal static partial class ProcessingSmokeCommand
     {
         private const string CommandName = "automatics_smoke_processing";
+        private const string AllArgument = "all";
 
         // Station pieces stand this far from the shared chest: inside Processing's default
         // container search range, and close enough to read as one group.
@@ -121,6 +123,9 @@ namespace Automatics.SmokeTest
         private static bool _registered;
         private static bool _commandBuilt;
 
+        // The results the last Report printed, which `all` adds to its own Summary.
+        private static IReadOnlyList<CheckResult> _reported;
+
         internal static void EnsureRegistered(MonoBehaviour host)
         {
             _host = host;
@@ -139,7 +144,7 @@ namespace Automatics.SmokeTest
 
             _ = new Terminal.ConsoleCommand(
                 CommandName,
-                $"Drive Automatic Processing against stations and a chest it spawns ({string.Join(", ", Subcommands.Keys)}).",
+                $"Drive Automatic Processing against stations and a chest it spawns ({string.Join(", ", Subcommands.Keys)}, or '{AllArgument}' for each of them, one after another).",
                 OnCommand);
         }
 
@@ -155,10 +160,25 @@ namespace Automatics.SmokeTest
 
             var sub = (args.Args.Skip(1).FirstOrDefault(x => !string.IsNullOrEmpty(x)) ?? "")
                 .ToLowerInvariant();
+            if (sub == AllArgument)
+            {
+                // The first case begins here, so a run still going refuses `all` at once.
+                var first = $"{CommandName} {Subcommands.Keys.First()}";
+                if (!SmokeSession.TryBegin(first, out var firstRunId, out var firstRefusal))
+                {
+                    Emit(context, LogLevel.Warning,
+                        $"[Automatics Smoke] {CommandName} {AllArgument} was not started: {firstRefusal}");
+                    return;
+                }
+
+                _host.StartCoroutine(RunAll(context, firstRunId));
+                return;
+            }
+
             if (!Subcommands.TryGetValue(sub, out var body))
             {
                 Emit(context, LogLevel.Warning,
-                    $"[Automatics Smoke] usage: {CommandName} <{string.Join("|", Subcommands.Keys)}>{(sub.Length == 0 ? "" : $" ('{sub}' is not a subcommand)")}");
+                    $"[Automatics Smoke] usage: {CommandName} <{AllArgument}|{string.Join("|", Subcommands.Keys)}>{(sub.Length == 0 ? "" : $" ('{sub}' is not a subcommand)")}");
                 return;
             }
 
@@ -173,6 +193,61 @@ namespace Automatics.SmokeTest
             // Guard hands back the run's obligations and releases the lock however the body
             // ends, a throw included.
             _host.StartCoroutine(SmokeSession.Guard(runId, runner, body(context, runId, runner)));
+        }
+
+        // `all`: every subcommand, in the order the usage lists them. Each case is a run of its
+        // own, begun, guarded and reported exactly as when it is started alone, so its setup,
+        // restore and hand-backs are the ones it has alone, and the next case begins only once
+        // TryBegin accepts it: once every obligation the case before left has been handed back,
+        // the return to where it started included. A failed case does not stop the ones after it;
+        // a case that cannot begin, or the player leaving the world, does. firstRunId is the first
+        // case's run, begun by OnCommand.
+        private static IEnumerator RunAll(Terminal context, int firstRunId)
+        {
+            var player = Player.m_localPlayer;
+            var cases = Subcommands.Keys.ToArray();
+            var results = new List<(string Case, CheckResult Result)>();
+
+            Emit(context, LogLevel.Info,
+                $"[Automatics Smoke] {CommandName} {AllArgument} started: {string.Join(", ", cases)}, one after another, each a run of its own with its own Summary, then one Summary over all of them");
+
+            var runId = firstRunId;
+            var ran = 0;
+            string stopped = null;
+            for (; ran < cases.Length; ran++)
+            {
+                var name = cases[ran];
+                var runner = $"{CommandName} {name}";
+                if (ran > 0)
+                {
+                    var begin = new SmokeSession.BeginResult();
+                    var wait = SmokeSession.AwaitBegin(runner, player, begin);
+                    while (wait.MoveNext()) yield return wait.Current;
+                    if (begin.RunId == 0)
+                    {
+                        stopped = begin.Refusal;
+                        break;
+                    }
+
+                    runId = begin.RunId;
+                }
+
+                _reported = null;
+                var steps = SmokeSession.Guard(runId, runner, Subcommands[name](context, runId, runner));
+                while (steps.MoveNext()) yield return steps.Current;
+
+                if (_reported == null)
+                    results.Add((name, CheckResult.Fail("case_reported",
+                        "the case stopped before its Summary; the error is in the log")));
+                else
+                    results.AddRange(_reported.Select(x => (name, x)));
+            }
+
+            var notStarted = cases.Skip(ran).ToArray();
+            if (stopped != null)
+                Emit(context, LogLevel.Warning,
+                    $"[Automatics Smoke] {CommandName} {AllArgument} stopped before {notStarted[0]}: {stopped}; not started: {string.Join(", ", notStarted)}");
+            ReportAll(context, ran, results, notStarted);
         }
 
         private static IEnumerator RunRpc(Terminal context, int runId, string runner)
@@ -310,6 +385,27 @@ namespace Automatics.SmokeTest
 
             Emit(context, LogLevel.Info,
                 $"[Automatics Smoke] Summary: total={results.Count} passed={passed} failed={failed.Length} skipped={skipped.Length} notRun={notRun.Length} failedChecks=[{string.Join(", ", failed)}] skippedChecks=[{string.Join(", ", skipped)}] notRunChecks=[{string.Join(", ", notRun)}]");
+            _reported = results;
+        }
+
+        // The Summary of `all`: how many cases ran, the totals over their checks, each check named
+        // after its case, and the cases it did not start.
+        private static void ReportAll(Terminal context, int cases,
+            IReadOnlyList<(string Case, CheckResult Result)> results, IEnumerable<string> notStarted)
+        {
+            string[] Names(CheckStatus status)
+            {
+                return results.Where(x => x.Result.Status == status).Select(x => $"{x.Case}:{x.Result.Name}")
+                              .ToArray();
+            }
+
+            var failed = Names(CheckStatus.Fail);
+            var skipped = Names(CheckStatus.Skip);
+            var notRun = Names(CheckStatus.NotRun);
+            var passed = results.Count(x => x.Result.Status == CheckStatus.Pass);
+
+            Emit(context, LogLevel.Info,
+                $"[Automatics Smoke] Summary ({AllArgument}): cases={cases} total={results.Count} passed={passed} failed={failed.Length} skipped={skipped.Length} notRun={notRun.Length} failedChecks=[{string.Join(", ", failed)}] skippedChecks=[{string.Join(", ", skipped)}] notRunChecks=[{string.Join(", ", notRun)}] casesNotStarted=[{string.Join(", ", notStarted)}]");
         }
 
         private static void Emit(Terminal context, LogLevel level, string line)

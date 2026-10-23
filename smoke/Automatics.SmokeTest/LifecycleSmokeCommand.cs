@@ -40,10 +40,17 @@ namespace Automatics.SmokeTest
     // cycles instead, under the same rules; see LifecycleSmokeMapping.cs. With the name of another
     // migrated module, such as "storage", it runs the descriptor-driven cycles of
     // LifecycleSmokeModules.cs, under the same rules again.
+    //
+    // With the argument "all" it runs the command without an argument and then with each module
+    // argument, one after another, and ends with one Summary over all of them (RunAll).
     internal static partial class LifecycleSmokeCommand
     {
         private const string CommandName = "automatics_smoke_lifecycle";
         private const string MappingArgument = "mapping";
+        private const string AllArgument = "all";
+
+        // The run without an argument, by the name `all` gives its case.
+        private const string PickupCase = "pickup";
 
         // A requested transition normally lands on the next pump tick, or a few ticks later
         // after a deferral. This bounds the wait; it is not an estimate of it.
@@ -64,6 +71,9 @@ namespace Automatics.SmokeTest
         private static bool _registered;
         private static bool _commandBuilt;
 
+        // The results the last Report printed, which `all` adds to its own Summary.
+        private static IReadOnlyList<CheckResult> _reported;
+
         internal static void EnsureRegistered(MonoBehaviour host)
         {
             _host = host;
@@ -82,7 +92,7 @@ namespace Automatics.SmokeTest
 
             _ = new Terminal.ConsoleCommand(
                 CommandName,
-                $"Turn Automatic Pickup off, on and off through its setting, check the runtime lifecycle, then restore the setting. With a module name ({string.Join(", ", ModuleArguments())}), turn that module off and on three times instead.",
+                $"Turn Automatic Pickup off, on and off through its setting, check the runtime lifecycle, then restore the setting. With a module name ({string.Join(", ", ModuleArguments())}), turn that module off and on three times instead. With '{AllArgument}', run without an argument and then with each module name, one after another.",
                 OnCommand);
         }
 
@@ -98,13 +108,27 @@ namespace Automatics.SmokeTest
 
             var argument = (args.Args.Skip(1).FirstOrDefault(x => !string.IsNullOrEmpty(x)) ?? "")
                 .ToLowerInvariant();
+            if (argument == AllArgument)
+            {
+                // The first case begins here, so a run still going refuses `all` at once.
+                if (!SmokeSession.TryBegin(CommandName, out var firstRunId, out var firstRefusal))
+                {
+                    Emit(context, LogLevel.Warning,
+                        $"[Automatics Smoke] {CommandName} {AllArgument} was not started: {firstRefusal}");
+                    return;
+                }
+
+                _host.StartCoroutine(RunAll(context, firstRunId));
+                return;
+            }
+
             ModuleDescriptor descriptor = null;
             if (argument.Length != 0 && argument != MappingArgument)
             {
                 if (!Descriptors.ContainsKey(argument))
                 {
                     Emit(context, LogLevel.Warning,
-                        $"[Automatics Smoke] usage: {CommandName} [{string.Join("|", ModuleArguments())}] ('{argument}' is not an argument)");
+                        $"[Automatics Smoke] usage: {CommandName} [{AllArgument}|{string.Join("|", ModuleArguments())}] ('{argument}' is not an argument)");
                     return;
                 }
 
@@ -126,11 +150,79 @@ namespace Automatics.SmokeTest
 
             // Guard hands back the run's obligations and releases the lock however the body
             // ends, a throw included.
-            IEnumerator body;
-            if (argument.Length == 0) body = Run(context, runId);
-            else if (argument == MappingArgument) body = RunMapping(context, runId, runner);
-            else body = RunModule(context, runId, runner, descriptor);
-            _host.StartCoroutine(SmokeSession.Guard(runId, runner, body));
+            _host.StartCoroutine(SmokeSession.Guard(runId, runner,
+                Body(context, runId, runner, argument, descriptor)));
+        }
+
+        private static IEnumerator Body(Terminal context, int runId, string runner, string argument,
+            ModuleDescriptor descriptor)
+        {
+            if (argument.Length == 0) return Run(context, runId);
+            if (argument == MappingArgument) return RunMapping(context, runId, runner);
+            return RunModule(context, runId, runner, descriptor);
+        }
+
+        // `all`: the run without an argument, then one run per module argument, in the order the
+        // usage lists them. Each case is a run of its own, begun, guarded and reported exactly as
+        // when it is started alone, so its setup, restore and hand-backs are the ones it has
+        // alone, and the next case begins only once TryBegin accepts it: once every obligation
+        // the case before left has been handed back. A failed case does not stop the ones after
+        // it; a case that cannot begin, or the player leaving the world, does. firstRunId is the
+        // first case's run, begun by OnCommand.
+        private static IEnumerator RunAll(Terminal context, int firstRunId)
+        {
+            var player = Player.m_localPlayer;
+            var cases = new[] { PickupCase }.Concat(ModuleArguments()).ToArray();
+            var results = new List<(string Case, CheckResult Result)>();
+
+            Emit(context, LogLevel.Info,
+                $"[Automatics Smoke] {CommandName} {AllArgument} started: {string.Join(", ", cases)}, one after another, each a run of its own with its own Summary, then one Summary over all of them");
+
+            var runId = firstRunId;
+            var ran = 0;
+            string stopped = null;
+            for (; ran < cases.Length; ran++)
+            {
+                var name = cases[ran];
+                var argument = name == PickupCase ? "" : name;
+                var runner = argument.Length == 0 ? CommandName : $"{CommandName} {argument}";
+                ModuleDescriptor descriptor = null;
+                if (ran > 0)
+                {
+                    if (argument != MappingArgument && !TryDescribe(argument, out descriptor, out var problem))
+                    {
+                        stopped = problem;
+                        break;
+                    }
+
+                    var begin = new SmokeSession.BeginResult();
+                    var wait = SmokeSession.AwaitBegin(runner, player, begin);
+                    while (wait.MoveNext()) yield return wait.Current;
+                    if (begin.RunId == 0)
+                    {
+                        stopped = begin.Refusal;
+                        break;
+                    }
+
+                    runId = begin.RunId;
+                }
+
+                _reported = null;
+                var steps = SmokeSession.Guard(runId, runner, Body(context, runId, runner, argument, descriptor));
+                while (steps.MoveNext()) yield return steps.Current;
+
+                if (_reported == null)
+                    results.Add((name, new CheckResult(CheckStatus.Fail, "case_reported",
+                        "the case stopped before its Summary; the error is in the log")));
+                else
+                    results.AddRange(_reported.Select(x => (name, x)));
+            }
+
+            var notStarted = cases.Skip(ran).ToArray();
+            if (stopped != null)
+                Emit(context, LogLevel.Warning,
+                    $"[Automatics Smoke] {CommandName} {AllArgument} stopped before {notStarted[0]}: {stopped}; not started: {string.Join(", ", notStarted)}");
+            ReportAll(context, ran, results, notStarted);
         }
 
         private static IEnumerator Run(Terminal context, int runId)
@@ -204,6 +296,26 @@ namespace Automatics.SmokeTest
 
             Emit(context, LogLevel.Info,
                 $"[Automatics Smoke] Summary: total={results.Count} passed={passed} failed={failed.Length} skipped={skipped.Length} failedChecks=[{string.Join(", ", failed)}] skippedChecks=[{string.Join(", ", skipped)}]");
+            _reported = results;
+        }
+
+        // The Summary of `all`: how many cases ran, the totals over their checks, each check named
+        // after its case, and the cases it did not start.
+        private static void ReportAll(Terminal context, int cases,
+            IReadOnlyList<(string Case, CheckResult Result)> results, IEnumerable<string> notStarted)
+        {
+            string[] Names(CheckStatus status)
+            {
+                return results.Where(x => x.Result.Status == status).Select(x => $"{x.Case}:{x.Result.Name}")
+                              .ToArray();
+            }
+
+            var failed = Names(CheckStatus.Fail);
+            var skipped = Names(CheckStatus.Skip);
+            var passed = results.Count(x => x.Result.Status == CheckStatus.Pass);
+
+            Emit(context, LogLevel.Info,
+                $"[Automatics Smoke] Summary ({AllArgument}): cases={cases} total={results.Count} passed={passed} failed={failed.Length} skipped={skipped.Length} failedChecks=[{string.Join(", ", failed)}] skippedChecks=[{string.Join(", ", skipped)}] casesNotStarted=[{string.Join(", ", notStarted)}]");
         }
 
         private static void Emit(Terminal context, LogLevel level, string line)

@@ -41,6 +41,12 @@ namespace Automatics.SmokeTest
         // that wrote records before they carried the command's name.
         private const string DefaultMarkerCommand = "automatics_smoke_lifecycle";
 
+        // How long AwaitBegin waits for the case before to hand everything back. The return to
+        // the starting spot that SmokeSetup drives is two attempts at most, each bounded by its
+        // teleport timeouts: a little over two minutes at worst. This bounds the wait; it is not
+        // an estimate of it.
+        private const float BeginTimeoutSeconds = 150f;
+
         private static readonly ManualLogSource Log =
             BepInEx.Logging.Logger.CreateLogSource("Automatics Smoke Session");
 
@@ -104,6 +110,32 @@ namespace Automatics.SmokeTest
             _runner = command;
             runId = ++_runId;
             return true;
+        }
+
+        // For a command that runs its cases one after another, each a run of its own. The case
+        // before releases the lock as its body ends, but a hand-back it left may still be under
+        // way - the return to the command's starting spot goes on after its Summary line - and
+        // TryBegin refuses meanwhile. So TryBegin is asked again until it accepts, the player the
+        // command started with is gone, or BeginTimeoutSeconds pass; begin.RunId is 0 unless it
+        // accepted, and begin.Refusal says why. Once a second, not every frame: each attempt runs
+        // the hand-backs again, and one that keeps failing logs a warning each time.
+        public static IEnumerator AwaitBegin(string command, Player player, BeginResult begin)
+        {
+            var deadline = Time.realtimeSinceStartup + BeginTimeoutSeconds;
+            while (true)
+            {
+                if (ZNetScene.instance == null || !player || Player.m_localPlayer != player)
+                {
+                    begin.Refusal =
+                        "the player the command started with is no longer in the world (a logout or a death)";
+                    yield break;
+                }
+
+                if (TryBegin(command, out begin.RunId, out begin.Refusal) ||
+                    Time.realtimeSinceStartup >= deadline)
+                    yield break;
+                yield return new WaitForSecondsRealtime(1f);
+            }
         }
 
         // Drives a command's body. Whether it completes or throws, the run's obligations are
@@ -622,6 +654,13 @@ namespace Automatics.SmokeTest
             return values.TryGetValue(key, out var value) && !string.IsNullOrEmpty(value)
                 ? value
                 : "(unknown)";
+        }
+
+        // What AwaitBegin came to: the run's id once TryBegin accepted it, otherwise 0 and why not.
+        internal sealed class BeginResult
+        {
+            public int RunId;
+            public string Refusal = "";
         }
 
         private sealed class PendingSpawn

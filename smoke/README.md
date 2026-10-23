@@ -337,7 +337,8 @@ Mapping instead, and with `door`, `farming`, `feeding`, `mining`, `repair`,
 `storage`, `supply` or `woodcutting` it exercises Automatic Door, Automatic
 Farming, Automatic Feeding, Automatic Mining, Automatic Repair, Automatic Storage,
 Automatic Supply or Automatic Woodcutting through the module runner
-the migrated modules share (described after this one). Run it from the
+the migrated modules share (described after this one); with `all` it runs every
+one of these in turn (described at the end of this section). Run it from the
 in-game console while a single-player world is loaded. It drives the toggle the
 way a user does, by writing `automatic_pickup / module`, and takes the module
 through off → on → off:
@@ -825,11 +826,50 @@ the stopped entries return without throwing. SKIP is unverified; this command
 does not demonstrate successful repairs, tool payment or multiplayer RPC delivery.
 The original module setting is restored under the shared session rules.
 
+#### `automatics_smoke_lifecycle all`
+
+`all` runs the command without an argument, named `pickup` in its lines, and then
+with each module argument, in the order the usage lists them: `pickup`,
+`mapping`, `door`, `farming`, `feeding`, `mining`, `repair`, `storage`, `supply`,
+`woodcutting`. The cases run one after another, never side by side, and each is
+a smoke run of its own, exactly as when you type it: it has its own `started`
+line, sets up, checks, restores and hands back what it changed as described
+above, and ends with its own Summary line.
+
+Between cases nothing is held. The next case starts the way a command you type
+starts, and only when such a command would be accepted: once the case before
+has put its settings back, removed its test objects and finished every
+hand-back. A hand-back still under way, or one that could not be done, makes
+the next case wait; it is tried again once a second for up to 150 s. A failed
+check, or a case that stopped on an exception, does not stop the cases after
+it.
+
+`all` stops before the next case when that case cannot start (its module
+cannot be described, or it is still refused after 150 s) and when the player it
+started with is no longer in the world (a logout or a death). The case that was
+running then reports as it would alone, and a warning names the reason and the
+cases that were not started. Since nothing is held between cases, a stopped
+`all` leaves nothing behind that would refuse the next command. Starting `all`
+while another smoke command runs is refused with `... all was not started:
+<reason>`, as for any command.
+
+The run ends with one more Summary line, over every case that ran: `cases`
+counts them, the totals add up their checks, each failed and skipped check is
+named after its case as `<case>:<check>`, and `casesNotStarted` lists the cases
+a stop left out. A case that stopped before its own Summary line counts as one
+FAIL, `<case>:case_reported`. A run cut short by a logout during `mapping` ends like this,
+for example:
+
+```text
+[Automatics Smoke] automatics_smoke_lifecycle all stopped before door: the player the command started with is no longer in the world (a logout or a death); not started: door, farming, feeding, mining, repair, storage, supply, woodcutting
+[Automatics Smoke] Summary (all): cases=2 total=42 passed=17 failed=0 skipped=25 failedChecks=[] skippedChecks=[mapping:mapping_off_state_disabled, mapping:mapping_off_stopped_at_request, …] casesNotStarted=[door, farming, feeding, mining, repair, storage, supply, woodcutting]
+```
+
 ### Processing smoke command
 
 `automatics_smoke_processing` takes one subcommand: `rpc`, `toggle`, `config`,
 `skill`, `store` or `collect` (the last five are described after `rpc`). Each is
-one smoke run.
+one smoke run. `all` runs each of them in turn (described after `collect`).
 
 Every subcommand but `config` sets up what it needs before it places anything,
 and puts it back when the run ends:
@@ -1366,6 +1406,41 @@ Safety, on top of the `rpc` rules:
   and are removed in the same frame; they are the only objects the run removes
   besides its chest and pieces. A drop Store made would be reported, never
   removed.
+
+#### `automatics_smoke_processing all`
+
+`all` runs `rpc`, `toggle`, `config`, `skill`, `store` and `collect`, in that
+order. The cases run one after another, never side by side, and each is a
+smoke run of its own, exactly as when you type it: it has its own `started`
+line, sets up, checks, restores and hands back what it changed as described
+above, and ends with its own Summary line.
+
+Between cases nothing is held. The next case starts the way a command you type
+starts, and only when such a command would be accepted: once the case before
+has put its settings back, removed its test objects and finished every
+hand-back, the return to where it started included when it moved you. A
+hand-back still under way, such as that return when it goes on after the
+case's Summary line, or one that could not be done, makes the next case wait;
+it is tried again once a second for up to 150 s. A failed check, or a case that
+stopped on an exception, does not stop the cases after it.
+
+`all` stops before the next case when that case is still refused after 150 s
+and when the player it started with is no longer in the world (a logout or a
+death). The case that was running then reports as it would alone, and a warning
+names the reason and the cases that were not started. Since nothing is held
+between cases, a stopped `all` leaves nothing behind that would refuse the next
+command. Starting `all` while another smoke command runs is refused with `...
+all was not started: <reason>`, as for any command.
+
+The run ends with one more Summary line, over every case that ran: `cases`
+counts them, the totals add up their checks, each failed, skipped and NOT-RUN
+check is named after its case as `<case>:<check>`, and `casesNotStarted` lists
+the cases a stop left out. A case that stopped before its own Summary line
+counts as one FAIL, `<case>:case_reported`. A passing run ends like this:
+
+```text
+[Automatics Smoke] Summary (all): cases=6 total=39 passed=39 failed=0 skipped=0 notRun=0 failedChecks=[] skippedChecks=[] notRunChecks=[] casesNotStarted=[]
+```
 
 ### Feature smoke command
 

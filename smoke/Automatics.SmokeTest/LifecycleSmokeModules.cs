@@ -1174,7 +1174,7 @@ namespace Automatics.SmokeTest
             return count?.GetValue(value, null) is int number ? number : -1;
         }
 
-        // Every argument the command takes besides none at all, in the order the usage lists them.
+        // Every module argument the command takes, in the order the usage lists them and `all` runs them.
         private static IEnumerable<string> ModuleArguments()
         {
             return new[] { MappingArgument }.Concat(Descriptors.Keys.OrderBy(x => x, StringComparer.Ordinal));
