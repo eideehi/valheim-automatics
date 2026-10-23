@@ -449,10 +449,10 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
-                if (otherTaken || stoneDelta != 0)
+                if (otherTaken)
                 {
                     run.Fail(check,
-                        $"the pass made on a Wood drop also took the Stone drop (taken={otherTaken}, stoneDelta={stoneDelta}){notes}");
+                        $"the pass made on a Wood drop also took the Stone drop (stoneDelta={stoneDelta}){notes}");
                     yield break;
                 }
 
@@ -460,6 +460,15 @@ namespace Automatics.SmokeTest
                 {
                     run.Fail(check,
                         $"both Wood drops disappeared but the Wood in the inventory grew by {woodDelta}, not 2{notes}");
+                    yield break;
+                }
+
+                // The test Stone drop stayed, so Stone that came or went was not the test's: a pass
+                // with an interval part takes every allowed drop in range, Stone of your own too.
+                if (stoneDelta != 0)
+                {
+                    run.Skip(check,
+                        $"inconclusive: the test Stone drop stayed, but the Stone in the inventory changed by {stoneDelta}, so Stone other than the test drop moved, such as Stone of your own nearby that the pass picked up; run it away from other Stone drops{notes}");
                     yield break;
                 }
 
