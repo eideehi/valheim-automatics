@@ -763,6 +763,14 @@ namespace Automatics.SmokeTest
                     yield break;
                 }
 
+                // The check waits seconds for vanilla to allow the drop. On sloping ground it would
+                // roll meanwhile, out of automatic_pickup_range or into vanilla's own reach, so it
+                // only falls.
+                var body = drop.GetComponent<Rigidbody>();
+                if (body)
+                    body.constraints |= RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionZ |
+                                        RigidbodyConstraints.FreezeRotation;
+
                 if (drop.CanPickup())
                 {
                     run.Skip(WaitsCheck, "inconclusive: vanilla already allowed the drop in the frame it spawned");
@@ -910,7 +918,9 @@ namespace Automatics.SmokeTest
             }
             finally
             {
-                if (woodMayBeLeft)
+                // Only a drop that was taken can have left Wood; an exit before the later pass leaves
+                // the drop in the world.
+                if (woodMayBeLeft && FeaturesSmokeCommand.IsConsumed(drop))
                     FeaturesSmokeCommand.Warn(
                         $"[Automatics Smoke] {WaitsCheck}: the Wood the later pass took could not be attributed to the test drop, so it was left in the inventory");
                 FeaturesSmokeCommand.RemoveTestDrop(drop, WaitsCheck);
