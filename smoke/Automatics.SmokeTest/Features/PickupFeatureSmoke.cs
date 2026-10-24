@@ -1095,8 +1095,8 @@ namespace Automatics.SmokeTest
             SmokeSession.TrackHandBack(handBack);
             try
             {
-                swimming = FeaturesSmokeCommand.SpawnTestDrop(prefab, origin, false);
-                landed = FeaturesSmokeCommand.SpawnTestDrop(prefab, origin + transform.forward * 0.6f, false);
+                swimming = FeaturesSmokeCommand.SpawnTestDrop(prefab, AboveGround(origin), false);
+                landed = FeaturesSmokeCommand.SpawnTestDrop(prefab, AboveGround(origin + transform.forward * 0.6f), false);
                 if (swimming == null || landed == null)
                 {
                     run.Skip(FishCheck, "a test drop could not be set up");
@@ -1466,7 +1466,7 @@ namespace Automatics.SmokeTest
             return null;
         }
 
-        // A Wood or Stone test drop starts 0.3 m above the ground at its spot. Placed at your height
+        // A test drop starts 0.3 m above the ground at its spot. Placed at your height
         // where the ground there is higher, it would start inside the terrain and fall through it,
         // out of Automatic Pickup's range within a second.
         private static Vector3 AboveGround(Vector3 point)

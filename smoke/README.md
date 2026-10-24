@@ -1475,9 +1475,9 @@ spawned; otherwise they stay and the log says so.
 
 #### `pickup`
 
-The Wood and Stone test drops start 0.3 m above the ground at their spot, not at
-your height: one placed where the ground is higher than your feet would start
-inside the terrain and fall through it.
+The test drops, Wood, Stone and the two fish alike, start 0.3 m above the ground
+at their spot, not at your height: one placed where the ground is higher than
+your feet would start inside the terrain and fall through it.
 
 | Check | Asserts |
 |---|---|
