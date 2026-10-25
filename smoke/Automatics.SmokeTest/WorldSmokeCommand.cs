@@ -182,6 +182,11 @@ namespace Automatics.SmokeTest
             {
                 _runId = runId;
                 _held = new Held();
+                if (!ProcessingIsolation.Attach(out var isolationProblem))
+                {
+                    Report(context, new List<CheckResult> { CheckResult.Skip(isolationProblem).WithName("world_processing_isolation_setup") });
+                    yield break;
+                }
                 var setUp = SetUp(context, includeStorage);
                 while (setUp.MoveNext()) yield return setUp.Current;
 
@@ -1236,6 +1241,9 @@ namespace Automatics.SmokeTest
                 var chestInventory = chest.GetInventory();
                 if (chestInventory == null) return CheckResult.Skip("spawned chest inventory is null");
 
+                if (!ProcessingSmokeCommand.CheckIsolation(chest, Smelter, smelterPos, out var isolationProblem))
+                    return CheckResult.Fail("", isolationProblem);
+
                 var minFuelCount =
                     global::Automatics.AutomaticProcessing.Config.FuelCountOfSuppressProcessing(Smelter);
                 var seeded = AddItemsLooped(chestInventory, fuelPrefab, minFuelCount + 4);
@@ -1268,6 +1276,27 @@ namespace Automatics.SmokeTest
                 var containerFuelBefore = chestInventory.CountItems(fuelName);
                 var fuelBefore = smelterNview.GetZDO().GetFloat("fuel");
 
+                // The cached source remains visible, but an unregistered chest must not supply
+                // fuel through the real caller. The same chest is the positive control below.
+                ProcessingIsolation.Unregister(chest);
+                try
+                {
+                    var refused = global::Automatics.AutomaticProcessing.SmelterProcess
+                        .QuickRefuel(smelter, smelterNview, 1f, fuelBefore);
+                    Expect(Mathf.Approximately(refused, fuelBefore),
+                        "QuickRefuel should return unchanged fuel for an unregistered chest");
+                    Expect(Mathf.Approximately(smelterNview.GetZDO().GetFloat("fuel"), fuelBefore),
+                        "smelter ZDO fuel should stay unchanged for an unregistered chest");
+                    Expect(chestInventory.CountItems(fuelName) == containerFuelBefore,
+                        "an unregistered chest should keep all of its fuel");
+                }
+                finally
+                {
+                    ProcessingIsolation.Register(chest);
+                }
+
+                // Refusal latches SkipQuickRefuel. Reset it while preserving the source cache.
+                global::Automatics.AutomaticProcessing.SmelterProcess.Cleanup();
                 var ret = global::Automatics.AutomaticProcessing.SmelterProcess
                     .QuickRefuel(smelter, smelterNview, 1f, fuelBefore);
 
@@ -1661,6 +1690,8 @@ namespace Automatics.SmokeTest
         private sealed class SpawnScope : IDisposable
         {
             private readonly List<GameObject> _spawned = new List<GameObject>();
+            // Separate from _spawned: Keep deliberately removes retained objects from that list.
+            private readonly List<Container> _containers = new List<Container>();
 
             private readonly Dictionary<GameObject, Dictionary<string, int>> _allowedContents =
                 new Dictionary<GameObject, Dictionary<string, int>>();
@@ -1671,6 +1702,12 @@ namespace Automatics.SmokeTest
             {
                 var go = UnityEngine.Object.Instantiate(prefab, position, rotation);
                 _spawned.Add(go);
+                var container = go.GetComponent<Container>();
+                if (container)
+                {
+                    _containers.Add(container);
+                    ProcessingIsolation.Register(container);
+                }
                 if (Objects.GetZNetView(go.transform, out var nview) && nview != null &&
                     nview.IsValid())
                     if (!nview.IsOwner())
@@ -1719,6 +1756,10 @@ namespace Automatics.SmokeTest
 
             public void Dispose()
             {
+                // No World processing scope yields. Its whitelist is empty again before the
+                // next frame, including when a chest is retained or removal fails.
+                foreach (var container in _containers) ProcessingIsolation.Unregister(container);
+                _containers.Clear();
                 foreach (var go in _spawned)
                 {
                     try

@@ -276,6 +276,14 @@ namespace Automatics.SmokeTest
         // session's guard, so a run that cannot even be built still releases the lock.
         private static IEnumerator RunBench(Terminal context, string runner, Func<BenchRun> create)
         {
+            // ToggleRun has its own setup. Guard the shared wrapper before either setup can
+            // enable Processing, and let the session detach it after restoration/hand-back.
+            if (!ProcessingIsolation.Attach(out var isolationProblem))
+            {
+                Report(context, new[] { CheckResult.Skip("processing_isolation_setup", isolationProblem) });
+                yield break;
+            }
+
             BenchRun run = null;
             try
             {
@@ -323,8 +331,40 @@ namespace Automatics.SmokeTest
                     $"[Automatics Smoke] {runner}: you could not be moved back to where the command started yet ({back.Reason}); the smoke plugin tries again as the run ends");
 
             var results = run.Results.ToList();
+            if (run.IsolationResult != null) results.Add(run.IsolationResult);
             if (run.SettingsResult != null) results.Add(run.SettingsResult);
             Report(context, results);
+        }
+
+        // Both console commands exercise the actual patched transfer gate with the same empty
+        // synthetic chest. Registration must not hide anything from the real search/cache.
+        internal static bool CheckIsolation(Container chest, string piece, Vector3 position, out string problem)
+        {
+            problem = null;
+            ProcessingIsolation.Unregister(chest);
+            try
+            {
+                ProcessingLogics.Cleanup();
+                var before = ProcessingLogics.GetNearbyContainers(piece, position).Select(x => x.container).ToArray();
+                Container askable = null;
+                var denied = !ProcessingLogics.TryClaimContainer(chest, ref askable) && ReferenceEquals(askable, null);
+                askable = chest;
+                denied &= !ProcessingLogics.TryClaimContainer(chest, ref askable) && ReferenceEquals(askable, chest);
+                ProcessingIsolation.Register(chest);
+                ProcessingLogics.Cleanup();
+                var after = ProcessingLogics.GetNearbyContainers(piece, position).Select(x => x.container).ToArray();
+                askable = null;
+                var allowed = ProcessingLogics.TryClaimContainer(chest, ref askable);
+                var sameSearch = before.Any(x => ReferenceEquals(x, chest)) && before.Length == after.Length &&
+                                 before.Zip(after, (a, b) => ReferenceEquals(a, b)).All(x => x);
+                if (!denied || !allowed || !sameSearch)
+                    problem = $"unregistered chest denied without changing askable={denied}; registered chest accepted={allowed}; real search unchanged={sameSearch}";
+                return problem == null;
+            }
+            finally
+            {
+                ProcessingIsolation.Register(chest);
+            }
         }
 
         // Automatic Processing keeps its per-piece settings in private dictionaries by the piece's
@@ -461,6 +501,7 @@ namespace Automatics.SmokeTest
             protected List<StationBench> Active => _stations.Where(x => x.Result == null).ToList();
 
             public int RunId => _runId;
+            public CheckResult IsolationResult { get; private set; }
 
             // processing_settings_restored, once RestoreSettings has run; null when the run wrote
             // no setting.
@@ -993,6 +1034,21 @@ namespace Automatics.SmokeTest
                 foreach (var station in Active)
                     if (!_benches.PlaceStation(station, out var stationProblem))
                         station.Skip(stationProblem);
+
+                var control = Active.FirstOrDefault();
+                if (control != null)
+                {
+                    const string check = "processing_container_isolated";
+                    var isolated = CheckIsolation(_benches.Chest, control.ObjectName, control.Position, out var problem);
+                    IsolationResult = isolated
+                        ? CheckResult.Pass(check, "the unregistered test chest was denied with askable unchanged; registration allowed the real gate, with the real search unchanged")
+                        : CheckResult.Fail(check, problem);
+                    if (!isolated)
+                    {
+                        FailRemaining(problem);
+                        return false;
+                    }
+                }
 
                 _info(
                     $"[Automatics Smoke] {_runner}: the test chest is at {Where(chestPosition)}, {distance:0.0} m ahead of you, with the test stations {StationOffset:0.0} m from it");
@@ -2022,6 +2078,8 @@ namespace Automatics.SmokeTest
                 else if (ChestInventory.NrOfItems() != 0)
                     problem = "the spawned chest was not empty";
 
+                if (problem == null) ProcessingIsolation.Register(Chest);
+
                 return problem == null;
             }
 
@@ -2086,6 +2144,8 @@ namespace Automatics.SmokeTest
             // the hand-back with the session, which tries again at its next trigger.
             public bool HandBack(string reason)
             {
+                // Even an object deliberately kept in the world is no longer a test fixture.
+                ProcessingIsolation.Unregister(Chest);
                 if (_handedBack) return true;
 
                 if (ZNetScene.instance == null)

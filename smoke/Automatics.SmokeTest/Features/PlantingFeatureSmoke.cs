@@ -85,6 +85,10 @@ namespace Automatics.SmokeTest
 
             var held = new Held();
             var setup = new List<string>();
+            // Grid checks drive planting directly; ordinary harvest/replant must stay idle
+            // during module activation, relocation and frame boundaries.
+            if (!Set(run, held, "_farmingInterval", 0f, out _)) yield break;
+            setup.Add("farming_interval set to 0 for the run");
             var module = new SmokeSetup.SetupResult();
             var enable = SmokeSetup.EnableModule(run.RunId, held, FarmingConfig.ModuleEntry, () => FarmingModule.Running, module);
             while (enable.MoveNext()) yield return enable.Current;

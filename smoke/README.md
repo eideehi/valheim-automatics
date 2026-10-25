@@ -6,7 +6,7 @@ not add root-level MSBuild files or production project settings.
 
 The smoke plugin compiles only its own sources (`SmokePlugin.cs`,
 `WorldSmokeCommand.cs`, `LifecycleSmokeCommand.cs`, `ProcessingSmokeCommand.cs`,
-`SmokeSession.cs`, and the feature sections under `Features/`). Every
+`SmokeSession.cs`, `ProcessingIsolation.cs`, and the feature sections under `Features/`). Every
 Automatics type it exercises (including the `StoragePlanner` routing types) is
 bound from the already-loaded `Automatics.dll` via
 `[assembly: InternalsVisibleTo("Automatics.SmokeTest")]`. It does **not** ship a
@@ -197,6 +197,13 @@ The command sets up what its checks need and puts it back when the run ends:
 - Before the first check it turns on, for the run, every module whose checks
   run that is off: Automatic Door and Automatic Processing, and Automatic
   Storage with `storage`.
+- Before changing any module it restricts Processing's container mutation gate
+  to the current check's spawned chests, until the settings and hand-back finish.
+  The real container search stays unchanged. Each processing check runs within
+  one frame and unregisters its chests before the next frame, even when a chest
+  must be kept. Ordinary stations therefore cannot take from or store into your
+  containers while setup or another check waits. This does not stop vanilla
+  production or growth, or the ordinary-world Door effects described below.
 - When a container that isn't the run's own is within 10 m of you, it moves you
   to clear ground first (see "Safety of the console commands" above) and moves
   you back before the Summary.
@@ -268,8 +275,11 @@ name it.
   where. A wait during which the game was paused SKIPs as inconclusive. When the
   inventory has no free slot or too little carry weight, items of yours are put
   aside first, and the PASS note says how many.
-- `world_processing_smelter_refuel` — `SmelterProcess.QuickRefuel` raises the
-  smelter's ZDO `fuel` by one and consumes fuel from a nearby chest.
+- `world_processing_smelter_refuel` — with the seeded test chest unregistered,
+  `SmelterProcess.QuickRefuel` leaves its returned fuel, the smelter's ZDO `fuel`
+  and the chest's fuel count unchanged. Registering that same chest and clearing
+  the station's skip state then raises the smelter's fuel by one and consumes
+  one fuel from the chest, using the same cached container search.
 - `world_container_store_after_spawn_keeps_stored_items` — a chest whose saved
   data holds items its inventory has not loaded yet, as when it has just spawned
   with stored items, keeps them when a module writes it. The check writes three
@@ -876,6 +886,14 @@ and puts it back when the run ends:
 
 - Automatic Processing is turned on for the run when it is off (`toggle` turns
   it on through the setting it round-trips; see there).
+- Before any module change, a smoke-only patch restricts Processing's container
+  mutation gate to the run's own registered chest. It stays through settings
+  restoration and hand-back, including an interrupted run. The real search and
+  its caches still expose other containers to the existing isolation checks;
+  rejected containers are neither changed nor requested for ownership. Chests
+  are unregistered before hand-back, even when kept after a failed check.
+  Ordinary stations cannot transfer to or from your containers during the run;
+  vanilla production and growth (including beehives and sap extractors) continue.
 - `automatic_pickup_range` is set to 1, its minimum, so that the test objects can
   stand 4 m ahead of you without Automatic Pickup reaching what a station drops.
 - The settings a check depends on are set for the stations it uses: the wood
@@ -894,6 +912,14 @@ needs. The run ends with `processing_settings_restored`: PASS when every setting
 it wrote is back, SKIP when you changed one meanwhile (yours is kept) or the run
 was abandoned, FAIL when one could not be put back. It is missing when the run
 wrote nothing. When a setting cannot be written, the checks SKIP and name it.
+
+Every subcommand that places a chest also reports `processing_container_isolated`:
+the empty test chest is rejected by the real transfer gate while unregistered,
+with both an empty and an existing ownership-request slot unchanged; registering
+the same chest lets the real gate accept it. Fresh real searches on both sides
+must still find that chest and the same other containers. The world's
+`world_processing_smelter_refuel` check runs the same controls before seeding
+fuel, then proves the real refuel transfer still works.
 
 `automatics_smoke_processing rpc` checks that Automatic Processing keeps every
 item when it moves one from a chest into a station. Processing does that by
@@ -1898,7 +1924,10 @@ use some stamina. Do not move or attack while the section runs.
 
 Requires a single-player world. It sets up the rest itself: the Farming module and
 `enable_grid_planting` are turned on for the section when they are off (and put
-back with the other settings). It walks the cultivator's own piece table in order
+back with the other settings). Before enabling Farming it sets `farming_interval`
+to 0 for the section, so ordinary harvesting and replanting stay idle through
+setup, relocation and grid checks; the existing settings hand-back restores it.
+It walks the cultivator's own piece table in order
 and uses the first piece with a `Plant` that needs no cultivated ground, has no
 terrain modifier, takes one kind of seed, and grows in your current biome (all
 read at runtime). It then puts aside the inventory items in the way, as described
@@ -2692,8 +2721,10 @@ a teleport (the section SKIPs otherwise). The section calls the module's own
 entries, `PieceRepair.Repair` for the periodic piece pass and
 `ItemRepair.Repair` and `ItemRepair.CraftingStationInteractHook` for the two item
 paths, against non-persistent objects it spawns 1.5 to 2.2 m from you. Every check
-sets up and calls in one frame, so the module's own timers cannot act on the test
-objects in between. The section:
+sets up and calls in one frame. Before any settings, module activation or wait,
+the observer suppresses the module's periodic callback; it remains until the
+test objects, player and settings are handed back, including the return trip.
+Direct repair calls below still run normally. The section:
 
 - turns Automatic Repair on when it is off and waits for it to start, and sets
   `piece_search_range` and `crafting_station_search_range` to 4, through the
@@ -2709,7 +2740,7 @@ objects in between. The section:
 - puts items aside until two inventory slots are free for the test items, and
   puts the same items back at the end (SKIP when two slots cannot be freed);
   `repair_setup` names what was set up and put aside;
-- adds an observer patch, removed at the end, that records only while a check has
+- adds an observer patch before setup, removed after restoration, that records only while a check has
   it armed: the repair calls on test pieces (and refuses them on any other piece),
   the ward flashes of the test ward (the flash of any other ward is dropped, so no
   ward of yours flashes), the ward access checks, the skill raises, the usability
@@ -2745,6 +2776,7 @@ objects in between. The section:
 | `repair_piece_in_range_station_repairs` | With a test workbench in range, two damaged wood walls are repaired after one build station lookup |
 | `repair_piece_stops_when_tool_used_up` | With a tool that has one repair of durability left, a pass over three damaged pieces repairs one and leaves the tool at zero or below; a pass with the used-up tool repairs nothing and changes nothing (SKIP for a tool that does not use durability) |
 | `repair_item_none_worn_touches_no_station` | With nothing worn, a pass asks no station whether it is usable and looks up no recipe, whatever you carry |
+| `repair_timer_isolated` | A forced due module tick leaves the worn synthetic item, station usability checks and skill raises unchanged; the following explicit item-repair check is its positive control |
 | `repair_item_periodic_raises_crafting` | The periodic pass repairs the worn test item and raises the Crafting skill by the wear it had, as a hand repair does |
 | `repair_item_station_checked_once` | In the same pass, each of the two test workbenches is asked once whether it is usable |
 | `repair_item_recipe_resolved_once` | An item that only another station repairs costs one recipe lookup with two stations in range, and stays worn |

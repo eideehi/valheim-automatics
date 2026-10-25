@@ -78,6 +78,7 @@
     <Compile Include="SmokeSetup.cs" />
     <Compile Include="ErrorObserver.cs" />
     <Compile Include="ProcessingSmokeCommand.cs" />
+    <Compile Include="ProcessingIsolation.cs" />
     <Compile Include="ProcessingSmokeToggle.cs" />
     <Compile Include="ProcessingSmokeSkill.cs" />
     <Compile Include="Features\FeaturesSmokeCommand.cs" />

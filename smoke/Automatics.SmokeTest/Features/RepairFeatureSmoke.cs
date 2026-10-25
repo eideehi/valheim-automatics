@@ -18,8 +18,8 @@ namespace Automatics.SmokeTest
     // and its two item paths (the periodic pass and the crafting-station interaction). It calls
     // the module's own entries, `PieceRepair.Repair`, `ItemRepair.Repair` and
     // `ItemRepair.CraftingStationInteractHook`, against non-persistent objects it spawns next to
-    // the player, and every check runs in one frame, so the module's own timers cannot act on
-    // the test objects between the set-up and the call.
+    // the player. The observer suppresses the module's periodic callback throughout setup,
+    // checks and restoration; the checks still call the repair entries directly.
     //
     // Pieces: stationless pieces and wood walls (which need a workbench in range) are spawned at
     // a health below their maximum, and undamaged ones of both kinds beside them. The checks
@@ -82,17 +82,31 @@ namespace Automatics.SmokeTest
         public static IEnumerator Run(FeatureRun run)
         {
             var steps = Checks(run);
-            while (steps.MoveNext()) yield return steps.Current;
-            if (!run.IsCurrent) yield break;
+            try
+            {
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!run.IsCurrent) yield break;
 
-            // Back to where the section started when it moved the player; otherwise the
-            // command's hand-back does it at its end.
-            var back = new SmokeSetup.SetupResult();
-            steps = SmokeSetup.ReturnToStart(run.RunId, back);
-            while (steps.MoveNext()) yield return steps.Current;
-            if (!back.Ok)
-                FeaturesSmokeCommand.Warn(
-                    $"[Automatics Smoke] {Label}: the player was not moved back yet ({back.Reason}); the command's hand-back tries again at its end");
+                // Keep the timer guard on through the return trip too.
+                var back = new SmokeSetup.SetupResult();
+                steps = SmokeSetup.ReturnToStart(run.RunId, back);
+                while (steps.MoveNext()) yield return steps.Current;
+                if (!back.Ok)
+                    FeaturesSmokeCommand.Warn(
+                        $"[Automatics Smoke] {Label}: the player was not moved back yet ({back.Reason}); the command's hand-back tries again at its end");
+            }
+            finally
+            {
+                try
+                {
+                    (steps as IDisposable)?.Dispose();
+                }
+                finally
+                {
+                    if (!RepairObserver.Detach(out var failure))
+                        run.Fail("repair_observer_removed", failure);
+                }
+            }
         }
 
         private static IEnumerator Checks(FeatureRun run)
@@ -153,6 +167,14 @@ namespace Automatics.SmokeTest
             Func<string, bool> handBack = null;
             try
             {
+                // Before settings, module activation or any frame boundary: enabling the module
+                // must not repair carried items or nearby pieces during setup and restoration.
+                if (!RepairObserver.Attach(out var problem))
+                {
+                    run.Skip(SectionCheck, problem);
+                    yield break;
+                }
+
                 var module = new SmokeSetup.SetupResult();
                 var steps = SmokeSetup.EnableModule(run.RunId, held, RepairConfig.ModuleEntry,
                     () => RepairModule.Running, module);
@@ -223,12 +245,6 @@ namespace Automatics.SmokeTest
                 run.Pass("repair_setup",
                     $"Automatic Repair {module.Reason}; piece_search_range and crafting_station_search_range set to {RequiredRange} for the run; {stash.Report}");
 
-                if (!RepairObserver.Attach(out var problem))
-                {
-                    run.Skip(SectionCheck, problem);
-                    yield break;
-                }
-
                 var tool = hammer.m_itemData.Clone();
                 var origin = player.transform.position;
 
@@ -272,33 +288,25 @@ namespace Automatics.SmokeTest
             {
                 try
                 {
-                    if (!RepairObserver.Detach(out var failure))
-                        run.Fail("repair_observer_removed", failure);
+                    if (state != null)
+                    {
+                        if (handBack(Label)) SmokeSession.ReleaseHandBack(handBack);
+                        else
+                            run.Fail("repair_player_restored",
+                                "the previously equipped items could not all be equipped again; it is retried at the next hand-back");
+                    }
                 }
                 finally
                 {
+                    // After the test items are out, so the stashed ones go back into their slots.
+                    stash?.Restore();
                     try
                     {
-                        if (state != null)
-                        {
-                            if (handBack(Label)) SmokeSession.ReleaseHandBack(handBack);
-                            else
-                                run.Fail("repair_player_restored",
-                                    "the previously equipped items could not all be equipped again; it is retried at the next hand-back");
-                        }
+                        if (held.Count > 0) ReportRestore(run);
                     }
                     finally
                     {
-                        // After the test items are out, so the stashed ones go back into their slots.
-                        stash?.Restore();
-                        try
-                        {
-                            if (held.Count > 0) ReportRestore(run);
-                        }
-                        finally
-                        {
-                            foreach (var go in spawned) WoodcuttingFeatureSmoke.RemoveTestObject(go);
-                        }
+                        foreach (var go in spawned) WoodcuttingFeatureSmoke.RemoveTestObject(go);
                     }
                 }
             }
@@ -594,6 +602,7 @@ namespace Automatics.SmokeTest
                 foreach (var periodic in new[]
                          {
                              "repair_item_none_worn_touches_no_station", "repair_item_periodic_raises_crafting",
+                             "repair_timer_isolated",
                              "repair_item_station_checked_once", "repair_item_recipe_resolved_once",
                              "repair_item_unusable_station_excluded"
                          })
@@ -607,12 +616,14 @@ namespace Automatics.SmokeTest
                     foreach (var periodic in new[]
                              {
                                  "repair_item_periodic_raises_crafting", "repair_item_station_checked_once",
+                                 "repair_timer_isolated",
                                  "repair_item_unusable_station_excluded"
                              })
                         run.Skip(periodic, "no earlier-biome item is repaired at a workbench");
                 }
                 else
                 {
+                    CheckTimerIsolation(run, player, workbenchItem);
                     CheckPeriodicRepair(run, player, workbenchItem, first, second);
                     CheckUnusableStations(run, player, workbenchItem, first, second);
                 }
@@ -643,6 +654,37 @@ namespace Automatics.SmokeTest
             }
 
             CheckInteraction(run, player, workbenchItem, first);
+        }
+
+        private static void CheckTimerIsolation(FeatureRun run, Player player, ItemDrop.ItemData item)
+        {
+            const string name = "repair_timer_isolated";
+            if (!RepairModule.Running || Game.IsPaused() || !player.IsOwner())
+            {
+                run.Skip(name, "requires a running module, an unpaused game and the local player owner");
+                return;
+            }
+
+            Wear(item);
+            var before = item.m_durability;
+            RepairObserver.Arm(null, new[] { item });
+            try
+            {
+                // A due tick would repair this test item at the test workbenches without the
+                // guard. The following explicit repair is its positive control.
+                AccessTools.Method(typeof(RepairModule), "OnPlayerFixedUpdate")
+                    .Invoke(null, new object[] { player, 2f });
+            }
+            finally
+            {
+                RepairObserver.Disarm();
+            }
+
+            if (!Mathf.Approximately(item.m_durability, before) ||
+                RepairObserver.UsableChecks.Count != 0 || RepairObserver.Raises.Count != 0)
+                run.Fail(name, "a forced due module tick touched the worn test item or a test station");
+            else
+                run.Pass(name, "a forced due module tick left the worn test item and test workbenches untouched");
         }
 
         // With nothing worn, a pass does not ask any station whether it is usable, and looks up
@@ -1037,8 +1079,9 @@ namespace Automatics.SmokeTest
                     nameof(CraftingStation.HaveBuildStationInRange));
                 var worn = AccessTools.Method(typeof(Inventory), nameof(Inventory.GetWornItems));
                 var access = AccessTools.Method(typeof(PrivateArea), nameof(PrivateArea.CheckAccess));
+                var tick = AccessTools.Method(typeof(RepairModule), "OnPlayerFixedUpdate");
                 if (tool == null || repair == null || flash == null || raise == null || usable == null ||
-                    recipe == null || lookup == null || worn == null || access == null)
+                    recipe == null || lookup == null || worn == null || access == null || tick == null)
                 {
                     problem = "a method the observer patches was not found";
                     return false;
@@ -1056,6 +1099,7 @@ namespace Automatics.SmokeTest
                 _harmony = new Harmony(HarmonyId);
                 try
                 {
+                    _harmony.Patch(tick, new HarmonyMethod(typeof(RepairObserver), nameof(TickPrefix)));
                     _harmony.Patch(tool, new HarmonyMethod(typeof(RepairObserver), nameof(ToolPrefix)));
                     _harmony.Patch(repair, new HarmonyMethod(typeof(RepairObserver), nameof(RepairPrefix)),
                         new HarmonyMethod(typeof(RepairObserver), nameof(RepairPostfix)));
@@ -1107,6 +1151,9 @@ namespace Automatics.SmokeTest
             {
                 harmony.UnpatchSelf();
             }
+
+            // Suppressed for the entire attached lifetime, including when no check is armed.
+            private static bool TickPrefix() => false;
 
             // The substitute tool stands for the hammer in your hand with the repair piece
             // selected, which the pass looks up first.
