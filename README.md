@@ -78,9 +78,15 @@ See [Console commands](docs/user-guide.md#console-commands) in the user guide fo
 
 ## Configurations
 
-I recommend using [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
+Open the game's Settings screen from the main menu or the pause menu, select the **Mods** tab, and then select **Automatics**. Changes are saved when you press **Apply**.
+
+[![Settings screen](docs/images/readme/settings-screen-thumbnail.png)](docs/images/readme/settings-screen.jpg)
+
+Automatics also works with [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
 [![Configuration Menu](docs/images/readme/config-menu-thumbnail.png)](docs/images/readme/config-menu.jpg)
+
+To remove Automatics from the **Mods** tab, turn off `Show on the Settings screen` in Configuration Manager's `Settings screen` category, or set `show_on_settings_screen=false` in the config file's `[mod_utils]` section. The change takes effect the next time the Settings screen opens; this option is not shown in the Automatics Settings panel.
 
 Use [CONFIG.md](CONFIG.md) for every configuration entry, default value, and accepted value range. Use [docs/user-guide.md](docs/user-guide.md) for feature-by-feature usage notes.
 

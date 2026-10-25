@@ -76,9 +76,13 @@ See [Console commands](https://github.com/eideehi/valheim-automatics/blob/1.8.0/
 
 ## Configurations
 
-I recommend using [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
+Open the game's Settings screen from the main menu or the pause menu, select the **Mods** tab, and then select **Automatics**. Changes are saved when you press **Apply**.
+
+Automatics also works with [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
 ![Configuration Menu](https://app.box.com/shared/static/3v57rjpauzzyv0xeugohnw8bn2ye3q2h.png)
+
+To remove Automatics from the **Mods** tab, turn off `Show on the Settings screen` in Configuration Manager's `Settings screen` category, or set `show_on_settings_screen=false` in the config file's `[mod_utils]` section. The change takes effect the next time the Settings screen opens; this option is not shown in the Automatics Settings panel.
 
 Use [CONFIG.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/CONFIG.md) for every configuration entry, default value, and accepted value range. Use [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/user-guide.md) for feature-by-feature usage notes.
 
