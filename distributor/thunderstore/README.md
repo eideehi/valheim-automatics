@@ -23,7 +23,7 @@ Automatically pins nearby dynamic objects, static objects, and locations to the 
 
 - **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/custom-icon-pack.md) for custom icon pack specifications.
 
-![Custom Icon Pack Image](https://app.box.com/shared/static/ggj61oyrdik1jk08lohdqr91e1q5isqv.png)
+[![Custom Icon Pack Image](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/custom-icon-pack.png)](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/custom-icon-pack.md)
 
 ### Automatic processing
 
@@ -78,9 +78,11 @@ See [Console commands](https://github.com/eideehi/valheim-automatics/blob/1.8.0/
 
 Open the game's Settings screen from the main menu or the pause menu, select the **Mods** tab, and then select **Automatics**. Changes are saved when you press **Apply**.
 
+[![Settings screen](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/settings-screen-thumbnail.png)](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/settings-screen.jpg)
+
 Automatics also works with [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
-![Configuration Menu](https://app.box.com/shared/static/3v57rjpauzzyv0xeugohnw8bn2ye3q2h.png)
+[![Configuration Menu](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/config-menu-thumbnail.png)](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/config-menu.jpg)
 
 To remove Automatics from the **Mods** tab, turn off `Show on the Settings screen` in Configuration Manager's `Settings screen` category, or set `show_on_settings_screen=false` in the config file's `[mod_utils]` section. The change takes effect the next time the Settings screen opens; this option is not shown in the Automatics Settings panel.
 
@@ -90,7 +92,7 @@ Use [CONFIG.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/CONFIG.
 
 You can use the [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager) to define objects that you want Automatics to work with.
 
-![User-defined objects in GUI](https://app.box.com/shared/static/5f6dvpg1elczu9froqkepxamv03ci9cd.png)
+[![User-defined objects in GUI](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/user-defined-objects.png)](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/add-user-defined-object.md)
 
 Open [docs/add-user-defined-object.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/add-user-defined-object.md) to learn more about adding user-defined objects.
 

@@ -160,4 +160,46 @@ if ! grep -Fq 'could not read latest changelog version from CHANGELOG.md' "$tmp_
     exit 1
 fi
 
+cat >"$fixture/CHANGELOG.md" <<'EOF'
+#### v1.6.0 [2026-05-17]
+- Release notes.
+EOF
+
+# Images may reference a full commit created after the release tag.
+mkdir -p "$fixture/docs/images/readme/tree.png"
+printf 'image\n' >"$fixture/docs/images/readme/image.png"
+printf 'child\n' >"$fixture/docs/images/readme/tree.png/child"
+git -C "$fixture" add docs/images/readme
+git -C "$fixture" commit -q -m "add images"
+image_commit="$(git -C "$fixture" rev-parse HEAD)"
+url_base="https://raw.githubusercontent.com/eideehi/valheim-automatics/"
+write_link() {
+    printf 'See [guide](https://github.com/eideehi/valheim-automatics/blob/1.6.0/docs/user-guide.md).\n![image](%s%s)\n' "$url_base" "$1" >"$fixture/distributor/thunderstore/README.md"
+}
+expect_failure() {
+    local entry="$1" expected="$2"
+    write_link "$entry"
+    if "$fixture/scripts/check-version.sh" >"$tmp_dir/link.out" 2>"$tmp_dir/link.err"; then
+        echo "error: check-version accepted $entry" >&2
+        exit 1
+    fi
+    if ! grep -Fq "$expected" "$tmp_dir/link.err"; then
+        echo "error: check-version failed for the wrong reason for $entry" >&2
+        cat "$tmp_dir/link.err" >&2
+        exit 1
+    fi
+}
+write_link "$image_commit/docs/images/readme/image.png"
+"$fixture/scripts/check-version.sh" >/dev/null
+# Blob links are parsed by the same policy.
+printf 'See [guide](https://github.com/eideehi/valheim-automatics/blob/1.6.0/docs/user-guide.md).\n![image](https://github.com/eideehi/valheim-automatics/blob/%s/docs/images/readme/image.png)\n' "$image_commit" >"$fixture/distributor/thunderstore/README.md"
+"$fixture/scripts/check-version.sh" >/dev/null
+expect_failure "main/docs/images/readme/image.png" 'contains main/master links'
+expect_failure "${image_commit:0:12}/docs/images/readme/image.png" 'does not match latest release tag'
+expect_failure "0000000000000000000000000000000000000000/docs/images/readme/image.png" 'is not a commit'
+expect_failure "$image_commit/docs/images/readme/missing.png" 'is not a blob'
+expect_failure "$image_commit/docs/images/readme/tree.png" 'is not a blob'
+expect_failure "$image_commit/docs/user-guide.md" 'does not match latest release tag'
+expect_failure '1.5.0/docs/user-guide.md' 'does not match latest release tag'
+
 echo "check-version regression tests passed."

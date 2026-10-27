@@ -66,6 +66,17 @@ check_thunderstore_links() {
             continue
         fi
 
+        if [[ "$tag" =~ ^[0-9a-f]{40}$ && "$path" =~ ^docs/images/readme/.+\.(png|jpg|jpeg)$ ]]; then
+            if [[ "$(git -C "$repo_root" cat-file -t "$tag" 2>/dev/null || true)" != commit ]]; then
+                echo "error: Thunderstore README image ref '$tag' is not a commit" >&2
+                failures=1
+            elif [[ "$(git -C "$repo_root" cat-file -t "$tag:$path" 2>/dev/null || true)" != blob ]]; then
+                echo "error: Thunderstore README image path '$path' is not a blob in commit $tag" >&2
+                failures=1
+            fi
+            continue
+        fi
+
         if [[ "$tag" != "$latest_release_tag" ]]; then
             echo "error: Thunderstore README link tag '$tag' does not match latest release tag $latest_release_tag" >&2
             failures=1
@@ -146,4 +157,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "Version metadata matches $project_version. Released documentation links use $latest_release_tag."
+echo "Version metadata matches $project_version. Released documentation links use $latest_release_tag; images may use immutable commits."
