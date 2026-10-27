@@ -9,7 +9,7 @@ Automatics is a mod that automates the tedious tasks of life in Valheim. Most of
 
 > **TIP**: On a new install every feature below starts turned off. Turn on the ones you want with the "Module" option in each section of the configuration. Automatic Door, Automatic Pickup, Automatic Processing, Automatic Mapping, Automatic Mining, Automatic Feeding, Automatic Farming, Automatic Repair, Automatic Storage, Automatic Supply and Automatic Woodcutting can all switch without restarting the game. Turning one off stops new actions immediately and lets work already in progress finish; the switch completes over the next few frames. The settings inside each feature keep their usual defaults, and an existing configuration keeps each feature on or off as it was.
 
-For released feature documentation, see [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/user-guide.md).
+For released feature documentation, see [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.9.0/docs/user-guide.md).
 
 ### Automatic door
 
@@ -21,9 +21,9 @@ Bind `Pin Looked-at Object Key` to save a pin for the object or ground you look 
 
 Automatically pins nearby dynamic objects, static objects, and locations to the map, including animals, monsters, flora, minerals, vehicles, portals, dungeons, spots, and other configured objects. You can configure search ranges, allowed targets, static pin saving, destroyed-object pin cleanup, and user-defined objects. The map navigation shortcut starts or clears navigation by holding the configured modifier key (Left Shift by default) and left-clicking a pin on the large map; while navigating, the HUD shows the target name and distance, and an optional swarm of small glowing lights streams along the ground toward the target. Turn on `Compass` to show a strip at the top or bottom of the screen with the cardinal directions and the icons of the map pins within `Compass Pin Range` (100 meters by default) in the direction they lie; it shows the navigation target at any distance and names the pin you face.
 
-- **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/custom-icon-pack.md) for custom icon pack specifications.
+- **Custom icon pack**: You can also define your own icons in png and json files. See [docs/custom-icon-pack.md](https://github.com/eideehi/valheim-automatics/blob/1.9.0/docs/custom-icon-pack.md) for custom icon pack specifications.
 
-[![Custom Icon Pack Image](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/custom-icon-pack.png)](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/custom-icon-pack.md)
+[![Custom Icon Pack Image](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/custom-icon-pack.png)](https://github.com/eideehi/valheim-automatics/blob/1.9.0/docs/custom-icon-pack.md)
 
 ### Automatic processing
 
@@ -72,7 +72,7 @@ Automatics adds console commands for command discovery, name lookup, nearby obje
 - `printobjects`: Shows nearby objects Automatics can handle.
 - `removemappins`: Removes duplicate or filtered map pins.
 
-See [Console commands](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/user-guide.md#console-commands) in the released documentation for usage and options.
+See [Console commands](https://github.com/eideehi/valheim-automatics/blob/1.9.0/docs/user-guide.md#console-commands) in the released documentation for usage and options.
 
 ## Configurations
 
@@ -86,15 +86,15 @@ Automatics also works with [Configuration Manager](https://github.com/BepInEx/Be
 
 To remove Automatics from the **Mods** tab, turn off `Show on the Settings screen` in Configuration Manager's `Settings screen` category, or set `show_on_settings_screen=false` in the config file's `[mod_utils]` section. The change takes effect the next time the Settings screen opens; this option is not shown in the Automatics Settings panel.
 
-Use [CONFIG.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/CONFIG.md) for every configuration entry, default value, and accepted value range. Use [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/user-guide.md) for feature-by-feature usage notes.
+Use [CONFIG.md](https://github.com/eideehi/valheim-automatics/blob/1.9.0/CONFIG.md) for every configuration entry, default value, and accepted value range. Use [docs/user-guide.md](https://github.com/eideehi/valheim-automatics/blob/1.9.0/docs/user-guide.md) for feature-by-feature usage notes.
 
 ### Adding object definitions to Automatics
 
 You can use the [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager) to define objects that you want Automatics to work with.
 
-[![User-defined objects in GUI](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/user-defined-objects.png)](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/add-user-defined-object.md)
+[![User-defined objects in GUI](https://raw.githubusercontent.com/eideehi/valheim-automatics/8cd75a091691df50a933ad8856bd6b6a6235ac00/docs/images/readme/user-defined-objects.png)](https://github.com/eideehi/valheim-automatics/blob/1.9.0/docs/add-user-defined-object.md)
 
-Open [docs/add-user-defined-object.md](https://github.com/eideehi/valheim-automatics/blob/1.8.0/docs/add-user-defined-object.md) to learn more about adding user-defined objects.
+Open [docs/add-user-defined-object.md](https://github.com/eideehi/valheim-automatics/blob/1.9.0/docs/add-user-defined-object.md) to learn more about adding user-defined objects.
 
 ## Languages
 
@@ -116,4 +116,4 @@ Open [docs/add-user-defined-object.md](https://github.com/eideehi/valheim-automa
 
 ## License
 
-Automatics is developed and released under the MIT license. For the full text of the license, please see the [LICENSE](https://github.com/eideehi/valheim-automatics/blob/1.8.0/LICENSE) file.
+Automatics is developed and released under the MIT license. For the full text of the license, please see the [LICENSE](https://github.com/eideehi/valheim-automatics/blob/1.9.0/LICENSE) file.
